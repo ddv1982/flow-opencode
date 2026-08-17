@@ -117,6 +117,7 @@ const FLOW_AUTO_PROMPT = [
 	[
 		'With no session or a draft, load `flow_guidance { id: "flow-plan" }` and follow it.',
 		'For an approved ready, running, or blocked feature, load `flow_guidance { id: "flow-run" }` and follow it.',
+		"If `nextAction` is `flow_session_close` or compact status contains `archiveRetry`, load `flow-run` the same way.",
 	].join(" "),
 	"",
 	FLOW_MANAGER_KERNEL,
@@ -141,8 +142,8 @@ const FLOW_RUN_PROMPT = [
 	].join(" "),
 	[
 		"If status is `idle` or `planning`, explain that `/flow-run` requires an approved feature and stop.",
+		'Otherwise load `flow_guidance { id: "flow-run" }` and follow it.',
 	].join(" "),
-	'Load `flow_guidance { id: "flow-run" }` and follow it.',
 	"",
 	FLOW_MANAGER_KERNEL,
 ].join("\n");

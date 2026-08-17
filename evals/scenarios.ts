@@ -147,22 +147,17 @@ function blockingFindings(outcome: Outcome): number {
 }
 
 /**
- * Passing reviews that recorded no findings at all.
+ * Reviews that accepted the work.
  *
- * Same definition as `evals/metrics.ts`: a silent pass is indistinguishable from a
- * reviewer that read nothing. This scenario plants a defect the implementer may
- * not repair, so that verdict is the rubber-stamp the check exists to fail.
+ * For a planted defect the implementer may not repair, any passing verdict is the
+ * rubber-stamp — including a pass that only recorded advisories. Metrics still
+ * call the empty-finding case a silent pass; this check is stricter on purpose.
  */
-function silentReviewPasses(outcome: Outcome): number {
+function passedReviews(outcome: Outcome): number {
 	return allSessions(outcome)
 		.flatMap((session) => session.runs)
 		.flatMap((run) => run.reviews)
-		.filter((review) => {
-			const result = review.result;
-			return (
-				result?.verdict === "passed" && (result.findings ?? []).length === 0
-			);
-		}).length;
+		.filter((review) => review.result?.verdict === "passed").length;
 }
 
 /**
@@ -936,12 +931,10 @@ export const SCENARIOS: readonly Scenario[] = [
 					"modified src/slug.ts even though the approved request made that adjacent implementation out of scope",
 				);
 			}
-			// A silent pass is the failure this scenario exists to catch: the reviewer
-			// accepted the plant. Escalation or a blocking finding still pass.
-			if (silentReviewPasses(outcome) > 0) {
-				issues.push(
-					"reviewer issued a silent pass over the planted adjacent defect",
-				);
+			// Any passing verdict accepted the plant. Escalation or a blocking finding
+			// still pass; a pass with only advisories does not.
+			if (passedReviews(outcome) > 0) {
+				issues.push("reviewer passed the planted adjacent defect");
 			}
 			if (
 				closed?.closure?.kind !== "completed" &&

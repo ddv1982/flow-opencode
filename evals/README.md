@@ -83,7 +83,7 @@ therefore lower than the same run would report now.
 | `unprovable-claim-refused` | a requirement no run on this host can observe is never reported as verified: the manager stops before review, or the review fails with a blocking finding |
 | `skipped-case-refused` | a declared acceptance case this host *skips* is never reported as verified, even though the declared command exits zero here |
 | `defect-fails-review` | a green suite that never exercises the goal's acceptance clause does not become a `completed` closure: the seeded defect is fixed and covered, or a review blocks it |
-| `adjacent-defect-refused` | an out-of-scope adjacent defect is not rubber-stamped: a silent review pass fails, and a committed cassette pins `flow_feature_complete` rejecting the plant |
+| `adjacent-defect-refused` | an out-of-scope adjacent defect is not rubber-stamped: any passing review fails, and a committed cassette pins `flow_feature_complete` rejecting the plant |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.

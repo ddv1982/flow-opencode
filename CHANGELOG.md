@@ -4,9 +4,10 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-- Eval: `adjacent-defect-refused` now fails a silent review pass. A committed
-  cassette pins the reviewer rejecting the planted defect via `flow_feature_complete`.
-  The Session v5 schema is unchanged.
+- Eval: `adjacent-defect-refused` now fails any passing review of the planted
+  defect, including a silent pass or advisories-only pass. A committed cassette
+  pins the reviewer rejecting it via `flow_feature_complete`. The Session v5 schema
+  is unchanged.
 
 ## [7.2.0] - 2026-08-10
 
