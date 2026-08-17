@@ -70,11 +70,10 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// defect the implementer has no reason to touch. `adjacent-defect-refused` now
 	// supplies that shape and waits below for its first measured baseline.
 	"adjacent-defect-refused": null,
-	// Ungated until a matrix shows which route it exercises. Unlike the earlier
-	// defect fixture, the requested edit is only the public export and the defective
-	// implementation is explicitly out of scope, so a run that reaches review gives
-	// the reviewer a real adjacent defect to catch rather than one implementation was
-	// already invited to repair.
+	// Live rate still ungated: no paid matrix has a baseline. The scenario check now
+	// fails a silent pass, and `evals/cassettes/` pins a reviewer rejection of the
+	// plant. Gating the *rate* still waits for a matrix; inventing 1.0 from a
+	// constructed cassette would publish a number no model has earned.
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */

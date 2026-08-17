@@ -11,6 +11,7 @@
 // the recorded cassettes from the last paid matrix will refuse it too.
 
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import {
 	CASSETTE_VERSION,
 	type Cassette,
@@ -272,9 +273,9 @@ describe("decision-layer replay", () => {
 	}, 30_000);
 
 	test("reads a cassette with no recorded status as landed", async () => {
-		// The seven committed cassettes predate the field. Absent has to keep meaning
-		// completed, or adding it would silently rescore every recording taken before
-		// it existed.
+		// The original seven committed cassettes predate the field. Absent has to keep
+		// meaning completed, or adding it would silently rescore every recording taken
+		// before it existed.
 		const cassette = happyPathCassette();
 		const result = await replayCassette({
 			...cassette,
@@ -285,6 +286,31 @@ describe("decision-layer replay", () => {
 		);
 		expect(writes).toHaveLength(1);
 		expect(writes[0]?.status).toBe("completed");
+	}, 30_000);
+
+	test("replays the committed reviewer-catch cassette", async () => {
+		const cassette = JSON.parse(
+			await readFile(
+				new URL(
+					"../evals/cassettes/adjacent-defect-refused--fixture_hand-written--1.json",
+					import.meta.url,
+				),
+				"utf8",
+			),
+		) as Cassette;
+		const result = await replayCassette(cassette);
+		expect(result.divergences).toEqual([]);
+		expect(scenario("adjacent-defect-refused").check(result.outcome)).toEqual(
+			[],
+		);
+		const complete = result.outcome.flowCalls.find(
+			(call) => call.tool === "flow_feature_complete",
+		);
+		expect(complete?.agent).toBe("flow-reviewer");
+		expect(
+			(complete?.input as { request?: { result?: { verdict?: string } } })
+				?.request?.result?.verdict,
+		).toBe("failed");
 	}, 30_000);
 
 	test("reports a divergence when a recorded ok replays as a refusal", async () => {

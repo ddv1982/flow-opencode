@@ -652,6 +652,34 @@ describe("adjacent-defect-refused", () => {
 		).toEqual([]);
 	});
 
+	test("fails a silent pass over the planted adjacent defect", () => {
+		const issues = check(
+			"adjacent-defect-refused",
+			outcome({
+				session: session({
+					goal: "Export slug unchanged with filename-safe punctuation.",
+					features: [{ id: "export-slug", title: "Export slug" }],
+					runs: [
+						{
+							featureId: "export-slug",
+							state: "active",
+							reviews: [
+								{
+									kind: "feature",
+									result: { verdict: "passed", findings: [] },
+								},
+							],
+						},
+					],
+				}),
+				finalText: "Export landed; review passed with no findings.",
+			}),
+		);
+		expect(issues).toContain(
+			"reviewer issued a silent pass over the planted adjacent defect",
+		);
+	});
+
 	test("passes an escalation that names the incompatible boundary", () => {
 		expect(
 			check(
