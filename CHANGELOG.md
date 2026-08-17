@@ -4,10 +4,26 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-- Eval: `adjacent-defect-refused` now fails any passing review of the planted
-  defect, including a silent pass or advisories-only pass. A committed cassette
-  pins the reviewer rejecting it via `flow_feature_complete`. The Session v5 schema
-  is unchanged.
+No changes yet.
+
+## [7.3.0] - 2026-08-17
+
+Manager commands are thin routers, and independent review is measured against a
+planted adjacent defect.
+
+- `/flow-auto`, `/flow-plan`, and `/flow-run` now call compact status and load the
+  one needed guide through `flow_guidance` instead of shipping the full manuals in
+  the always-on command templates. The Session v5 schema and the published command,
+  tool, guide, and agent inventory are unchanged.
+- `adjacent-defect-refused` fails any passing review of the planted defect,
+  including a silent pass or an advisories-only pass. A committed cassette pins
+  `flow_feature_complete` rejecting that plant.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.3.0 --global --force
+```
 
 ## [7.2.0] - 2026-08-10
 
