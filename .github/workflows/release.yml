@@ -4,13 +4,48 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - main
 
 permissions:
   contents: write
   id-token: write
 
 jobs:
+  decide:
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.resolve.outputs.publish }}
+      tag: ${{ steps.resolve.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve release tag
+        id: resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          tag="v${version}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "${tag}" ]]; then
+            echo "::error::Release tag/version mismatch: tag=${GITHUB_REF_NAME}, package.json=${version}."
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE}" == "branch" ]] && git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
+            echo "Tag ${tag} already exists; skipping release on main."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
   release:
+    needs: decide
+    if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -38,7 +73,7 @@ jobs:
         run: bun install --frozen-lockfile
 
       - name: Validate release tag and changelog
-        run: bun run release:metadata -- --tag "${GITHUB_REF_NAME}" --notes-file release-notes.md
+        run: bun run release:metadata -- --tag "${{ needs.decide.outputs.tag }}" --notes-file release-notes.md
 
       - name: Run checks
         run: bun run check
@@ -89,7 +124,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ needs.decide.outputs.tag }}"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
           release_query_error_file="$(mktemp)"
 
@@ -117,7 +152,7 @@ jobs:
               printf '%s\n' "$release_query_error" >&2
               exit 1
             fi
-            gh release create "$tag" --title "$tag" --notes-file release-notes.md
+            retry_idempotent gh release create "$tag" --title "$tag" --notes-file release-notes.md --target "${GITHUB_SHA}"
           fi
 
           retry_idempotent gh release upload "$tag" "$tarball" --clobber

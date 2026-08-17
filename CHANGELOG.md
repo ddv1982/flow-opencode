@@ -4,13 +4,25 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [Unreleased]
 
-Planning no longer dispatches `flow-worker` for inventory or review. The 7.3.0
-thin routers left `/flow-auto` telling the manager to delegate active work to
-workers while loading only `flow-plan`, which never mentioned the assignment
-checklist those workers refuse to start without. The first planning review wave
-then failed closed on a missing matrix and had to be reissued. Worker waves
-remain an implementation-only option after a feature run starts. The Session v5 schema
-and the published command, tool, guide, and agent inventory are unchanged.
+No changes yet.
+
+## [7.3.1] - 2026-08-17
+
+Planning no longer dispatches `flow-worker` for inventory or review.
+
+- `/flow-auto` scopes worker delegation to an active feature run, and `/flow-plan`
+  inspects in the manager instead of launching workers. The 7.3.0 thin routers
+  left planning able to dispatch `flow-worker` without the assignment checklist
+  those workers refuse to start without, so the first planning review wave failed
+  closed on a missing matrix. Worker waves remain an implementation-only option
+  after a feature run starts. The Session v5 schema and the published command,
+  tool, guide, and agent inventory are unchanged.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@7.3.1 --global --force
+```
 
 ## [7.3.0] - 2026-08-17
 
