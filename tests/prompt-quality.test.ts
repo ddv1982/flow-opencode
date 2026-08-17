@@ -271,8 +271,8 @@ describe("Flow prompt economy", () => {
 		const status = compileFlowPromptSurface("flow-status");
 		expectOnce(status, 'flow_status { request: { view: "compact" } }');
 		expectOnce(status, 'flow_status { request: { view: "detail" } }');
-		expectOnce(
-			compileFlowPromptSurface("flow-run"),
+		// Thin routers load guides that invoke detail view; not inlined in router
+		expect(getFlowGuidance("flow-run").content).toContain(
 			'flow_status { request: { view: "detail" } }',
 		);
 	});

@@ -10,9 +10,7 @@ bun install --frozen-lockfile
 bun run check
 ```
 
-`bun run check` is the canonical deterministic gate. Cassette replay (`bun run replay`) proves runtime behavior without model involvement; see `.cursor/skills/verify-flow/` for feature-level verification guidance.
-
-Use focused commands while iterating:
+`bun run check` is the canonical deterministic gate. Use focused commands while iterating:
 
 ```bash
 bun run typecheck

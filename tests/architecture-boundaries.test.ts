@@ -52,14 +52,14 @@ const sourceRoot = join(repositoryRoot, "src");
  * next phase replaces three overlapping evidence checks with one and should *return*
  * bytes. If it does not, that is the signal to stop adding fields.
  *
- * Raised again, from 248 KiB, for Phase 1 thin routers. The manager command prompts
- * (flow-auto, flow-plan, flow-run) were inlining full SKILL.md guidance at compile
- * time, consuming ~27KB of the 38.5KB compiled prompt ceiling with only 15 bytes of
- * headroom. The thin routers add 3.7 KiB of source but remove 21.1 KiB from the
- * compiled surface (flow-run alone dropped from 15KB to 2KB). The SKILL.md files
- * remain unchanged as the judgment source, now loaded lazily via flow_guidance.
+ * Raised again, from 248 KiB, for Phase 1 thin routers (review-cut version).
+ * Manager commands (flow-auto, flow-plan, flow-run) are now actual routers: call
+ * flow_status compact, handle top-level errors, and load the one needed guide via
+ * flow_guidance. Duplicated alignment/archiveRetry/recovery rules removed (they're
+ * in the loaded SKILL.md). The thinner routers need 600 bytes more source than the
+ * old inlined manuals but remove 23.9 KiB from compiled prompts (flow-run: 15KB → 1KB).
  */
-const MAX_TYPESCRIPT_SOURCE_BYTES = 252 * 1024;
+const MAX_TYPESCRIPT_SOURCE_BYTES = 249 * 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {
