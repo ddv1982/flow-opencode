@@ -334,11 +334,10 @@ export function reviewerProjection(
 					// something else, and cannot tell whether a declared environment was
 					// observed on the host it named. A `platform` of `other` is judgment by
 					// design, and judgment needs the entry in hand.
-					...(plan.gate === undefined ? {} : { gate: plan.gate }),
-					...(plan.externalEvidence === undefined
+					...(plan.evidence === undefined
 						? {}
 						: {
-								externalEvidence: plan.externalEvidence.map((entry) => ({
+								evidence: plan.evidence.map((entry) => ({
 									...entry,
 								})),
 							}),

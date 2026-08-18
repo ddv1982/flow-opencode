@@ -7,6 +7,7 @@ import {
 } from "../src/domain/limits.js";
 import { operationInputDigest } from "../src/domain/operation.js";
 import type {
+	EvidenceEntry,
 	EvidencePlatform,
 	FeatureId,
 	ObservedAssertion,
@@ -16,6 +17,7 @@ import type {
 	SourceDigest,
 	ValidationScope,
 } from "../src/domain/session.js";
+import { planGate } from "../src/domain/session.js";
 import {
 	approvePlan,
 	closeSession,
@@ -41,13 +43,38 @@ const SOURCE_A = `sha256:${"a".repeat(64)}` as SourceDigest;
 const SOURCE_B = `sha256:${"b".repeat(64)}` as SourceDigest;
 const OUTPUT = `sha256:${"f".repeat(64)}` as SourceDigest;
 
+function repositoryEvidence(command: string): EvidenceEntry[] {
+	return [
+		{
+			scope: "gate",
+			requirement: "Repository suite",
+			environment: "this host",
+			command,
+			platform: "other",
+			assertions: [],
+		},
+	];
+}
+
+function withExtraEvidence(
+	base: Plan,
+	entries: Omit<EvidenceEntry, "scope">[],
+): Plan {
+	return {
+		...base,
+		evidence: [
+			...repositoryEvidence(planGate(base) ?? "bun test"),
+			...entries.map((entry) => ({ ...entry, scope: "extra" as const })),
+		],
+	};
+}
+
 const plan: Plan = {
 	summary: "Ship the small Flow runtime.",
 	overview: "Build the kernel, then expose it.",
 	requirements: ["Keep lifecycle state canonical."],
 	decisions: ["Use one full review per run."],
-	gate: "bun test",
-	externalEvidence: [],
+	evidence: repositoryEvidence("bun test"),
 	features: [
 		{
 			id: FOUNDATION,
@@ -73,7 +100,7 @@ function oneFeaturePlan(validation: string[], gate = "bun test"): Plan {
 	if (!feature) throw new Error("Expected the delivery plan feature.");
 	return {
 		...plan,
-		gate,
+		evidence: repositoryEvidence(gate),
 		features: [{ ...feature, validation, dependsOn: [] }],
 	};
 }
@@ -1107,12 +1134,14 @@ describe("Session v5 domain state machine", () => {
 			environment,
 		);
 		expect(
-			validate(session, {
-				id: "declared-cannot-fail",
-				featureId: DELIVERY,
-				command: cannotFail,
-				scope: "broad",
-			}).plan?.gate,
+			planGate(
+				validate(session, {
+					id: "declared-cannot-fail",
+					featureId: DELIVERY,
+					command: cannotFail,
+					scope: "broad",
+				}).plan,
+			),
 		).toBe(cannotFail);
 	});
 
@@ -1127,34 +1156,28 @@ describe("Session v5 domain state machine", () => {
 		).toThrow("canonical gate cannot select which tests it runs");
 	});
 
-	test("requires a new plan to declare its external evidence", () => {
+	test("requires a new plan to declare its evidence", () => {
 		const environment = deterministicEnvironment();
-		const { externalEvidence: _omitted, ...withoutEvidence } = oneFeaturePlan([
+		const { evidence: _omitted, ...withoutEvidence } = oneFeaturePlan([
 			PROSE_VALIDATION,
 		]);
 		expect(() => saveDraft(environment, { plan: withoutEvidence })).toThrow(
-			"must declare `externalEvidence`",
+			"must declare `evidence`",
 		);
-		// An empty list is the answer, not the absence of one.
-		expect(
-			saveDraft(environment, {
-				plan: { ...withoutEvidence, externalEvidence: [] },
-			}).plan?.externalEvidence,
-		).toEqual([]);
-		// And an entry must name the host, because prose is what the runtime could not
-		// compare with the machine the command ran on.
 		expect(() =>
 			saveDraft(environment, {
-				plan: {
-					...withoutEvidence,
-					externalEvidence: [
-						{
-							requirement: "observed on Windows",
-							environment: "Windows (win32) host with bun installed",
-							command: "bun test src/platform.test.ts",
-						},
-					],
-				},
+				plan: { ...withoutEvidence, evidence: [] },
+			}),
+		).toThrow('exactly one `evidence` entry with `scope: "gate"`');
+		expect(() =>
+			saveDraft(environment, {
+				plan: withExtraEvidence(withoutEvidence, [
+					{
+						requirement: "observed on Windows",
+						environment: "Windows (win32) host with bun installed",
+						command: "bun test src/platform.test.ts",
+					},
+				]),
 			}),
 		).toThrow("must declare `platform`");
 	});
@@ -1168,18 +1191,15 @@ describe("Session v5 domain state machine", () => {
 		let session = begin(
 			approve(
 				saveDraft(environment, {
-					plan: {
-						...oneFeaturePlan([PROSE_VALIDATION]),
-						externalEvidence: [
-							{
-								requirement: "the sandbox account is charged once",
-								environment: "Stripe test credentials",
-								command: probe,
-								platform: "other",
-								assertions: [],
-							},
-						],
-					},
+					plan: withExtraEvidence(oneFeaturePlan([PROSE_VALIDATION]), [
+						{
+							requirement: "the sandbox account is charged once",
+							environment: "Stripe test credentials",
+							command: probe,
+							platform: "other",
+							assertions: [],
+						},
+					]),
 				}),
 			),
 			DELIVERY,
@@ -1222,19 +1242,16 @@ describe("Session v5 domain state machine", () => {
 		let session = begin(
 			approve(
 				saveDraft(environment, {
-					plan: {
-						...oneFeaturePlan([PROSE_VALIDATION]),
-						externalEvidence: [
-							{
-								requirement:
-									"the original reserved name cannot be created and the safe one can",
-								environment: "Windows",
-								command: probe,
-								platform: "win32",
-								assertions: [],
-							},
-						],
-					},
+					plan: withExtraEvidence(oneFeaturePlan([PROSE_VALIDATION]), [
+						{
+							requirement:
+								"the original reserved name cannot be created and the safe one can",
+							environment: "Windows",
+							command: probe,
+							platform: "win32",
+							assertions: [],
+						},
+					]),
 				}),
 			),
 			DELIVERY,
@@ -1311,9 +1328,9 @@ describe("Session v5 domain state machine", () => {
 		// its features somehow completed.
 		const unobserved: Session = {
 			...completed,
-			plan: completed.plan && {
-				...completed.plan,
-				externalEvidence: [
+			plan:
+				completed.plan &&
+				withExtraEvidence(completed.plan, [
 					{
 						requirement: "observed on Windows",
 						environment: "Windows",
@@ -1321,8 +1338,7 @@ describe("Session v5 domain state machine", () => {
 						platform: "win32",
 						assertions: [],
 					},
-				],
-			},
+				]),
 		};
 		expect(() =>
 			closeSession(unobserved, {
@@ -1354,18 +1370,15 @@ describe("Session v5 domain state machine", () => {
 		let session = begin(
 			approve(
 				saveDraft(environment, {
-					plan: {
-						...oneFeaturePlan([PROSE_VALIDATION]),
-						externalEvidence: [
-							{
-								requirement: "the safe name can be created on Windows",
-								environment: "Windows",
-								command: probe,
-								platform: "win32",
-								assertions: [acceptance],
-							},
-						],
-					},
+					plan: withExtraEvidence(oneFeaturePlan([PROSE_VALIDATION]), [
+						{
+							requirement: "the safe name can be created on Windows",
+							environment: "Windows",
+							command: probe,
+							platform: "win32",
+							assertions: [acceptance],
+						},
+					]),
 				}),
 			),
 			DELIVERY,
@@ -1428,17 +1441,14 @@ describe("Session v5 domain state machine", () => {
 		const environment = deterministicEnvironment();
 		expect(() =>
 			saveDraft(environment, {
-				plan: {
-					...oneFeaturePlan([PROSE_VALIDATION]),
-					externalEvidence: [
-						{
-							requirement: "observed on Windows",
-							environment: "Windows",
-							command: "bun test src/platform.test.ts",
-							platform: "win32",
-						},
-					],
-				},
+				plan: withExtraEvidence(oneFeaturePlan([PROSE_VALIDATION]), [
+					{
+						requirement: "observed on Windows",
+						environment: "Windows",
+						command: "bun test src/platform.test.ts",
+						platform: "win32",
+					},
+				]),
 			}),
 		).toThrow("must declare `assertions`");
 	});
@@ -1451,13 +1461,15 @@ describe("Session v5 domain state machine", () => {
 		let session = begin(
 			approve(
 				saveDraft(environment, {
-					plan: {
-						...plan,
-						features: plan.features.map((feature) => ({
-							...feature,
-							validation: [PROSE_VALIDATION],
-						})),
-						externalEvidence: [
+					plan: withExtraEvidence(
+						{
+							...plan,
+							features: plan.features.map((feature) => ({
+								...feature,
+								validation: [PROSE_VALIDATION],
+							})),
+						},
+						[
 							{
 								requirement: "observed on Windows",
 								environment: "Windows",
@@ -1466,7 +1478,7 @@ describe("Session v5 domain state machine", () => {
 								assertions: [],
 							},
 						],
-					},
+					),
 				}),
 			),
 			FOUNDATION,
@@ -1485,11 +1497,11 @@ describe("Session v5 domain state machine", () => {
 
 	test("requires a new plan to declare its canonical gate", () => {
 		const environment = deterministicEnvironment();
-		const { gate: _omitted, ...withoutGate } = oneFeaturePlan([
+		const { evidence: _omitted, ...withoutGate } = oneFeaturePlan([
 			PROSE_VALIDATION,
 		]);
 		expect(() => saveDraft(environment, { plan: withoutGate })).toThrow(
-			"must declare `gate`",
+			"must declare `evidence`",
 		);
 	});
 
@@ -1500,7 +1512,7 @@ describe("Session v5 domain state machine", () => {
 		// is the whole contract of an operation id. Asserting the new declarations before
 		// the replay check turned the retry into a refusal on upgrade.
 		const environment = deterministicEnvironment();
-		const { gate: _omitted, ...withoutGate } = oneFeaturePlan([
+		const { evidence: _omitted, ...withoutGate } = oneFeaturePlan([
 			PROSE_VALIDATION,
 		]);
 		const request = {
@@ -1535,7 +1547,7 @@ describe("Session v5 domain state machine", () => {
 		// A new write of the same undeclared plan still has to declare both.
 		expect(() =>
 			savePlan(legacy, { ...request, operationId: "plan-save-2" }, environment),
-		).toThrow("must declare `gate`");
+		).toThrow("must declare `evidence`");
 	});
 
 	test("blocks a substitute broad command after the gate failed", () => {

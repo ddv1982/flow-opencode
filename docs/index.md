@@ -1,6 +1,6 @@
 # Flow documentation
 
-This directory is the maintained documentation source for Flow v7 and Session
+This directory is the maintained documentation source for Flow and Session
 v5. The public overview and installation instructions live in the
 [README](../README.md).
 
@@ -39,6 +39,8 @@ v5. The public overview and installation instructions live in the
   discharges nothing.
 - [ADR 0013](adr/0013-derived-assurance-and-paired-value-measurement.md) — assurance
   and paired measurement.
+- [ADR 0014](adr/0014-one-evidence-record.md) — `gate` and `externalEvidence`
+  collapse into one `evidence` record.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

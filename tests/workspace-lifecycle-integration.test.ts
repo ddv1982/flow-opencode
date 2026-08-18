@@ -84,8 +84,16 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 						overview: "Persist every lifecycle transition through .flow.",
 						requirements: ["Archive completed work."],
 						decisions: ["Use one final review."],
-						gate: "bun test",
-						externalEvidence: [],
+						evidence: [
+							{
+								scope: "gate",
+								requirement: "Repository suite",
+								environment: "this host",
+								command: "bun test",
+								platform: "other",
+								assertions: [],
+							},
+						],
 						features: [
 							{
 								id: FEATURE_ID,

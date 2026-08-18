@@ -21,59 +21,23 @@ export type PlanFeature = Readonly<{
 	dependsOn: FeatureId[];
 }>;
 
+/** Repository suite versus an observation this host may be unable to produce. */
+type EvidenceScope = "gate" | "extra";
+
 /**
- * An acceptance observation that needs an environment this host may not be.
+ * One acceptance observation declared at planning time.
  *
- * `plan.gate` moved one claim out of prose and into a declared command. This is the
- * same move for the claim that broke next: a measured run whose goal required
- * observing Windows filesystem behavior wrote "this sandbox has no Windows OS" into
- * `requirements` as a non-goal, implemented what was left, recorded a Wine script it
- * had just written as the acceptance evidence, and closed `completed` — with a
- * passing independent review. Every rule it broke existed, in prose, on the surface
- * that ran it.
- *
- * `command` is what makes this checkable: the entry is satisfied only by a passing
- * observation of that exact command, so the evidence has to be named before there is
- * any pressure to substitute for it, in the plan the user approves. A proxy is still
- * possible — but only by writing the proxy into the approved plan as the proof.
- *
- * `platform` closes the proxy the byte-match alone could not see. A measured run
- * declared `environment: "Windows (win32) host with bun installed"` and discharged it
- * with that exact command's exit zero on Linux — green precisely because the Windows
- * case was skipped there. Every field of that record was true. Naming the OS as a
- * value instead of prose lets the runtime compare it with the host the command
- * actually ran on.
+ * `scope: "gate"` is the canonical whole-repository command. Broad observations
+ * must run it byte-for-byte. `scope: "extra"` is everything else the goal needs
+ * that this host may not be able to produce. Satisfaction is the same function
+ * for both: exact command, declared platform, named cases, eligible observation.
  */
-export type ExternalEvidence = Readonly<{
-	/** What has to be observed, in the goal's own terms. */
+export type EvidenceEntry = Readonly<{
 	requirement: string;
-	/** The environment that can observe it: an OS, service, credential, or device. */
 	environment: string;
-	/** The exact command whose passing is that observation. */
 	command: string;
-	/**
-	 * The operating system that can observe it, or `other` when the missing
-	 * environment is not an OS: a service, credential, setting, or device. An OS
-	 * value is checked against the host each observation was recorded on; `other`
-	 * keeps the command-only rule, because Flow cannot see what a credential is, and
-	 * is judged where the plan is approved and in the review that is given the entry.
-	 *
-	 * Optional so Session v5 stays forward-readable; `savePlan` requires it, so no
-	 * plan this build writes omits it.
-	 */
+	scope: EvidenceScope;
 	platform?: EvidencePlatform | undefined;
-	/**
-	 * The test cases whose passing *is* this observation, by name.
-	 *
-	 * `platform` moved the environment out of prose; this moves the result out of the
-	 * exit code, the other half of the same measured failure — the declared command
-	 * exited zero for a case that never ran, because `test.skip` exits zero. An entry
-	 * that names cases is satisfied only by a report saying each one passed.
-	 *
-	 * An empty list is the honest and common answer, and keeps the exit-code rule: a
-	 * credential, a device, or a setting has no case names. Optional so Session v5
-	 * stays forward-readable; `savePlan` requires the field, so a new entry was asked.
-	 */
 	assertions?: string[] | undefined;
 }>;
 
@@ -94,33 +58,22 @@ export type Plan = Readonly<{
 	decisions: string[];
 	features: PlanFeature[];
 	/**
-	 * Acceptance evidence this host may be unable to produce, declared at planning
-	 * time. Empty when everything the goal asks for is observable here.
-	 *
-	 * A final review and a `completed` closure are both refused while any entry has
-	 * no passing observation of its exact command, so the honest routes out are the
-	 * environment, deferred closure, or abandoned closure.
-	 *
-	 * Optional so Session v5 stays forward-readable; `savePlan` requires it, so no
-	 * plan this build writes omits it.
+	 * Acceptance observations declared at planning time. Exactly one `scope: "gate"`
+	 * entry is required at save. Extra entries are the observations this host may
+	 * be unable to produce. Optional on disk; `savePlan` requires the field.
 	 */
-	externalEvidence?: ExternalEvidence[] | undefined;
-	/**
-	 * The repository's canonical broad validation command, declared once at planning
-	 * time and locked by approval.
-	 *
-	 * `scope: "broad"` used to be a bare claim about whatever command the model
-	 * happened to arm, which is how a run closed `completed` over a red gate by
-	 * claiming `git diff --check && git diff --name-status` as broad: nothing in that
-	 * record was false, and nothing in it was a test. Naming the gate first moves the
-	 * decision to the moment there is no red test to dodge, into the document the
-	 * user approves.
-	 *
-	 * Optional so Session v5 stays forward-readable; `savePlan` requires it, so no
-	 * plan this build writes omits it.
-	 */
-	gate?: string | undefined;
+	evidence?: EvidenceEntry[] | undefined;
 }>;
+
+export function planEvidence(
+	plan: Plan | null | undefined,
+): readonly EvidenceEntry[] {
+	return plan?.evidence ?? [];
+}
+
+export function planGate(plan: Plan | null | undefined): string | undefined {
+	return planEvidence(plan).find((entry) => entry.scope === "gate")?.command;
+}
 
 export type ValidationScope = "focused" | "broad";
 
@@ -156,7 +109,7 @@ export type ValidationObservation = Readonly<{
 	/**
 	 * The host this command actually ran on, supplied by the capture adapter.
 	 *
-	 * This is what makes `ExternalEvidence.platform` checkable rather than another
+	 * This is what makes `EvidenceEntry.platform` checkable rather than another
 	 * claim. Optional so existing Session v5 documents remain readable; an
 	 * observation without it cannot satisfy an entry that names an OS, because a
 	 * record that never said where it ran is not evidence about where it ran.

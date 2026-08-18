@@ -86,11 +86,11 @@ Arm each evidence Bash command with `flow_validation_start` (current revision,
 feature id, exact command, `scope`) immediately before running it byte-for-byte.
 Flow records the host observation; copy no host-observed fields.
 
-`scope: "broad"` runs the plan's declared `gate` and nothing else.
+`scope: "broad"` runs the plan's gate evidence command and nothing else.
 
 A failed, incomplete, or source-drifted observation of a plan-listed command or
-of the declared `gate` blocks review until that same command passes for current
-source.
+of the declared gate command blocks review until that same command passes for
+current source.
 
 Every host-observed validation advances revision. The `[flow-validation]`
 marker reports `passed`, `recordedRevision`, and declared `assertions`. Use
@@ -98,12 +98,11 @@ marker reports `passed`, `recordedRevision`, and declared `assertions`. Use
 `flow_review_start` only when `passed: true`. If the marker is absent, refresh
 compact status before mutating.
 
-For the final feature, run the plan's declared `gate` at broad scope after the
+For the final feature, run the plan's gate command at broad scope after the
 last relevant edit.
 
-A gate or `externalEvidence` command that cannot pass withholds completed
-closure. Reach the passing command, or ask the user to choose deferred or
-abandoned closure.
+An evidence command that cannot pass withholds completed closure. Reach the
+passing command, or ask the user to choose deferred or abandoned closure.
 
 ## Review
 

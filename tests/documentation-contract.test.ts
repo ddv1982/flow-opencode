@@ -121,8 +121,8 @@ const packageVersion = packageJson.version;
  * were reasoning `scripts/qualify-release.ts` already carries in full, and duplication
  * is what this budget exists to find.
  *
- * Nothing here excuses the collapse. It is still owed, and this prose ceiling is
- * still where it would return bytes.
+ * 8.0.0 landed the collapse as ADR 0014. This prose ceiling was not raised for
+ * it. Do not raise it for another evidence field.
  *
  * Raised to 89,000 — the sixth raise, and the first not forced by a decision record.
  * The paragraph above forbids a raise before the collapse lands *if the next evidence
@@ -135,8 +135,7 @@ const packageVersion = packageJson.version;
  *
  * 805 bytes of slack, and it should be spent on measurements rather than on rules: a
  * result is the one kind of prose that cannot be paid for by trimming, because nobody
- * can shorten a number they did not choose. The collapse is still owed and this is
- * still where it returns bytes.
+ * can shorten a number they did not choose.
  */
 const MAX_MAINTAINED_DOC_BYTES = 89_000;
 
@@ -150,8 +149,11 @@ const MAX_MAINTAINED_DOC_BYTES = 89_000;
  * `docs/maintainer-contract.md` for the space.
  *
  * Ten records at 44,532 bytes is the state at the split.
+ *
+ * Raised from 46,000 for ADR 0014, the evidence collapse the previous raises
+ * borrowed against. Slack stays under one record.
  */
-const MAX_DECISION_RECORD_BYTES = 46_000;
+const MAX_DECISION_RECORD_BYTES = 48_000;
 
 /**
  * No single maintained document should outgrow the operator-facing README.
@@ -376,6 +378,16 @@ describe("Flow v6 documentation contract", () => {
 					"Rejected alternatives",
 				],
 			],
+			[
+				"docs/adr/0014-one-evidence-record.md",
+				[
+					"Status",
+					"Context",
+					"Decision",
+					"Consequences",
+					"Rejected alternatives",
+				],
+			],
 		] as const) {
 			expect(headings(await readFile(path, "utf8"))).toEqual(
 				expect.arrayContaining([...required]),
@@ -510,23 +522,24 @@ describe("Flow v6 documentation contract", () => {
 			sessionSource.indexOf("export type Plan ="),
 			sessionSource.indexOf("export type ValidationScope"),
 		);
-		const optionalPlanFields = [
-			...planBlock.matchAll(/^\t(\w+)\?:/gm),
-		].map((match) => match[1]);
-		expect(optionalPlanFields).toEqual(["externalEvidence", "gate"]);
+		const optionalPlanFields = [...planBlock.matchAll(/^\t(\w+)\?:/gm)].map(
+			(match) => match[1],
+		);
+		expect(optionalPlanFields).toEqual(["evidence"]);
 
 		const entryBlock = sessionSource.slice(
-			sessionSource.indexOf("export type ExternalEvidence ="),
+			sessionSource.indexOf("export type EvidenceEntry ="),
 			sessionSource.indexOf("export type ObservedAssertion"),
 		);
-		const optionalEntryFields = [
-			...entryBlock.matchAll(/^\t(\w+)\?:/gm),
-		].map((match) => match[1]);
+		const optionalEntryFields = [...entryBlock.matchAll(/^\t(\w+)\?:/gm)].map(
+			(match) => match[1],
+		);
 		expect(optionalEntryFields).toEqual(["platform", "assertions"]);
 
 		const transitions = await readFile("src/domain/transitions.ts", "utf8");
-		expect(transitions).toContain("assertDeclaredGate");
-		expect(transitions).toContain("assertDeclaredExternalEvidence");
+		expect(transitions).toContain("assertDeclaredEvidence");
+		expect(transitions).not.toContain("assertDeclaredGate");
+		expect(transitions).not.toContain("assertDeclaredExternalEvidence");
 	});
 
 	test("keeps maintained relative Markdown links resolvable", async () => {

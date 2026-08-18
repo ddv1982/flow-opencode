@@ -70,11 +70,10 @@ const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
  * evidence rules arrived as a checked field rather than another paragraph asking the
  * model to be careful.
  *
- * Ratcheted to 16,000 after 7.3.0 thin routers landed at 14,761 total shipped bytes
- * (~55% below the old inlined-manual footprint). Headroom buys one router edit before
- * the ceiling forces another cut.
+ * Ratcheted to 14,500 after 8.0.0 thinned flow-run and the worker prompt.
+ * Landed at 14,376.
  */
-const MAX_TOTAL_PROMPT_BYTES = 16_000;
+const MAX_TOTAL_PROMPT_BYTES = 14_500;
 
 /**
  * Absolute-rule markers per surface. Both Anthropic and OpenAI advise reserving
@@ -83,13 +82,13 @@ const MAX_TOTAL_PROMPT_BYTES = 16_000;
  * a deliberate act, not a side effect of an edit.
  */
 const MAX_ABSOLUTE_RULES: Readonly<Record<FlowPromptSurfaceName, number>> = {
-	"flow-auto": 27,
+	"flow-auto": 6,
 	"flow-plan": 17,
-	"flow-run": 49,
+	"flow-run": 6,
 	"flow-review": 3,
 	"flow-status": 7,
 	"flow-reviewer": 25,
-	"flow-worker": 13,
+	"flow-worker": 12,
 };
 
 /**

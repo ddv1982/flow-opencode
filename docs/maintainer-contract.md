@@ -13,11 +13,10 @@ labelled so there.
 The public surface — tools, commands, guides, agents, and the Session v5 shape —
 stays frozen while those guarantees are measured; additive optional fields are
 allowed, and a removal or rename waits for a major announced one release ahead.
-A new required-at-save plan declaration is a major. Today's declarations are
-`gate`, `externalEvidence`, and on each entry `platform` and `assertions`. Do
-not add another evidence field to close a measured cheat; collapse these
-instead. [Release qualification](release-qualification.md) owns the thresholds
-and cadence.
+A new required-at-save plan declaration is a major. Today's declaration is
+`evidence`, with `scope`, `platform`, and `assertions` on each entry. Do not
+add another evidence field to close a measured cheat.
+[Release qualification](release-qualification.md) owns the thresholds and cadence.
 
 Flow is a serial durable workflow plugin, not a general orchestration framework.
 It owns planning state, one active run, observed validation, one independent
@@ -118,8 +117,9 @@ or delivery document.
   planned gates plus one separate broad observation. Users must finish or close
   active work before downgrade; Flow adds no rollback capability layer.
 - A plan is a bounded DAG and is immutable after approval. A newly saved plan
-  declares the canonical `gate`; the persisted field stays optional so an older
-  document still hydrates.
+  declares `evidence` with exactly one `scope: "gate"` entry. The persisted
+  field stays optional so an older document still hydrates. This build does not
+  read `gate` or `externalEvidence`.
 - Stable finding, issue, and requirement IDs supplied by the source request
   remain verbatim in saved feature summary or validation prose so each ID is
   traceable to an immutable outcome and its evidence.

@@ -99,8 +99,6 @@
 							"Add the new test case to existing src/greet.test.ts rather than a new file, since it directly tests sibling greet.ts exports and no existing test lines are altered",
 							"Gate command is `bun test`, the repo's canonical whole-repository check"
 						],
-						"gate": "bun test",
-						"externalEvidence": [],
 						"features": [
 							{
 								"id": "farewell-function",
@@ -109,6 +107,16 @@
 								"targets": ["src/greet.ts", "src/greet.test.ts"],
 								"validation": ["bun test"],
 								"dependsOn": []
+							}
+						],
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
 							}
 						]
 					}

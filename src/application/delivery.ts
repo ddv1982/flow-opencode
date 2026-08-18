@@ -4,10 +4,11 @@ import type {
 	Session,
 	SessionClosure,
 } from "../domain/session.js";
+import { planGate } from "../domain/session.js";
 import { isFeatureComplete } from "../domain/transitions.js";
 import {
 	isValidationEligible,
-	unsatisfiedExternalEvidence,
+	unsatisfiedEvidence,
 } from "../domain/validation.js";
 
 type AssuranceCheck = Readonly<{
@@ -147,7 +148,7 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 			`${runs.filter((run) => accepted.some((item) => item.runId === run.id)).length}/${features.length} terminal runs have eligible host evidence accepted by review.`,
 		),
 	];
-	const gate = session.plan?.gate;
+	const gate = planGate(session.plan);
 	checks.push(
 		gate === undefined
 			? {
@@ -155,7 +156,7 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 					label: "Canonical gate",
 					tier: "caller-declared",
 					status: "not-applicable",
-					explanation: "This legacy plan declared no canonical gate.",
+					explanation: "This plan declared no canonical gate.",
 				}
 			: check(
 					"canonical-gate",
@@ -168,21 +169,20 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 					`${JSON.stringify(gate)} must have eligible broad evidence accepted by review.`,
 				),
 	);
-	const declared = session.plan?.externalEvidence;
-	const missing = unsatisfiedExternalEvidence(session).length;
+	const declared = session.plan?.evidence;
+	const missing = unsatisfiedEvidence(session).length;
 	checks.push(
 		declared === undefined
 			? {
-					id: "external-evidence",
-					label: "Declared external evidence",
+					id: "declared-evidence",
+					label: "Declared evidence",
 					tier: "caller-declared",
 					status: "not-applicable",
-					explanation:
-						"This legacy plan declared no external-evidence obligations.",
+					explanation: "This plan declared no evidence obligations.",
 				}
 			: check(
-					"external-evidence",
-					"Declared external evidence",
+					"declared-evidence",
+					"Declared evidence",
 					declared.length === 0 ? "caller-declared" : "host-attested",
 					missing === 0,
 					`${declared.length - missing}/${declared.length} declared obligations have eligible evidence on their declared host with named cases passing.`,

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { assuranceProjection } from "../src/application/delivery.js";
 import type {
-	ExternalEvidence,
+	EvidenceEntry,
 	Session,
 	SourceDigest,
 } from "../src/domain/session.js";
@@ -12,8 +12,8 @@ const OUTPUT = `sha256:${"b".repeat(64)}` as SourceDigest;
 function completedSession(
 	overrides: Readonly<{
 		gate?: string | undefined;
-		externalEvidence?: ExternalEvidence[] | undefined;
-		includeGate?: boolean;
+		extraEvidence?: Omit<EvidenceEntry, "scope">[] | undefined;
+		includeEvidence?: boolean;
 	}> = {},
 ): Session {
 	const gate = overrides.gate ?? "bun test";
@@ -31,6 +31,10 @@ function completedSession(
 		hostPlatform: "linux" as const,
 		observedAssertions: [{ name: "acceptance", status: "passed" as const }],
 	};
+	const extras = (overrides.extraEvidence ?? []).map((entry) => ({
+		...entry,
+		scope: "extra" as const,
+	}));
 	return {
 		version: 5,
 		id: "session-1",
@@ -42,10 +46,21 @@ function completedSession(
 			overview: "Exercise assurance.",
 			requirements: ["Acceptance passes."],
 			decisions: ["Use the canonical gate."],
-			...(overrides.includeGate === false ? {} : { gate }),
-			...(overrides.externalEvidence === undefined
-				? { externalEvidence: [] }
-				: { externalEvidence: overrides.externalEvidence }),
+			...(overrides.includeEvidence === false
+				? {}
+				: {
+						evidence: [
+							{
+								scope: "gate" as const,
+								requirement: "Repository suite",
+								environment: "this host",
+								command: gate,
+								platform: "other" as const,
+								assertions: [],
+							},
+							...extras,
+						],
+					}),
 			features: [
 				{
 					id: "delivery",
@@ -171,18 +186,8 @@ describe("assurance projection", () => {
 		}
 	});
 
-	test("labels legacy declarations instead of inventing them", () => {
-		const withPlan = completedSession({ includeGate: false });
-		const legacy: Session = {
-			...withPlan,
-			plan: withPlan.plan
-				? {
-						...withPlan.plan,
-						gate: undefined,
-						externalEvidence: undefined,
-					}
-				: null,
-		};
+	test("labels missing declarations instead of inventing them", () => {
+		const legacy: Session = completedSession({ includeEvidence: false });
 
 		const assurance = assuranceProjection(legacy);
 		expect(assurance.conclusion).toBe("completion-supported");
@@ -194,33 +199,33 @@ describe("assurance projection", () => {
 					tier: "caller-declared",
 				}),
 				expect.objectContaining({
-					id: "external-evidence",
+					id: "declared-evidence",
 					status: "not-applicable",
 				}),
 			]),
 		);
 	});
 
-	test("reports named external evidence as satisfied only on matching evidence", () => {
-		const entry: ExternalEvidence = {
+	test("reports named extra evidence as satisfied only on matching evidence", () => {
+		const entry = {
 			requirement: "Acceptance case passes on Linux",
 			environment: "Linux CI",
-			platform: "linux",
+			platform: "linux" as const,
 			command: "bun test",
 			assertions: ["acceptance"],
 		};
 		const supported = assuranceProjection(
-			completedSession({ externalEvidence: [entry] }),
+			completedSession({ extraEvidence: [entry] }),
 		);
 		expect(supported.conclusion).toBe("completion-supported");
 		expect(supported.checks).toContainEqual(
 			expect.objectContaining({
-				id: "external-evidence",
+				id: "declared-evidence",
 				status: "satisfied",
 			}),
 		);
 
-		const session = completedSession({ externalEvidence: [entry] });
+		const session = completedSession({ extraEvidence: [entry] });
 		const wrongHost: Session = {
 			...session,
 			runs: session.runs.map((run) => ({
@@ -235,7 +240,7 @@ describe("assurance projection", () => {
 		expect(unsupported.conclusion).toBe("completion-unsupported");
 		expect(unsupported.checks).toContainEqual(
 			expect.objectContaining({
-				id: "external-evidence",
+				id: "declared-evidence",
 				status: "unsatisfied",
 			}),
 		);

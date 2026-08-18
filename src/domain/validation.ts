@@ -1,7 +1,7 @@
 import { MAX_VALIDATION_ID_LENGTH, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import type {
+	EvidenceEntry,
 	EvidencePlatform,
-	ExternalEvidence,
 	FeatureId,
 	FeatureRun,
 	ObservedAssertion,
@@ -11,6 +11,7 @@ import type {
 	ValidationObservation,
 	ValidationScope,
 } from "./session.js";
+import { planEvidence, planGate } from "./session.js";
 import { assertionsSatisfied, unmetAssertions } from "./test-results.js";
 import { FlowTransitionError } from "./transition-error.js";
 
@@ -99,7 +100,7 @@ export function declaredAssertions(
 ): string[] {
 	return [
 		...new Set(
-			(session.plan?.externalEvidence ?? [])
+			planEvidence(session.plan)
 				.filter((entry) => entry.command === command)
 				.flatMap((entry) => entry.assertions ?? []),
 		),
@@ -204,8 +205,7 @@ export function recordValidation(
 				`A broad observation cannot select which tests it runs (${narrowing.join(", ")}). Arm the repository's canonical gate, or record this command as focused.`,
 			);
 		}
-		// Legacy plans declare no gate and retain the earlier scope rule.
-		const gate = session.plan?.gate;
+		const gate = planGate(session.plan);
 		if (gate !== undefined && input.command !== gate) {
 			throw new FlowTransitionError(
 				`A broad observation must run the plan-declared canonical gate (${gate}). Arm that exact command, or record this one as focused.`,
@@ -254,7 +254,7 @@ export function recordValidation(
 
 /** `other` and legacy entries retain the command-only rule. */
 function isObservedOnDeclaredPlatform(
-	entry: ExternalEvidence,
+	entry: EvidenceEntry,
 	observation: ValidationObservation,
 ): boolean {
 	if (entry.platform === undefined || entry.platform === "other") return true;
@@ -262,9 +262,9 @@ function isObservedOnDeclaredPlatform(
 }
 
 /** Distinguishes missing, wrong-host, and named-case evidence for recovery. */
-export function externalEvidenceRefusal(
+export function evidenceRefusal(
 	session: Session,
-	entry: ExternalEvidence,
+	entry: EvidenceEntry,
 	sourceDigest?: SourceDigest,
 ): string {
 	const eligible = session.runs
@@ -306,11 +306,11 @@ export function externalEvidenceRefusal(
 }
 
 /** Exact command, host, named-case, eligibility, and optional-source check. */
-export function unsatisfiedExternalEvidence(
+export function unsatisfiedEvidence(
 	session: Session,
 	sourceDigest?: SourceDigest,
-): ExternalEvidence[] {
-	const declared = session.plan?.externalEvidence ?? [];
+): EvidenceEntry[] {
+	const declared = planEvidence(session.plan);
 	if (declared.length === 0) return [];
 	const observed = session.runs.flatMap((run) => run.validations);
 	return declared.filter(
@@ -352,9 +352,9 @@ export function isValidationFresh(
  * by exact string; that field is free-form text and models write prose in it,
  * matching no command, so this half often does not engage although its tests,
  * which pass bare commands, do (`PROSE_VALIDATION` in
- * `tests/domain-transitions.test.ts`). `plan.gate` is the same rule on a field that
- * is always a command, so the plan half now engages for the one command that
- * matters most, whatever scope its observation was labelled.
+ * `tests/domain-transitions.test.ts`). The `scope: "gate"` command is the same
+ * rule on a field that is always a command, so the plan half now engages for the
+ * one command that matters most, whatever scope its observation was labelled.
  *
  * A command an observation claimed at `broad` scope qualifies whatever the plan
  * says, because `scope` is the one field in a recorded observation that nothing
@@ -376,7 +376,7 @@ export function unresolvedVetoedCommands(
 	run: FeatureRun,
 	sourceDigest?: SourceDigest,
 ): string[] {
-	const gate = session.plan?.gate;
+	const gate = planGate(session.plan);
 	const planned =
 		session.approval === "approved"
 			? [

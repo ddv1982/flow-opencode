@@ -83,23 +83,15 @@ const PlanFeatureSchema = z
 	})
 	.strict();
 
-const ExternalEvidenceSchema = z
+const EvidenceEntrySchema = z
 	.object({
-		requirement: boundedText("External evidence requirement"),
-		environment: boundedText("External evidence environment"),
-		command: boundedText("External evidence command"),
-		/**
-		 * Optional for the same reason the field around it is: an entry written before
-		 * `platform` existed still hydrates and keeps the command-only rule, while
-		 * `savePlan` refuses a new entry without it.
-		 */
+		requirement: boundedText("Evidence requirement"),
+		environment: boundedText("Evidence environment"),
+		command: boundedText("Evidence command"),
+		scope: z.enum(["gate", "extra"]),
 		platform: z.enum(EVIDENCE_PLATFORMS).optional(),
-		/**
-		 * Optional under the same rule: an entry written before `assertions` existed
-		 * keeps the exit-code rule, and `savePlan` refuses a new entry without it.
-		 */
 		assertions: z
-			.array(boundedText("External evidence assertion"))
+			.array(boundedText("Evidence assertion"))
 			.max(MAX_DECLARED_ASSERTIONS)
 			.optional(),
 	})
@@ -125,21 +117,7 @@ const PlanSchema = z
 			.max(MAX_PLAN_FEATURES)
 			.default([]),
 		features: z.array(PlanFeatureSchema).min(1).max(MAX_PLAN_FEATURES),
-		/**
-		 * Optional in the persisted schema so a plan written before the field existed
-		 * still hydrates; `savePlan` refuses a new plan without it.
-		 */
-		gate: boundedText("Plan gate").optional(),
-		/**
-		 * Optional for the same reason `gate` is: a plan written before the field
-		 * existed still hydrates, and `savePlan` refuses a new plan without it. An
-		 * empty array is the declared answer that nothing here needs another
-		 * environment, which is different from never having been asked.
-		 */
-		externalEvidence: z
-			.array(ExternalEvidenceSchema)
-			.max(MAX_PLAN_FEATURES)
-			.optional(),
+		evidence: z.array(EvidenceEntrySchema).max(MAX_PLAN_FEATURES).optional(),
 	})
 	.strict()
 	.superRefine((plan, context) => {

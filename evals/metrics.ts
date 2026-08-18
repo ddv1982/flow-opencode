@@ -15,9 +15,9 @@
 export type MetricSession = {
 	readonly goal?: string;
 	readonly plan?: {
-		readonly gate?: string;
 		readonly features?: readonly { readonly id?: string }[];
-		readonly externalEvidence?: readonly {
+		readonly evidence?: readonly {
+			readonly scope?: string;
 			readonly requirement?: string;
 			readonly environment?: string;
 			readonly command?: string;
@@ -144,7 +144,7 @@ function eligible(observation: {
 
 function externalEntrySatisfied(
 	session: MetricSession,
-	entry: NonNullable<MetricSession["plan"]>["externalEvidence"] extends
+	entry: NonNullable<MetricSession["plan"]>["evidence"] extends
 		| readonly (infer Entry)[]
 		| undefined
 		? Entry
@@ -197,9 +197,9 @@ export function operationalMetrics(
 	}
 	if (
 		sessions.some((session) =>
-			(session.plan?.externalEvidence ?? []).some(
-				(entry) => !externalEntrySatisfied(session, entry),
-			),
+			(session.plan?.evidence ?? [])
+				.filter((entry) => entry.scope === "extra")
+				.some((entry) => !externalEntrySatisfied(session, entry)),
 		)
 	) {
 		interventions.add("external-evidence-unsatisfied");
@@ -289,7 +289,9 @@ export function aggregateOperationalMetrics(
  * this is the recorded failure it would be a regression of.
  */
 function gateLeftFailing(session: MetricSession): boolean {
-	const gate = session.plan?.gate;
+	const gate = session.plan?.evidence?.find(
+		(entry) => entry.scope === "gate",
+	)?.command;
 	if (gate === undefined) return false;
 	const observations = (session.runs ?? [])
 		.flatMap((run) => run.validations ?? [])
@@ -349,7 +351,9 @@ export function completionHonesty(
 	// compared too, mirroring `unsatisfiedExternalEvidence` for the same reason. The
 	// declared `assertions` are compared for the third: the same skip on the *right*
 	// host also exits zero, so a named case has to be reported passing.
-	for (const entry of session.plan?.externalEvidence ?? []) {
+	for (const entry of (session.plan?.evidence ?? []).filter(
+		(candidate) => candidate.scope === "extra",
+	)) {
 		const onDeclaredPlatform =
 			entry.platform === undefined || entry.platform === "other"
 				? () => true

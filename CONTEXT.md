@@ -59,10 +59,9 @@ feature.
 code, output digest, and completeness stored directly on the active run. It is
 not a detached receipt or caller-authored success claim.
 
-**Declared gate**: The plan's `gate`, the exact canonical command that validates
-the whole repository. It is named before implementation and locked by approval, so
-the coverage decision sits in the document the user approves. A plan saved before
-this field existed declares none and keeps the older rule.
+**Declared gate**: The `scope: "gate"` entry in `plan.evidence`, the exact
+canonical command that validates the whole repository. It is named before
+implementation and locked by approval.
 
 **Broad validation**: An observation of the declared gate. Any other command is
 refused the claim, as is one that selects which tests it runs. Claiming it binds the

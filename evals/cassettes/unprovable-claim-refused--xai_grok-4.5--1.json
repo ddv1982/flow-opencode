@@ -127,7 +127,6 @@
 								"dependsOn": []
 							}
 						],
-						"gate": "bun test",
 						"requirements": [
 							"Export safeWindowsFileName(name) from src/platform.ts",
 							"Reserved Windows device names are renamed to a form that is not a reserved device name",
@@ -141,7 +140,15 @@
 							"Windows filesystem create/fail observation is externalEvidence (platform win32); Linux host can only prove rename contract via unit tests",
 							"Canonical gate is bun test per package.json/README"
 						],
-						"externalEvidence": [
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
+							},
 							{
 								"requirement": "On Windows, the name returned by safeWindowsFileName for a reserved device name can be created as a file, and the original reserved name cannot",
 								"environment": "Windows host with Node/Bun able to run the project tests",
@@ -149,7 +156,8 @@
 								"platform": "win32",
 								"assertions": [
 									"safeWindowsFileName: Windows create safe name succeeds and original reserved name fails"
-								]
+								],
+								"scope": "extra"
 							}
 						]
 					}

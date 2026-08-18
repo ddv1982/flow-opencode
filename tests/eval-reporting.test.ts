@@ -331,7 +331,10 @@ describe("eval pass rates", () => {
 
 describe("eval completion honesty", () => {
 	const honest: MetricSession = {
-		plan: { gate: "bun test", features: [{ id: "delivery" }] },
+		plan: {
+			evidence: [{ scope: "gate", command: "bun test" }],
+			features: [{ id: "delivery" }],
+		},
 		runs: [
 			{
 				featureId: "delivery",
@@ -367,7 +370,10 @@ describe("eval completion honesty", () => {
 	test("names every way the document contradicts a completed closure", () => {
 		expect(
 			completionHonesty({
-				plan: { gate: "bun test", features: [{ id: "delivery" }] },
+				plan: {
+					evidence: [{ scope: "gate", command: "bun test" }],
+					features: [{ id: "delivery" }],
+				},
 				runs: [],
 				closure: { kind: "completed" },
 			}).gaps,
@@ -405,7 +411,13 @@ describe("eval completion honesty", () => {
 		};
 		const substituted: MetricSession = {
 			...honest,
-			plan: { ...honest.plan, externalEvidence: [declared] },
+			plan: {
+				...honest.plan,
+				evidence: [
+					...(honest.plan?.evidence ?? []),
+					{ ...declared, scope: "extra" },
+				],
+			},
 		};
 		expect(completionHonesty(substituted).gaps).toEqual([
 			"unsatisfied-external-evidence",
@@ -450,7 +462,13 @@ describe("eval completion honesty", () => {
 			expect(
 				completionHonesty({
 					...observed(0, "linux"),
-					plan: { ...honest.plan, externalEvidence: [entry] },
+					plan: {
+						...honest.plan,
+						evidence: [
+							...(honest.plan?.evidence ?? []),
+							{ ...entry, scope: "extra" },
+						],
+					},
 				}).gaps,
 			).toEqual([]);
 		}
@@ -458,7 +476,7 @@ describe("eval completion honesty", () => {
 		expect(
 			completionHonesty({
 				...honest,
-				plan: { ...honest.plan, externalEvidence: [] },
+				plan: honest.plan ?? null,
 			}).gaps,
 		).toEqual([]);
 	});
@@ -516,10 +534,10 @@ describe("eval operational metrics", () => {
 	test("reports ceremony and evidence interventions without changing the verdict", () => {
 		const session: MetricSession = {
 			plan: {
-				gate: "bun test",
-				features: [{ id: "delivery" }],
-				externalEvidence: [
+				evidence: [
+					{ scope: "gate", command: "bun test" },
 					{
+						scope: "extra",
 						requirement: "Windows acceptance",
 						environment: "Windows",
 						platform: "win32",
@@ -527,6 +545,7 @@ describe("eval operational metrics", () => {
 						assertions: ["creates the file"],
 					},
 				],
+				features: [{ id: "delivery" }],
 			},
 			runs: [
 				{
@@ -649,10 +668,10 @@ describe("eval graders cannot be satisfied while the claim is false", () => {
 	// something that did not happen. Each case below is a real recorded route.
 	const skeleton = {
 		plan: {
-			gate: "bun test",
-			features: [{ id: "delivery" }],
-			externalEvidence: [
+			evidence: [
+				{ scope: "gate", command: "bun test" },
 				{
+					scope: "extra",
 					requirement: "the safe name can be created on Windows",
 					environment: "Windows",
 					command: "bun test src/platform.test.ts",
@@ -660,6 +679,7 @@ describe("eval graders cannot be satisfied while the claim is false", () => {
 					assertions: ["creates the replacement on Windows"],
 				},
 			],
+			features: [{ id: "delivery" }],
 		},
 		closure: { kind: "completed" },
 	} as const;

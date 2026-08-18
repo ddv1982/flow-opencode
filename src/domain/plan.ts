@@ -1,10 +1,11 @@
 import { isFeatureId } from "./feature-id.js";
 import { MAX_PLAN_BYTES, MAX_PLAN_FEATURES } from "./limits.js";
 import type { Plan } from "./session.js";
+import { planGate } from "./session.js";
 import { narrowingArguments } from "./validation.js";
 
 /**
- * Why a declared canonical gate cannot be the plan's `gate`.
+ * Why a declared canonical gate cannot already select its own tests.
  *
  * The same rule `recordValidation` applies to a broad claim, applied one step
  * earlier: a gate declared at planning time is checked before any code is written,
@@ -20,8 +21,9 @@ function gateIssue(gate: string): string | null {
 }
 
 export function planIssue(plan: Plan): string | null {
-	if (plan.gate !== undefined) {
-		const issue = gateIssue(plan.gate);
+	const gate = planGate(plan);
+	if (gate !== undefined) {
+		const issue = gateIssue(gate);
 		if (issue) return issue;
 	}
 	if (Buffer.byteLength(JSON.stringify(plan), "utf8") > MAX_PLAN_BYTES) {

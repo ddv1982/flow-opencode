@@ -46,33 +46,24 @@ persisted directly on the run.
 Validation commands are durable and must not contain inline secrets. Raw output
 is neither persisted nor projected; the command, exit code, completeness,
 output digest, and source binding are the evidence. `broad` means an observation of
-the plan's declared `gate`: `savePlan` requires that command for a new plan and
-refuses one that selects its own tests, `recordValidation` refuses a broad claim on
-any other command, and the declared gate is itself a vetoed command. Nothing decides
-whether the declared command is a test;
-[ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
+the plan's gate command: `savePlan` requires exactly one `scope: "gate"` evidence
+entry and refuses a gate that selects its own tests. `recordValidation` refuses a
+broad claim on any other command. Nothing decides whether the declared command is
+a test; [ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
 caller declaration made at planning time.
 
-`savePlan` also requires `externalEvidence`: every acceptance observation needing an
-environment this host may not be, each with the exact command whose passing is that
-observation, the `platform` (`win32`, `darwin`, `linux`, or `other`) that can observe
-it, and `assertions`: the test case names whose passing is that observation, or an
-empty list. An entry is satisfied only by an eligible observation of that exact command
-recorded on the platform it declared and reporting every declared case as `passed`;
-`other` and an empty `assertions` each keep the command-only rule. Case outcomes come
-from a JUnit report the command wrote, named by `resultsPath` when the command is
-armed, and only if that file was modified after arming — the names come from the
-approved plan, never from the caller. Nothing named, nothing readable, and nothing
-parseable all record each case as `absent`, which discharges nothing
-([ADR 0012](adr/0012-named-results-over-exit-codes.md)). A plan saved before either field existed declares neither and keeps
-the older rules: `broad` is the claimant's word, and no observation is owed.
-`startReview` refuses a *final* review while any entry is
-unsatisfied for current source, and `closeSession` refuses a `completed` closure
-while any entry has never passed; both refusals name the remaining closures. Feature
-reviews are deliberately not vetoed, so a goal can be split into the half this host
-can prove and the half it cannot.
-[ADR 0011](adr/0011-declared-external-evidence.md) records the measured substitutions
-this replaced.
+`savePlan` requires `evidence`: the gate entry plus every extra observation this
+host may be unable to produce. Each extra entry names the command, `platform`,
+and `assertions`. An entry is satisfied only by an eligible observation of that
+exact command on the platform it declared, with every declared case `passed`.
+Case outcomes come from a JUnit report named by `resultsPath` after arming
+([ADR 0012](adr/0012-named-results-over-exit-codes.md)). `startReview` refuses a
+final review while any extra entry is unsatisfied, and `closeSession` refuses a
+`completed` closure while any extra entry has never passed. The gate still uses
+the broad-observation and veto rules. Feature reviews are not vetoed, so a goal
+can be split into the half this host can prove and the half it cannot.
+[ADR 0014](adr/0014-one-evidence-record.md) records the collapse of `gate` and
+`externalEvidence` into this one field.
 
 A failed, incomplete, or source-drifted observation creates a freshness boundary
 for its command across attempts. Prospectively, review remains unavailable until
@@ -83,7 +74,7 @@ from before that boundary, and no other passing command discharges it — neithe
 a substitute broad gate nor a narrower command relabelled `broad`. Three command
 sets are vetoed this way: any command whose stored bytes equal an entry in the
 active feature's validation list, since Flow does not parse validation prose
-into commands; the plan's declared `gate`; and any command an observation recorded
+into commands; the plan's gate command; and any command an observation recorded
 at `broad` scope.
 Accepted same-schema Session v5 pending or completed reviews are grandfathered;
 Flow neither reopens them nor adds a retroactive veto during completion or close.
@@ -105,7 +96,7 @@ from the assignment digest.
 
 Each run has at most one review assignment. The runtime derives `feature` or
 `final`; callers do not choose it. The hidden reviewer receives approved plan
-context — including the declared `gate` and `externalEvidence`, so the two commands it
+context — including `plan.evidence`, so the commands it
 is asked about are in hand rather than inferred — its full assignment, declared
 artifacts, assignment-linked validation with each observation's recorded host, and
 completed feature IDs. It is workspace-read-only; its allowed Flow tools are
