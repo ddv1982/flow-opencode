@@ -13,7 +13,11 @@ labelled so there.
 The public surface — tools, commands, guides, agents, and the Session v5 shape —
 stays frozen while those guarantees are measured; additive optional fields are
 allowed, and a removal or rename waits for a major announced one release ahead.
-[Release qualification](release-qualification.md) owns the thresholds and cadence.
+A new required-at-save plan declaration is a major. Today's declarations are
+`gate`, `externalEvidence`, and on each entry `platform` and `assertions`. Do
+not add another evidence field to close a measured cheat; collapse these
+instead. [Release qualification](release-qualification.md) owns the thresholds
+and cadence.
 
 Flow is a serial durable workflow plugin, not a general orchestration framework.
 It owns planning state, one active run, observed validation, one independent
@@ -166,13 +170,13 @@ plainly instead of letting continuation fail silently after every feature. This
 adds no Session v5 field and never blocks a transition.
 
 `flow_status` may also add timing for the latest `/flow-auto` invocation in the
-current plugin process to top-level workflow data. `activeMs` is process-local
-wall time while the coordinator classifies the lease as active, not CPU time or
-pure coding time. `waitingForUserMs` counts only recognized projected
-`flow_plan_approve` and `await-user-direction` checkpoints. Paused, inactive,
-errored, and unprojected waits are excluded. Timing resets on plugin reload,
-never enters Session v5 or a projection, and never authorizes or blocks a
-transition.
+current plugin process to top-level workflow data, and only on `view: "detail"`.
+Compact status omits it. `activeMs` is process-local wall time while the
+coordinator classifies the lease as active, not CPU time or pure coding time.
+`waitingForUserMs` counts only recognized projected `flow_plan_approve` and
+`await-user-direction` checkpoints. Paused, inactive, errored, and unprojected
+waits are excluded. Timing resets on plugin reload, never enters Session v5 or a
+projection, and never authorizes or blocks a transition.
 
 ## Validation and review
 

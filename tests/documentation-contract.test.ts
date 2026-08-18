@@ -504,6 +504,31 @@ describe("Flow v6 documentation contract", () => {
 		}
 	});
 
+	test("pins today's plan evidence declarations until a major", async () => {
+		const sessionSource = await readFile("src/domain/session.ts", "utf8");
+		const planBlock = sessionSource.slice(
+			sessionSource.indexOf("export type Plan ="),
+			sessionSource.indexOf("export type ValidationScope"),
+		);
+		const optionalPlanFields = [
+			...planBlock.matchAll(/^\t(\w+)\?:/gm),
+		].map((match) => match[1]);
+		expect(optionalPlanFields).toEqual(["externalEvidence", "gate"]);
+
+		const entryBlock = sessionSource.slice(
+			sessionSource.indexOf("export type ExternalEvidence ="),
+			sessionSource.indexOf("export type ObservedAssertion"),
+		);
+		const optionalEntryFields = [
+			...entryBlock.matchAll(/^\t(\w+)\?:/gm),
+		].map((match) => match[1]);
+		expect(optionalEntryFields).toEqual(["platform", "assertions"]);
+
+		const transitions = await readFile("src/domain/transitions.ts", "utf8");
+		expect(transitions).toContain("assertDeclaredGate");
+		expect(transitions).toContain("assertDeclaredExternalEvidence");
+	});
+
 	test("keeps maintained relative Markdown links resolvable", async () => {
 		const documents = [
 			"README.md",
