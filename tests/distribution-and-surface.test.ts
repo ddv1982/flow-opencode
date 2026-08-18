@@ -1259,14 +1259,18 @@ describe("flow-auto host continuation", () => {
 		const statusResponse = JSON.parse(
 			String(await status.execute({ request: { view: "compact" } }, context)),
 		);
-		expect(statusResponse.workflowData.autoTiming).toMatchObject({
+		expect(statusResponse.workflowData).not.toHaveProperty("autoTiming");
+		expect(statusResponse.workflowData.projection).not.toHaveProperty(
+			"autoTiming",
+		);
+		const detailResponse = JSON.parse(
+			String(await status.execute({ request: { view: "detail" } }, context)),
+		);
+		expect(detailResponse.workflowData.autoTiming).toMatchObject({
 			scope: "latest-flow-auto-in-current-plugin-process",
 			authoritative: false,
 			state: "active",
 		});
-		expect(statusResponse.workflowData.projection).not.toHaveProperty(
-			"autoTiming",
-		);
 		await hooks.event({
 			event: {
 				type: "session.idle",

@@ -304,11 +304,16 @@ function toolError(error: unknown): string {
 function withAutoContext(
 	response: FlowToolResponse,
 	options: ToolOptions,
+	view?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
 	try {
-		const timing = options.autoTimingSnapshot?.();
-		if (timing) workflowData = { ...workflowData, autoTiming: timing };
+		// Compact is the ordinary loop read. Timing is process-local diagnostics;
+		// attach it only when the caller asked for detail.
+		if (view === "detail") {
+			const timing = options.autoTimingSnapshot?.();
+			if (timing) workflowData = { ...workflowData, autoTiming: timing };
+		}
 	} catch {
 		// Timing is diagnostic; losing it must not fail a status read.
 	}
@@ -383,7 +388,11 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			args: StatusArgs,
 			execute: (args, context) =>
 				execute(context, async (workspace) =>
-					withAutoContext(await flowStatus(workspace, args), options),
+					withAutoContext(
+						await flowStatus(workspace, args),
+						options,
+						args.request.view,
+					),
 				),
 		}),
 		flow_plan_save: tool({
