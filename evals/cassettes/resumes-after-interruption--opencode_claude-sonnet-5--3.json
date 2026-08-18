@@ -95,8 +95,6 @@
 							"Test added to the existing src/greet.test.ts file rather than a new test file, matching current single-file test convention.",
 							"Gate command per README.md is `bun test`."
 						],
-						"gate": "bun test",
-						"externalEvidence": [],
 						"features": [
 							{
 								"id": "farewell-function",
@@ -107,6 +105,16 @@
 									"bun test — new farewell test case passes and existing greet test still passes"
 								],
 								"dependsOn": []
+							}
+						],
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
 							}
 						]
 					}

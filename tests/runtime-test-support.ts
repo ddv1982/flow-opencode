@@ -13,6 +13,7 @@ import {
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
 import type {
+	EvidenceEntry,
 	EvidencePlatform,
 	Plan,
 	ReviewAssignment,
@@ -21,6 +22,19 @@ import type {
 	SourceDigest,
 } from "../src/domain/session.js";
 import type { TransitionEnvironment } from "../src/domain/transitions.js";
+
+export function repositoryEvidence(command: string): EvidenceEntry[] {
+	return [
+		{
+			scope: "gate",
+			requirement: "Repository suite",
+			environment: "this host",
+			command,
+			platform: "other",
+			assertions: [],
+		},
+	];
+}
 
 export const FEATURE = "runtime-kernel";
 export const SOURCE_A = `sha256:${"a".repeat(64)}` as SourceDigest;
@@ -32,8 +46,7 @@ export const plan: Plan = {
 	overview: "Exercise the public application boundary.",
 	requirements: ["Persist validation directly in Session v5."],
 	decisions: ["Use a single final review for the final feature."],
-	gate: "bun test",
-	externalEvidence: [],
+	evidence: repositoryEvidence("bun test"),
 	features: [
 		{
 			id: FEATURE,

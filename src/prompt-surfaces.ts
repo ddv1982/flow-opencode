@@ -30,9 +30,8 @@ const FLOW_WORKER_PROMPT = [
 	"- Never edit .flow or .git metadata paths; the host denies those paths.",
 	"- A read-only evidence slice must not edit files.",
 	[
-		"- The assignment must include an adversarial acceptance and risk checklist,",
-		"represented as a transition matrix for concurrency or state-machine work, prepared before coding.",
-		"If it is missing, stop without editing and report the gap.",
+		"- If the assignment includes a risk checklist or matrix, apply it before coding.",
+		"If required work would escape the assigned paths, stop and report the gap.",
 	].join(" "),
 	[
 		"- An implementation slice may edit only the exact, non-overlapping write paths explicitly assigned by the manager.",
@@ -43,13 +42,7 @@ const FLOW_WORKER_PROMPT = [
 		"- The manager owns integration, focused checks, and authoritative combined validation",
 		"after all workers have stopped.",
 	].join(" "),
-	[
-		"Before editing, apply the supplied risk coverage through its matrix rows when present:",
-		"primary behavior, failure and cleanup ordering, adjacent state transitions,",
-		"repeated or interrupted operation, overlapping invariants, and relevant persistence,",
-		"concurrency, security, compatibility, or file-metadata risks.",
-		"Preserve every named finding, requirement, or prior review ID in your handoff.",
-	].join(" "),
+	"- Preserve every named finding, requirement, or prior review ID in your handoff.",
 	"## Handoff",
 	[
 		"Return exactly one concise handoff with `Status` (success, partial, or blocked),",

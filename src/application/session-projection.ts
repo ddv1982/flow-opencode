@@ -327,18 +327,10 @@ export function reviewerProjection(
 						validation: [...candidate.validation],
 						dependsOn: [...candidate.dependsOn],
 					})),
-					// The two commands the plan declares, projected because the reviewer is
-					// asked about both and could see neither. It receives each observation's
-					// command, scope, and recorded host, so without these it cannot tell a
-					// broad observation that ran the canonical gate from one that ran
-					// something else, and cannot tell whether a declared environment was
-					// observed on the host it named. A `platform` of `other` is judgment by
-					// design, and judgment needs the entry in hand.
-					...(plan.gate === undefined ? {} : { gate: plan.gate }),
-					...(plan.externalEvidence === undefined
+					...(plan.evidence === undefined
 						? {}
 						: {
-								externalEvidence: plan.externalEvidence.map((entry) => ({
+								evidence: plan.evidence.map((entry) => ({
 									...entry,
 								})),
 							}),

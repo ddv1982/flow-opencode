@@ -1006,8 +1006,7 @@ describe("Flow application runtime gates", () => {
 				// The reviewer is asked whether a broad observation ran the canonical gate
 				// and whether a declared environment was really observed, and used to be
 				// shown neither command.
-				gate: multiFeaturePlan.gate,
-				externalEvidence: multiFeaturePlan.externalEvidence,
+				evidence: multiFeaturePlan.evidence,
 			},
 			feature: multiFeaturePlan.features[1],
 			assignment: {

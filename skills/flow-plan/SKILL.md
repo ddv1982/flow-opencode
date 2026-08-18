@@ -49,19 +49,16 @@ Save one plan with:
 - `overview`: the implementation approach and important boundaries.
 - `requirements`: acceptance criteria, constraints, and non-goals.
 - `decisions`: assumptions and architecture or scope choices already made.
-- `gate`: the canonical whole-repository command, read from repository
-  configuration. Broad evidence later runs this command byte-for-byte, so a check
-  too weak to fail forecloses broad evidence for the session.
-- `externalEvidence`: each acceptance observation needing an operating system,
-  architecture, service, credential, setting, or hardware this host may lack, as
-  `requirement`, `environment`, the exact `command` whose passing is that observation,
-  `platform`: `win32`, `darwin`, `linux`, or `other` for a non-OS environment, and
-  `assertions`: the test case names whose passing is that observation, empty for
-  evidence that is not a test result. Empty list when the goal is fully observable
-  here. That command, on that platform, reporting those cases passing is what
-  satisfies it: final review and completed closure stay refused until then. A skipped
-  case exits zero and satisfies nothing, and recording the gap as a `requirements`
-  non-goal declares nothing.
+- `evidence`: one `scope: "gate"` entry for the canonical whole-repository
+  command, plus `scope: "extra"` entries for observations this host may lack.
+  Each entry names `requirement`, `environment`, `command`, `platform`
+  (`win32`, `darwin`, `linux`, or `other`), and `assertions` (empty when the
+  evidence is not a test result). Broad observations run the gate command
+  byte-for-byte. Extra entries may be omitted when the goal is fully observable
+  here. Final review and completed closure stay refused until every extra
+  entry is satisfied on its declared platform with named cases passing. The
+  gate is the command every broad observation must run; a failed or
+  claimed-broad gate still vetoes review.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
 

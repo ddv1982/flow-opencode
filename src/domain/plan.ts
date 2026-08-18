@@ -1,17 +1,9 @@
 import { isFeatureId } from "./feature-id.js";
 import { MAX_PLAN_BYTES, MAX_PLAN_FEATURES } from "./limits.js";
 import type { Plan } from "./session.js";
+import { planGate } from "./session.js";
 import { narrowingArguments } from "./validation.js";
 
-/**
- * Why a declared canonical gate cannot be the plan's `gate`.
- *
- * The same rule `recordValidation` applies to a broad claim, applied one step
- * earlier: a gate declared at planning time is checked before any code is written,
- * so a plan that names a hand-picked subset as the whole suite is refused while it
- * is still cheap to fix. Nothing here decides whether the command is a *test* —
- * that stays a whitelist — only that it does not already say it is narrow.
- */
 function gateIssue(gate: string): string | null {
 	const narrowing = narrowingArguments(gate);
 	return narrowing.length === 0
@@ -20,8 +12,9 @@ function gateIssue(gate: string): string | null {
 }
 
 export function planIssue(plan: Plan): string | null {
-	if (plan.gate !== undefined) {
-		const issue = gateIssue(plan.gate);
+	const gate = planGate(plan);
+	if (gate !== undefined) {
+		const issue = gateIssue(gate);
 		if (issue) return issue;
 	}
 	if (Buffer.byteLength(JSON.stringify(plan), "utf8") > MAX_PLAN_BYTES) {

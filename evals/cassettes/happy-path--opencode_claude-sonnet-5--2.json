@@ -94,8 +94,6 @@
 							"Mirror the existing greet() function's style (arrow vs function declaration, template literal) for consistency",
 							"Add the new test case in the existing src/greet.test.ts file rather than a new file, consistent with current single-file test convention"
 						],
-						"gate": "bun test",
-						"externalEvidence": [],
 						"features": [
 							{
 								"id": "farewell-function",
@@ -103,6 +101,16 @@
 								"summary": "Implement exported farewell(name) in src/greet.ts and add a focused test in src/greet.test.ts",
 								"targets": ["src/greet.ts", "src/greet.test.ts"],
 								"validation": ["bun test"]
+							}
+						],
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
 							}
 						]
 					}

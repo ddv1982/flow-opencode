@@ -104,26 +104,14 @@ const plan = host
 		requirements: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		decisions: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		features: host.array(planFeature).min(1).max(MAX_PLAN_FEATURES),
-		/**
-		 * The exact canonical command every broad observation must run.
-		 *
-		 * Optional here and required by `savePlan`, like every other plan rule the
-		 * domain owns: the persisted schema has to keep hydrating plans written before
-		 * the field existed, and the two schemas stay at parity.
-		 */
-		gate: text.optional(),
-		/**
-		 * Acceptance observations needing an environment this host may not be, each
-		 * with the exact command whose passing is that observation. Optional and
-		 * required by `savePlan` for the same reason `gate` is.
-		 */
-		externalEvidence: host
+		evidence: host
 			.array(
 				host
 					.object({
 						requirement: text,
 						environment: text,
 						command: text,
+						scope: host.enum(["gate", "extra"]),
 						platform: host.enum(EVIDENCE_PLATFORMS).optional(),
 						assertions: host
 							.array(text)
@@ -304,11 +292,14 @@ function toolError(error: unknown): string {
 function withAutoContext(
 	response: FlowToolResponse,
 	options: ToolOptions,
+	view?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
 	try {
-		const timing = options.autoTimingSnapshot?.();
-		if (timing) workflowData = { ...workflowData, autoTiming: timing };
+		if (view === "detail") {
+			const timing = options.autoTimingSnapshot?.();
+			if (timing) workflowData = { ...workflowData, autoTiming: timing };
+		}
 	} catch {
 		// Timing is diagnostic; losing it must not fail a status read.
 	}
@@ -383,7 +374,11 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			args: StatusArgs,
 			execute: (args, context) =>
 				execute(context, async (workspace) =>
-					withAutoContext(await flowStatus(workspace, args), options),
+					withAutoContext(
+						await flowStatus(workspace, args),
+						options,
+						args.request.view,
+					),
 				),
 		}),
 		flow_plan_save: tool({

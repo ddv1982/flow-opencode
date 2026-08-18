@@ -32,14 +32,13 @@ and a rule that lives only in a prompt.
 - A failed review must carry every still-live prior finding id forward.
 - Review is refused while a vetoed command's latest evidence is not a pass:
   any command an observation claimed at `broad` scope, any command whose bytes
-  match the feature's plan-listed validation, and the plan's declared `gate`.
-- A `broad` observation must run the plan-declared `gate` byte-for-byte, and may
+  match the feature's plan-listed validation, and the plan's gate command.
+- A `broad` observation must run the plan's gate command byte-for-byte, and may
   not select which tests it runs.
 - Final review requires a passing broad observation for current source.
-- Final review and `completed` closure are refused while any command the plan
-  declared in `externalEvidence` has not passed on the OS that entry declared.
-  Feature reviews are not, so a goal can be split into the half this host can prove
-  and the half it cannot.
+- Final review and `completed` closure are refused while any `plan.evidence`
+  entry has not passed on the OS that entry declared. Feature reviews are not,
+  so a goal can be split into the half this host can prove and the half it cannot.
 - One revision per accepted mutation; an operation id replays exactly or conflicts.
 - Every mutation validates the whole schema and writes atomically under one
   cross-process lock.
@@ -51,7 +50,7 @@ and a rule that lives only in a prompt.
   neither yields a durable never-passing observation rather than a silent pass.
 - That the executed command's bytes equal the armed command.
 - The **host platform** each observation ran on, normalized from what the runtime
-  reports. A model cannot claim it, and an `externalEvidence` entry naming an OS is
+  reports. A model cannot claim it, and an evidence entry naming an OS is
   satisfied only by an observation recorded on it.
 - **Which declared test cases the command reported passing**, read from a JUnit report
   the command wrote after Flow armed it. An entry naming cases is satisfied only when
@@ -66,10 +65,9 @@ and a rule that lives only in a prompt.
 
 - `artifactsChanged`. Flow validates bounded workspace-relative paths and labels
   them Flow-reported. It does not prove a path exists, changed, or is exhaustive.
-- The plan's `gate` command itself. Nothing decides whether a command is a *test*:
-  a plan may declare a check that cannot fail. What changed with the gate field is
-  *when* that is decided — at planning time, in the document the user approves,
-  rather than mid-run against whatever the suite was doing.
+- The plan's gate command itself. Nothing decides whether a command is a *test*:
+  a plan may declare a check that cannot fail. That decision is made at planning
+  time, in the document the user approves.
 - Feature `validation` prose, `targets`, `requirements`, and closure summaries.
 
 ## Model-judgment
@@ -84,26 +82,25 @@ reason Flow asks you to read the review rather than trust the verdict.
   checklist, and failed an unprovable claim instead of passing it conditionally.
   `unprovable-claim-refused` and `defect-fails-review` put work in front of it that
   should not pass; neither can force the review path.
-- **Evidence completeness.** That an `externalEvidence` entry names the observation
-  the goal actually asks for, a command that would really produce it, and the platform
-  it actually needs — `other` restores the command-only rule. The runtime
-  enforces that the declared command passed on the declared OS; that the entry
-  describes the goal is visible in the approved plan and in the reviewer's plan
-  context, and judged there.
+- **Evidence completeness.** That an evidence entry names the observation the
+  goal actually asks for, a command that would really produce it, and the
+  platform it actually needs. The runtime enforces that the declared command
+  passed on the declared OS. That the entry describes the goal is judged in the
+  approved plan and the review.
 - **Scope discipline.** That implementation stayed inside the approved plan, and
   that a worker wave respected its assigned paths.
 - **Honest reporting.** That the closing summary matches what happened.
 
 ## Unenforced
 
-- A declared `gate` that cannot fail. See Caller-declared above; deciding which
+- A declared gate that cannot fail. See Caller-declared above; deciding which
   commands count as tests is an open-ended whitelist, not an invariant.
 - A suite that skips where no case names were declared. `assertions: []` keeps the
   exit-code rule, which is the honest answer for a credential or a device and the
   remaining escape for a test result. See Caller-declared.
-- Plans saved before `plan.gate` and `plan.externalEvidence` existed. They declare
-  neither and keep the older, weaker rules: `broad` is the claimant's word, and no
-  acceptance observation is owed.
+- Plans saved before `plan.evidence` existed. They declare none and keep the
+  older, weaker rules: `broad` is the claimant's word, and no acceptance
+  observation is owed. This build does not hydrate `gate` or `externalEvidence`.
 - Worker file boundaries beyond `.flow`, `.git`, and Bash denial. Exact per-slice
   write paths are a prompt contract the manager audits afterward.
 - `/flow-auto` continuation across model turns, which depends on an unversioned

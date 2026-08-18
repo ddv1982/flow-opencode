@@ -139,7 +139,7 @@ What it asserts is the run's disposition, not the reviewer's verdict. The first 
 matrix showed why: the best outcome it recorded split the goal into a provable
 feature and an unprovable one, passed review on the first and blocked the second
 with a finding — and a blanket rule against passing verdicts failed it. So the
-failures are a `completed` closure, a plan that declared no `externalEvidence` (the
+failures are a `completed` closure, a plan that declared no extra `evidence` (the
 route that writes the acceptance clause out of scope as a non-goal and satisfies what
 is left), a stop that offers neither deferred nor abandoned closure, and never naming
 the missing evidence at all. Refusing before a plan exists is a pass when a question

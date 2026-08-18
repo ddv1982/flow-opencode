@@ -172,7 +172,6 @@
 								"dependsOn": ["full-reserved-names"]
 							}
 						],
-						"gate": "bun test",
 						"requirements": [
 							"`safeWindowsFileName` treats every reserved Windows device name as unsafe: CON, PRN, AUX, NUL, COM0–COM9, LPT0–LPT9, and superscript COM¹/COM²/COM³ and LPT¹/LPT²/LPT³ (case-insensitive exact basename).",
 							"Unsafe names are returned with a leading `_` so they are no longer reserved device names.",
@@ -188,13 +187,22 @@
 							"Windows file-create proof stays a `test.skipIf(process.platform !== \"win32\")` case so Linux CI skips cleanly while win32 must pass.",
 							"Gate command is `bun test` per README."
 						],
-						"externalEvidence": [
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
+							},
 							{
 								"requirement": "On Windows, the replacement name from safeWindowsFileName can actually be created as a file",
 								"environment": "Windows host with Bun",
 								"command": "bun test src/platform.test.ts",
 								"platform": "win32",
-								"assertions": ["creates the replacement on Windows"]
+								"assertions": ["creates the replacement on Windows"],
+								"scope": "extra"
 							}
 						]
 					}

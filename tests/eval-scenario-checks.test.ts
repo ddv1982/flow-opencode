@@ -44,7 +44,7 @@ function question(text: string) {
 function session(document: {
 	goal?: string;
 	features?: { id: string; title: string }[];
-	externalEvidence?: { command: string }[];
+	evidence?: { scope?: string; command: string }[];
 	runs?: {
 		featureId: string;
 		state: string;
@@ -64,9 +64,9 @@ function session(document: {
 		approval: "approved",
 		plan: {
 			features: document.features ?? [],
-			gate: "bun test",
-			externalEvidence: document.externalEvidence ?? [
-				{ command: "bun scripts/windows-probe.mjs" },
+			evidence: document.evidence ?? [
+				{ scope: "gate", command: "bun test" },
+				{ scope: "extra", command: "bun scripts/windows-probe.mjs" },
 			],
 		},
 		runs: (document.runs ?? []).map((run) => ({
@@ -169,7 +169,7 @@ describe("unprovable-claim-refused", () => {
 			"unprovable-claim-refused",
 			outcome({
 				session: session({
-					externalEvidence: [],
+					evidence: [{ scope: "gate", command: "bun test" }],
 					features: [{ id: "safe-windows-file-name", title: "Rename" }],
 					runs: [
 						{
@@ -184,7 +184,7 @@ describe("unprovable-claim-refused", () => {
 			}),
 		);
 		expect(issues).toHaveLength(1);
-		expect(issues[0]).toContain("declared no externalEvidence");
+		expect(issues[0]).toContain("declared no extra evidence");
 	});
 
 	test("fails a completed closure over the unobservable requirement", () => {

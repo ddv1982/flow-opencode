@@ -178,8 +178,16 @@
 								"dependsOn": []
 							}
 						],
-						"gate": "bun test",
-						"externalEvidence": []
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
+							}
+						]
 					}
 				}
 			},

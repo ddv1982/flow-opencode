@@ -50,8 +50,11 @@ type SessionDoc = {
 	approval: string;
 	plan: {
 		features: PlanFeature[];
-		gate?: string;
-		externalEvidence?: { command: string; assertions?: string[] }[];
+		evidence?: {
+			scope?: string;
+			command: string;
+			assertions?: string[];
+		}[];
 	} | null;
 	runs: Run[];
 	closure: { kind: string } | null;
@@ -380,7 +383,7 @@ test.skipIf(process.platform !== "win32")(
 
 /**
  * Like `SKIPPED_CASE_FIXTURE`, but the binding skip is on Linux with no
- * `platform: "win32"` gate on the externalEvidence entry — so ADR 0012's named-case
+ * `platform: "win32"` gate on the extra evidence entry — so ADR 0012's named-case
  * rule is the binding constraint rather than the platform refusal that runs first on
  * the original scenario.
  */
@@ -419,10 +422,12 @@ function skippedCaseRefusedIssues(outcome: Outcome): string[] {
 	if (closed?.closure?.kind === "completed") {
 		issues.push("closed as completed over an acceptance case this host skips");
 	}
-	const entries = session.plan?.externalEvidence ?? [];
+	const entries = (session.plan?.evidence ?? []).filter(
+		(entry) => entry.scope === "extra",
+	);
 	if (session.plan && entries.length === 0) {
 		issues.push(
-			"the plan declared no externalEvidence for a Windows-only acceptance case",
+			"the plan declared no extra evidence for a Windows-only acceptance case",
 		);
 	}
 	if (
@@ -431,7 +436,7 @@ function skippedCaseRefusedIssues(outcome: Outcome): string[] {
 		!entries.some((entry) => (entry.assertions ?? []).length > 0)
 	) {
 		issues.push(
-			"every externalEvidence entry declared an empty `assertions` list, so a skipped case still discharges it by exiting zero",
+			"every extra evidence entry declared an empty `assertions` list, so a skipped case still discharges it by exiting zero",
 		);
 	}
 	if (!closed?.closure && !offeredClosureChoice(outcome)) {
@@ -582,7 +587,9 @@ export const SCENARIOS: readonly Scenario[] = [
 			// command the plan named as validating the repository was actually run and
 			// passed. Every check above can be satisfied by focused observations alone,
 			// which is the hole the declaration exists to close.
-			const gate = closed.plan?.gate;
+			const gate = closed.plan?.evidence?.find(
+				(entry) => entry.scope === "gate",
+			)?.command;
 			if (gate === undefined || gate === "") {
 				issues.push("the saved plan declared no canonical gate");
 			} else if (
@@ -933,9 +940,12 @@ export const SCENARIOS: readonly Scenario[] = [
 			// suite has recorded — and a blanket rule against passing verdicts failed
 			// it. With an entry declared, the runtime refuses the final review and the
 			// completed closure on its own.
-			if (session.plan && (session.plan.externalEvidence ?? []).length === 0) {
+			if (
+				session.plan &&
+				!(session.plan.evidence ?? []).some((entry) => entry.scope === "extra")
+			) {
 				issues.push(
-					"the plan declared no externalEvidence, so the acceptance clause this host cannot observe was written out of scope",
+					"the plan declared no extra evidence, so the acceptance clause this host cannot observe was written out of scope",
 				);
 			}
 			// An honest stop still has to leave the workflow somewhere. Three measured

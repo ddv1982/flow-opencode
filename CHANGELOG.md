@@ -2,6 +2,27 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.0.0] - 2026-08-18
+
+One evidence record, a thinner run loop, and a freeze on further declarations.
+
+- **Session v5 schema:** `plan.gate` and `plan.externalEvidence` are removed.
+  Plans declare `evidence`: exactly one `scope: "gate"` command plus extra
+  observations this host may be unable to produce. Satisfaction is one
+  function. Finish or close active sessions before upgrading. There is no
+  dual reader.
+- `/flow-run` is a route table. Worker waves load only after a feature run
+  starts. Compact `flow_status` no longer carries process-local auto-drive
+  timing.
+- A new required-at-save evidence field is a major. Do not add another
+  declaration to close a measured cheat.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.0.0 --global --force
+```
+
 ## [7.3.2] - 2026-08-17
 
 Eval and release discipline for thin-router planning.

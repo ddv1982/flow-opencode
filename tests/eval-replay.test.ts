@@ -91,8 +91,16 @@ function happyPathCassette(overrides: Partial<Cassette> = {}): Cassette {
 							dependsOn: [],
 						},
 					],
-					gate: "bun test",
-					externalEvidence: [],
+					evidence: [
+						{
+							scope: "gate",
+							requirement: "Repository suite",
+							environment: "this host",
+							command: "bun test",
+							platform: "other",
+							assertions: [],
+						},
+					],
 				},
 			},
 			{ revision: 1, sessionId: RECORDED_SESSION },
