@@ -4,9 +4,8 @@
 // Every report records the prompt-surface size alongside the pass rate and token
 // use, so trimming a prompt produces a comparable datapoint instead of a guess.
 //
-//   bun run eval -- --model openai/gpt-5.6-sol
-//   bun run eval -- --model openai/gpt-5.6-sol --model opencode/claude-opus-5
-//   bun run eval -- --scenario happy-path --repeat 3
+//   bun run eval -- --repeat 3
+//   bun run eval -- --model openai/gpt-5.6-sol --scenario happy-path
 
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -23,6 +22,7 @@ import {
 	cassetteFileName,
 	type FidelityNote,
 } from "./cassette.js";
+import { DEFAULT_EVAL_MODELS } from "./default-models.js";
 import {
 	askedQuestions,
 	askedScoring,
@@ -187,7 +187,7 @@ function parseArgs(argv: string[]) {
 			index += 1;
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
-				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id>] [--repeat <n>] [--concurrency <n>]",
+				"usage: bun run eval -- [--model <provider/model> ...] [--scenario <id>] [--repeat <n>] [--concurrency <n>]",
 			);
 			process.exit(0);
 		}
@@ -198,10 +198,7 @@ function parseArgs(argv: string[]) {
 			models.push(...fromEnv.split(",").map((entry) => entry.trim()));
 	}
 	if (models.length === 0) {
-		console.error(
-			"No model given. Pass --model provider/model (repeatable) or set FLOW_EVAL_MODEL.",
-		);
-		process.exit(2);
+		models.push(...DEFAULT_EVAL_MODELS);
 	}
 	if (!Number.isSafeInteger(repeat) || repeat < 1) {
 		console.error("--repeat must be a positive integer.");

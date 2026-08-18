@@ -14,10 +14,19 @@ hold.
 Needs provider credentials, so this is never part of `bun run check`.
 
 ```bash
-bun run eval -- --model openai/gpt-5.6-sol
-bun run eval -- --model openai/gpt-5.6-sol --model opencode/claude-opus-5
-bun run eval -- --scenario happy-path --repeat 3
+bun run eval -- --repeat 3
+bun run eval -- --model openai/gpt-5.6-sol --scenario happy-path --repeat 3
 ```
+
+With no `--model`, the harness uses Sol, Sonnet 5, and Grok 4.5 as
+`openai/gpt-5.6-sol`, `opencode/claude-sonnet-5`, and `xai/grok-4.5`. Those are
+the same three families Cursor exposes. The eval host is OpenCode, so the ids
+are OpenCode providers, not Cursor's catalog. Three prefixes keep qualification
+honest. A single `opencode/` Zen key would otherwise count as one vendor.
+
+The weekly workflow skips until at least two of `OPENAI_API_KEY`,
+`OPENCODE_API_KEY`, and `XAI_API_KEY` are present. `FLOW_EVAL_MODEL` or a
+workflow dispatch still overrides the list.
 
 Ids are `providerID/modelID` as the host resolves them, which depends on which
 providers you have authenticated — Opus 5 may be `opencode/claude-opus-5` rather
