@@ -71,13 +71,12 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
-          FLOW_EVAL_MODEL: ${{ inputs.models || vars.FLOW_EVAL_MODELS }}
+          REQUESTED: ${{ inputs.models }}
+          CONFIGURED: ${{ vars.FLOW_EVAL_MODELS }}
         run: |
-          models="$(bun evals/resolve-matrix.ts)"
-          if [ -z "$models" ]; then
-            echo "::notice::Default matrix is Sol, Sonnet 5, and Grok 4.5. Skipping until at least two of OPENAI_API_KEY, OPENCODE_API_KEY, and XAI_API_KEY are set."
+          models="${REQUESTED:-$CONFIGURED}"
+          if [ -z "$models" ] || { [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; }; then
+            echo "::notice::No eval model matrix or provider credentials configured; skipping."
             echo "models=" >> "$GITHUB_OUTPUT"
           else
             echo "models=$models" >> "$GITHUB_OUTPUT"
@@ -88,8 +87,6 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           FLOW_EVAL_MODEL: ${{ steps.matrix.outputs.models }}
           FLOW_EVAL_NO_AUTH_COPY: "1"
           # Through the environment, not interpolated into the script: a dispatch

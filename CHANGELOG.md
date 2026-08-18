@@ -16,8 +16,6 @@ One evidence record, a thinner run loop, and a freeze on further declarations.
   timing.
 - A new required-at-save evidence field is a major. Do not add another
   declaration to close a measured cheat.
-- The default eval matrix is Sol, Sonnet 5, and Grok 4.5 on three OpenCode
-  providers. The weekly job skips until two of those credentials exist.
 
 Install or update:
 
