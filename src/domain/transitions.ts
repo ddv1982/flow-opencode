@@ -28,7 +28,7 @@ import {
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
-	unsatisfiedEvidence,
+	unsatisfiedExtraEvidence,
 } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
@@ -476,9 +476,7 @@ export function startReview(
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
 	if (kind === "final") {
-		const unsatisfied = unsatisfiedEvidence(session, input.sourceDigest).filter(
-			(entry) => entry.scope === "extra",
-		);
+		const unsatisfied = unsatisfiedExtraEvidence(session, input.sourceDigest);
 		if (unsatisfied.length > 0) {
 			fail(
 				`Final review requires the plan's declared evidence to pass for the current workspace content: ${unsatisfied
@@ -759,9 +757,7 @@ export function closeSession(
 		fail("A completed close requires every planned feature to pass review.");
 	}
 	if (input.kind === "completed") {
-		const unsatisfied = unsatisfiedEvidence(session).filter(
-			(entry) => entry.scope === "extra",
-		);
+		const unsatisfied = unsatisfiedExtraEvidence(session);
 		if (unsatisfied.length > 0) {
 			fail(
 				`A completed close requires the plan's declared evidence to have passed: ${unsatisfied

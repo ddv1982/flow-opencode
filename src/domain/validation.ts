@@ -328,6 +328,15 @@ export function unsatisfiedEvidence(
 	);
 }
 
+export function unsatisfiedExtraEvidence(
+	session: Session,
+	sourceDigest?: SourceDigest,
+): EvidenceEntry[] {
+	return unsatisfiedEvidence(session, sourceDigest).filter(
+		(entry) => entry.scope === "extra",
+	);
+}
+
 export function isValidationFresh(
 	session: Session,
 	run: FeatureRun,
