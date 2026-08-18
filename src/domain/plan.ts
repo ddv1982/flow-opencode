@@ -4,15 +4,6 @@ import type { Plan } from "./session.js";
 import { planGate } from "./session.js";
 import { narrowingArguments } from "./validation.js";
 
-/**
- * Why a declared canonical gate cannot already select its own tests.
- *
- * The same rule `recordValidation` applies to a broad claim, applied one step
- * earlier: a gate declared at planning time is checked before any code is written,
- * so a plan that names a hand-picked subset as the whole suite is refused while it
- * is still cheap to fix. Nothing here decides whether the command is a *test* —
- * that stays a whitelist — only that it does not already say it is narrow.
- */
 function gateIssue(gate: string): string | null {
 	const narrowing = narrowingArguments(gate);
 	return narrowing.length === 0

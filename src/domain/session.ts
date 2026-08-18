@@ -21,7 +21,6 @@ export type PlanFeature = Readonly<{
 	dependsOn: FeatureId[];
 }>;
 
-/** Repository suite versus an observation this host may be unable to produce. */
 type EvidenceScope = "gate" | "extra";
 
 /**
@@ -57,11 +56,6 @@ export type Plan = Readonly<{
 	requirements: string[];
 	decisions: string[];
 	features: PlanFeature[];
-	/**
-	 * Acceptance observations declared at planning time. Exactly one `scope: "gate"`
-	 * entry is required at save. Extra entries are the observations this host may
-	 * be unable to produce. Optional on disk; `savePlan` requires the field.
-	 */
 	evidence?: EvidenceEntry[] | undefined;
 }>;
 

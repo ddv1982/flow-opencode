@@ -1506,11 +1506,6 @@ describe("Session v5 domain state machine", () => {
 	});
 
 	test("replays a plan-save accepted before the declarations were required", () => {
-		// The upgrade path. A session written by a version without these guards holds an
-		// operation record whose plan declared no `gate` and no `externalEvidence`, and a
-		// client retrying that exact request must still get the recorded replay -- that
-		// is the whole contract of an operation id. Asserting the new declarations before
-		// the replay check turned the retry into a refusal on upgrade.
 		const environment = deterministicEnvironment();
 		const { evidence: _omitted, ...withoutGate } = oneFeaturePlan([
 			PROSE_VALIDATION,
@@ -1521,8 +1516,6 @@ describe("Session v5 domain state machine", () => {
 			goal: "Ship Flow v6",
 			plan: withoutGate as Plan,
 		};
-		// Built by hand because this version cannot produce it: the record fingerprints a
-		// request whose plan declared no gate, which is what an older session holds.
 		const legacy: Session = {
 			version: 5,
 			id: "legacy-session",
@@ -1544,7 +1537,6 @@ describe("Session v5 domain state machine", () => {
 		const replayed = savePlan(legacy, request, environment);
 		expect(replayed.replayed).toBe(true);
 		expect(replayed.session.revision).toBe(1);
-		// A new write of the same undeclared plan still has to declare both.
 		expect(() =>
 			savePlan(legacy, { ...request, operationId: "plan-save-2" }, environment),
 		).toThrow("must declare `evidence`");

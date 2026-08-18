@@ -296,8 +296,6 @@ function withAutoContext(
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
 	try {
-		// Compact is the ordinary loop read. Timing is process-local diagnostics;
-		// attach it only when the caller asked for detail.
 		if (view === "detail") {
 			const timing = options.autoTimingSnapshot?.();
 			if (timing) workflowData = { ...workflowData, autoTiming: timing };

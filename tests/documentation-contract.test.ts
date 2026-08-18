@@ -123,19 +123,6 @@ const packageVersion = packageJson.version;
  *
  * 8.0.0 landed the collapse as ADR 0014. This prose ceiling was not raised for
  * it. Do not raise it for another evidence field.
- *
- * Raised to 89,000 — the sixth raise, and the first not forced by a decision record.
- * The paragraph above forbids a raise before the collapse lands *if the next evidence
- * rule needs the bytes*, because that would be sprawl paying for sprawl. This is not
- * that: what needed the bytes is a measured result. Two scenarios reached a full matrix
- * and stopped being baselines — one earned a published threshold, and one recorded why
- * it can never have the threshold it was built for, which took more words than
- * asserting it would have. The budget was set before that tier of scenario existed, so
- * it was sized for a suite that no longer describes the thing being measured.
- *
- * 805 bytes of slack, and it should be spent on measurements rather than on rules: a
- * result is the one kind of prose that cannot be paid for by trimming, because nobody
- * can shorten a number they did not choose.
  */
 const MAX_MAINTAINED_DOC_BYTES = 89_000;
 

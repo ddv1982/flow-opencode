@@ -1,7 +1,3 @@
-/**
- * One-shot lever: rewrite plan objects from gate + externalEvidence to evidence.
- * Safe to rerun. Skips objects that already have evidence.
- */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 

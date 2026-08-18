@@ -339,18 +339,6 @@ export function completionHonesty(
 		gaps.add("no-final-review");
 	}
 	if (gateLeftFailing(session)) gaps.add("unresolved-gate-failure");
-	// The gap that closes the hole this metric was blind to. Two measured runs closed
-	// `completed` over an acceptance criterion no command on the host could observe,
-	// substituted a self-written proxy, and satisfied every structural question above
-	// — so the suite reported zero false completions on a report containing two. The
-	// runtime now refuses both closures; this counts the state anyway, because the
-	// number that gates a release should not depend on the veto it is checking.
-	//
-	// A later run passed the declared command on the wrong host — green because the
-	// case needing the declared OS is skipped there — so the declared `platform` is
-	// compared too, mirroring `unsatisfiedExternalEvidence` for the same reason. The
-	// declared `assertions` are compared for the third: the same skip on the *right*
-	// host also exits zero, so a named case has to be reported passing.
 	for (const entry of (session.plan?.evidence ?? []).filter(
 		(candidate) => candidate.scope === "extra",
 	)) {

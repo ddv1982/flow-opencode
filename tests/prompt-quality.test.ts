@@ -69,9 +69,6 @@ const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
  * a second time. A ceiling this tight is the point — it is why each of the last three
  * evidence rules arrived as a checked field rather than another paragraph asking the
  * model to be careful.
- *
- * Ratcheted to 14,500 after 8.0.0 thinned flow-run and the worker prompt.
- * Landed at 14,376.
  */
 const MAX_TOTAL_PROMPT_BYTES = 14_500;
 

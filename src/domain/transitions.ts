@@ -153,14 +153,6 @@ function assertPlan(plan: Plan): void {
 	if (issue) fail(issue);
 }
 
-/**
- * A newly saved plan must name the repository's canonical gate.
- *
- * Checked here rather than in `planIssue` because it is a rule about what this
- * build writes, not an invariant every Session v5 document satisfies: a plan saved
- * before the field existed must still hydrate, and it keeps the weaker rule that a
- * `broad` label is the claimant's word.
- */
 function assertDeclaredEvidence(plan: Plan): void {
 	if (plan.evidence === undefined) {
 		fail(
@@ -279,9 +271,6 @@ export function savePlan(
 		input,
 	);
 	if (replay) return { session, value: null, replayed: true };
-	// After the replay check, not before it. A plan-save accepted by an earlier
-	// build could have carried no `evidence`. Asserting first turned the retry of
-	// an already-accepted request into a refusal on upgrade.
 	assertDeclaredEvidence(input.plan);
 	assertRevision(session, input.expectedRevision);
 	assertMutable(session);
@@ -486,12 +475,6 @@ export function startReview(
 		);
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
-	// Only the final review, and deliberately: a run that split the goal into a
-	// feature this host can prove and one it cannot, then passed the first and
-	// blocked the second, produced the best outcome the eval matrix has recorded.
-	// Vetoing every feature review over a plan-level gap would refuse that work.
-	// The final review is where the whole plan is claimed verified, which is the
-	// claim declared external evidence exists to hold.
 	if (kind === "final") {
 		const unsatisfied = unsatisfiedEvidence(session, input.sourceDigest).filter(
 			(entry) => entry.scope === "extra",
@@ -775,10 +758,6 @@ export function closeSession(
 	if (input.kind === "completed" && sessionStatus(session) !== "completed") {
 		fail("A completed close requires every planned feature to pass review.");
 	}
-	// Reachable only through a plan whose external evidence was satisfied and then
-	// invalidated, since the final review already checked it. Stated here anyway
-	// because this is the claim the field exists to hold, and it should not depend on
-	// which path reached the closure.
 	if (input.kind === "completed") {
 		const unsatisfied = unsatisfiedEvidence(session).filter(
 			(entry) => entry.scope === "extra",
