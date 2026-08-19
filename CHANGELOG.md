@@ -2,6 +2,25 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.1.0] - 2026-08-19
+
+Inspect surveys can finish with blockers, and `/flow-auto` hands back a findings list.
+
+- Compact `flow_status` and close delivery now carry a derived `findingsDigest`
+  over every identified finding across attempts. `/flow-auto` prints that list
+  when it parks or stops instead of going silent after a blocked review.
+- **Session v5 schema:** `PlanFeature.kind` is optional `change` or `inspect`.
+  Absent is `change`. A failed inspect review completes that slice so later
+  features can start without `flow_feature_reset`. `completed` then means the
+  survey finished, not that the tree is clean. Existing documents keep the
+  repair loop.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.1.0 --global --force
+```
+
 ## [8.0.0] - 2026-08-18
 
 One evidence record, a thinner run loop, and a freeze on further declarations.
