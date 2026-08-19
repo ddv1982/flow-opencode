@@ -29,6 +29,7 @@ import {
 	isValidationFresh,
 	unresolvedVetoedCommands,
 } from "../domain/validation.js";
+import { type FindingsDigest, findingsDigest } from "./findings-digest.js";
 import type { StatusRequest } from "./schema.js";
 
 type FlowNextAction =
@@ -77,6 +78,7 @@ export type CompactProjection = Readonly<{
 	progress: FeatureProgress;
 	nextAction: FlowNextAction;
 	archiveRetry: ArchiveRetryProjection | null;
+	findingsDigest: FindingsDigest;
 }>;
 
 export type ArchivedProjection = Readonly<
@@ -131,6 +133,7 @@ type IdleProjection = Readonly<{
 	status: "idle";
 	revision: 0;
 	nextAction: "flow_plan_save";
+	findingsDigest: FindingsDigest;
 }>;
 
 export type ActiveSessionProjection =
@@ -253,6 +256,7 @@ export function compactProjection(
 		progress: featureProgress(session),
 		nextAction: nextAction(session, pendingReviewSourceStale, blockedFeature),
 		archiveRetry: retryRequest ? { request: retryRequest } : null,
+		findingsDigest: findingsDigest(session),
 	};
 }
 
@@ -374,6 +378,7 @@ export function idleProjection(view: StatusRequest["view"]): IdleProjection {
 		status: "idle",
 		revision: 0,
 		nextAction: "flow_plan_save",
+		findingsDigest: [],
 	};
 }
 

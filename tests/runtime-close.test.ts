@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ArchiveCollisionError } from "../src/application/errors.js";
+import { findingsDigest } from "../src/application/findings-digest.js";
 import { createFlowService } from "../src/application/flow-service.js";
 import type { Plan, Session } from "../src/domain/session.js";
 import {
@@ -384,13 +385,14 @@ describe("Flow close recovery and delivery", () => {
 			verdict: "passed",
 		});
 
-		const sessionId = repository.session?.id;
-		if (!sessionId) throw new Error("Expected the delivery session id.");
+		const active = repository.session;
+		if (!active) throw new Error("Expected the delivery session id.");
+		const expectedDigest = findingsDigest(active);
 		const closeRequest = {
 			request: {
 				operationId: "close-delivery",
 				expectedRevision: revision(repository),
-				sessionId,
+				sessionId: active.id,
 				kind: "completed" as const,
 				summary: "Deterministic delivery shipped.",
 			},
@@ -432,6 +434,7 @@ describe("Flow close recovery and delivery", () => {
 			assurance: expect.objectContaining({
 				conclusion: "completion-supported",
 			}),
+			findingsDigest: expectedDigest,
 			// The runtime renders the handoff so its shape, ordering, and the artifact
 			// qualifier are guarantees rather than instructions restated per surface.
 			report: expect.any(Array),
@@ -453,6 +456,13 @@ describe("Flow close recovery and delivery", () => {
 		expect(interrupted.workflowData.delivery.report).toContain(
 			"- latest attempts: latest-a.ts, latest-b.ts, shared.ts",
 		);
+		expect(
+			interrupted.workflowData.delivery.report.some(
+				(line) =>
+					line.includes("historical") &&
+					line.includes("The foundation needs a retry."),
+			),
+		).toBe(true);
 		const retryStatus = await flow.status({ request: { view: "compact" } });
 		expectOk(retryStatus);
 		const retryProjection = retryStatus.workflowData.projection;
@@ -532,6 +542,7 @@ describe("Flow close recovery and delivery", () => {
 			assurance: expect.objectContaining({
 				conclusion: "completion-not-claimed",
 			}),
+			findingsDigest: [],
 			report: expect.any(Array),
 			reportedArtifacts: {
 				latestAttempts: [],
@@ -601,14 +612,15 @@ describe("Flow close recovery and delivery", () => {
 					],
 				});
 			}
-			const sessionId = repository.session?.id;
-			if (!sessionId) throw new Error("Expected the deferred session id.");
+			const active = repository.session;
+			if (!active) throw new Error("Expected the deferred session id.");
+			const expectedDigest = findingsDigest(active);
 			const summary = `Runtime ${scenario.name} work will resume later.`;
 			const deferred = await flow.sessionClose({
 				request: {
 					operationId: `close-deferred-${scenario.name}`,
 					expectedRevision: revision(repository),
-					sessionId,
+					sessionId: active.id,
 					kind: "deferred",
 					summary,
 				},
@@ -644,6 +656,7 @@ describe("Flow close recovery and delivery", () => {
 				assurance: expect.objectContaining({
 					conclusion: "completion-not-claimed",
 				}),
+				findingsDigest: expectedDigest,
 				// Rendering is asserted line-by-line in the delivery and planless cases;
 				// here the interesting part is the never-started feature.
 				report: expect.any(Array),
@@ -657,6 +670,14 @@ describe("Flow close recovery and delivery", () => {
 			expect(deferred.workflowData.delivery.report).toContain(
 				"  outcome: none recorded",
 			);
+			if (scenario.name === "blocked") {
+				expect(
+					deferred.workflowData.delivery.report.some(
+						(line) =>
+							line.includes("live") && line.includes("Kernel is incomplete."),
+					),
+				).toBe(true);
+			}
 		}
 	});
 });

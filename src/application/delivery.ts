@@ -10,6 +10,11 @@ import {
 	isValidationEligible,
 	unsatisfiedEvidence,
 } from "../domain/validation.js";
+import {
+	digestReportLines,
+	type FindingsDigest,
+	findingsDigest,
+} from "./findings-digest.js";
 
 type AssuranceCheck = Readonly<{
 	id: string;
@@ -49,6 +54,7 @@ export type DeliveryProjection = Readonly<{
 		supersededAttemptsOnly: ReadonlyArray<string>;
 	}>;
 	assurance: AssuranceProjection;
+	findingsDigest: FindingsDigest;
 	report: ReadonlyArray<string>;
 }>;
 
@@ -225,6 +231,7 @@ function formatReport(delivery: Omit<DeliveryProjection, "report">): string[] {
 		`Progress: ${delivery.progress.completed} of ${delivery.progress.total} features complete`,
 		"Features:",
 		...lines,
+		...digestReportLines(delivery.findingsDigest),
 		`Assurance: ${delivery.assurance.conclusion.replaceAll("-", " ")}`,
 		"Assurance checks:",
 		...delivery.assurance.checks.map(
@@ -256,6 +263,7 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 			run.artifactsChanged.map((item) => item.path),
 		),
 	);
+	const digest = findingsDigest(session);
 	const delivery = {
 		goal: session.goal,
 		closure: { kind: session.closure.kind, summary: session.closure.summary },
@@ -273,13 +281,9 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 				attempts: runs.length,
 				latestState: run?.state ?? "not-started",
 				outcomeSummary: run?.summary ?? null,
-				terminalFindings:
-					run?.reviews
-						.at(-1)
-						?.result?.findings.map(({ severity, summary }) => ({
-							severity,
-							summary,
-						})) ?? [],
+				terminalFindings: digest
+					.filter((row) => row.featureId === feature.id && row.live)
+					.map(({ severity, summary }) => ({ severity, summary })),
 			};
 		}),
 		reportedArtifacts: {
@@ -289,6 +293,7 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 				.sort(),
 		},
 		assurance: assuranceProjection(session),
+		findingsDigest: digest,
 	} satisfies Omit<DeliveryProjection, "report">;
 	return { ...delivery, report: formatReport(delivery) };
 }

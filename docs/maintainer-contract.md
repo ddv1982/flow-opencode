@@ -251,12 +251,13 @@ manager contract.
 Compact `flow_status` includes the active goal so the manager can align the
 current request before mutation. When blocked, it also includes
 `blockedFeature.featureId`, the latest attempt number, and a
-`failedReviewCount` derived only from recorded failed review results. No intent
-classification, feature hold, or retry budget is persisted. After the second
+`failedReviewCount` derived only from recorded failed review results. Compact
+always includes `findingsDigest` (derived; empty is `[]`). No intent,
+hold, or retry budget is persisted. After the second
 failure, blocked status has `nextAction: await-user-direction`; the same action
 is projected with ready status when every runnable candidate requires an
-explicit retry. For either form the manager reads detail once and reports the
-retry-required feature or features. While blocked, an authorized choice is passed
+explicit retry. For either form the manager reads detail once and reports
+`findingsDigest`. While blocked, an authorized choice is passed
 as optional `nextFeatureId` so reset and exact run start are atomic. Once ready,
 there is no blocked run to reset: explicit `flow_run_start(featureId)` starts
 the authorized retry. A reset-only compatibility request never makes the failed
