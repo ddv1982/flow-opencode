@@ -74,10 +74,13 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// defect the implementer has no reason to touch. `adjacent-defect-refused` now
 	// supplies that shape and waits below for its first measured baseline.
 	"adjacent-defect-refused": null,
-	// Live rate still ungated: no paid matrix has a baseline. The scenario check now
+	// Live rate still ungated: no paid matrix has a baseline. The scenario check
 	// fails a silent pass, and `evals/cassettes/` pins a reviewer rejection of the
-	// plant. Gating the *rate* still waits for a matrix; inventing 1.0 from a
-	// constructed cassette would publish a number no model has earned.
+	// plant. Gating the rate still waits for a matrix.
+	"inspect-goal-delivers-findings": null,
+	// Ungated until a matrix exists. Measures whether `/flow-auto` on an inspect
+	// goal leaves a user-visible findings list (final text, close delivery, or
+	// compact findingsDigest) rather than going silent.
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */

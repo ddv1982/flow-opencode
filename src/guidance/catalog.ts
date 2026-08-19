@@ -24,6 +24,8 @@ export const FLOW_MANAGER_KERNEL = [
 	[
 		"- Make one automatic fresh full retry only when the projected `nextAction`",
 		"is `flow_feature_reset`; otherwise checkpoint.",
+		"On `await-user-direction` or a lease stop, print compact `findingsDigest`",
+		"without inventing ids.",
 	].join(" "),
 	[
 		"- Before review, require current-source evidence appropriate to the changed outcome,",

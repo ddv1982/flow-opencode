@@ -75,6 +75,12 @@ outcome and its evidence.
 A `validation` entry naming a command is recorded byte-for-byte; prose there stays
 reviewer judgment, never a fabricated result.
 
+If the request is inspect-only (review, audit, survey, no promised edit), invent
+no repair features. Save at most a small set of inspect features whose
+`validation` is reviewer inspection, whose `targets` are existing paths, and
+whose `decisions` state that no source edit is authorized. The gate may be the
+repo's existing check. Ask before turning an inspect request into repairs.
+
 Before saving, confirm:
 
 - every requirement maps to a feature or an explicit non-goal;

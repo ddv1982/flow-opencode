@@ -38,17 +38,15 @@ the manager's summary. Check that:
 - changed behavior is correct at public and downstream call sites;
 - validation is strong enough for the behavior and main failure modes;
 - scope did not drift and unrelated user work was preserved;
-- relevant adjacent states, failure/cleanup ordering, repetition, retry,
-  interruption, reentrancy, concurrency, and overlapping invariants still work;
 - the feature's actual base diff includes no unexplained deletion, rename, file
   type, generated artifact, or executable/file-mode change; and
 - persistence, concurrency, security, migration, compatibility, package, UI,
   and recovery risks were examined when relevant.
 
-Finish the supplied feature-specific risk checklist, represented by a bounded
-matrix for concurrency or state-machine work. Continue that matrix after finding
-one blocker so independently detectable interleavings arrive in the same review
-cohort.
+Finish the supplied feature-specific risk checklist. Continue a concurrency or
+state-machine matrix after one blocker only when `assignment.packet.riskLenses`
+is non-empty or the packet summary includes a matrix. Otherwise inspect the
+changed artifacts, the supplied validation, and live `priorFindings`.
 
 Scope plan/source IDs by assignment kind. An ordinary feature review records
 dispositions only for IDs mapped to the active feature or explicitly supplied

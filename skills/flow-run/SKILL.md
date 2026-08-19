@@ -119,7 +119,8 @@ feature.
 
 ### Blocked review
 
-Follow `nextAction` with the one detail projection. The runtime already weighs
+Follow `nextAction` with the one detail projection for routing, then print
+compact `findingsDigest` as the user-facing list. The runtime already weighs
 `failedReviewCount` and `blockedFeature.scopeBlocker`.
 
 - Ready `await-user-direction` has no blocked run left to reset. Identify the
@@ -138,5 +139,5 @@ Follow `nextAction` with the one detail projection. The runtime already weighs
   feature, pass that exact `featureId` as `nextFeatureId` on
   `flow_feature_reset`.
 
-Direct `/flow-run` reports this one feature's cumulative outcome and
-`nextAction`, then stops. Under `/flow-auto`, return to its lifecycle loop.
+Direct `/flow-run` reports compact `findingsDigest` and `nextAction`, then
+stops. Under `/flow-auto`, return to its lifecycle loop.

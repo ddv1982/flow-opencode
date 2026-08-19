@@ -25,7 +25,9 @@ only when a wrong change is expensive. For anything else it is overhead.
   turn you did not need.
 - **You are exploring.** Flow locks a plan on approval and refuses to fold a
   materially different request into an active goal. That is the wrong shape for
-  "let's see what happens if".
+  "let's see what happens if". Independent review is a gate on a change: a
+  codebase survey needs inspect-shaped planning (no repair features) or an
+  ordinary non-Flow chat.
 - **You want speed above all.** A serial lifecycle with an independent review is
   slower than asking directly, by design.
 - **You will not read the review.** Flow's review is a real model judgment, not a

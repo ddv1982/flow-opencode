@@ -253,6 +253,23 @@ describe("Flow prompt structure", () => {
 		expect(compileFlowPromptSurface("flow-reviewer")).toContain("scopeBlocker");
 	});
 
+	test("names findingsDigest on auto and run handback surfaces", () => {
+		expect(compileFlowPromptSurface("flow-auto")).toContain("findingsDigest");
+		expect(compileFlowPromptSurface("flow-run")).toContain("findingsDigest");
+		expect(getFlowGuidance("flow-run").content).toContain("findingsDigest");
+		expect(getFlowGuidance("flow").content).toContain("findingsDigest");
+	});
+
+	test("continues a reviewer matrix only when the packet asked for one", () => {
+		const reviewer = compileFlowPromptSurface("flow-reviewer");
+		expect(reviewer).toContain("riskLenses");
+		expect(reviewer).toContain("packet summary includes a matrix");
+		expect(getFlowGuidance("flow-plan").content).toContain("inspect-only");
+		expect(getFlowGuidance("flow-plan").content).toContain(
+			"no repair features",
+		);
+	});
+
 	test("retires stale projection vocabulary", () => {
 		for (const surface of SURFACES) {
 			expect(compileFlowPromptSurface(surface)).not.toContain(

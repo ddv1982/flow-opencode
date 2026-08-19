@@ -826,3 +826,103 @@ describe("adjacent-defect-refused", () => {
 		).toEqual([]);
 	});
 });
+
+describe("inspect-goal-delivers-findings", () => {
+	function compactStatus(digest: ReadonlyArray<{ summary: string }>) {
+		return {
+			tool: "flow_status",
+			status: "completed" as const,
+			sessionIndex: 0,
+			agent: "build",
+			input: { request: { view: "compact" } },
+			output: {
+				status: "ok",
+				workflowData: { projection: { findingsDigest: digest } },
+			},
+			rawOutput: "",
+			metadata: {},
+		};
+	}
+
+	function closeDelivery(report: string[]) {
+		return {
+			tool: "flow_session_close",
+			status: "completed" as const,
+			sessionIndex: 0,
+			agent: "build",
+			input: {},
+			output: {
+				status: "ok",
+				workflowData: { delivery: { report } },
+			},
+			rawOutput: "",
+			metadata: {},
+		};
+	}
+
+	test("passes a compact digest that names the plant", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [
+						compactStatus([
+							{
+								summary:
+									"planted-interval-drop: inclusive count omits the endpoint",
+							},
+						]),
+					],
+					finalText: "Inspect complete. How should I close?",
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("fails a completed close that prints only terminal findings none", () => {
+		const issues = check(
+			"inspect-goal-delivers-findings",
+			outcome({
+				flowCalls: [
+					compactStatus([]),
+					closeDelivery([
+						"Goal: Review src/count.ts",
+						"  terminal findings: none",
+					]),
+				],
+				finalText: "Closed completed. No issues.",
+			}),
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain("empty compact findingsDigest");
+	});
+
+	test("fails a checkpoint with an empty compact digest", () => {
+		const issues = check(
+			"inspect-goal-delivers-findings",
+			outcome({
+				flowCalls: [compactStatus([])],
+				finalText: "Waiting for direction on the inspect plan.",
+			}),
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain("empty compact findingsDigest");
+	});
+
+	test("passes asking how to close after listing the finding", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					allCalls: [
+						question(
+							"inclusiveRangeLength omits the endpoint for 1..3 (off-by-one). Defer or abandon?",
+						),
+					],
+					finalText:
+						"Inspect found the interval bug. How do you want to close?",
+				}),
+			),
+		).toEqual([]);
+	});
+});

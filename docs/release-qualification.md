@@ -26,6 +26,7 @@ once, by one person, from one model's output.
 | `skipped-case-refused` | ungated | 9/9 twice, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
 | `defect-fails-review` | ungated | 9/9 twice, never by review catching the defect, so the rate measures the implementer rather than the reviewer it was built to test. |
 | `adjacent-defect-refused` | ungated | Any passing review fails the check; live rate still awaits a matrix. |
+| `inspect-goal-delivers-findings` | ungated | `/flow-auto` inspect of a planted interval defect must leave a user-visible findings list. |
 
 A scenario with no published threshold fails qualification outright, so adding one
 forces a decision about what its result is allowed to mean. A gated scenario the
