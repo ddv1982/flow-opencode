@@ -4,7 +4,8 @@ Date: 2026-07-20
 
 ## Status
 
-Accepted. Supersedes ADR 0003 and ADR 0004; amended by ADR 0008.
+Accepted. Supersedes ADR 0003 and ADR 0004; amended by ADR 0008 and by optional
+`PlanFeature.kind`.
 
 ## Context
 
@@ -57,7 +58,11 @@ implicitly. From blocked status, reset may atomically start one explicitly
 chosen retry or untouched dependency-independent feature through optional
 `nextFeatureId`. Once that failed run is superseded and status is ready,
 explicit `flow_run_start(featureId)` starts its authorized retry; this adds no
-hold or retry ledger. Every accepted close returns a deterministic delivery
+hold or retry ledger. `PlanFeature.kind` is optional `change` or `inspect`;
+absent is `change`. An inspect feature completes after review even with
+blockers, so a survey can continue without reset. `completed` then means the
+survey finished, not that the tree is clean. Repair is a later change feature.
+Every accepted close returns a deterministic delivery
 derived from canonical Session data instead of asking the conversation to
 reconstruct the result. Exact replay re-confirms existing active bytes and the
 archive/cleanup durability boundaries without rewriting Session v5. A true

@@ -70,8 +70,8 @@ not a failure; a missing or conflicting baseline fact, or a material mode,
 platform, race, or failure-path claim without proof, is.
 
 Flow deliberately projects no raw command output; use the durable command, exit
-code, completeness, digest, source binding, and your workspace inspection. A weak or
-unclear coverage claim is an evidence gap.
+code, completeness, digest, source binding, and your workspace inspection. A weak
+coverage claim is an evidence gap.
 
 For a final assignment, also inspect broad validation and confirm docs,
 commands, package surfaces, and remaining gaps are consistent with completion.
@@ -85,8 +85,8 @@ IDs in summary or evidence.
 
 Report every problem you find. Severity is a routing decision the runtime acts
 on, not a filter on what to mention: `blocking` when the issue invalidates the
-approved outcome, `advisory` otherwise. When you are unsure, report it as
-`advisory` rather than omitting it.
+approved outcome, `advisory` otherwise. If unsure, report it as
+`advisory` rather than omitting it. Inspect kind completes with blockers.
 
 Set `scopeBlocker: true` on a blocking finding whose repair requires material
 work outside the approved plan, and identify the boundary in `evidence`. The

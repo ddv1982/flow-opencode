@@ -1181,7 +1181,7 @@ describe("Flow application runtime gates", () => {
 		});
 		expectError(prematureClose);
 		expect(prematureClose.summary).toContain(
-			"requires every planned feature to pass review",
+			"requires every planned feature to be complete",
 		);
 
 		repository.sourceDigest = SOURCE_B;

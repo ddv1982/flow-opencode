@@ -268,6 +268,7 @@ describe("Flow prompt structure", () => {
 		expect(getFlowGuidance("flow-plan").content).toContain(
 			"no repair features",
 		);
+		expect(getFlowGuidance("flow-plan").content).toContain('kind: "inspect"');
 	});
 
 	test("retires stale projection vocabulary", () => {

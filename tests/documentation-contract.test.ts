@@ -514,6 +514,15 @@ describe("Flow v6 documentation contract", () => {
 		);
 		expect(optionalPlanFields).toEqual(["evidence"]);
 
+		const featureBlock = sessionSource.slice(
+			sessionSource.indexOf("export type PlanFeature ="),
+			sessionSource.indexOf("type EvidenceScope"),
+		);
+		const optionalFeatureFields = [
+			...featureBlock.matchAll(/^\t(\w+)\?:/gm),
+		].map((match) => match[1]);
+		expect(optionalFeatureFields).toEqual(["kind"]);
+
 		const entryBlock = sessionSource.slice(
 			sessionSource.indexOf("export type EvidenceEntry ="),
 			sessionSource.indexOf("export type ObservedAssertion"),

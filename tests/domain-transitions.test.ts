@@ -10,6 +10,7 @@ import type {
 	EvidenceEntry,
 	EvidencePlatform,
 	FeatureId,
+	FeatureKind,
 	ObservedAssertion,
 	Plan,
 	ReviewAssignment,
@@ -18,6 +19,7 @@ import type {
 	ValidationScope,
 } from "../src/domain/session.js";
 import { planGate } from "../src/domain/session.js";
+import { sessionInvariantIssues } from "../src/domain/session-invariants.js";
 import {
 	approvePlan,
 	closeSession,
@@ -776,6 +778,54 @@ describe("Session v5 domain state machine", () => {
 				runs: [...structuredClone(retry.runs)].reverse(),
 			}).success,
 		).toBe(false);
+	});
+
+	test("an inspect feature completes with blockers so the next feature can start", () => {
+		const kind: FeatureKind = "inspect";
+		const environment = deterministicEnvironment();
+		const inspectPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({ ...feature, kind })),
+		};
+		let session = begin(
+			approve(saveDraft(environment, { plan: inspectPlan })),
+			FOUNDATION,
+			environment,
+		);
+		session = validate(session, {
+			id: "inspect-foundation-validation",
+			featureId: FOUNDATION,
+			scope: "focused",
+		});
+		const first = requestReview(session, FOUNDATION, environment);
+		session = rejectReview(first.session, FOUNDATION, first.assignment);
+
+		expect(session.runs[0]?.state).toBe("completed");
+		expect(sessionStatus(session)).toBe("ready");
+		expect(compactProjection(session).nextAction).toBe("flow_run_start");
+		expect(sessionInvariantIssues(session)).toEqual([]);
+		expect(SessionSchema.safeParse(structuredClone(session)).success).toBe(
+			true,
+		);
+
+		session = begin(session, DELIVERY, environment, "start-after-inspect");
+		expect(session.runs[0]?.state).toBe("completed");
+		expect(session.runs[1]).toMatchObject({
+			featureId: DELIVERY,
+			state: "active",
+		});
+		expect(sessionStatus(session)).toBe("running");
+
+		session = validate(session, {
+			id: "inspect-delivery-validation",
+			featureId: DELIVERY,
+		});
+		const second = requestReview(session, DELIVERY, environment);
+		session = rejectReview(second.session, DELIVERY, second.assignment);
+		expect(session.runs[1]?.state).toBe("completed");
+		expect(sessionStatus(session)).toBe("completed");
+		expect(compactProjection(session).nextAction).toBe("flow_session_close");
+		expect(sessionInvariantIssues(session)).toEqual([]);
 	});
 
 	test("requires explicit retries while independent untouched work continues", () => {

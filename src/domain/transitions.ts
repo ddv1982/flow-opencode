@@ -21,7 +21,11 @@ import type {
 	SessionStatus,
 	SourceDigest,
 } from "./session.js";
-import { planEvidence, reviewResultSemanticIssues } from "./session.js";
+import {
+	featureKind,
+	planEvidence,
+	reviewResultSemanticIssues,
+} from "./session.js";
 import { FlowTransitionError } from "./transition-error.js";
 import {
 	evidenceRefusal,
@@ -603,6 +607,10 @@ export function completeFeature(
 		input.result.findings,
 		findingIdPrefix(run.featureId, assignment.createdRevision),
 	);
+	const inspect =
+		featureKind(
+			session.plan?.features.find((feature) => feature.id === run.featureId),
+		) === "inspect";
 	const next = commit(
 		session,
 		"feature-complete",
@@ -614,7 +622,10 @@ export function completeFeature(
 				if (item.id !== run.id) return item;
 				return {
 					...item,
-					state: input.result.verdict === "passed" ? "completed" : "blocked",
+					state:
+						input.result.verdict === "passed" || inspect
+							? "completed"
+							: "blocked",
 					summary: input.summary,
 					reviews: item.reviews.map((review) =>
 						review.id === assignment.id
@@ -754,7 +765,7 @@ export function closeSession(
 		fail("sessionId does not match active state.");
 	assertMutable(session);
 	if (input.kind === "completed" && sessionStatus(session) !== "completed") {
-		fail("A completed close requires every planned feature to pass review.");
+		fail("A completed close requires every planned feature to be complete.");
 	}
 	if (input.kind === "completed") {
 		const unsatisfied = unsatisfiedExtraEvidence(session);

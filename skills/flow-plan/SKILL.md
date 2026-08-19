@@ -60,7 +60,8 @@ Save one plan with:
   gate is the command every broad observation must run; a failed or
   claimed-broad gate still vetoes review.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
-  `summary`, bounded `targets`, concrete `validation`, and `dependsOn` ids.
+  `summary`, bounded `targets`, concrete `validation`, `dependsOn` ids, and
+  optional `kind`.
 
 Each feature needs one observable outcome judgeable from bounded evidence and
 focused validation. Split only independent failures or true dependencies; file
@@ -76,10 +77,11 @@ A `validation` entry naming a command is recorded byte-for-byte; prose there sta
 reviewer judgment, never a fabricated result.
 
 If the request is inspect-only (review, audit, survey, no promised edit), invent
-no repair features. Save at most a small set of inspect features whose
-`validation` is reviewer inspection, whose `targets` are existing paths, and
-whose `decisions` state that no source edit is authorized. The gate may be the
-repo's existing check. Ask before turning an inspect request into repairs.
+no repair features. Save at most a small set of inspect features with
+`kind: "inspect"`, whose `validation` is reviewer inspection, whose `targets`
+are existing paths, and whose `decisions` state that no source edit is
+authorized. The gate may be the repo's existing check. Ask before turning an
+inspect request into repairs.
 
 Before saving, confirm:
 
