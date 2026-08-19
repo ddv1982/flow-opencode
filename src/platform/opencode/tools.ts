@@ -95,6 +95,7 @@ const planFeature = host
 		targets: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		validation: host.array(text).max(MAX_PLAN_FEATURES).default([]),
 		dependsOn: host.array(featureId).max(MAX_PLAN_FEATURES).default([]),
+		kind: host.enum(["change", "inspect"]).optional(),
 	})
 	.strict();
 const plan = host
