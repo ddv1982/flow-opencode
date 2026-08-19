@@ -50,6 +50,7 @@ type Lease = {
 	baseline: AutoDriveProjection | null;
 	delivery: AutoDriveDelivery | null;
 	lastPromptedRevision: number | null;
+	handbackPromptedRevision: number | null;
 	checkpoint: Checkpoint | null;
 	pendingReply: boolean;
 	/** Serializes work so concurrent idle events cannot double-prompt. */
@@ -82,6 +83,10 @@ const CONTINUATION_ROUTE = [
 	"for a fresh close use compact session id/revision plus a fresh operation id,",
 	"and replay archiveRetry exactly from its projected request.",
 ].join(" ");
+const HANDBACK_ROUTE = [
+	"Call flow_status with the compact view first.",
+	"Print findingsDigest as the user-facing list. Do not invent ids.",
+].join(" ");
 
 function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
 	let token: string | null = null;
@@ -112,6 +117,13 @@ function isCheckpoint(projection: AutoDriveProjection): boolean {
 function isPendingReviewer(projection: AutoDriveProjection): boolean {
 	return (
 		projection.status === "running" &&
+		projection.nextAction === "dispatch-flow-reviewer"
+	);
+}
+function isHandback(projection: AutoDriveProjection): boolean {
+	return (
+		projection.status === "blocked" ||
+		projection.nextAction === "flow_feature_reset" ||
 		projection.nextAction === "dispatch-flow-reviewer"
 	);
 }
@@ -173,6 +185,34 @@ export class AutoDriveCoordinator {
 		lease.lastPromptedRevision = null;
 		this.#setTiming("waiting-for-user");
 	}
+	async #promptHandback(
+		lease: Lease,
+		projection: AutoDriveProjection,
+	): Promise<void> {
+		if (!isHandback(projection)) return;
+		if (lease.handbackPromptedRevision === projection.revision) return;
+		if (!lease.delivery) return;
+		lease.handbackPromptedRevision = projection.revision;
+		lease.messageId = null;
+		this.#setTiming("active");
+		lease.inFlight = "prompt";
+		try {
+			const handback = [
+				`Flow is handing control back at compact revision ${projection.revision}.`,
+				HANDBACK_ROUTE,
+				`Then follow ${projection.nextAction} or stop at await-user-direction.`,
+				"Do not expand the approved goal.",
+			].join(" ");
+			await this.#options.prompt(
+				lease.hostSessionId,
+				`${handback}\n\n${FLOW_MANAGER_KERNEL}`,
+				lease.delivery,
+				{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+			);
+		} catch (error) {
+			this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
+		}
+	}
 	async #read(lease: Lease): Promise<AutoDriveProjection | null> {
 		try {
 			return await this.#options.readProjection();
@@ -195,6 +235,7 @@ export class AutoDriveCoordinator {
 			baseline: null,
 			delivery: null,
 			lastPromptedRevision: null,
+			handbackPromptedRevision: null,
 			checkpoint: null,
 			pendingReply: false,
 			inFlight: null,
@@ -381,10 +422,12 @@ export class AutoDriveCoordinator {
 	/**
 	 * The single continuation decision point, run on every host idle event. Its
 	 * phases are: admit the event, read compact state, resolve a pending reply,
-	 * park at a boundary, require a mechanical action that advanced the revision,
-	 * then prompt. Each phase that does not continue stops or parks the lease, so
-	 * the default is to stop: a wrong continuation spends the user's
-	 * authorization on work they never approved.
+	 * park at a boundary, prompt one findings handback on blocked/reset/reviewer
+	 * idle, require a mechanical action that advanced the revision, then prompt.
+	 * Each phase that does not continue stops or parks the lease, so the default
+	 * is to stop: a wrong continuation spends the user's authorization on work
+	 * they never approved. The handback prompt is conversational, not a new
+	 * mechanical route.
 	 */
 	async onIdle(hostSessionId: string): Promise<void> {
 		const lease = this.#lease;
@@ -430,8 +473,11 @@ export class AutoDriveCoordinator {
 				if (
 					boundary &&
 					(!checkpoint || projection.revision > checkpoint.revision)
-				)
+				) {
+					await this.#promptHandback(lease, projection);
+					if (this.#lease !== lease) return;
 					return void this.#waitAt(lease, projection.revision);
+				}
 				if (!checkpoint || (!boundary && !mutationAdvanced))
 					return void this.deactivate(hostSessionId);
 				checkpoint.answered = true;
@@ -441,7 +487,22 @@ export class AutoDriveCoordinator {
 			if (boundary) {
 				if (checkpoint && projection.revision < checkpoint.revision)
 					return void this.deactivate(hostSessionId);
+				await this.#promptHandback(lease, projection);
+				if (this.#lease !== lease) return;
 				return void this.#waitAt(lease, projection.revision);
+			}
+			if (!isMechanical(projection)) {
+				const already = lease.handbackPromptedRevision === projection.revision;
+				await this.#promptHandback(lease, projection);
+				if (this.#lease !== lease) return;
+				if (
+					!already &&
+					lease.handbackPromptedRevision === projection.revision
+				) {
+					this.#setTiming("paused");
+					return;
+				}
+				return void this.deactivate(hostSessionId);
 			}
 			// Past an answered checkpoint. Leaving it requires the exact mutation the
 			// answer authorized; a revision at or behind the checkpoint, or one reached
@@ -451,7 +512,6 @@ export class AutoDriveCoordinator {
 					return void this.deactivate(hostSessionId);
 				lease.checkpoint = null;
 			}
-			if (!isMechanical(projection)) return void this.deactivate(hostSessionId);
 			if (lease.lastPromptedRevision === projection.revision) {
 				this.#setTiming("paused");
 				return this.#warn(
