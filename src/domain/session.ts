@@ -12,6 +12,8 @@ export type SourceDigest = `sha256:${string}`;
 
 export type Artifact = Readonly<{ path: string }>;
 
+export type FeatureKind = "change" | "inspect";
+
 export type PlanFeature = Readonly<{
 	id: FeatureId;
 	title: string;
@@ -19,6 +21,13 @@ export type PlanFeature = Readonly<{
 	targets: string[];
 	validation: string[];
 	dependsOn: FeatureId[];
+	/**
+	 * Outcome slice kind. Absent hydrates to `change`.
+	 *
+	 * `inspect` records findings without a repair loop. A failed review completes
+	 * the survey slice so later features can start without reset.
+	 */
+	kind?: FeatureKind | undefined;
 }>;
 
 type EvidenceScope = "gate" | "extra";
@@ -67,6 +76,13 @@ export function planEvidence(
 
 export function planGate(plan: Plan | null | undefined): string | undefined {
 	return planEvidence(plan).find((entry) => entry.scope === "gate")?.command;
+}
+
+/** Absent `kind` is `change`, so existing Session v5 documents keep the repair loop. */
+export function featureKind(
+	feature: PlanFeature | undefined | null,
+): FeatureKind {
+	return feature?.kind === "inspect" ? "inspect" : "change";
 }
 
 export type ValidationScope = "focused" | "broad";

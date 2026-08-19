@@ -3,31 +3,34 @@ import { MAX_REVIEW_FINDINGS, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import { closureOperationIssue } from "./operation.js";
 import { planIssue } from "./plan.js";
 import type { Session } from "./session.js";
-import { reviewResultSemanticIssues } from "./session.js";
+import { featureKind, reviewResultSemanticIssues } from "./session.js";
 import { isFeatureComplete } from "./transitions.js";
 import { isValidationEligible } from "./validation.js";
 
 /**
- * Whether the feature already held a passing review before the given revision.
+ * Whether the feature was already settled before the given revision.
  *
- * Read only to re-derive a review's `kind`. A review is `final` when it is the
- * last feature still outstanding, which is a fact about the whole session at the
- * moment the review was created -- so checking a stored `kind` means reconstructing
- * that moment from revision numbers rather than from the session as it stands now.
+ * Used only to re-derive a review's `kind`. A review is `final` when it is the
+ * last feature still outstanding. Change features settle on a passing review.
+ * Inspect features settle on any recorded result, including a failed survey.
  */
-function featurePassedBefore(
+function featureSettledBefore(
 	session: Session,
 	featureId: string,
 	revision: number,
 ): boolean {
+	const inspect =
+		featureKind(
+			session.plan?.features.find((feature) => feature.id === featureId),
+		) === "inspect";
 	return session.runs.some(
 		(run) =>
 			run.featureId === featureId &&
-			run.reviews.some(
-				(review) =>
-					review.result?.verdict === "passed" &&
-					review.result.recordedRevision < revision,
-			),
+			run.reviews.some((review) => {
+				const result = review.result;
+				if (!result || result.recordedRevision >= revision) return false;
+				return result.verdict === "passed" || inspect;
+			}),
 	);
 }
 
@@ -220,7 +223,7 @@ export function sessionInvariantIssues(session: Session): string[] {
 			const expectedKind = session.plan.features.every(
 				(feature) =>
 					feature.id === run.featureId ||
-					featurePassedBefore(session, feature.id, review.createdRevision),
+					featureSettledBefore(session, feature.id, review.createdRevision),
 			)
 				? "final"
 				: "feature";
@@ -252,7 +255,15 @@ export function sessionInvariantIssues(session: Session): string[] {
 			issues.push(`Active run '${run.id}' contains a recorded outcome.`);
 		}
 		if (run.state === "completed" && last?.result?.verdict !== "passed") {
-			issues.push(`Completed run '${run.id}' lacks a passing review.`);
+			const inspect =
+				featureKind(
+					session.plan?.features.find(
+						(feature) => feature.id === run.featureId,
+					),
+				) === "inspect";
+			if (!(inspect && last?.result?.verdict === "failed")) {
+				issues.push(`Completed run '${run.id}' lacks a passing review.`);
+			}
 		}
 		if (run.state === "blocked" && last?.result?.verdict !== "failed") {
 			issues.push(`Blocked run '${run.id}' lacks a failed review.`);

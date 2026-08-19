@@ -38,6 +38,12 @@ On `session.idle`, the host may enqueue one synthetic continuation only for:
 - `ready` with `flow_run_start`; or
 - `completed` or recoverable `closed` with `flow_session_close`.
 
+A blocked projection, `flow_feature_reset`, or `dispatch-flow-reviewer` may
+receive one conversational handback prompt that tells the manager to print
+compact `findingsDigest` and then follow `nextAction` or stop. That prompt is
+not a mechanical route: the lease does not auto-reset, auto-approve, or
+continue after it. A second idle at the same revision does not send another.
+
 Planning awaiting `flow_plan_approve` and any
 `await-user-direction` projection, whether blocked or ready, are conversational
 checkpoints rather than mechanical routes. The same lease may remain attached

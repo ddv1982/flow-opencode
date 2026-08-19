@@ -80,6 +80,7 @@ const PlanFeatureSchema = z
 			.max(MAX_PLAN_FEATURES)
 			.default([]),
 		dependsOn: z.array(FeatureIdSchema).max(MAX_PLAN_FEATURES).default([]),
+		kind: z.enum(["change", "inspect"]).optional(),
 	})
 	.strict();
 

@@ -89,6 +89,7 @@ describe("Flow application runtime gates", () => {
 			status: "idle",
 			revision: 0,
 			nextAction: "flow_plan_save",
+			findingsDigest: [],
 		});
 		expect(repository.saveCount).toBe(0);
 
@@ -390,6 +391,20 @@ describe("Flow application runtime gates", () => {
 				attempt: 2,
 				failedReviewCount: 1,
 			},
+			findingsDigest: [
+				expect.objectContaining({
+					featureId: FEATURE,
+					severity: "blocking",
+					summary: "Shared contract is still incomplete.",
+					live: true,
+				}),
+				expect.objectContaining({
+					featureId: FEATURE,
+					severity: "blocking",
+					summary: "Legacy branch still returns stale data.",
+					live: true,
+				}),
+			],
 		});
 
 		await resetFeatureRun(flow, repository, FEATURE, "failed-review-2");
@@ -711,6 +726,15 @@ describe("Flow application runtime gates", () => {
 				failedReviewCount: 1,
 				scopeBlocker: true,
 			},
+			findingsDigest: [
+				expect.objectContaining({
+					featureId: FEATURE,
+					severity: "blocking",
+					summary:
+						"The approved plan cannot cover the required storage change.",
+					live: true,
+				}),
+			],
 		});
 	});
 
@@ -1157,7 +1181,7 @@ describe("Flow application runtime gates", () => {
 		});
 		expectError(prematureClose);
 		expect(prematureClose.summary).toContain(
-			"requires every planned feature to pass review",
+			"requires every planned feature to be complete",
 		);
 
 		repository.sourceDigest = SOURCE_B;

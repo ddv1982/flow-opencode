@@ -263,8 +263,8 @@ describe("Flow auto-drive coordinator", () => {
 		state.setNow(21_600_015);
 		await state.driver.onIdle("host-1");
 
-		expect(state.prompts).toHaveLength(1);
-		expect(state.prompts[0]?.delivery).toEqual(resumedDelivery);
+		expect(state.prompts).toHaveLength(2);
+		expect(state.prompts[1]?.delivery).toEqual(resumedDelivery);
 		expect(state.driver.timingSnapshot()).toMatchObject({
 			state: "active",
 			activeMs: 15,
@@ -294,7 +294,7 @@ describe("Flow auto-drive coordinator", () => {
 		);
 		await state.driver.onIdle("host-1");
 
-		expect(state.prompts).toHaveLength(0);
+		expect(state.prompts).toHaveLength(1);
 		expect(state.driver.compactionContext("host-1")).not.toBeNull();
 		expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
 
@@ -310,7 +310,7 @@ describe("Flow auto-drive coordinator", () => {
 		);
 		await state.driver.onIdle("host-1");
 
-		expect(state.prompts).toHaveLength(0);
+		expect(state.prompts).toHaveLength(1);
 		expect(state.driver.compactionContext("host-1")).not.toBeNull();
 		expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
 
@@ -334,8 +334,8 @@ describe("Flow auto-drive coordinator", () => {
 		await state.driver.onIdle("host-1");
 		await state.driver.onIdle("host-1");
 
-		expect(state.prompts).toHaveLength(1);
-		expect(state.prompts[0]?.delivery).toEqual(approvalDelivery);
+		expect(state.prompts).toHaveLength(2);
+		expect(state.prompts[1]?.delivery).toEqual(approvalDelivery);
 	});
 
 	test("requires lifecycle progress after the checkpoint reply", async () => {
@@ -822,7 +822,8 @@ describe("Flow auto-drive coordinator", () => {
 		mutate(state.driver, "host-1", 7, undefined, "new-checkpoint-reply");
 		await state.driver.onIdle("host-1");
 
-		expect(state.prompts).toHaveLength(0);
+		expect(state.prompts).toHaveLength(1);
+		expect(state.prompts[0]?.text).toContain("findingsDigest");
 		expect(state.driver.compactionContext("host-1")).toBeNull();
 	});
 
@@ -1007,8 +1008,48 @@ describe("Flow auto-drive coordinator", () => {
 			state.setProjection(projection);
 			if (shouldPrompt) mutate(state.driver, "host-1", projection.revision);
 			await state.driver.onIdle("host-1");
-			expect(state.prompts.length > 0).toBe(shouldPrompt);
+			const handback =
+				projection.status === "blocked" ||
+				projection.nextAction === "flow_feature_reset" ||
+				projection.nextAction === "dispatch-flow-reviewer";
+			expect(state.prompts.length > 0).toBe(shouldPrompt || handback);
 		}
+	});
+
+	test("prompts one findings handback on a first failed review then stops looping", async () => {
+		const state = harness({
+			sessionId: "flow-1",
+			status: "blocked",
+			revision: 12,
+			nextAction: "flow_feature_reset",
+		});
+		await state.activate();
+		await state.driver.onIdle("host-1");
+
+		expect(state.prompts).toHaveLength(1);
+		expect(state.prompts[0]?.text).toContain("findingsDigest");
+		expect(state.prompts[0]?.text).toContain("flow_feature_reset");
+		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		expect(state.driver.compactionContext("host-1")).toBeNull();
+	});
+
+	test("prompts one findings handback when a reviewer is waiting to dispatch", async () => {
+		const state = harness({
+			sessionId: "flow-1",
+			status: "running",
+			revision: 8,
+			nextAction: "dispatch-flow-reviewer",
+		});
+		await state.activate();
+		await state.driver.onIdle("host-1");
+
+		expect(state.prompts).toHaveLength(1);
+		expect(state.prompts[0]?.text).toContain("findingsDigest");
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
 	});
 
 	test("requires initiating progress and rejects a replacement Flow session", async () => {

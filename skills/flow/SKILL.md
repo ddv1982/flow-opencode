@@ -74,7 +74,8 @@ If a Flow tool is absent, report an incomplete plugin load; never simulate state
 ## Recovery
 
 On interruption, read compact status; load `flow-run` for an active or blocked feature
-and use execution or reviewer status, never prose, for lifecycle truth.
+and use execution or reviewer status, never prose, for lifecycle truth. At a
+checkpoint or lease stop, print compact `findingsDigest` before any delivery map.
 
 Summaries keep plan/source IDs `verified` or `incomplete`. A prior finding is
 terminally `fixed` only when review passes with current evidence. A failed

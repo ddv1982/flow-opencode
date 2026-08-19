@@ -38,17 +38,15 @@ the manager's summary. Check that:
 - changed behavior is correct at public and downstream call sites;
 - validation is strong enough for the behavior and main failure modes;
 - scope did not drift and unrelated user work was preserved;
-- relevant adjacent states, failure/cleanup ordering, repetition, retry,
-  interruption, reentrancy, concurrency, and overlapping invariants still work;
 - the feature's actual base diff includes no unexplained deletion, rename, file
   type, generated artifact, or executable/file-mode change; and
 - persistence, concurrency, security, migration, compatibility, package, UI,
   and recovery risks were examined when relevant.
 
-Finish the supplied feature-specific risk checklist, represented by a bounded
-matrix for concurrency or state-machine work. Continue that matrix after finding
-one blocker so independently detectable interleavings arrive in the same review
-cohort.
+Finish the supplied feature-specific risk checklist. Continue a concurrency or
+state-machine matrix after one blocker only when `assignment.packet.riskLenses`
+is non-empty or the packet summary includes a matrix. Otherwise inspect the
+changed artifacts, the supplied validation, and live `priorFindings`.
 
 Scope plan/source IDs by assignment kind. An ordinary feature review records
 dispositions only for IDs mapped to the active feature or explicitly supplied
@@ -72,8 +70,8 @@ not a failure; a missing or conflicting baseline fact, or a material mode,
 platform, race, or failure-path claim without proof, is.
 
 Flow deliberately projects no raw command output; use the durable command, exit
-code, completeness, digest, source binding, and your workspace inspection. A weak or
-unclear coverage claim is an evidence gap.
+code, completeness, digest, source binding, and your workspace inspection. A weak
+coverage claim is an evidence gap.
 
 For a final assignment, also inspect broad validation and confirm docs,
 commands, package surfaces, and remaining gaps are consistent with completion.
@@ -87,8 +85,8 @@ IDs in summary or evidence.
 
 Report every problem you find. Severity is a routing decision the runtime acts
 on, not a filter on what to mention: `blocking` when the issue invalidates the
-approved outcome, `advisory` otherwise. When you are unsure, report it as
-`advisory` rather than omitting it.
+approved outcome, `advisory` otherwise. If unsure, report it as
+`advisory` rather than omitting it. Inspect kind completes with blockers.
 
 Set `scopeBlocker: true` on a blocking finding whose repair requires material
 work outside the approved plan, and identify the boundary in `evidence`. The
