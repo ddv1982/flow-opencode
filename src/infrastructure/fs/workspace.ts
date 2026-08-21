@@ -528,37 +528,64 @@ export async function quarantineUnreadableSession(
 const inProcessLocks = new Map<string, Promise<void>>();
 const LOCK_TIMEOUT_MS = 30_000;
 
-/**
- * Whether the lock's recorded owner process is gone, making the lock an
- * orphan a crashed host left behind. Signal 0 succeeds for any live process,
- * so a reused PID reads as alive and degrades to waiting, never to stealing a
- * live owner's lock. A missing or unreadable owner.json is not reclaimed: a
- * live acquirer writes it in the window between mkdir and the wx write.
- */
-async function lockOwnerIsDead(lock: string): Promise<boolean> {
-	let owner: { token?: unknown; pid?: unknown };
+async function orphanOwnerToken(lock: string): Promise<string | null> {
 	try {
-		owner = JSON.parse(await readFile(join(lock, "owner.json"), "utf8"));
+		const owner = JSON.parse(
+			await readFile(join(lock, "owner.json"), "utf8"),
+		) as {
+			token?: unknown;
+			pid?: unknown;
+		};
+		if (typeof owner.token !== "string" || owner.token.length === 0)
+			return null;
+		const pid = owner.pid;
+		if (typeof pid !== "number" || !Number.isInteger(pid) || pid < 1)
+			return null;
+		try {
+			process.kill(pid, 0);
+			return null;
+		} catch (error) {
+			return (error as NodeJS.ErrnoException).code === "ESRCH"
+				? owner.token
+				: null;
+		}
 	} catch {
-		return false;
+		return null;
 	}
-	const pid = owner.pid;
-	if (typeof pid !== "number" || !Number.isInteger(pid) || pid < 1)
-		return false;
+}
+
+async function restoreLock(trash: string, lock: string): Promise<void> {
 	try {
-		process.kill(pid, 0);
-		return false;
+		await rename(trash, lock);
+	} catch {
+		// inert reclaiming-* residue
+	}
+}
+
+/** Rename-claim an orphan. */
+export async function reclaimOrphanedLock(lock: string): Promise<boolean> {
+	const token = await orphanOwnerToken(lock);
+	if (token === null) return false;
+	const trash = `${lock}.reclaiming-${process.pid}-${randomUUID()}`;
+	try {
+		await rename(lock, trash);
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "ESRCH") return false;
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
 	}
-	// Reclaim only the exact orphan that was checked: if a concurrent waiter
-	// already replaced it, the fresh owner's token will not match.
 	try {
-		const again = JSON.parse(await readFile(join(lock, "owner.json"), "utf8"));
-		return (again as { token?: unknown }).token === owner.token;
+		const claimed = JSON.parse(
+			await readFile(join(trash, "owner.json"), "utf8"),
+		) as { token?: unknown };
+		if (claimed.token === token) {
+			await rm(trash, { recursive: true, force: true });
+			return true;
+		}
 	} catch {
-		return false;
+		// restore if the path is still free
 	}
+	await restoreLock(trash, lock);
+	return false;
 }
 
 async function acquireLock(workspace: string): Promise<() => Promise<void>> {
@@ -576,7 +603,10 @@ async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 					{ encoding: "utf8", flag: "wx", mode: 0o600 },
 				);
 			} catch (error) {
-				await rm(lock, { recursive: true, force: true });
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "EEXIST" && code !== "ENOENT") {
+					await rm(lock, { recursive: true, force: true });
+				}
 				throw error;
 			}
 			return async () => {
@@ -592,10 +622,7 @@ async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 			await pathKind(lock, "directory", "the Flow session lock");
-			if (await lockOwnerIsDead(lock)) {
-				await rm(lock, { recursive: true, force: true });
-				continue;
-			}
+			if (await reclaimOrphanedLock(lock)) continue;
 			if (Date.now() - started >= LOCK_TIMEOUT_MS) {
 				throw new Error(
 					`Timed out waiting for Flow session lock at ${lock}; inspect it before manual removal.`,

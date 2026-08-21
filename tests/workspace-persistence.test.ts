@@ -33,6 +33,7 @@ import {
 	loadArchivedSession,
 	loadSession,
 	quarantineUnreadableSession,
+	reclaimOrphanedLock,
 	saveSession,
 	sessionPath,
 	UnsafeFlowWorkspaceLayoutError,
@@ -636,6 +637,42 @@ describe("session locks", () => {
 		await rm(lock, { recursive: true, force: true });
 		await attempt;
 		expect(acquired).toBe(true);
+	});
+
+	test("claims an orphan so only one waiter can delete it", async () => {
+		const workspace = await temporaryRoot();
+		const child = spawn(process.execPath, ["--eval", ""], {
+			stdio: "ignore",
+		});
+		await waitForChild(child);
+		const deadPid = child.pid;
+		if (deadPid === undefined) throw new Error("Expected a child pid.");
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(
+			join(lock, "owner.json"),
+			JSON.stringify({ token: "orphaned", pid: deadPid }),
+		);
+
+		const [first, second] = await Promise.all([
+			reclaimOrphanedLock(lock),
+			reclaimOrphanedLock(lock),
+		]);
+		expect([first, second].filter(Boolean)).toHaveLength(1);
+		expect(await exists(lock)).toBe(false);
+	});
+
+	test("leaves a live lock untouched", async () => {
+		const workspace = await temporaryRoot();
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		const owner = { token: "live", pid: process.pid };
+		await writeFile(join(lock, "owner.json"), JSON.stringify(owner));
+
+		expect(await reclaimOrphanedLock(lock)).toBe(false);
+		expect(
+			JSON.parse(await readFile(join(lock, "owner.json"), "utf8")),
+		).toEqual(owner);
 	});
 
 	test("does not reclaim a lock whose owner record is unreadable", async () => {
