@@ -6,6 +6,9 @@ A cassette lands here only after someone has read the run it came from and decid
 the sequence is worth pinning. `bun run eval` writes candidates into
 `evals/results/<stamp>.cassettes/`; copy the ones worth keeping.
 
+`flowVersion` in a cassette is the build that recorded it, kept as provenance.
+Replay never reads it.
+
 Prefer a small set that covers distinct decisions over one per attempt. Six
 cassettes that each reach a different refusal are worth more than sixty that all
 walk the happy path, and the set is read by hand — keep it readable.

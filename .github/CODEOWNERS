@@ -1,7 +1,7 @@
 # Default ownership
 * @ddv1982
 
-# Flow v6 ownership boundaries
+# Flow ownership boundaries
 /.github/ @ddv1982
 /.agents/ @ddv1982
 /src/domain/ @ddv1982

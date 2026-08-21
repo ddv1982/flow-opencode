@@ -216,7 +216,7 @@ async function registeredToolNames(): Promise<string[]> {
 	}
 }
 
-describe("Flow v6 documentation contract", () => {
+describe("Flow documentation contract", () => {
 	test("pins the exact published version in the install instructions", async () => {
 		const readme = await readFile("README.md", "utf8");
 		const install = section(readme, "Install");
@@ -450,6 +450,29 @@ describe("Flow v6 documentation contract", () => {
 		expect(currentReleaseNotes).not.toMatch(
 			/public surface (?:is|are) unchanged/i,
 		);
+	});
+
+	test("keeps the product generation unnamed outside history", async () => {
+		// The numbered label went stale in maintained prose twice already, so the
+		// rule lives here instead of in another sentence nobody rereads. History
+		// keeps its labels: the CHANGELOG, the ADRs, and the upgrade heading in
+		// troubleshooting.md name real past versions. Test fixtures are not scanned.
+		const maintained = [
+			"README.md",
+			"CONTEXT.md",
+			...(await markdownFiles("docs")).filter(
+				(path) => !path.startsWith(join("docs", "adr")),
+			),
+		];
+		const offenders: string[] = [];
+		for (const document of [...maintained, "src/application/errors.ts"]) {
+			for (const line of (await readFile(document, "utf8")).split("\n")) {
+				if (/^#{1,6} Upgrading from Flow v\d/.test(line)) continue;
+				if (/Flow v\d/.test(line))
+					offenders.push(`${document}: ${line.trim()}`);
+			}
+		}
+		expect(offenders).toEqual([]);
 	});
 
 	test("keeps CI focused on normal checks, platforms, live smoke, and release", async () => {

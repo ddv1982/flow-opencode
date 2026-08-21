@@ -72,6 +72,9 @@ wait timed out; a live writer may still own it.
 command cancels capture. Arm it again, run the displayed command unchanged, and
 wait for the `[flow-validation]` marker.
 
+A host restart discards an armed capture; the command then runs unobserved. Arm
+it again and rerun it.
+
 `recordedRevision` is only a concurrency token. When the marker reports
 `passed: true`, use that revision for `flow_review_start` only if every runtime
 review gate still holds; it may also arm the next validation. A `passed: false`

@@ -18,7 +18,7 @@ before this comparison because it authorizes no new work.
 
 ## Versions
 
-**Flow v7** is the plugin and product generation.
+**Flow** is the plugin and product generation.
 
 **Session v5** is its sole active persisted-state contract. Older active
 documents are not migrated. Historical archives are inert and are never used to

@@ -215,7 +215,7 @@ afterEach(async () => {
 	}
 });
 
-describe("Flow v6 distribution surface", () => {
+describe("Flow distribution surface", () => {
 	test("ships ten tools, five commands, two hidden agents, and four guides", async () => {
 		expect(new Set(Object.keys(createRegisteredTools()))).toEqual(
 			new Set(TOOL_NAMES),
