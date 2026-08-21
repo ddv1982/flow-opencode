@@ -109,6 +109,33 @@ reason Flow asks you to read the review rather than trust the verdict.
   host surface. Capability-gated and best-effort: see
   [ADR 0008](adr/0008-bounded-auto-continuation.md).
 
+## Threat model
+
+Who can break a run, and what each is up against.
+
+- **A misbehaving model.** The manager runs with the user's own OpenCode
+  permissions by design, since it is the user's agent and Flow does not sandbox
+  it. What Flow enforces is that the lifecycle cannot be talked into existence.
+  An armed validation command runs byte-for-byte or the observation is
+  ineligible, the exit code and output-completeness flag come from the host's
+  Bash metadata, and only the reserved reviewer identity submits a review result.
+  The hidden worker and reviewer agents do get a deny matrix: no Bash, no
+  external directories, no skills, no delegation, no Flow lifecycle tools. The
+  reviewer cannot edit at all, and the worker cannot touch `.flow` or `.git`.
+- **A compromised host.** Nothing. The host's own reports are the root of trust
+  for exit codes, platform, and truncation, so a host that lies defeats every
+  host-attested row above. Flow's answer is limited to failing visibly when the
+  host reports nothing.
+- **User error at approval.** The gate command and the evidence entries are
+  approved with the plan, and their fitness stays caller-declared. A gate that
+  cannot fail is a declared gate, not an enforced one.
+
+Worker path limits beyond `.flow` and `.git` remain a prompt contract the
+manager audits afterward, as the Unenforced tier says. An allowlist for armed
+commands is deliberately absent. It would duplicate the host's permission layer
+and the plan approval, and the guarantee Flow makes is byte-equality, not
+safety.
+
 ## Assurance at close
 
 Every close derives `delivery.assurance` from canonical closed state. It labels tiers

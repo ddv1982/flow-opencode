@@ -123,8 +123,14 @@ const packageVersion = packageJson.version;
  *
  * 8.0.0 landed the collapse as ADR 0014. This prose ceiling was not raised for
  * it. Do not raise it for another evidence field.
+ *
+ * Raised from 89,000, which had 17 bytes left, for the threat-model section in
+ * `guarantees.md`. The section names the three adversaries and what each is up
+ * against, and the file had nothing left to delete that still earned its place.
+ * The 466 left is under a third of the section it bought, so the next growth
+ * deletes prose first.
  */
-const MAX_MAINTAINED_DOC_BYTES = 89_000;
+const MAX_MAINTAINED_DOC_BYTES = 91_000;
 
 /**
  * Decision records under `docs/adr/`, budgeted apart from maintained prose.
