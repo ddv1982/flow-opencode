@@ -73,8 +73,10 @@ direction. The cadence follows from that:
 - **Freeze on the public surface** while the guarantees are being measured: tools,
   commands, guides, agents, and the Session v5 shape. Additive optional fields are
   allowed; removals and renames are not.
-- **No major release** without a recorded qualification pass on the current
-  matrix, and a `CHANGELOG` entry that states the schema impact explicitly.
+- **No major release** without a committed qualification record.
+  `bun run qualify -- --record <version>` writes
+  `evals/qualification/<version>.json` on a pass, and release metadata refuses
+  the tag without it. A `CHANGELOG` entry states the schema impact explicitly.
 - **Patch releases** for defects and host-compatibility fixes, which is what the
   weekly OpenCode compatibility smoke exists to catch early.
 - **Deprecate before removing.** A surface that is going away is announced in one
@@ -91,9 +93,8 @@ bun run qualify
 Only the full matrix qualifies a release. The cheaper tiers — a free replay of
 recorded decisions, a one-model smoke run — answer questions during work and are
 described with their prices in
-[../evals/README.md](../evals/README.md#three-tiers-three-prices). A replay proves
-nothing about the prompts, and a single attempt of a stochastic scenario is not a
-rate. `bun run triage` says which runs in a report are worth reading.
+[../evals/README.md](../evals/README.md#three-tiers-three-prices).
+`bun run triage` says which runs in a report are worth reading.
 
 `bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
 ordinary OpenCode on hidden-graded tasks. It is not a qualification input.
