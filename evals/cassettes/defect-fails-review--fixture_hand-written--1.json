@@ -1,0 +1,258 @@
+{
+	"cassetteVersion": 1,
+	"flowVersion": "8.1.0",
+	"recordedAt": "2026-08-21T00:00:00.000Z",
+	"scenario": "defect-fails-review",
+	"model": "fixture/hand-written",
+	"attempt": 1,
+	"hostPlatform": "linux",
+	"files": {
+		"package.json": "{\n  \"name\": \"flow-eval-fixture\",\n  \"version\": \"1.0.0\",\n  \"private\": true,\n  \"type\": \"module\",\n  \"scripts\": {\n    \"test\": \"bun test\"\n  }\n}\n",
+		"src/greet.ts": "export function greet(name: string): string {\n\treturn `Hello, ${name}!`;\n}\n",
+		"src/greet.test.ts": "import { expect, test } from \"bun:test\";\nimport { greet } from \"./greet.js\";\n\ntest(\"greets by name\", () => {\n\texpect(greet(\"Ada\")).toBe(\"Hello, Ada!\");\n});\n",
+		"README.md": "# Flow eval fixture\n\nRun `bun test` for the canonical gate.\n",
+		"src/slug.ts": "/** Lowercases a title and joins its words with hyphens. */\nexport function slug(title: string): string {\n\treturn title.toLowerCase().split(\" \").join(\"-\");\n}\n",
+		"src/slug.test.ts": "import { expect, test } from \"bun:test\";\nimport { slug } from \"./slug.js\";\n\ntest(\"joins words with hyphens\", () => {\n\texpect(slug(\"Hello World\")).toBe(\"hello-world\");\n});\n"
+	},
+	"events": [
+		{
+			"kind": "flow",
+			"tool": "flow_status",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"view": "compact"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 0
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_plan_save",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "plan-1",
+					"expectedRevision": 0,
+					"goal": "Add an exported `slugPath(dir, title)` to src/slug.ts that returns `<dir>/<slug of title>.md`. Acceptance: a title carrying punctuation, such as `Q1: Report/Draft`, must produce exactly one path separator and no character that is illegal in a filename.",
+					"plan": {
+						"summary": "Add slugPath(dir, title) on top of the existing slug helper.",
+						"overview": "One exported function composing dir, slug(title), and the .md suffix, covered by a focused test.",
+						"requirements": [
+							"Export slugPath(dir, title) from src/slug.ts",
+							"Acceptance: a punctuated title yields one path separator and no illegal filename character"
+						],
+						"decisions": [
+							"Compose the existing slug function rather than duplicating its rules."
+						],
+						"features": [
+							{
+								"id": "add-slugpath",
+								"title": "Add slugPath",
+								"summary": "Add and cover slugPath(dir, title) in src/slug.ts.",
+								"targets": ["src/slug.ts", "src/slug.test.ts"],
+								"validation": ["bun test"],
+								"dependsOn": []
+							}
+						],
+						"evidence": [
+							{
+								"scope": "gate",
+								"requirement": "Repository suite",
+								"environment": "this host",
+								"command": "bun test",
+								"platform": "other",
+								"assertions": []
+							}
+						]
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 1,
+				"sessionId": "recorded-session-id"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_plan_approve",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "approve-1",
+					"expectedRevision": 1
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 2,
+				"sessionId": "recorded-session-id"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_run_start",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "run-1",
+					"expectedRevision": 2,
+					"featureId": "add-slugpath"
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 3,
+				"sessionId": "recorded-session-id"
+			}
+		},
+		{
+			"kind": "other",
+			"tool": "edit",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "src/slug.ts",
+				"oldString": "export function slug(title: string): string {\n\treturn title.toLowerCase().split(\" \").join(\"-\");\n}\n",
+				"newString": "export function slug(title: string): string {\n\treturn title.toLowerCase().split(\" \").join(\"-\");\n}\n\n/** Builds `<dir>/<slug of title>.md`. */\nexport function slugPath(dir: string, title: string): string {\n\treturn `${dir}/${slug(title)}.md`;\n}\n"
+			},
+			"rawOutput": "Updated src/slug.ts",
+			"status": "completed"
+		},
+		{
+			"kind": "other",
+			"tool": "edit",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "src/slug.test.ts",
+				"oldString": "test(\"joins words with hyphens\", () => {\n\texpect(slug(\"Hello World\")).toBe(\"hello-world\");\n});\n",
+				"newString": "test(\"joins words with hyphens\", () => {\n\texpect(slug(\"Hello World\")).toBe(\"hello-world\");\n});\n\ntest(\"builds a slug path\", () => {\n\texpect(slugPath(\"docs\", \"My Report\")).toBe(\"docs/my-report.md\");\n});\n"
+			},
+			"rawOutput": "Updated src/slug.test.ts",
+			"status": "completed"
+		},
+		{
+			"kind": "other",
+			"tool": "edit",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"filePath": "src/slug.test.ts",
+				"oldString": "import { slug } from \"./slug.js\";",
+				"newString": "import { slug, slugPath } from \"./slug.js\";"
+			},
+			"rawOutput": "Updated src/slug.test.ts",
+			"status": "completed"
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_validation_start",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"expectedRevision": 3,
+					"featureId": "add-slugpath",
+					"command": "bun test",
+					"scope": "broad"
+				}
+			},
+			"observed": {
+				"status": "ok"
+			}
+		},
+		{
+			"kind": "bash",
+			"agent": "build",
+			"sessionIndex": 0,
+			"command": "bun test",
+			"output": "3 pass\n0 fail",
+			"metadata": {
+				"exit": 0,
+				"truncated": false
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_review_start",
+			"agent": "build",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "review-1",
+					"expectedRevision": 4,
+					"featureId": "add-slugpath",
+					"artifactsChanged": [
+						{
+							"path": "src/slug.ts"
+						},
+						{
+							"path": "src/slug.test.ts"
+						}
+					],
+					"packet": {
+						"summary": "Added slugPath(dir, title) composing slug, with a focused test. The declared gate passed.",
+						"riskLenses": ["test-coverage", "acceptance-fit"]
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 5,
+				"sessionId": "recorded-session-id",
+				"assignmentId": "review:recorded-assignment-id"
+			}
+		},
+		{
+			"kind": "flow",
+			"tool": "flow_feature_complete",
+			"agent": "flow-reviewer",
+			"sessionIndex": 0,
+			"input": {
+				"request": {
+					"operationId": "complete-1",
+					"expectedRevision": 5,
+					"featureId": "add-slugpath",
+					"assignmentId": "review:recorded-assignment-id",
+					"summary": "Independent review failed: the acceptance clause fails for a punctuated title and the green suite never exercises it.",
+					"result": {
+						"verdict": "failed",
+						"findings": [
+							{
+								"severity": "blocking",
+								"summary": "slugPath with a punctuated title produces an unsafe multi-separator path.",
+								"evidence": "slugPath(\"docs\", \"Q1: Report/Draft\") returns \"docs/q1:-report/draft.md\": slug() replaces only spaces, so the colon survives and the slash adds a second separator.",
+								"scopeBlocker": false
+							}
+						],
+						"terminalDisposition": "submitted"
+					}
+				}
+			},
+			"observed": {
+				"status": "ok",
+				"revision": 6,
+				"sessionId": "recorded-session-id",
+				"findingIds": ["F1"]
+			}
+		}
+	],
+	"expected": {
+		"verdict": "PASS",
+		"issues": [],
+		"falseCompletion": false,
+		"closureKind": null
+	},
+	"finalText": "Review blocked completion. slugPath composes slug, which replaces only spaces, so the punctuated acceptance title yields an unsafe path and the green suite never exercised that case. The fix is in scope: make slug strip unsafe characters and cover the punctuated case.",
+	"assistantMessages": 9,
+	"fidelity": []
+}
