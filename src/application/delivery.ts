@@ -4,7 +4,7 @@ import type {
 	Session,
 	SessionClosure,
 } from "../domain/session.js";
-import { planGate } from "../domain/session.js";
+import { currentRun, planGate } from "../domain/session.js";
 import { isFeatureComplete } from "../domain/transitions.js";
 import {
 	isValidationEligible,
@@ -63,15 +63,6 @@ const LIMITATIONS = [
 	"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
 	"Freshness holds when review is accepted; an archive does not attest the current workspace.",
 ] as const;
-
-function currentRun(
-	session: Session,
-	featureId: string,
-): FeatureRun | undefined {
-	return session.runs.findLast(
-		(run) => run.featureId === featureId && run.state !== "superseded",
-	);
-}
 
 /** Tiered support for a recorded closure, derived rather than persisted. */
 export function assuranceProjection(session: Session): AssuranceProjection {

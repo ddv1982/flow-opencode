@@ -297,3 +297,28 @@ export type Session = Readonly<{
 	operations: OperationRecord[];
 	closure: SessionClosure | null;
 }>;
+
+/** The latest run of a feature that has not been superseded. */
+export function currentRun(
+	session: Session,
+	featureId: string,
+): FeatureRun | null {
+	return (
+		session.runs.findLast(
+			(run) => run.featureId === featureId && run.state !== "superseded",
+		) ?? null
+	);
+}
+
+/**
+ * The current run of the first feature in plan order whose current run is
+ * blocked. `startRun` refuses new runs while one exists and the status
+ * projection names it, so both read this one rule.
+ */
+export function firstBlockedRun(session: Session): FeatureRun | null {
+	for (const feature of session.plan?.features ?? []) {
+		const run = currentRun(session, feature.id);
+		if (run?.state === "blocked") return run;
+	}
+	return null;
+}

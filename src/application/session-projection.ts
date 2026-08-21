@@ -18,6 +18,7 @@ import type {
 	SessionStatus,
 	ValidationObservation,
 } from "../domain/session.js";
+import { firstBlockedRun } from "../domain/session.js";
 import {
 	activeRun,
 	isFeatureComplete,
@@ -162,9 +163,7 @@ export function activePendingReview(session: Session): ReviewAssignment | null {
 function blockedFeatureProjection(
 	session: Session,
 ): BlockedFeatureProjection | null {
-	const blockedRun = [...session.runs]
-		.reverse()
-		.find((run) => run.state === "blocked");
+	const blockedRun = firstBlockedRun(session);
 	if (!blockedRun) return null;
 	const featureRuns = session.runs.filter(
 		(run) => run.featureId === blockedRun.featureId,
