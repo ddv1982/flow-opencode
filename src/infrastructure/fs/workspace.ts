@@ -24,6 +24,7 @@ import {
 	MAX_SESSION_BYTES,
 	MAX_SESSION_ID_LENGTH,
 } from "../../domain/limits.js";
+import { operationInputDigest } from "../../domain/operation.js";
 import type { Session } from "../../domain/session.js";
 import { parseStrictJsonObject } from "./strict-json-object.js";
 
@@ -410,7 +411,7 @@ export async function confirmActiveSessionDurability(
 			"Flow could not verify canonical active state before durability confirmation.",
 		);
 	}
-	if (JSON.stringify(active) !== JSON.stringify(canonical)) {
+	if (operationInputDigest(active) !== operationInputDigest(canonical)) {
 		throw new ArchiveCollisionError(
 			"Active state changed before durability confirmation; Flow left it untouched.",
 		);
@@ -465,7 +466,10 @@ export async function archiveAndClearSession(
 					"Flow could not verify that the existing archive is identical; it left both documents untouched.",
 				);
 			}
-			if (!existing || JSON.stringify(existing) !== JSON.stringify(canonical)) {
+			if (
+				!existing ||
+				operationInputDigest(existing) !== operationInputDigest(canonical)
+			) {
 				throw new ArchiveCollisionError(
 					"Flow refused to overwrite a different archived session.",
 				);
@@ -491,7 +495,7 @@ export async function archiveAndClearSession(
 		await synchronizeDirectory(flowDir(root));
 		return;
 	}
-	if (JSON.stringify(active) !== JSON.stringify(canonical)) {
+	if (operationInputDigest(active) !== operationInputDigest(canonical)) {
 		throw new ArchiveCollisionError(
 			"Active state changed before archive cleanup; Flow left it untouched.",
 		);
@@ -524,6 +528,60 @@ export async function quarantineUnreadableSession(
 const inProcessLocks = new Map<string, Promise<void>>();
 const LOCK_TIMEOUT_MS = 30_000;
 
+async function orphanOwnerToken(lock: string): Promise<string | null> {
+	try {
+		const owner = JSON.parse(
+			await readFile(join(lock, "owner.json"), "utf8"),
+		) as {
+			token?: unknown;
+			pid?: unknown;
+		};
+		if (typeof owner.token !== "string" || owner.token.length === 0)
+			return null;
+		const pid = owner.pid;
+		if (typeof pid !== "number" || !Number.isInteger(pid) || pid < 1)
+			return null;
+		try {
+			process.kill(pid, 0);
+			return null;
+		} catch (error) {
+			return (error as NodeJS.ErrnoException).code === "ESRCH"
+				? owner.token
+				: null;
+		}
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * wx-create `claim` inside the lock. That binds the claim to this directory
+ * inode, so a live replacement is never moved off the canonical path.
+ * Re-check the owner token before deleting; a mismatch drops the claim file.
+ */
+export async function reclaimOrphanedLock(lock: string): Promise<boolean> {
+	const token = await orphanOwnerToken(lock);
+	if (token === null) return false;
+	const claim = join(lock, "claim");
+	try {
+		await writeFile(claim, "", { encoding: "utf8", flag: "wx", mode: 0o600 });
+	} catch (error) {
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code === "EEXIST" || code === "ENOENT") return false;
+		throw error;
+	}
+	if ((await orphanOwnerToken(lock)) !== token) {
+		try {
+			await rm(claim);
+		} catch {
+			// Directory was replaced; the claim went with it.
+		}
+		return false;
+	}
+	await rm(lock, { recursive: true, force: true });
+	return true;
+}
+
 async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 	await ensureFlowDirectory(workspace);
 	const lock = join(flowDir(workspace), "session.lock");
@@ -539,7 +597,10 @@ async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 					{ encoding: "utf8", flag: "wx", mode: 0o600 },
 				);
 			} catch (error) {
-				await rm(lock, { recursive: true, force: true });
+				const code = (error as NodeJS.ErrnoException).code;
+				if (code !== "EEXIST" && code !== "ENOENT") {
+					await rm(lock, { recursive: true, force: true });
+				}
 				throw error;
 			}
 			return async () => {
@@ -555,6 +616,7 @@ async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 			await pathKind(lock, "directory", "the Flow session lock");
+			if (await reclaimOrphanedLock(lock)) continue;
 			if (Date.now() - started >= LOCK_TIMEOUT_MS) {
 				throw new Error(
 					`Timed out waiting for Flow session lock at ${lock}; inspect it before manual removal.`,

@@ -216,6 +216,25 @@ describe("durable session invariants", () => {
 		).toEqual([`Superseded run '${runId}' cannot retain a passing review.`]);
 	});
 
+	test("rejects a second review at the schema boundary", async () => {
+		const session = await reviewedSession();
+		// The one-review rule lives in the schema itself, so a forged second
+		// assignment fails the parse rather than reporting an invariant issue.
+		const forged = forge(session, (draft) => {
+			const run = draft.runs[0];
+			const review = run?.reviews[0];
+			if (!run || !review) throw new Error("Expected a reviewed run.");
+			run.reviews = [review, { ...review }];
+		});
+		const result = SessionSchema.safeParse(forged);
+		expect(result.success).toBe(false);
+		expect(
+			result.error?.issues.some(
+				(issue) => issue.path.join(".") === "runs.0.reviews",
+			),
+		).toBe(true);
+	});
+
 	test("reports the plan's own rules through the shared primitive", async () => {
 		const session = await reviewedSession();
 		// The plan rules live in `planIssue`, which `savePlan` throws and this

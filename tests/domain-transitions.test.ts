@@ -18,7 +18,7 @@ import type {
 	SourceDigest,
 	ValidationScope,
 } from "../src/domain/session.js";
-import { planGate } from "../src/domain/session.js";
+import { firstBlockedRun, planGate } from "../src/domain/session.js";
 import { sessionInvariantIssues } from "../src/domain/session-invariants.js";
 import {
 	approvePlan,
@@ -778,6 +778,54 @@ describe("Session v5 domain state machine", () => {
 				runs: [...structuredClone(retry.runs)].reverse(),
 			}).success,
 		).toBe(false);
+	});
+
+	test("the blocked-run rule reads plan order, not position in runs", () => {
+		const environment = deterministicEnvironment();
+		let session = begin(
+			approve(saveDraft(environment)),
+			FOUNDATION,
+			environment,
+		);
+		session = validate(session, {
+			id: "validation-before-blocked-order",
+			featureId: FOUNDATION,
+			scope: "focused",
+		});
+		const review = requestReview(session, FOUNDATION, environment);
+		session = completeFeature(review.session, {
+			operationId: "feature-failed-for-blocked-order",
+			expectedRevision: review.session.revision,
+			featureId: FOUNDATION,
+			assignmentId: review.assignment.id,
+			summary: "The review found a correctness issue.",
+			result: {
+				verdict: "failed",
+				findings: [
+					{
+						severity: "blocking",
+						summary: "Completion can bypass review.",
+						evidence: "src/domain/transitions.ts: completion gate",
+					},
+				],
+				terminalDisposition: "submitted",
+			},
+		}).session;
+		const foundationRun = session.runs[0];
+		if (!foundationRun) throw new Error("Expected the blocked run.");
+		// Transitions never leave two current blocked runs, so the second one is
+		// forged to pin the rule both readers share: plan order, not array order.
+		const forged: Session = {
+			...session,
+			runs: [
+				...session.runs,
+				{ ...foundationRun, id: "run-forged", featureId: DELIVERY },
+			],
+		};
+		expect(firstBlockedRun(forged)?.featureId).toBe(FOUNDATION);
+		expect(compactProjection(forged).blockedFeature?.featureId).toBe(
+			FOUNDATION,
+		);
 	});
 
 	test("an inspect feature completes with blockers so the next feature can start", () => {

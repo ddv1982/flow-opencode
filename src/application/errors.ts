@@ -13,7 +13,7 @@ export class UnsupportedFlowSessionVersionError extends Error {
 	readonly actualVersion: unknown;
 	constructor(actualVersion: unknown) {
 		super(
-			"Flow v6 supports only Session v5 active state. Close active older sessions before upgrading; archived history remains inert.",
+			"This Flow build supports only Session v5 active state. Close active older sessions before upgrading; archived history remains inert.",
 		);
 		this.name = "UnsupportedFlowSessionVersionError";
 		this.actualVersion = actualVersion;

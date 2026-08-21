@@ -40,6 +40,7 @@ and a rule that lives only in a prompt.
   entry has not passed on the OS that entry declared. Feature reviews are not,
   so a goal can be split into the half this host can prove and the half it cannot.
 - One revision per accepted mutation; an operation id replays exactly or conflicts.
+  Validation observations replay by capture id, not operation id.
 - Every mutation validates the whole schema and writes atomically under one
   cross-process lock.
 
@@ -82,6 +83,8 @@ reason Flow asks you to read the review rather than trust the verdict.
   checklist, and failed an unprovable claim instead of passing it conditionally.
   `unprovable-claim-refused` and `defect-fails-review` put work in front of it that
   should not pass; neither can force the review path.
+- **Reviewer independence.** Without `OPENCODE_FLOW_REVIEWER_MODEL` the reviewer
+  shares the manager's model; independence rests on structure alone.
 - **Evidence completeness.** That an evidence entry names the observation the
   goal actually asks for, a command that would really produce it, and the
   platform it actually needs. The runtime enforces that the declared command
@@ -93,8 +96,7 @@ reason Flow asks you to read the review rather than trust the verdict.
 
 ## Unenforced
 
-- A declared gate that cannot fail. See Caller-declared above; deciding which
-  commands count as tests is an open-ended whitelist, not an invariant.
+- A declared gate that cannot fail. See Caller-declared above.
 - A suite that skips where no case names were declared. `assertions: []` keeps the
   exit-code rule, which is the honest answer for a credential or a device and the
   remaining escape for a test result. See Caller-declared.
@@ -107,6 +109,33 @@ reason Flow asks you to read the review rather than trust the verdict.
   host surface. Capability-gated and best-effort: see
   [ADR 0008](adr/0008-bounded-auto-continuation.md).
 
+## Threat model
+
+Who can break a run, and what each is up against.
+
+- **A misbehaving model.** The manager runs with the user's own OpenCode
+  permissions by design, since it is the user's agent and Flow does not sandbox
+  it. What Flow enforces is that the lifecycle cannot be talked into existence.
+  An armed validation command runs byte-for-byte or the observation is
+  ineligible, the exit code and output-completeness flag come from the host's
+  Bash metadata, and only the reserved reviewer identity submits a review result.
+  The hidden worker and reviewer agents do get a deny matrix: no Bash, no
+  external directories, no skills, no delegation, no Flow lifecycle tools. The
+  reviewer cannot edit at all, and the worker cannot touch `.flow` or `.git`.
+- **A compromised host.** Nothing. The host's own reports are the root of trust
+  for exit codes, platform, and truncation, so a host that lies defeats every
+  host-attested row above. Flow's answer is limited to failing visibly when the
+  host reports nothing.
+- **User error at approval.** The gate command and the evidence entries are
+  approved with the plan, and their fitness stays caller-declared. A gate that
+  cannot fail is a declared gate, not an enforced one.
+
+Worker path limits beyond `.flow` and `.git` remain a prompt contract the
+manager audits afterward, as the Unenforced tier says. An allowlist for armed
+commands is deliberately absent. It would duplicate the host's permission layer
+and the plan approval, and the guarantee Flow makes is byte-equality, not
+safety.
+
 ## Assurance at close
 
 Every close derives `delivery.assurance` from canonical closed state. It labels tiers
@@ -117,7 +146,8 @@ gaps not applicable, and is neither persisted nor a correctness probability. See
 ## How this page is kept honest
 
 Every enforced row has a test; every judgment is evaluated or labelled unmeasured.
-Eval false completion independently audits the document, while the paired benchmark
-measures hidden-graded correctness against ordinary OpenCode.
+That mapping is maintained by hand, not machine-checked. Eval false completion
+independently audits the document, while the paired benchmark measures
+hidden-graded correctness against ordinary OpenCode.
 
 Release thresholds are in [release qualification](release-qualification.md).

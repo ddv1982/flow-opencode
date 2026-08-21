@@ -1,9 +1,13 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { SCENARIOS } from "../evals/scenarios.js";
 import {
 	mergeReports,
 	providers,
 	qualificationFailures,
+	writeQualificationRecord,
 } from "../scripts/qualify-release.js";
 
 // Producing a real report costs credentials and money, so what is proven here is
@@ -387,5 +391,69 @@ describe("merging a re-run into a matrix", () => {
 		expect(qualificationFailures(merged.report).join()).toContain(
 			"false completion",
 		);
+	});
+});
+
+describe("qualification records", () => {
+	const temporary: string[] = [];
+	afterEach(async () => {
+		await Promise.all(
+			temporary
+				.splice(0)
+				.map((directory) => rm(directory, { recursive: true, force: true })),
+		);
+	});
+
+	test("writes a QUALIFIED record for a major version", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
+		temporary.push(directory);
+		const path = await writeQualificationRecord(
+			"9.0.0",
+			report({}),
+			["evals/results/a.json"],
+			directory,
+			"7.0.2",
+		);
+		const record = JSON.parse(await readFile(path, "utf8"));
+		expect(record).toMatchObject({
+			version: "9.0.0",
+			verdict: "QUALIFIED",
+			flowVersion: "7.0.2",
+			opencodeVersion: "1.18.6",
+			reports: ["evals/results/a.json"],
+			providers: ["anthropic", "openai"],
+		});
+		expect(typeof record.qualifiedAt).toBe("string");
+	});
+
+	test("refuses to record a non-major version", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
+		temporary.push(directory);
+		await expect(
+			writeQualificationRecord("9.1.0", report({}), [], directory, "7.0.2"),
+		).rejects.toThrow(/major release/);
+	});
+
+	test("refuses a report that measured a different Flow build", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
+		temporary.push(directory);
+		await expect(
+			writeQualificationRecord(
+				"9.0.0",
+				report({ flowVersion: "8.1.0" }),
+				[],
+				directory,
+				"8.1.1",
+			),
+		).rejects.toThrow(/8\.1\.0, not this repository's 8\.1\.1/);
+	});
+
+	test("refuses a report with no flowVersion", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
+		temporary.push(directory);
+		const { flowVersion: _omitted, ...measured } = report({});
+		await expect(
+			writeQualificationRecord("9.0.0", measured, [], directory, "8.1.1"),
+		).rejects.toThrow(/requires the report's flowVersion/);
 	});
 });

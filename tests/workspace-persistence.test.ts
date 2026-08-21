@@ -33,6 +33,7 @@ import {
 	loadArchivedSession,
 	loadSession,
 	quarantineUnreadableSession,
+	reclaimOrphanedLock,
 	saveSession,
 	sessionPath,
 	UnsafeFlowWorkspaceLayoutError,
@@ -86,6 +87,19 @@ async function exists(path: string): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+/** The same document with every object's keys reversed: equal content, different bytes. */
+function shuffleKeys(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(shuffleKeys);
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value)
+				.reverse()
+				.map(([key, entry]) => [key, shuffleKeys(entry)]),
+		);
+	}
+	return value;
 }
 
 async function waitForPath(path: string): Promise<void> {
@@ -410,6 +424,30 @@ describe("atomic persistence and archival", () => {
 		).rejects.toBeInstanceOf(ArchiveCollisionError);
 	});
 
+	test("accepts an equal document written in a different key order", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("confirm-shuffled-keys");
+		await saveSession(workspace, session);
+		await writeFile(
+			sessionPath(workspace),
+			JSON.stringify(shuffleKeys(session)),
+		);
+
+		// Content equality, not byte equality: the parse must not raise.
+		await expect(
+			confirmActiveSessionDurability(workspace, session),
+		).resolves.toBeUndefined();
+
+		await mkdir(historyDir(workspace));
+		await writeFile(
+			archivedSessionPath(workspace, session.id),
+			JSON.stringify(shuffleKeys(session)),
+		);
+		await archiveAndClearSession(workspace, session);
+		expect(await loadSession(workspace)).toBeNull();
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
+	});
+
 	test("re-syncs an interrupted archive publication before clearing active state", async () => {
 		const workspace = await temporaryRoot();
 		const session = closedSession("archive-sync-retry");
@@ -555,5 +593,103 @@ describe("session locks", () => {
 			await parent;
 			if (child.exitCode === null) child.kill();
 		}
+	});
+
+	test("reclaims a lock whose owner process is gone", async () => {
+		const workspace = await temporaryRoot();
+		const child = spawn(process.execPath, ["--eval", ""], {
+			stdio: "ignore",
+		});
+		await waitForChild(child);
+		const deadPid = child.pid;
+		if (deadPid === undefined) throw new Error("Expected a child pid.");
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(
+			join(lock, "owner.json"),
+			JSON.stringify({ token: "orphaned", pid: deadPid }),
+		);
+
+		let ran = false;
+		await withSessionLock(workspace, async () => {
+			ran = true;
+		});
+
+		expect(ran).toBe(true);
+		expect(await exists(lock)).toBe(false);
+	});
+
+	test("waits for a lock whose owner process is alive", async () => {
+		const workspace = await temporaryRoot();
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(
+			join(lock, "owner.json"),
+			JSON.stringify({ token: "live", pid: process.pid }),
+		);
+
+		let acquired = false;
+		const attempt = withSessionLock(workspace, async () => {
+			acquired = true;
+		});
+		await delay(200);
+		expect(acquired).toBe(false);
+		await rm(lock, { recursive: true, force: true });
+		await attempt;
+		expect(acquired).toBe(true);
+	});
+
+	test("claims an orphan so only one waiter can delete it", async () => {
+		const workspace = await temporaryRoot();
+		const child = spawn(process.execPath, ["--eval", ""], {
+			stdio: "ignore",
+		});
+		await waitForChild(child);
+		const deadPid = child.pid;
+		if (deadPid === undefined) throw new Error("Expected a child pid.");
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(
+			join(lock, "owner.json"),
+			JSON.stringify({ token: "orphaned", pid: deadPid }),
+		);
+
+		const [first, second] = await Promise.all([
+			reclaimOrphanedLock(lock),
+			reclaimOrphanedLock(lock),
+		]);
+		expect([first, second].filter(Boolean)).toHaveLength(1);
+		expect(await exists(lock)).toBe(false);
+	});
+
+	test("leaves a live lock untouched", async () => {
+		const workspace = await temporaryRoot();
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		const owner = { token: "live", pid: process.pid };
+		await writeFile(join(lock, "owner.json"), JSON.stringify(owner));
+
+		expect(await reclaimOrphanedLock(lock)).toBe(false);
+		expect(
+			JSON.parse(await readFile(join(lock, "owner.json"), "utf8")),
+		).toEqual(owner);
+		expect(await exists(join(lock, "claim"))).toBe(false);
+	});
+
+	test("does not reclaim a lock whose owner record is unreadable", async () => {
+		const workspace = await temporaryRoot();
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(join(lock, "owner.json"), "not json");
+
+		let acquired = false;
+		const attempt = withSessionLock(workspace, async () => {
+			acquired = true;
+		});
+		await delay(200);
+		expect(acquired).toBe(false);
+		await rm(lock, { recursive: true, force: true });
+		await attempt;
+		expect(acquired).toBe(true);
 	});
 });

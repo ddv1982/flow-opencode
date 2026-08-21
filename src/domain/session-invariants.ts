@@ -129,9 +129,6 @@ export function sessionInvariantIssues(session: Session): string[] {
 			previousRunStartedRevision,
 			run.startedRevision,
 		);
-		if (run.reviews.length > 1) {
-			issues.push(`Run '${run.id}' has more than one review.`);
-		}
 		if (run.validations.length > MAX_VALIDATIONS_PER_RUN) {
 			issues.push(
 				`Run '${run.id}' has more than ${MAX_VALIDATIONS_PER_RUN} validations.`,

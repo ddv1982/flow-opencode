@@ -79,8 +79,8 @@ native plugin command and normal plugin configuration.
 - Keep validation host-observed and session-native. Do not add caller-authored
   success, detached receipt stores, or clock requirements.
 - Treat validation scope as a coverage claim. `broad` means the canonical
-  repository gate or a justified applicable equivalent; do not promote a
-  narrow command by relabeling it.
+  repository gate, byte for byte. Do not promote a narrow command by
+  relabeling it.
 - Validation commands are persisted. Never inline secrets. Raw output is
   intentionally reduced to completeness and a digest rather than stored or
   projected.

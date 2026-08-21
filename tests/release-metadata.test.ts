@@ -1,8 +1,30 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
+	assertQualificationRecord,
+	isMajorRelease,
+	qualificationRecordIssue,
 	releaseNotesForVersion,
 	validateReleaseMetadata,
 } from "../scripts/release-metadata.js";
+
+const temporary: string[] = [];
+
+afterEach(async () => {
+	await Promise.all(
+		temporary
+			.splice(0)
+			.map((directory) => rm(directory, { recursive: true, force: true })),
+	);
+});
+
+async function recordDirectory(): Promise<string> {
+	const directory = await mkdtemp(join(tmpdir(), "flow-qualification-"));
+	temporary.push(directory);
+	return directory;
+}
 
 const VERSION = "6.0.0";
 const exactChangelog = [
@@ -50,5 +72,57 @@ describe("release metadata", () => {
 				VERSION,
 			),
 		).toThrow("multiple headings for exact version 6.0.0");
+	});
+
+	test("gates only the exact x.0.0 shape", () => {
+		expect(isMajorRelease("7.0.0")).toBe(true);
+		expect(isMajorRelease("7.1.0")).toBe(false);
+		expect(isMajorRelease("7.0.1")).toBe(false);
+	});
+
+	test("refuses a major release with no qualification record", async () => {
+		const directory = await recordDirectory();
+		await expect(assertQualificationRecord("7.0.0", directory)).rejects.toThrow(
+			/no qualification record exists for 7\.0\.0/,
+		);
+		await expect(
+			assertQualificationRecord("7.1.0", directory),
+		).resolves.toBeUndefined();
+		await expect(
+			assertQualificationRecord("7.0.1", directory),
+		).resolves.toBeUndefined();
+	});
+
+	test("accepts a matching QUALIFIED record and refuses mismatches", async () => {
+		const directory = await recordDirectory();
+		await writeFile(
+			join(directory, "7.0.0.json"),
+			JSON.stringify({ version: "7.0.0", verdict: "QUALIFIED" }),
+		);
+		await expect(
+			assertQualificationRecord("7.0.0", directory),
+		).resolves.toBeUndefined();
+
+		expect(qualificationRecordIssue("8.0.0", null)).toMatch(
+			/no qualification record exists for 8\.0\.0/,
+		);
+		expect(
+			qualificationRecordIssue("8.0.0", {
+				version: "7.0.0",
+				verdict: "QUALIFIED",
+			}),
+		).toMatch(/names 7\.0\.0, not 8\.0\.0/);
+		expect(
+			qualificationRecordIssue("8.0.0", {
+				version: "8.0.0",
+				verdict: "NOT QUALIFIED",
+			}),
+		).toMatch(/not QUALIFIED/);
+		expect(
+			qualificationRecordIssue("8.0.0", {
+				version: "8.0.0",
+				verdict: "QUALIFIED",
+			}),
+		).toBeNull();
 	});
 });

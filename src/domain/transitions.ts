@@ -22,7 +22,9 @@ import type {
 	SourceDigest,
 } from "./session.js";
 import {
+	currentRun,
 	featureKind,
+	firstBlockedRun,
 	planEvidence,
 	reviewResultSemanticIssues,
 } from "./session.js";
@@ -184,16 +186,6 @@ function assertDeclaredEvidence(plan: Plan): void {
 function assertArtifacts(artifacts: readonly Artifact[]): void {
 	const issue = artifactIssues(artifacts)[0];
 	if (issue) fail(issue);
-}
-
-function currentRun(session: Session, featureId: string): FeatureRun | null {
-	return (
-		[...session.runs]
-			.reverse()
-			.find(
-				(run) => run.featureId === featureId && run.state !== "superseded",
-			) ?? null
-	);
 }
 
 export function activeRun(session: Session): FeatureRun | null {
@@ -412,11 +404,11 @@ export function startRun(
 		fail("Approve a plan before starting execution.");
 	}
 	if (activeRun(session)) fail("Only one feature run may be active.");
-	const blocked = session.plan.features.find(
-		(feature) => currentRun(session, feature.id)?.state === "blocked",
-	);
+	const blocked = firstBlockedRun(session);
 	if (blocked) {
-		fail(`Reset blocked feature '${blocked.id}' before starting another run.`);
+		fail(
+			`Reset blocked feature '${blocked.featureId}' before starting another run.`,
+		);
 	}
 	const featureId = input.featureId ?? nextRunnableFeature(session);
 	if (!featureId) fail("No runnable feature is available.");

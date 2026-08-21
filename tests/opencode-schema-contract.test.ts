@@ -192,7 +192,7 @@ function expectParity(
 	}
 }
 
-describe("Flow v6 OpenCode host schemas", () => {
+describe("Flow OpenCode host schemas", () => {
 	test("uses one strict request envelope for all nine lifecycle tools", () => {
 		for (const name of LIFECYCLE_TOOL_NAMES) {
 			const definition = registeredTools[name];

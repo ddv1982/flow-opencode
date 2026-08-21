@@ -5,7 +5,7 @@
 Rerun OpenCode's exact-version npm plugin command:
 
 ```bash
-opencode plugin opencode-plugin-flow@8.1.0 --global --force
+opencode plugin opencode-plugin-flow@8.1.1 --global --force
 ```
 
 Or confirm that the relevant `opencode.json` contains the exact npm plugin
@@ -14,7 +14,7 @@ entry:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@8.1.0"]
+  "plugin": ["opencode-plugin-flow@8.1.1"]
 }
 ```
 
@@ -61,16 +61,19 @@ Flow session, or run separate sessions inside the relevant repositories.
 
 ## Flow reports that the project lock is busy
 
-Flow never steals `.flow/session.lock` automatically. First confirm that no
-OpenCode or Flow process is still operating on the project. Only then remove
-that exact lock directory manually and retry. Do not remove it merely because a
-wait timed out; a live writer may still own it.
+Flow reclaims `.flow/session.lock` itself once the recorded owner process is
+gone. If a wait still times out, the owner is alive or its record is
+unreadable. Confirm that no OpenCode or Flow process is still operating on the
+project, then remove that exact lock directory manually and retry.
 
 ## Validation capture was cancelled
 
 `flow_validation_start` arms the exact next Bash command. Any different Bash
 command cancels capture. Arm it again, run the displayed command unchanged, and
 wait for the `[flow-validation]` marker.
+
+A host restart discards an armed capture; the command then runs unobserved. Arm
+it again and rerun it.
 
 `recordedRevision` is only a concurrency token. When the marker reports
 `passed: true`, use that revision for `flow_review_start` only if every runtime

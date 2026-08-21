@@ -2,6 +2,26 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.1.1] - 2026-08-21
+
+A crashed host no longer wedges the session lock.
+
+- The session lock is reclaimed when its owner process is gone, instead of
+  waiting out a 30-second timeout that then asks for manual removal. A reused
+  PID still waits. Finish or close active sessions before upgrading, as usual.
+- **Session v5 schema:** a run accepts at most one review at the schema
+  boundary. The invariant already required this; documents Flow wrote cannot
+  carry a second review. Existing documents keep their shape.
+- Without `OPENCODE_FLOW_REVIEWER_MODEL` the reviewer shares the manager's
+  model. Independence is structural. The guarantee page now carries a threat
+  model.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.1.1 --global --force
+```
+
 ## [8.1.0] - 2026-08-19
 
 Inspect surveys can finish with blockers, and `/flow-auto` hands back a findings list.

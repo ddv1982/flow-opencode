@@ -4,6 +4,8 @@
 //   bun run qualify                       # newest report in evals/results/
 //   bun run qualify evals/results/x.json  # one exact report
 //   bun run qualify base.json rerun.json  # a matrix plus the pairs it re-measured
+//   bun run qualify -- --record 9.0.0     # on a pass, write the committed record
+//                                         # release-metadata requires for a major
 //
 // The thresholds live here rather than in prose because "the evals looked fine" was
 // the entire release bar: every recorded pass rate was read by eye, from one model,
@@ -14,8 +16,9 @@
 // credentials and real spend. `docs/release-qualification.md` publishes the numbers
 // and the reasoning.
 
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { isMajorRelease } from "./release-metadata.js";
 
 /**
  * Minimum share of scored attempts a scenario must pass, per scenario.
@@ -135,6 +138,70 @@ async function newestReport(): Promise<string> {
 		);
 	}
 	return join(directory, newest);
+}
+
+/**
+ * The committed evidence a major release points at. Written only on a
+ * QUALIFIED verdict, and only for an `x.0.0` version: minor and patch releases
+ * are not gated, so a record for one would be dead weight a reader would have
+ * to explain.
+ */
+async function repositoryVersion(): Promise<string> {
+	const manifest = JSON.parse(
+		await readFile(join(import.meta.dir, "..", "package.json"), "utf8"),
+	) as { version?: unknown };
+	if (typeof manifest.version !== "string") {
+		throw new Error("package.json must contain a string version.");
+	}
+	return manifest.version;
+}
+
+export async function writeQualificationRecord(
+	version: string,
+	report: Report,
+	paths: readonly string[],
+	directory = join(import.meta.dir, "..", "evals", "qualification"),
+	currentVersion?: string,
+): Promise<string> {
+	if (!isMajorRelease(version)) {
+		throw new Error(
+			`A qualification record is written for a major release (x.0.0); '${version}' is not one.`,
+		);
+	}
+	const measured = currentVersion ?? (await repositoryVersion());
+	if (
+		typeof report.flowVersion !== "string" ||
+		report.flowVersion.length === 0
+	) {
+		throw new Error(
+			"A qualification record requires the report's flowVersion so it binds to the build that was measured.",
+		);
+	}
+	if (report.flowVersion !== measured) {
+		throw new Error(
+			`The report measured Flow ${report.flowVersion}, not this repository's ${measured}. Re-run the matrix on the current build before recording.`,
+		);
+	}
+	const models = [
+		...new Set(
+			(report.results ?? []).flatMap((result) =>
+				result.model ? [result.model] : [],
+			),
+		),
+	];
+	const record = {
+		version,
+		verdict: "QUALIFIED",
+		qualifiedAt: new Date().toISOString(),
+		flowVersion: report.flowVersion ?? null,
+		opencodeVersion: report.opencodeVersion ?? null,
+		reports: paths,
+		providers: providers(models),
+	};
+	await mkdir(directory, { recursive: true });
+	const path = join(directory, `${version}.json`);
+	await writeFile(path, `${JSON.stringify(record, null, "\t")}\n`, "utf8");
+	return path;
 }
 
 /**
@@ -381,7 +448,23 @@ export function qualificationFailures(report: Report): string[] {
 }
 
 async function main(): Promise<void> {
-	const paths = process.argv.slice(2).filter((arg) => !arg.startsWith("-"));
+	const args = process.argv.slice(2);
+	let recordVersion: string | undefined;
+	const paths: string[] = [];
+	for (let index = 0; index < args.length; index += 1) {
+		const argument = args[index];
+		if (argument === undefined) continue;
+		if (argument === "--record") {
+			const value = args[index + 1];
+			if (!value || value.startsWith("-")) {
+				throw new Error("--record requires the release version it qualifies.");
+			}
+			recordVersion = value;
+			index += 1;
+			continue;
+		}
+		if (!argument.startsWith("-")) paths.push(argument);
+	}
 	if (paths.length === 0) paths.push(await newestReport());
 	const loaded = await Promise.all(
 		paths.map(
@@ -396,6 +479,12 @@ async function main(): Promise<void> {
 	for (const note of merged.notes) console.log(`  merged: ${note}`);
 	const failures = [...merged.failures, ...qualificationFailures(report)];
 	if (failures.length === 0) {
+		if (recordVersion !== undefined) {
+			const path = await writeQualificationRecord(recordVersion, report, paths);
+			console.log(
+				`Recorded the qualification at ${path}; commit it with the release.`,
+			);
+		}
 		console.log(
 			merged.notes.length > 0
 				? `QUALIFIED (merged from ${paths.length} reports): every published threshold held. Record both reports with the release — the pairs above were measured separately.`
@@ -404,9 +493,9 @@ async function main(): Promise<void> {
 		return;
 	}
 	console.error(
-		`NOT QUALIFIED: ${failures.length} threshold(s) failed.\n${failures
-			.map((failure) => `  - ${failure}`)
-			.join("\n")}`,
+		`NOT QUALIFIED: ${failures.length} threshold(s) failed.${
+			recordVersion !== undefined ? " No record was written." : ""
+		}\n${failures.map((failure) => `  - ${failure}`).join("\n")}`,
 	);
 	process.exit(1);
 }
