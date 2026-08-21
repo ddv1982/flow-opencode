@@ -412,6 +412,7 @@ describe("qualification records", () => {
 			report({}),
 			["evals/results/a.json"],
 			directory,
+			"7.0.2",
 		);
 		const record = JSON.parse(await readFile(path, "utf8"));
 		expect(record).toMatchObject({
@@ -429,7 +430,30 @@ describe("qualification records", () => {
 		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
 		temporary.push(directory);
 		await expect(
-			writeQualificationRecord("9.1.0", report({}), [], directory),
+			writeQualificationRecord("9.1.0", report({}), [], directory, "7.0.2"),
 		).rejects.toThrow(/major release/);
+	});
+
+	test("refuses a report that measured a different Flow build", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
+		temporary.push(directory);
+		await expect(
+			writeQualificationRecord(
+				"9.0.0",
+				report({ flowVersion: "8.1.0" }),
+				[],
+				directory,
+				"8.1.1",
+			),
+		).rejects.toThrow(/8\.1\.0, not this repository's 8\.1\.1/);
+	});
+
+	test("refuses a report with no flowVersion", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "flow-qualify-record-"));
+		temporary.push(directory);
+		const { flowVersion: _omitted, ...measured } = report({});
+		await expect(
+			writeQualificationRecord("9.0.0", measured, [], directory, "8.1.1"),
+		).rejects.toThrow(/requires the report's flowVersion/);
 	});
 });

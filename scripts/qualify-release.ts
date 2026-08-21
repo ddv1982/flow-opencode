@@ -146,15 +146,40 @@ async function newestReport(): Promise<string> {
  * are not gated, so a record for one would be dead weight a reader would have
  * to explain.
  */
+async function repositoryVersion(): Promise<string> {
+	const manifest = JSON.parse(
+		await readFile(join(import.meta.dir, "..", "package.json"), "utf8"),
+	) as { version?: unknown };
+	if (typeof manifest.version !== "string") {
+		throw new Error("package.json must contain a string version.");
+	}
+	return manifest.version;
+}
+
 export async function writeQualificationRecord(
 	version: string,
 	report: Report,
 	paths: readonly string[],
 	directory = join(import.meta.dir, "..", "evals", "qualification"),
+	currentVersion?: string,
 ): Promise<string> {
 	if (!isMajorRelease(version)) {
 		throw new Error(
 			`A qualification record is written for a major release (x.0.0); '${version}' is not one.`,
+		);
+	}
+	const measured = currentVersion ?? (await repositoryVersion());
+	if (
+		typeof report.flowVersion !== "string" ||
+		report.flowVersion.length === 0
+	) {
+		throw new Error(
+			"A qualification record requires the report's flowVersion so it binds to the build that was measured.",
+		);
+	}
+	if (report.flowVersion !== measured) {
+		throw new Error(
+			`The report measured Flow ${report.flowVersion}, not this repository's ${measured}. Re-run the matrix on the current build before recording.`,
 		);
 	}
 	const models = [

@@ -75,7 +75,8 @@ direction. The cadence follows from that:
   allowed; removals and renames are not.
 - **No major release** without a committed qualification record.
   `bun run qualify -- --record <version>` writes
-  `evals/qualification/<version>.json` on a pass, and release metadata refuses
+  `evals/qualification/<version>.json` on a pass of a report whose
+  `flowVersion` matches this repository, and release metadata refuses
   the tag without it. A `CHANGELOG` entry states the schema impact explicitly.
 - **Patch releases** for defects and host-compatibility fixes, which is what the
   weekly OpenCode compatibility smoke exists to catch early.

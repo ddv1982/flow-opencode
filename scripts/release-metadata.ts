@@ -66,6 +66,11 @@ export function isMajorRelease(version: string): boolean {
  * does. The record is a checklist with a filename, not a proof: a human can
  * write one by hand. The point is that a major tag is refused without one, so
  * skipping the qualification run has to show up in the release diff.
+ *
+ * `flowVersion` is not checked here. Qualification runs against the current
+ * build; the bump commit then cuts the release, so the record's flowVersion is
+ * the pre-bump version by design. `writeQualificationRecord` binds the report
+ * to that build at record time.
  */
 export function qualificationRecordIssue(
 	version: string,
