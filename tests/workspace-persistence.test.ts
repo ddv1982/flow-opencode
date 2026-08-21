@@ -88,6 +88,19 @@ async function exists(path: string): Promise<boolean> {
 	}
 }
 
+/** The same document with every object's keys reversed: equal content, different bytes. */
+function shuffleKeys(value: unknown): unknown {
+	if (Array.isArray(value)) return value.map(shuffleKeys);
+	if (value && typeof value === "object") {
+		return Object.fromEntries(
+			Object.entries(value)
+				.reverse()
+				.map(([key, entry]) => [key, shuffleKeys(entry)]),
+		);
+	}
+	return value;
+}
+
 async function waitForPath(path: string): Promise<void> {
 	for (let attempt = 0; attempt < 200; attempt += 1) {
 		if (await exists(path)) return;
@@ -408,6 +421,30 @@ describe("atomic persistence and archival", () => {
 		await expect(
 			confirmActiveSessionDurability(workspace, session),
 		).rejects.toBeInstanceOf(ArchiveCollisionError);
+	});
+
+	test("accepts an equal document written in a different key order", async () => {
+		const workspace = await temporaryRoot();
+		const session = closedSession("confirm-shuffled-keys");
+		await saveSession(workspace, session);
+		await writeFile(
+			sessionPath(workspace),
+			JSON.stringify(shuffleKeys(session)),
+		);
+
+		// Content equality, not byte equality: the parse must not raise.
+		await expect(
+			confirmActiveSessionDurability(workspace, session),
+		).resolves.toBeUndefined();
+
+		await mkdir(historyDir(workspace));
+		await writeFile(
+			archivedSessionPath(workspace, session.id),
+			JSON.stringify(shuffleKeys(session)),
+		);
+		await archiveAndClearSession(workspace, session);
+		expect(await loadSession(workspace)).toBeNull();
+		expect(await loadArchivedSession(workspace, session.id)).toEqual(session);
 	});
 
 	test("re-syncs an interrupted archive publication before clearing active state", async () => {

@@ -24,6 +24,7 @@ import {
 	MAX_SESSION_BYTES,
 	MAX_SESSION_ID_LENGTH,
 } from "../../domain/limits.js";
+import { operationInputDigest } from "../../domain/operation.js";
 import type { Session } from "../../domain/session.js";
 import { parseStrictJsonObject } from "./strict-json-object.js";
 
@@ -410,7 +411,7 @@ export async function confirmActiveSessionDurability(
 			"Flow could not verify canonical active state before durability confirmation.",
 		);
 	}
-	if (JSON.stringify(active) !== JSON.stringify(canonical)) {
+	if (operationInputDigest(active) !== operationInputDigest(canonical)) {
 		throw new ArchiveCollisionError(
 			"Active state changed before durability confirmation; Flow left it untouched.",
 		);
@@ -465,7 +466,10 @@ export async function archiveAndClearSession(
 					"Flow could not verify that the existing archive is identical; it left both documents untouched.",
 				);
 			}
-			if (!existing || JSON.stringify(existing) !== JSON.stringify(canonical)) {
+			if (
+				!existing ||
+				operationInputDigest(existing) !== operationInputDigest(canonical)
+			) {
 				throw new ArchiveCollisionError(
 					"Flow refused to overwrite a different archived session.",
 				);
@@ -491,7 +495,7 @@ export async function archiveAndClearSession(
 		await synchronizeDirectory(flowDir(root));
 		return;
 	}
-	if (JSON.stringify(active) !== JSON.stringify(canonical)) {
+	if (operationInputDigest(active) !== operationInputDigest(canonical)) {
 		throw new ArchiveCollisionError(
 			"Active state changed before archive cleanup; Flow left it untouched.",
 		);
