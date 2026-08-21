@@ -673,6 +673,7 @@ describe("session locks", () => {
 		expect(
 			JSON.parse(await readFile(join(lock, "owner.json"), "utf8")),
 		).toEqual(owner);
+		expect(await exists(join(lock, "claim"))).toBe(false);
 	});
 
 	test("does not reclaim a lock whose owner record is unreadable", async () => {

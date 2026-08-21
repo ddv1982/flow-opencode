@@ -554,38 +554,32 @@ async function orphanOwnerToken(lock: string): Promise<string | null> {
 	}
 }
 
-async function restoreLock(trash: string, lock: string): Promise<void> {
-	try {
-		await rename(trash, lock);
-	} catch {
-		// inert reclaiming-* residue
-	}
-}
-
-/** Rename-claim an orphan. */
+/**
+ * wx-create `claim` inside the lock. That binds the claim to this directory
+ * inode, so a live replacement is never moved off the canonical path.
+ * Re-check the owner token before deleting; a mismatch drops the claim file.
+ */
 export async function reclaimOrphanedLock(lock: string): Promise<boolean> {
 	const token = await orphanOwnerToken(lock);
 	if (token === null) return false;
-	const trash = `${lock}.reclaiming-${process.pid}-${randomUUID()}`;
+	const claim = join(lock, "claim");
 	try {
-		await rename(lock, trash);
+		await writeFile(claim, "", { encoding: "utf8", flag: "wx", mode: 0o600 });
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code === "EEXIST" || code === "ENOENT") return false;
 		throw error;
 	}
-	try {
-		const claimed = JSON.parse(
-			await readFile(join(trash, "owner.json"), "utf8"),
-		) as { token?: unknown };
-		if (claimed.token === token) {
-			await rm(trash, { recursive: true, force: true });
-			return true;
+	if ((await orphanOwnerToken(lock)) !== token) {
+		try {
+			await rm(claim);
+		} catch {
+			// Directory was replaced; the claim went with it.
 		}
-	} catch {
-		// restore if the path is still free
+		return false;
 	}
-	await restoreLock(trash, lock);
-	return false;
+	await rm(lock, { recursive: true, force: true });
+	return true;
 }
 
 async function acquireLock(workspace: string): Promise<() => Promise<void>> {
