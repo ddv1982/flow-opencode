@@ -18,12 +18,13 @@ can and cannot reproduce.
 
 ## What is pinned, and why these
 
-One per scenario from the Flow 7.0.2 matrix of 2026-07-28, plus one constructed
-reviewer-catch sequence. The 7.0.2 set is spread across three providers on purpose
-— a set drawn from one model records that model's habits rather than the runtime's
-rules. Every paid recording was gated in that report (empty `fidelity`), and all 63
-candidates replayed with the only divergence being the attempt that wedged
-mid-flight, which is advisory by construction.
+One per scenario from the Flow 7.0.2 matrix of 2026-07-28, plus hand-written
+fixtures for the decisions that matrix never reached. The 7.0.2 set is spread
+across three providers on purpose — a set drawn from one model records that
+model's habits rather than the runtime's rules. Every paid recording was gated
+in that report (empty `fidelity`), and all 63 candidates replayed with the only
+divergence being the attempt that wedged mid-flight, which is advisory by
+construction.
 
 Picked by decision reached, not by provider or size: the ordinary path, the
 plan-only stop, the refused goal change, the blocking gate, the unprovable claim,
@@ -36,6 +37,16 @@ decision — so replacing one would drop a distinct refusal. It is a hand-writte
 decision-layer sequence (`fixture/hand-written`), not a paid-model score: the
 reviewer submits a failed verdict with a blocking finding, and a silent pass now
 fails the scenario check. Replay still executes the real handlers.
+
+Four more fixtures cover the scenarios the paid set has no cassette for.
+`continuation-accepted` walks the full lifecycle to completed closure on one
+session. `skipped-case-named-binding` declares the skipped case for the replay
+host's own OS, so the named-case rule rather than a platform refusal is what
+refuses the final review. `defect-fails-review` pins the reviewer rejecting the
+plant the live scenario keeps fixing before review. `inspect-goal-delivers-findings`
+carries the planted interval defect in the compact findingsDigest. Each pins what
+the runtime refuses or accepts, not what a model chooses; the paid matrix still
+owns the rates.
 
 `plan-only-stops` cassettes pin thin-router planning: `flow_guidance` before
 `flow_plan_save`, and no `flow-worker` dispatch before a feature run starts. The
