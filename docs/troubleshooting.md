@@ -61,10 +61,10 @@ Flow session, or run separate sessions inside the relevant repositories.
 
 ## Flow reports that the project lock is busy
 
-Flow never steals `.flow/session.lock` automatically. First confirm that no
-OpenCode or Flow process is still operating on the project. Only then remove
-that exact lock directory manually and retry. Do not remove it merely because a
-wait timed out; a live writer may still own it.
+Flow reclaims `.flow/session.lock` itself once the recorded owner process is
+gone. If a wait still times out, the owner is alive or its record is
+unreadable. Confirm that no OpenCode or Flow process is still operating on the
+project, then remove that exact lock directory manually and retry.
 
 ## Validation capture was cancelled
 

@@ -528,6 +528,39 @@ export async function quarantineUnreadableSession(
 const inProcessLocks = new Map<string, Promise<void>>();
 const LOCK_TIMEOUT_MS = 30_000;
 
+/**
+ * Whether the lock's recorded owner process is gone, making the lock an
+ * orphan a crashed host left behind. Signal 0 succeeds for any live process,
+ * so a reused PID reads as alive and degrades to waiting, never to stealing a
+ * live owner's lock. A missing or unreadable owner.json is not reclaimed: a
+ * live acquirer writes it in the window between mkdir and the wx write.
+ */
+async function lockOwnerIsDead(lock: string): Promise<boolean> {
+	let owner: { token?: unknown; pid?: unknown };
+	try {
+		owner = JSON.parse(await readFile(join(lock, "owner.json"), "utf8"));
+	} catch {
+		return false;
+	}
+	const pid = owner.pid;
+	if (typeof pid !== "number" || !Number.isInteger(pid) || pid < 1)
+		return false;
+	try {
+		process.kill(pid, 0);
+		return false;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ESRCH") return false;
+	}
+	// Reclaim only the exact orphan that was checked: if a concurrent waiter
+	// already replaced it, the fresh owner's token will not match.
+	try {
+		const again = JSON.parse(await readFile(join(lock, "owner.json"), "utf8"));
+		return (again as { token?: unknown }).token === owner.token;
+	} catch {
+		return false;
+	}
+}
+
 async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 	await ensureFlowDirectory(workspace);
 	const lock = join(flowDir(workspace), "session.lock");
@@ -559,6 +592,10 @@ async function acquireLock(workspace: string): Promise<() => Promise<void>> {
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 			await pathKind(lock, "directory", "the Flow session lock");
+			if (await lockOwnerIsDead(lock)) {
+				await rm(lock, { recursive: true, force: true });
+				continue;
+			}
 			if (Date.now() - started >= LOCK_TIMEOUT_MS) {
 				throw new Error(
 					`Timed out waiting for Flow session lock at ${lock}; inspect it before manual removal.`,

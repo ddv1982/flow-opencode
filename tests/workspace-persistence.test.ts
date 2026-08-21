@@ -593,4 +593,65 @@ describe("session locks", () => {
 			if (child.exitCode === null) child.kill();
 		}
 	});
+
+	test("reclaims a lock whose owner process is gone", async () => {
+		const workspace = await temporaryRoot();
+		const child = spawn(process.execPath, ["--eval", ""], {
+			stdio: "ignore",
+		});
+		await waitForChild(child);
+		const deadPid = child.pid;
+		if (deadPid === undefined) throw new Error("Expected a child pid.");
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(
+			join(lock, "owner.json"),
+			JSON.stringify({ token: "orphaned", pid: deadPid }),
+		);
+
+		let ran = false;
+		await withSessionLock(workspace, async () => {
+			ran = true;
+		});
+
+		expect(ran).toBe(true);
+		expect(await exists(lock)).toBe(false);
+	});
+
+	test("waits for a lock whose owner process is alive", async () => {
+		const workspace = await temporaryRoot();
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(
+			join(lock, "owner.json"),
+			JSON.stringify({ token: "live", pid: process.pid }),
+		);
+
+		let acquired = false;
+		const attempt = withSessionLock(workspace, async () => {
+			acquired = true;
+		});
+		await delay(200);
+		expect(acquired).toBe(false);
+		await rm(lock, { recursive: true, force: true });
+		await attempt;
+		expect(acquired).toBe(true);
+	});
+
+	test("does not reclaim a lock whose owner record is unreadable", async () => {
+		const workspace = await temporaryRoot();
+		const lock = join(flowDir(workspace), "session.lock");
+		await mkdir(lock, { recursive: true });
+		await writeFile(join(lock, "owner.json"), "not json");
+
+		let acquired = false;
+		const attempt = withSessionLock(workspace, async () => {
+			acquired = true;
+		});
+		await delay(200);
+		expect(acquired).toBe(false);
+		await rm(lock, { recursive: true, force: true });
+		await attempt;
+		expect(acquired).toBe(true);
+	});
 });
