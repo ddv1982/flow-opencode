@@ -27,7 +27,11 @@ type CommandHook = NonNullable<Hooks["command.execute.before"]>;
 type CommandOutput = Parameters<CommandHook>[1];
 type Part = CommandOutput["parts"][number];
 type TextPart = Extract<Part, { type: "text" }>;
-type SubtaskPart = Extract<Part, { type: "subtask" }> & { command?: string };
+/**
+ * A text part as the plugin writes one: the host assigns id, sessionID, and
+ * messageID only after the command hook returns.
+ */
+type DraftTextPart = Omit<TextPart, "id" | "sessionID" | "messageID">;
 const MUTATION =
 	/^flow_(?:plan_save|plan_approve|run_start|review_start|feature_complete|feature_reset|session_close)$/;
 const AUTO_STOPPED = "Flow auto stopped.";
@@ -64,13 +68,21 @@ function textPart(
 	text: string,
 	synthetic = false,
 	metadata?: Readonly<Record<string, unknown>>,
-): TextPart {
+): DraftTextPart {
 	return {
 		type: "text",
 		text,
 		...(synthetic ? { synthetic: true } : {}),
 		...(metadata ? { metadata } : {}),
-	} as TextPart;
+	};
+}
+/**
+ * The command hook's parts are typed with the identity the host assigns after
+ * the hook returns, so a part written here is a draft at runtime. This is the
+ * one place a draft crosses into the host's array.
+ */
+function asHostTextPart(part: DraftTextPart): TextPart {
+	return part as TextPart;
 }
 function rewriteCommand(
 	command: FlowCommandName,
@@ -89,20 +101,25 @@ function rewriteCommand(
 		output.parts.splice(
 			0,
 			output.parts.length,
-			textPart(args.trim() ? `Flow ${command}: ${args}` : `Flow ${command}`),
-			textPart(prompt, true),
+			asHostTextPart(
+				textPart(args.trim() ? `Flow ${command}: ${args}` : `Flow ${command}`),
+			),
+			asHostTextPart(textPart(prompt, true)),
 			...preserved,
 		);
 		return;
 	}
-	if (output.parts.length !== 1 || output.parts[0]?.type !== "subtask")
+	const part = output.parts[0];
+	if (output.parts.length !== 1 || part?.type !== "subtask")
 		throw new Error(`/${command} requires exactly one reviewer subtask.`);
-	const subtask = output.parts[0] as SubtaskPart;
-	if (subtask.agent !== config.agent)
+	if (part.agent !== config.agent)
 		throw new Error(`/${command} must dispatch to '${config.agent}'.`);
-	if (subtask.command?.replace(/^\/+/, "") !== command)
+	// The host's subtask type does not declare `command`, but a command-dispatched
+	// subtask carries it at runtime, so its presence is checked, not asserted.
+	const declared = "command" in part ? part.command : undefined;
+	if (typeof declared !== "string" || declared.replace(/^\/+/, "") !== command)
 		throw new Error(`/${command} subtask identity did not match.`);
-	subtask.prompt = prompt;
+	part.prompt = prompt;
 }
 function createCommandHook(
 	assertOperational: (action: string) => void,
@@ -120,7 +137,7 @@ function createCommandHook(
 				autoDrive.deactivate(input.sessionID) || confirmed
 					? AUTO_STOPPED
 					: "No Flow auto lease was active in this OpenCode session.";
-			output.parts[0] = textPart(response);
+			output.parts[0] = asHostTextPart(textPart(response));
 			output.parts.length = 1;
 			return;
 		}
@@ -135,8 +152,10 @@ function createCommandHook(
 		// guessing which of the two it is.
 		if (autoDrive.continuationSupport() === "unsupported") {
 			output.parts.unshift(
-				textPart(
-					"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+				asHostTextPart(
+					textPart(
+						"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+					),
 				),
 			);
 		}
