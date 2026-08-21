@@ -1,8 +1,5 @@
 import { errorResponse } from "../../application/flow-response.js";
-import {
-	ValidationStartInputSchema,
-	type ValidationStartRequest,
-} from "../../application/schema.js";
+import type { ValidationStartRequest } from "../../application/schema.js";
 import {
 	ARTIFACT_PATH_MESSAGE,
 	isArtifactPath,
@@ -187,7 +184,7 @@ const ValidationStartArgs = {
 		.object({
 			expectedRevision: revision,
 			featureId,
-			command: text,
+			command: boundedHostText("Validation command"),
 			scope: host.enum(["focused", "broad"]),
 			resultsPath: boundedHostText("Validation results path", {
 				maxBytes: MAX_PATH_BYTES,
@@ -404,9 +401,11 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			args: ValidationStartArgs,
 			execute: async (args, context) => {
 				try {
-					const request = ValidationStartInputSchema.parse(args).request;
 					const workspace = resolveWorkspaceRoot(context);
-					const prepared = await options.prepareValidation(workspace, request);
+					const prepared = await options.prepareValidation(
+						workspace,
+						args.request,
+					);
 					return json({
 						status: "ok",
 						summary: "Validation armed for the exact next Bash command.",
