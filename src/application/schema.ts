@@ -245,7 +245,7 @@ const FeatureRunSchema = z
 		validations: z
 			.array(ValidationObservationSchema)
 			.max(MAX_VALIDATIONS_PER_RUN),
-		reviews: z.array(ReviewAssignmentSchema).max(64),
+		reviews: z.array(ReviewAssignmentSchema).max(1),
 	})
 	.strict();
 
