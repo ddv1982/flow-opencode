@@ -110,8 +110,7 @@ type AttemptRecordV2 = {
 	readonly hostConfigSha256: string;
 	readonly actors: readonly ActorIdentity[];
 	readonly instructions: readonly InstructionDelivery[];
-	readonly transcriptSha256: string;
-	readonly transcriptArtifact: string;
+	readonly transcript: { readonly sha256: string; readonly artifact: string } | null;
 	readonly outcome: AttemptOutcome;
 	readonly usage: { readonly durationMs: number; readonly outputTokens: number; readonly costUsd: number | null };
 };
@@ -120,6 +119,7 @@ type ScheduledCell = {
 	readonly cellId: string;
 	readonly blockId: string;
 	readonly caseId: string;
+	readonly caseVersion: number;
 	readonly armToken: string | null;
 	readonly repetition: number;
 	readonly managerModel: ModelIdentity | null;
@@ -351,7 +351,10 @@ remain. New code adds evidence semantics and analysis around them.
 
 ## Module map
 
-- `evals/report.ts` owns v2 types, strict parsing, integrity checks, and verdicts.
+- `evals/report.ts` owns v2 types, strict parsing, integrity checks, and verdicts;
+  `evals/canonical-json.ts` owns canonical serialization and domain-separated hashes.
+- `evals/validated.ts` owns the shared deep-readonly and runtime-freeze boundary.
+- `evals/report-pairing.ts` owns paired plan and complete-pair invariants.
 - `evals/report-store.ts` owns canonical write-once attempt files and finalization.
 - `evals/provenance.ts` owns source, artifact, evaluator, host, actor, and instruction digests.
 - `evals/catalog.ts` owns typed case policies and campaign planning.
