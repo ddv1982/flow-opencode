@@ -5,6 +5,12 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import {
+	buildHostEvidenceCapabilities,
+	collectFieldObservations,
+	type EndpointAttempt,
+	HOST_METADATA_CONTRACT,
+} from "../scripts/probe-opencode-eval-metadata.js";
 
 // This test deliberately proves only the host boundary. Domain and persistence
 // behavior belongs in fast deterministic tests; the live smoke verifies that a
@@ -133,6 +139,307 @@ async function stopServer(server: ChildProcess): Promise<void> {
 		}),
 	]);
 }
+
+function observed(
+	endpoint: EndpointAttempt["endpoint"],
+	response: unknown,
+): EndpointAttempt {
+	return { kind: "observed", endpoint, response };
+}
+
+function createdSession(version = PINNED_OPENCODE_VERSION): EndpointAttempt {
+	return observed(HOST_METADATA_CONTRACT.endpoints.createSession, {
+		id: "session",
+		version,
+	});
+}
+
+function answeredModel(modelID = "model", providerID = "provider") {
+	return {
+		info: {
+			role: "assistant",
+			time: { created: 1, completed: 2 },
+			model: { providerID, modelID },
+		},
+	};
+}
+
+function reviewerChild(id = "child", parentID = "parent") {
+	return { agent: "flow-reviewer", id, parentID };
+}
+
+type EvidenceInput = Parameters<typeof buildHostEvidenceCapabilities>[0];
+
+function evidence(overrides: Partial<EvidenceInput> = {}) {
+	return buildHostEvidenceCapabilities({
+		opencodeVersion: PINNED_OPENCODE_VERSION,
+		generatedAt: "2026-08-24T00:00:00.000Z",
+		parentSessionId: "parent",
+		endpointResponses: [createdSession()],
+		childSessions: observed(HOST_METADATA_CONTRACT.endpoints.childSessions, [
+			reviewerChild(),
+		]),
+		parentMessages: observed(HOST_METADATA_CONTRACT.endpoints.parentMessages, [
+			answeredModel("manager"),
+		]),
+		childMessages: [
+			{
+				sessionId: "child",
+				messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
+					answeredModel("reviewer"),
+				]),
+			},
+		],
+		...overrides,
+	});
+}
+
+describe("OpenCode eval metadata probe", () => {
+	test("pins the Phase 0 host, endpoints, and reviewer bound", () => {
+		expect(HOST_METADATA_CONTRACT.hostVersion).toBe("1.18.6");
+		expect(HOST_METADATA_CONTRACT.endpoints).toEqual({
+			agents: "GET /agent",
+			createSession: "POST /session",
+			dispatchReview: "POST /session/:id/command",
+			parentMessages: "GET /session/:id/message",
+			childSessions: "GET /session/:id/children",
+			childMessages: "GET /session/:child_id/message",
+		});
+		expect(HOST_METADATA_CONTRACT.limits).toEqual({
+			requestTimeoutMs: 120_000,
+			reviewerSteps: 8,
+		});
+	});
+
+	test("redacts compound sensitive keys but keeps identity field labels", () => {
+		const fields = collectFieldObservations({
+			info: {
+				model: { providerID: "provider-secret", modelID: "model-secret" },
+			},
+			parts: [
+				{
+					apiKey: "secret",
+					accessToken: "secret",
+					promptText: "secret",
+					toolOutput: "secret",
+					credential: "secret",
+				},
+			],
+		});
+		expect(fields).toEqual([
+			{ path: "info", kind: "object" },
+			{ path: "info.model", kind: "object" },
+			{ path: "info.model.modelID", kind: "string" },
+			{ path: "info.model.providerID", kind: "string" },
+			{ path: "parts", kind: "array" },
+			{ path: "parts[]", kind: "object" },
+		]);
+	});
+
+	test("records completed parent and reviewer identities and raw parent linkage as labels", () => {
+		const capabilities = evidence({
+			parentSessionId: "ses_parent_raw",
+			childSessions: observed(HOST_METADATA_CONTRACT.endpoints.childSessions, [
+				reviewerChild("ses_child_raw", "ses_parent_raw"),
+			]),
+			parentMessages: observed(
+				HOST_METADATA_CONTRACT.endpoints.parentMessages,
+				[answeredModel("manager-secret", "provider-secret")],
+			),
+			childMessages: [
+				{
+					sessionId: "ses_child_raw",
+					messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
+						answeredModel("reviewer-secret", "provider-secret"),
+					]),
+				},
+			],
+		});
+		expect(capabilities.capabilities).toMatchObject({
+			hostVersion: {
+				kind: "observed",
+				matchesRequested: true,
+				fieldPath: "version",
+			},
+			parentManagerModelIdentity: {
+				kind: "observed",
+				actors: [
+					{
+						actor: "parent-1",
+						fieldPaths: ["[].info.model.modelID", "[].info.model.providerID"],
+					},
+				],
+			},
+			childReviewerModelIdentity: {
+				kind: "observed",
+				actors: [
+					{
+						actor: "child-1",
+						fieldPaths: ["[].info.model.modelID", "[].info.model.providerID"],
+					},
+				],
+			},
+			childLineage: {
+				kind: "observed",
+				links: [
+					{
+						parent: "parent-1",
+						child: "child-1",
+						fieldPaths: ["[].id", "[].parentID"],
+					},
+				],
+			},
+		});
+		expect(capabilities).toMatchObject({
+			unsupportedClaims: [],
+			result: { kind: "complete" },
+		});
+		expect(JSON.stringify(capabilities)).not.toMatch(
+			/ses_(parent|child)_raw|provider-secret|reviewer-secret/,
+		);
+	});
+
+	for (const scenario of [
+		{
+			name: "host-version-mismatch",
+			overrides: { endpointResponses: [createdSession("9.9.9")] },
+			result: "host-version-mismatch",
+		},
+		{
+			name: "parent-model-field-unavailable",
+			overrides: {
+				parentMessages: observed(
+					HOST_METADATA_CONTRACT.endpoints.parentMessages,
+					[{ info: { role: "assistant", time: { completed: 2 } } }],
+				),
+			},
+			result: "required-capability-unavailable",
+			unsupported: ["parent-manager-model-identity"],
+		},
+		{
+			name: "child-model-field-unavailable",
+			overrides: {
+				childMessages: [
+					{
+						sessionId: "child",
+						messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
+							{ info: { role: "assistant", time: { completed: 2 } } },
+						]),
+					},
+				],
+			},
+			result: "required-capability-unavailable",
+			unsupported: ["child-reviewer-model-identity"],
+		},
+		{
+			name: "endpoint-failure",
+			overrides: {
+				childSessions: {
+					kind: "endpoint-failure" as const,
+					endpoint: HOST_METADATA_CONTRACT.endpoints.childSessions,
+				},
+				parentMessages: {
+					kind: "endpoint-failure" as const,
+					endpoint: HOST_METADATA_CONTRACT.endpoints.parentMessages,
+				},
+				childMessages: [],
+			},
+			result: "endpoint-failure",
+			unsupported: [],
+		},
+		{
+			name: "review-command-failure",
+			overrides: {
+				endpointResponses: [
+					createdSession(),
+					{
+						kind: "endpoint-failure" as const,
+						endpoint: HOST_METADATA_CONTRACT.endpoints.dispatchReview,
+					},
+				],
+			},
+			result: "endpoint-failure",
+			unsupported: [],
+		},
+		{
+			name: "mismatched-reviewer-parent",
+			overrides: {
+				childSessions: observed(
+					HOST_METADATA_CONTRACT.endpoints.childSessions,
+					[reviewerChild("child", "different-parent")],
+				),
+				childMessages: [],
+			},
+			result: "reviewer-child-not-observed",
+			unsupported: ["child-reviewer-model-identity", "child-session-lineage"],
+			lineage: "parent-mismatch",
+		},
+		{
+			name: "non-reviewer-child",
+			overrides: {
+				childSessions: observed(
+					HOST_METADATA_CONTRACT.endpoints.childSessions,
+					[{ agent: "flow-worker", id: "child", parentID: "parent" }],
+				),
+				childMessages: [],
+			},
+			result: "reviewer-child-not-observed",
+			unsupported: [],
+			lineage: "reviewer-child-not-observed",
+		},
+		{
+			name: "unanswered-reviewer",
+			overrides: {
+				childMessages: [
+					{
+						sessionId: "child",
+						messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
+							{
+								info: {
+									role: "user",
+									model: { providerID: "provider", modelID: "reviewer" },
+								},
+							},
+						]),
+					},
+				],
+			},
+			result: "model-did-not-answer",
+		},
+		{
+			name: "failed-parent-message",
+			overrides: {
+				parentMessages: observed(
+					HOST_METADATA_CONTRACT.endpoints.parentMessages,
+					[
+						{
+							info: {
+								error: { name: "ProviderError" },
+								model: { providerID: "provider", modelID: "manager" },
+							},
+						},
+					],
+				),
+			},
+			result: "model-did-not-answer",
+		},
+	] as const) {
+		test(`reports ${scenario.name}`, () => {
+			const capabilities = evidence(scenario.overrides);
+			expect(capabilities.result).toEqual({
+				kind: "inconclusive",
+				reason: scenario.result,
+			});
+			if (scenario.unsupported)
+				expect(capabilities.unsupportedClaims).toEqual(scenario.unsupported);
+			if (scenario.lineage)
+				expect(capabilities.capabilities.childLineage).toMatchObject({
+					kind: "unobserved",
+					reason: scenario.lineage,
+				});
+		});
+	}
+});
 
 describe("live OpenCode smoke configuration", () => {
 	test("uses the pinned host unless compatibility monitoring overrides it", () => {
