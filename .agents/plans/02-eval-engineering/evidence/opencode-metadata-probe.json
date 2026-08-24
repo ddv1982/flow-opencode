@@ -1,0 +1,908 @@
+{
+  "opencodeVersion": "1.18.6",
+  "generatedAt": "2026-08-24T22:49:56.778Z",
+  "fieldMap": [
+    {
+      "kind": "observed",
+      "endpoint": "GET /agent",
+      "fields": [
+        {
+          "path": "[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].color",
+          "kind": "null"
+        },
+        {
+          "path": "[].description",
+          "kind": "string"
+        },
+        {
+          "path": "[].hidden",
+          "kind": "boolean"
+        },
+        {
+          "path": "[].mode",
+          "kind": "string"
+        },
+        {
+          "path": "[].name",
+          "kind": "string"
+        },
+        {
+          "path": "[].native",
+          "kind": "boolean"
+        },
+        {
+          "path": "[].options",
+          "kind": "object"
+        },
+        {
+          "path": "[].permission",
+          "kind": "array"
+        },
+        {
+          "path": "[].permission[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].permission[].action",
+          "kind": "string"
+        },
+        {
+          "path": "[].permission[].pattern",
+          "kind": "string"
+        },
+        {
+          "path": "[].permission[].permission",
+          "kind": "string"
+        },
+        {
+          "path": "[].steps",
+          "kind": "null"
+        },
+        {
+          "path": "[].temperature",
+          "kind": "number"
+        },
+        {
+          "path": "[].topP",
+          "kind": "null"
+        },
+        {
+          "path": "[].variant",
+          "kind": "null"
+        }
+      ]
+    },
+    {
+      "kind": "observed",
+      "endpoint": "POST /session",
+      "fields": [
+        {
+          "path": "cost",
+          "kind": "number"
+        },
+        {
+          "path": "directory",
+          "kind": "string"
+        },
+        {
+          "path": "id",
+          "kind": "string"
+        },
+        {
+          "path": "path",
+          "kind": "string"
+        },
+        {
+          "path": "projectID",
+          "kind": "string"
+        },
+        {
+          "path": "slug",
+          "kind": "string"
+        },
+        {
+          "path": "time",
+          "kind": "object"
+        },
+        {
+          "path": "time.created",
+          "kind": "number"
+        },
+        {
+          "path": "time.updated",
+          "kind": "number"
+        },
+        {
+          "path": "title",
+          "kind": "string"
+        },
+        {
+          "path": "version",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "kind": "observed",
+      "endpoint": "POST /session/:id/command",
+      "fields": [
+        {
+          "path": "info",
+          "kind": "object"
+        },
+        {
+          "path": "info.agent",
+          "kind": "string"
+        },
+        {
+          "path": "info.cost",
+          "kind": "number"
+        },
+        {
+          "path": "info.finish",
+          "kind": "string"
+        },
+        {
+          "path": "info.id",
+          "kind": "string"
+        },
+        {
+          "path": "info.mode",
+          "kind": "string"
+        },
+        {
+          "path": "info.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "info.parentID",
+          "kind": "string"
+        },
+        {
+          "path": "info.path",
+          "kind": "object"
+        },
+        {
+          "path": "info.path.cwd",
+          "kind": "string"
+        },
+        {
+          "path": "info.path.root",
+          "kind": "string"
+        },
+        {
+          "path": "info.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "info.role",
+          "kind": "string"
+        },
+        {
+          "path": "info.sessionID",
+          "kind": "string"
+        },
+        {
+          "path": "info.time",
+          "kind": "object"
+        },
+        {
+          "path": "info.time.completed",
+          "kind": "number"
+        },
+        {
+          "path": "info.time.created",
+          "kind": "number"
+        },
+        {
+          "path": "parts",
+          "kind": "array"
+        },
+        {
+          "path": "parts[]",
+          "kind": "object"
+        },
+        {
+          "path": "parts[].cost",
+          "kind": "number"
+        },
+        {
+          "path": "parts[].id",
+          "kind": "string"
+        },
+        {
+          "path": "parts[].messageID",
+          "kind": "string"
+        },
+        {
+          "path": "parts[].reason",
+          "kind": "string"
+        },
+        {
+          "path": "parts[].sessionID",
+          "kind": "string"
+        },
+        {
+          "path": "parts[].snapshot",
+          "kind": "string"
+        },
+        {
+          "path": "parts[].time",
+          "kind": "object"
+        },
+        {
+          "path": "parts[].time.end",
+          "kind": "number"
+        },
+        {
+          "path": "parts[].time.start",
+          "kind": "number"
+        },
+        {
+          "path": "parts[].type",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "kind": "observed",
+      "endpoint": "GET /session/:id/children",
+      "fields": [
+        {
+          "path": "[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].agent",
+          "kind": "string"
+        },
+        {
+          "path": "[].cost",
+          "kind": "number"
+        },
+        {
+          "path": "[].directory",
+          "kind": "string"
+        },
+        {
+          "path": "[].id",
+          "kind": "string"
+        },
+        {
+          "path": "[].model",
+          "kind": "object"
+        },
+        {
+          "path": "[].model.id",
+          "kind": "string"
+        },
+        {
+          "path": "[].model.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].model.variant",
+          "kind": "string"
+        },
+        {
+          "path": "[].parentID",
+          "kind": "string"
+        },
+        {
+          "path": "[].path",
+          "kind": "string"
+        },
+        {
+          "path": "[].permission",
+          "kind": "array"
+        },
+        {
+          "path": "[].permission[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].permission[].action",
+          "kind": "string"
+        },
+        {
+          "path": "[].permission[].pattern",
+          "kind": "string"
+        },
+        {
+          "path": "[].permission[].permission",
+          "kind": "string"
+        },
+        {
+          "path": "[].projectID",
+          "kind": "string"
+        },
+        {
+          "path": "[].slug",
+          "kind": "string"
+        },
+        {
+          "path": "[].summary",
+          "kind": "object"
+        },
+        {
+          "path": "[].summary.additions",
+          "kind": "number"
+        },
+        {
+          "path": "[].summary.deletions",
+          "kind": "number"
+        },
+        {
+          "path": "[].summary.files",
+          "kind": "number"
+        },
+        {
+          "path": "[].time",
+          "kind": "object"
+        },
+        {
+          "path": "[].time.created",
+          "kind": "number"
+        },
+        {
+          "path": "[].time.updated",
+          "kind": "number"
+        },
+        {
+          "path": "[].title",
+          "kind": "string"
+        },
+        {
+          "path": "[].version",
+          "kind": "string"
+        }
+      ]
+    },
+    {
+      "kind": "observed",
+      "endpoint": "GET /session/:id/message",
+      "fields": [
+        {
+          "path": "[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].info",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.agent",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.cost",
+          "kind": "number"
+        },
+        {
+          "path": "[].info.finish",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.id",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.mode",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.model",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.model.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.model.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.parentID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.path",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.path.cwd",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.path.root",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.role",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.sessionID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.summary",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.summary.diffs",
+          "kind": "array"
+        },
+        {
+          "path": "[].info.time",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.time.completed",
+          "kind": "number"
+        },
+        {
+          "path": "[].info.time.created",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts",
+          "kind": "array"
+        },
+        {
+          "path": "[].parts[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].agent",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].callID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].command",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].cost",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].description",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].id",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].messageID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].metadata",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].metadata.anthropic",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].metadata.anthropic.caller",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].metadata.anthropic.caller.type",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].model",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].model.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].model.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].reason",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].sessionID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].snapshot",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.input",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.input.command",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.input.description",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.input.request",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.input.request.view",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.input.subagent_type",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.metadata",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.metadata.model",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.metadata.model.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.metadata.model.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.metadata.parentSessionId",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.metadata.sessionId",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.metadata.truncated",
+          "kind": "boolean"
+        },
+        {
+          "path": "[].parts[].state.status",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.time",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.time.end",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].state.time.start",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].state.title",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].synthetic",
+          "kind": "boolean"
+        },
+        {
+          "path": "[].parts[].time",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].time.end",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].time.start",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].tool",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].type",
+          "kind": "string"
+        }
+      ],
+      "actor": "parent-1"
+    },
+    {
+      "kind": "observed",
+      "endpoint": "GET /session/:child_id/message",
+      "fields": [
+        {
+          "path": "[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].info",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.agent",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.cost",
+          "kind": "number"
+        },
+        {
+          "path": "[].info.finish",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.id",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.mode",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.model",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.model.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.model.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.modelID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.parentID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.path",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.path.cwd",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.path.root",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.providerID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.role",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.sessionID",
+          "kind": "string"
+        },
+        {
+          "path": "[].info.summary",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.summary.diffs",
+          "kind": "array"
+        },
+        {
+          "path": "[].info.time",
+          "kind": "object"
+        },
+        {
+          "path": "[].info.time.completed",
+          "kind": "number"
+        },
+        {
+          "path": "[].info.time.created",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts",
+          "kind": "array"
+        },
+        {
+          "path": "[].parts[]",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].callID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].cost",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].id",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].messageID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].metadata",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].metadata.anthropic",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].metadata.anthropic.caller",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].metadata.anthropic.caller.type",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].reason",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].sessionID",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].snapshot",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.input",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.input.request",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.input.request.assignmentId",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.input.request.view",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.metadata",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.metadata.truncated",
+          "kind": "boolean"
+        },
+        {
+          "path": "[].parts[].state.status",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].state.time",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].state.time.end",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].state.time.start",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].state.title",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].time",
+          "kind": "object"
+        },
+        {
+          "path": "[].parts[].time.end",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].time.start",
+          "kind": "number"
+        },
+        {
+          "path": "[].parts[].tool",
+          "kind": "string"
+        },
+        {
+          "path": "[].parts[].type",
+          "kind": "string"
+        }
+      ],
+      "actor": "child-1"
+    }
+  ],
+  "capabilities": {
+    "hostVersion": {
+      "kind": "observed",
+      "matchesRequested": true,
+      "fieldPath": "version"
+    },
+    "parentManagerModelIdentity": {
+      "kind": "observed",
+      "actors": [
+        {
+          "actor": "parent-1",
+          "fieldPaths": [
+            "[].info.modelID",
+            "[].info.providerID"
+          ]
+        }
+      ]
+    },
+    "childReviewerModelIdentity": {
+      "kind": "observed",
+      "actors": [
+        {
+          "actor": "child-1",
+          "fieldPaths": [
+            "[].info.modelID",
+            "[].info.providerID"
+          ]
+        }
+      ]
+    },
+    "childLineage": {
+      "kind": "observed",
+      "links": [
+        {
+          "parent": "parent-1",
+          "child": "child-1",
+          "fieldPaths": [
+            "[].id",
+            "[].parentID"
+          ]
+        }
+      ]
+    }
+  },
+  "unsupportedClaims": [],
+  "result": {
+    "kind": "complete"
+  }
+}

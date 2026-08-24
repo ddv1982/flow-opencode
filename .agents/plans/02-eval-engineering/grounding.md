@@ -90,3 +90,44 @@ It must create reusable measurement tools, preserve the existing harness, keep
 capability work separate from release regressions, blind comparative runs, and
 make every promotion decision auditable. Product changes may follow only when the
 new evidence identifies a measured weakness and a phase-specific predicate.
+
+## Phase 0 host metadata reconnaissance
+
+The Phase 0 probe ran against OpenCode 1.18.6 through the packed Flow plugin. Its
+redacted field map and capability result are stored at
+[`evidence/opencode-metadata-probe.json`](evidence/opencode-metadata-probe.json).
+
+Observed endpoints:
+
+- `GET /agent`.
+- `POST /session`.
+- `GET /session/:id/children`.
+- `GET /session/:id/message`.
+- `GET /session/:child_id/message`.
+
+The evidence model is `HostEvidenceCapabilities`. It has independent
+`observed` or `unobserved` values for parent-manager model identity,
+child-reviewer model identity, and child lineage. An observed model identity
+requires both provider and model field paths for that actor. The artifact records
+only field paths and stable labels such as `parent-1` and `child-1`.
+
+The probe checks every child row's raw `parentID` against its raw parent id before
+assigning a label, and accepts only a child whose transient `agent` is
+`flow-reviewer`. It records a lineage capability only when every reviewer child
+matches. It does not persist either id or model value. The session response also
+reported the requested OpenCode version. The current 1.18.6 run observed both
+actor identities, a matching host version, and one verified child lineage link.
+
+The field map excludes values and sensitive paths for prompts, message text, tool
+output, tokens, signatures, and credentials. It also does not retain the requested
+model value. Endpoint failures remain distinct from unsupported claims. A failed
+request produces an `endpoint-failure` capability variant. An unavailable or
+mismatched field produces an unsupported claim. A failed model turn or missing
+reviewer child produces an `inconclusive` result.
+
+The CLI requires `--allow-live-credentials`, warns that the run makes paid model
+calls, limits the reviewer to eight steps, and observes command delivery directly.
+
+Later report schemas must carry host-observed identity and lineage evidence into
+attempt records. They must not infer a cross-family claim from a requested model
+or environment variable.
