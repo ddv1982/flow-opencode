@@ -181,7 +181,7 @@ export function mapStrings(
 	if (value && typeof value === "object") {
 		return Object.fromEntries(
 			Object.entries(value as Record<string, unknown>).map(([key, item]) => [
-				key,
+				map(key),
 				mapStrings(item, map),
 			]),
 		);

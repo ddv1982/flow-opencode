@@ -20,6 +20,13 @@ import {
 	syncProviderCredentialsBack,
 } from "../evals/harness.js";
 import {
+	extractObservedActor,
+	extractObservedModelIdentity,
+	guidanceLoad,
+	reviewerActorObservation,
+	selectLineageValidatedReviewers,
+} from "../evals/host-observation.js";
+import {
 	aggregateOperationalMetrics,
 	completionHonesty,
 	countGuidanceSkips,
@@ -174,6 +181,174 @@ describe("eval run classification", () => {
 		expect(askedScoring([], 2, false)).toEqual({
 			escalated: false,
 			unscored: false,
+		});
+	});
+});
+
+describe("eval actor and instruction observations", () => {
+	const assistant = (info: Record<string, unknown>) => ({
+		info: { role: "assistant", time: { created: 1, completed: 2 }, ...info },
+		parts: [],
+	});
+
+	test("extracts nested and top-level model identities, including gateway ids", () => {
+		expect(
+			extractObservedModelIdentity([
+				assistant({
+					model: {
+						providerID: "openrouter",
+						modelID: "openai/gpt-5.6-sol",
+					},
+				}),
+			]),
+		).toEqual({
+			kind: "observed",
+			value: {
+				providerID: "openrouter",
+				modelID: "openai/gpt-5.6-sol",
+			},
+		});
+		expect(
+			extractObservedModelIdentity([
+				assistant({ providerID: "anthropic", modelID: "claude-sonnet" }),
+			]),
+		).toEqual({
+			kind: "observed",
+			value: { providerID: "anthropic", modelID: "claude-sonnet" },
+		});
+	});
+
+	test("refuses incomplete, errored, and conflicting model observations", () => {
+		expect(extractObservedModelIdentity(null)).toEqual({
+			kind: "unobserved",
+			reason: "endpoint-failure",
+		});
+		expect(
+			extractObservedModelIdentity([
+				{ info: { role: "assistant", time: { created: 1 } }, parts: [] },
+			]),
+		).toEqual({ kind: "unobserved", reason: "no-completed-assistant" });
+		expect(
+			extractObservedModelIdentity([
+				{
+					info: {
+						role: "assistant",
+						time: { created: 1, completed: 2 },
+						error: { name: "ProviderError" },
+					},
+					parts: [],
+				},
+			]),
+		).toEqual({ kind: "unobserved", reason: "no-completed-assistant" });
+		expect(extractObservedModelIdentity([assistant({})])).toEqual({
+			kind: "unobserved",
+			reason: "field-unavailable",
+		});
+		expect(
+			extractObservedModelIdentity([
+				assistant({ providerID: "a", modelID: "one" }),
+				assistant({ providerID: "b", modelID: "two" }),
+			]),
+		).toEqual({ kind: "unobserved", reason: "conflicting-observations" });
+	});
+
+	test("counts only lineage-validated reviewer children and preserves actor ids", () => {
+		const children = [
+			{ id: "worker", agent: "flow-worker", parentID: "parent" },
+			{ id: "wrong", agent: "flow-reviewer", parentID: "other" },
+			{ id: "reviewer", agent: "flow-reviewer", parentID: "parent" },
+		] as const;
+		expect(selectLineageValidatedReviewers(["parent"], children)).toEqual([
+			children[2],
+		]);
+		expect(extractObservedActor({ role: "reviewer", sessions: [] })).toEqual({
+			role: "reviewer",
+			sessionIds: [],
+			actualModel: {
+				kind: "unobserved",
+				reason: "reviewer-child-not-observed",
+			},
+		});
+		expect(
+			reviewerActorObservation({
+				sessions: [],
+				childEndpointFailed: true,
+			}),
+		).toEqual({
+			role: "reviewer",
+			sessionIds: [],
+			actualModel: { kind: "unobserved", reason: "endpoint-failure" },
+		});
+		expect(
+			reviewerActorObservation({
+				sessions: [
+					{
+						id: "reviewer",
+						messages: [assistant({ providerID: "a", modelID: "reviewer" })],
+					},
+				],
+				childEndpointFailed: true,
+			}),
+		).toMatchObject({
+			sessionIds: ["reviewer"],
+			actualModel: { kind: "unobserved", reason: "endpoint-failure" },
+		});
+		expect(
+			extractObservedActor({
+				role: "manager",
+				sessions: [
+					{
+						id: "parent",
+						messages: [
+							assistant({
+								model: { providerID: "openrouter", modelID: "x/y" },
+							}),
+						],
+					},
+				],
+			}),
+		).toEqual({
+			role: "manager",
+			sessionIds: ["parent"],
+			actualModel: {
+				kind: "observed",
+				value: { providerID: "openrouter", modelID: "x/y" },
+			},
+		});
+		expect(
+			extractObservedActor({
+				role: "manager",
+				sessions: [
+					{
+						id: "parent",
+						messages: [assistant({ providerID: "a", modelID: "m" })],
+					},
+					{ id: "resume", messages: null },
+				],
+			}),
+		).toEqual({
+			role: "manager",
+			sessionIds: ["parent", "resume"],
+			actualModel: { kind: "unobserved", reason: "endpoint-failure" },
+		});
+	});
+
+	test("measures raw guidance output in UTF-8 bytes", () => {
+		expect(
+			guidanceLoad({
+				sequence: 3,
+				sessionIndex: 1,
+				agent: "",
+				id: "flow-plan",
+				rawOutput: "plan café",
+			}),
+		).toEqual({
+			sequence: 3,
+			sessionIndex: 1,
+			agent: "",
+			id: "flow-plan",
+			rawOutput: "plan café",
+			utf8Bytes: 10,
 		});
 	});
 });

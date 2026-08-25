@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-08-25T04:14:14.980Z",
+  "scenario": "happy-path",
+  "modelRoute": "opencode/gpt-5.6-sol",
+  "opencodeVersion": "1.18.6",
+  "passed": true,
+  "artifact": {
+    "packageVersion": "8.1.1",
+    "sourceCommit": "04d3f6ee34bc92373982f9599beb6ce66c08f6c8",
+    "sourceTreeSha256": "sha256:605b10580561bd0bc592614b550eb5516ec9240fd2553dd3e92e3a36a30821d9",
+    "tarballSha256": "sha256:c89f7363248ccc3e3f69728c1aa42044a25938cd533e470d9f73ef08bc64ad24",
+    "unpackedManifestSha256": "sha256:398e6003b3c4d16f5e49dad9dbe734666149ee753e803d020501c863c19f0183"
+  },
+  "evaluator": {
+    "sourceCommit": "04d3f6ee34bc92373982f9599beb6ce66c08f6c8",
+    "caseCatalogSha256": "sha256:b9bd76c55d20db6daca1b40bf4118fae66f829dafec4b9388288d6a603a47be3",
+    "policyCatalogSha256": "sha256:708363968ed83fedf84f0310baa65f2b8b172c8c5ccdc0d090cf50bae2b51c9d",
+    "graderBundleSha256": "sha256:3eba0223d2f005abd4c429e05dd86ddb4c20a495725be69d852ea8d36f09431a"
+  },
+  "hostConfigSha256": "sha256:fc5de04f3e595f7c84d9310369a9ebc3118600c1bbc342be67e65d8d72f5b64e",
+  "actors": [
+    { "role": "manager", "requestedModelId": "opencode/gpt-5.6-sol", "actual": "observed", "sessionCount": 1 },
+    { "role": "reviewer", "requestedModelId": "opencode/gpt-5.6-sol", "actual": "observed", "sessionCount": 1 }
+  ],
+  "instructions": [
+    { "source": "guidance", "name": "flow-plan", "sequence": 0, "sha256": "sha256:f9d2f6dbf60f8be5a53a3959517eb9e5307624e75e7aa25960d76db3c8c71d7a", "bytes": 5685 },
+    { "source": "guidance", "name": "flow-run", "sequence": 1, "sha256": "sha256:9f451a740456a7a59aca02f4485bdcfe5f64ad3fb57a48980fa09cde40c08050", "bytes": 7933 }
+  ],
+  "transcriptSha256": "sha256:875a85c8007daa436be268553319967c35b449ab4ad5d0e663a9a80e8063db0d",
+  "redactionScanPassed": true,
+  "unsupportedClaim": "Observed provider and model fields do not independently establish family, gateway, or revision. Phase 4 must preserve actual v2 model identity as unobserved unless those fields become independently available."
+}
