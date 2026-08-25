@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "reportId": "flow-v2-2026-08-25T04-34-58-778Z",
+  "scenario": "happy-path",
+  "passed": true,
+  "planSha256": "sha256:79325b57e4fba2e823b503a8f50758e32a69d7907604d0ce105c4a8bc67c19da",
+  "cellCount": 1,
+  "attemptCount": 1,
+  "completionStatus": "complete",
+  "completionCause": "fixed-target",
+  "outputTokens": 3238,
+  "costUsd": 0.1978994,
+  "artifactTarballSha256": "sha256:c89f7363248ccc3e3f69728c1aa42044a25938cd533e470d9f73ef08bc64ad24",
+  "attemptOutcome": "product",
+  "managerActualIdentity": "unobserved-full-v2-identity",
+  "reviewerActualIdentity": "unobserved-full-v2-identity",
+  "instructionCount": 3,
+  "transcriptSha256": "sha256:588356d860cec23ab95d12f39f4d91f67ff3dd2a87c9849c1fc1a4719d1bc52d",
+  "strictParsePassed": true
+}
