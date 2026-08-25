@@ -35,3 +35,12 @@ report states that the model cannot be blinded to Flow tool presence.
 
 Stop gate. No claim from incomplete pairs, an invalid analysis policy, scanner
 failures, or intervals wider than the preregistered decision bound.
+
+## Outcome
+
+Implemented and verified. The accepted one-pair packed-host pilot produced a
+strict v2 report, transcript-bound clean scans, a durable masked record before
+allocation reveal, and no unresolved pair. Both arms passed, so the descriptive
+effect is zero. The result remains `inconclusive` because one planned pair misses
+the 265-pair power requirement. See `evidence/phase-7-architecture.md`,
+`evidence/phase-7-review.md`, and `evidence/phase-7-pilot.json`.
