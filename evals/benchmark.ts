@@ -7,12 +7,30 @@ export type BenchmarkGrade = {
 	readonly issues: readonly string[];
 };
 
+export type BenchmarkContaminationNotes = {
+	readonly schemaVersion: 1;
+	readonly public: readonly string[];
+	readonly withheld: readonly string[];
+};
+
+export type BenchmarkKnownBadMutation = {
+	readonly id: string;
+	readonly fileOverrides: Readonly<Record<string, string>>;
+};
+
+export type BenchmarkOracleMetadata = {
+	readonly schemaVersion: 1;
+	readonly contamination: BenchmarkContaminationNotes;
+	readonly knownBadMutations: readonly BenchmarkKnownBadMutation[];
+};
+
 /** One task whose result can be graded without trusting model-written tests. */
 export type BenchmarkCase = {
 	readonly id: string;
 	readonly description: string;
 	readonly files: Readonly<Record<string, string>>;
 	readonly prompt: string;
+	readonly oracle: BenchmarkOracleMetadata;
 	readonly grade: (project: string) => Promise<BenchmarkGrade>;
 };
 
