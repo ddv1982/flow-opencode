@@ -1,291 +1,647 @@
 #!/usr/bin/env bun
-// Runs the same hidden-graded tasks with Flow and with ordinary OpenCode.
-
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
-import {
-	type BenchmarkMode,
-	type BenchmarkResult,
-	seededShuffle,
-	summarizeBenchmark,
-} from "./benchmark.js";
+import type { BenchmarkCase } from "./benchmark.js";
 import { BENCHMARK_CASES } from "./benchmarks.js";
-import { EvalHost, packPlugin, preparePackageCache } from "./harness.js";
+import { parseCaseCatalog } from "./catalog.js";
+import {
+	armForCell,
+	createPairedPlan,
+	type ExperimentBlock,
+	freezeMaskedAnalysis,
+	pairedBlocks,
+	revealPairedAnalysis,
+	scanPairedTranscript,
+} from "./experiment.js";
+import {
+	type CommandEnd,
+	EvalHost,
+	type Outcome,
+	packPlugin,
+	preparePackageCache,
+} from "./harness.js";
+import {
+	evaluatorIdentity,
+	hostConfigSha256,
+	inspectArtifact,
+	instructionDelivery,
+	normalizeRequestedModel,
+	redactTranscript,
+} from "./provenance.js";
+import type {
+	ActorIdentity,
+	AttemptRecordV2,
+	CampaignPlan,
+	InstructionDelivery,
+	ModelIdentity,
+} from "./report.js";
+import { createReportStore } from "./report-store.js";
 
-type Job = {
-	readonly model: string;
-	readonly benchmark: (typeof BENCHMARK_CASES)[number];
-	readonly attempt: number;
-	readonly mode: BenchmarkMode;
+type Options = {
+	model: string;
+	cases: readonly string[];
+	repeat: number;
+	seed: string;
+	reserves: number;
+	maxUsd: number | null;
 };
-
-function parseArgs(argv: string[]) {
-	const models: string[] = [];
+function args(argv: readonly string[]): Options {
+	let model = "";
 	const cases: string[] = [];
 	let repeat = 1;
 	let seed = new Date().toISOString().slice(0, 10);
-	for (let index = 0; index < argv.length; index += 1) {
-		const flag = argv[index];
-		const value = argv[index + 1];
+	let reserves = 1;
+	let maxUsd: number | null = null;
+	for (let i = 0; i < argv.length; i += 1) {
+		const flag = argv[i];
+		const value = argv[i + 1];
 		if (flag === "--model" && value) {
-			models.push(value);
-			index += 1;
+			model = value;
+			i += 1;
 		} else if (flag === "--case" && value) {
 			cases.push(value);
-			index += 1;
+			i += 1;
 		} else if (flag === "--repeat" && value) {
 			repeat = Number.parseInt(value, 10);
-			index += 1;
+			i += 1;
 		} else if (flag === "--seed" && value) {
 			seed = value;
-			index += 1;
+			i += 1;
+		} else if (flag === "--reserve-pairs" && value) {
+			reserves = Number.parseInt(value, 10);
+			i += 1;
+		} else if (flag === "--max-usd" && value) {
+			maxUsd = Number.parseFloat(value);
+			i += 1;
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
-				"usage: bun run benchmark -- --model <provider/model> [--case <id>] [--repeat <n>] [--seed <text>]",
+				"usage: bun run benchmark -- --model provider/model [--case id] [--repeat n] [--seed text] [--reserve-pairs n] [--max-usd n]",
 			);
 			process.exit(0);
-		}
+		} else throw new Error(`Unknown or incomplete argument: ${flag ?? ""}`);
 	}
-	if (models.length === 0) {
-		const configured = process.env.FLOW_EVAL_MODEL?.trim();
-		if (configured)
-			models.push(...configured.split(",").map((model) => model.trim()));
-	}
-	if (models.length === 0) {
-		console.error("Pass --model provider/model or set FLOW_EVAL_MODEL.");
-		process.exit(2);
-	}
-	if (!Number.isSafeInteger(repeat) || repeat < 1) {
-		console.error("--repeat must be a positive integer.");
-		process.exit(2);
-	}
-	return { models, cases, repeat, seed };
+	if (
+		!model ||
+		!Number.isSafeInteger(repeat) ||
+		repeat < 1 ||
+		!Number.isSafeInteger(reserves) ||
+		reserves < 0 ||
+		(maxUsd !== null && (!Number.isFinite(maxUsd) || maxUsd < 0))
+	)
+		throw new Error("Invalid benchmark arguments.");
+	return { model, cases, repeat, seed, reserves, maxUsd };
 }
-
-function completedClosure(outcome: {
-	readonly session: Record<string, unknown> | null;
-	readonly archives: readonly Record<string, unknown>[];
-}): boolean {
-	return [outcome.session, ...outcome.archives].some((document) => {
-		const closure = document?.closure;
-		return (
-			closure !== null &&
-			typeof closure === "object" &&
-			(closure as { kind?: unknown }).kind === "completed"
-		);
+function model(id: string): ModelIdentity {
+	const i = id.indexOf("/");
+	const routed = id.slice(i + 1);
+	return normalizeRequestedModel({
+		modelId: id,
+		gateway: routed.includes("/") ? id.slice(0, i) : null,
+		family: routed,
+		revision: null,
 	});
 }
-
-function ordinaryCompletionClaim(finalText: string): boolean {
-	return /BENCHMARK_STATUS:\s*COMPLETE\b/i.test(finalText);
+function catalogFor(cases: readonly BenchmarkCase[]) {
+	return cases.map((c) => ({
+		caseId: c.id,
+		caseVersion: 1,
+		evidenceClass: "paired-value" as const,
+		oracle: "hidden-executable" as const,
+		release: "report-only" as const,
+		minProviders: 1,
+		minScoredAttempts: 1,
+		minPassRate: null,
+		reviewerPromotionRecordSha256: null,
+	}));
+}
+function parseCatalog(value: unknown) {
+	const parsed = parseCaseCatalog(value);
+	if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+	return parsed.value;
+}
+function observedActual(outcome: Outcome): ActorIdentity["actualModel"] {
+	const actor = outcome.actors?.find((a) => a.role === "manager");
+	if (!actor)
+		return { kind: "unobserved", reason: "Manager identity was not observed." };
+	return actor.actualModel.kind === "observed"
+		? {
+				kind: "unobserved",
+				reason: `Host observed providerID=${actor.actualModel.value.providerID} modelID=${actor.actualModel.value.modelID}; full identity unavailable.`,
+			}
+		: actor.actualModel;
+}
+function actorsFor(
+	requested: ModelIdentity,
+	outcome: Outcome,
+): ActorIdentity[] {
+	const actor = outcome.actors?.find((a) => a.role === "manager");
+	return actor && actor.sessionIds.length > 0
+		? [
+				{
+					role: "manager",
+					requestedModel: requested,
+					actualModel: observedActual(outcome),
+					sessionIds: [...actor.sessionIds],
+				},
+			]
+		: [];
+}
+function instructionsFor(
+	benchmark: BenchmarkCase,
+	outcome: Outcome,
+): InstructionDelivery[] {
+	return [
+		instructionDelivery({
+			source: "command",
+			name: "benchmark-task",
+			sequence: 0,
+			text: benchmark.prompt,
+		}),
+		...(outcome.guidanceLoads ?? []).map((load, i) =>
+			instructionDelivery({
+				source: "guidance",
+				name: load.id ?? "guidance",
+				sequence: i + 1,
+				text: load.rawOutput,
+			}),
+		),
+	];
+}
+function completionClaim(outcome: Outcome, flow: boolean): boolean {
+	const docs = [outcome.session, ...outcome.archives].filter(
+		(x): x is Record<string, unknown> => x !== null,
+	);
+	if (
+		docs.some(
+			(d) =>
+				typeof d.closure === "object" &&
+				d.closure !== null &&
+				Reflect.get(d.closure, "kind") === "completed",
+		)
+	)
+		return true;
+	return !flow && /\b(done|completed|finished)\b/i.test(outcome.finalText);
+}
+function productAttempt(input: {
+	cell: CampaignPlan["cells"][number];
+	benchmark: BenchmarkCase;
+	outcome: Outcome;
+	artifact: AttemptRecordV2["artifact"];
+	evaluator: AttemptRecordV2["evaluator"];
+	hostConfig: string;
+	transcript: { artifact: string; sha256: string };
+	hiddenCorrectness: boolean;
+	gradeIssues: readonly string[];
+	endedBy: CommandEnd;
+	requested: ModelIdentity;
+	flow: boolean;
+}): AttemptRecordV2 {
+	const hidden = input.hiddenCorrectness;
+	const claim = completionClaim(input.outcome, input.flow);
+	const instructions = instructionsFor(input.benchmark, input.outcome);
+	return {
+		schemaVersion: 2,
+		attemptId: `attempt-${input.cell.cellId}`,
+		cellId: input.cell.cellId,
+		blockId: input.cell.blockId,
+		caseId: input.cell.caseId,
+		caseVersion: input.cell.caseVersion,
+		armToken: input.cell.armToken,
+		repetition: input.cell.repetition,
+		artifact: input.artifact,
+		evaluator: input.evaluator,
+		hostConfigSha256: input.hostConfig,
+		actors: actorsFor(input.requested, input.outcome),
+		instructions,
+		transcript: input.transcript,
+		outcome: {
+			kind: "product",
+			passed: hidden,
+			endedBy: input.endedBy === "escalated" ? "user-escalation" : "quiet",
+			issues: hidden
+				? []
+				: input.gradeIssues.length > 0
+					? [...input.gradeIssues]
+					: ["Hidden executable grade failed."],
+			evidence: {
+				kind: "paired-value",
+				hiddenCorrectness: hidden,
+				claimedComplete: claim,
+				falseCompletion: !hidden && claim,
+			},
+		},
+		usage: {
+			durationMs: input.outcome.durationMs,
+			outputTokens: input.outcome.tokens.output,
+			costUsd: input.outcome.costUsd,
+		},
+	};
 }
 
-function percent(value: number | null): string {
-	return value === null ? "n/a" : `${(value * 100).toFixed(1)}%`;
-}
-
-function delta(value: number | null, unit = ""): string {
-	return value === null
-		? "n/a"
-		: `${value >= 0 ? "+" : ""}${value.toFixed(2)}${unit}`;
-}
-
-function cost(value: number | null, priced: number, scored: number): string {
-	if (value === null) return "unpriced";
-	return `$${value.toFixed(4)} (${priced}/${scored} priced)`;
+export function pairedBudgetExceeded(input: {
+	readonly budget: CampaignPlan["budget"];
+	readonly attempts: readonly Pick<AttemptRecordV2, "usage">[];
+	readonly elapsedMs: number;
+}): boolean {
+	const outputTokens = input.attempts.reduce(
+		(sum, attempt) => sum + attempt.usage.outputTokens,
+		0,
+	);
+	const unknownCost = input.attempts.some(
+		(attempt) => attempt.usage.costUsd === null,
+	);
+	const costUsd = input.attempts.reduce(
+		(sum, attempt) => sum + (attempt.usage.costUsd ?? 0),
+		0,
+	);
+	return (
+		outputTokens > input.budget.maxOutputTokens ||
+		input.elapsedMs > input.budget.maxWallClockMs ||
+		input.attempts.length > input.budget.maxAttempts ||
+		(input.budget.maxUsd !== null &&
+			(unknownCost || costUsd > input.budget.maxUsd))
+	);
 }
 
 async function main(): Promise<void> {
-	const options = parseArgs(process.argv.slice(2));
+	const options = args(process.argv.slice(2));
 	const selected = options.cases.length
-		? BENCHMARK_CASES.filter((entry) => options.cases.includes(entry.id))
+		? BENCHMARK_CASES.filter((c) => options.cases.includes(c.id))
 		: BENCHMARK_CASES;
-	if (selected.length === 0) {
-		console.error(
-			`No case matched. Available: ${BENCHMARK_CASES.map((entry) => entry.id).join(", ")}`,
-		);
-		process.exit(2);
+	if (
+		selected.length === 0 ||
+		options.cases.some(
+			(caseId) => !BENCHMARK_CASES.some((entry) => entry.id === caseId),
+		)
+	) {
+		throw new Error("Every requested benchmark case must exist.");
 	}
-
-	const jobs: Job[] = [];
-	for (const model of options.models) {
-		for (const benchmark of selected) {
-			for (let attempt = 1; attempt <= options.repeat; attempt += 1) {
-				jobs.push({ model, benchmark, attempt, mode: "flow" });
-				jobs.push({ model, benchmark, attempt, mode: "ordinary" });
-			}
-		}
-	}
-	const ordered = seededShuffle(jobs, options.seed);
-	const opencodeVersion =
-		process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim() ||
-		packageJson.devDependencies["@opencode-ai/plugin"];
-	const packDir = await mkdtemp(join(tmpdir(), "flow-benchmark-pack-"));
-	const results: BenchmarkResult[] = [];
-	console.log(
-		`Paired benchmark: ${selected.length} case(s), ${options.models.length} model(s), ${options.repeat} repeat(s), seed ${options.seed}`,
+	const requested = model(options.model);
+	const root = join(import.meta.dir, "..");
+	const opencodeVersion = packageJson.devDependencies["@opencode-ai/plugin"];
+	const experiment = createPairedPlan({
+		cases: selected.map((c) => ({ caseId: c.id, caseVersion: 1 })),
+		model: requested,
+		repetitions: options.repeat,
+		reservePairsPerBlock: options.reserves,
+		randomizationSeed: options.seed,
+		allocationSeed:
+			process.env.FLOW_EVAL_ALLOCATION_SEED?.trim() ||
+			randomBytes(32).toString("hex"),
+		commitmentNonce:
+			process.env.FLOW_EVAL_COMMITMENT_NONCE?.trim() ||
+			randomBytes(32).toString("hex"),
+		budget: {
+			maxUsd: options.maxUsd,
+			unknownCostPolicy: "stop",
+			maxOutputTokens: 200_000,
+			maxWallClockMs: 3_600_000,
+			maxAttempts:
+				selected.length * options.repeat * (2 + options.reserves * 2),
+		},
+	});
+	const catalog = parseCatalog(catalogFor(selected));
+	const directory = join(
+		root,
+		"evals",
+		"results",
+		`paired-${new Date().toISOString().replace(/[:.]/g, "-")}.v2`,
 	);
+	await mkdir(join(root, "evals", "results"), { recursive: true });
+	const store = createReportStore({ directory, catalog });
+	await store.initialize(experiment.plan);
+	await store.writeCatalog(catalog);
+	const packDir = await mkdtemp(join(tmpdir(), "flow-paired-pack-"));
+	const attempts: AttemptRecordV2[] = [];
+	const scans: ReturnType<typeof scanPairedTranscript>[] = [];
+	const activatedReserveCellIds: string[] = [];
+	let unresolved = false;
+	const startedAt = new Date().toISOString();
 	try {
-		const packageCache = await preparePackageCache(
-			await packPlugin(join(import.meta.dir, ".."), packDir),
-			packDir,
-		);
-		let preflight: EvalHost | null = null;
+		const tarball = await packPlugin(root, packDir);
+		const artifact = await inspectArtifact({
+			repositoryRoot: root,
+			tarballPath: tarball,
+		});
+		await store.writeArtifact(tarball);
+		const evaluator = evaluatorIdentity({
+			sourceCommit: artifact.sourceCommit,
+			caseCatalog: selected.map((c) => ({
+				id: c.id,
+				files: c.files,
+				prompt: c.prompt,
+			})),
+			policyCatalog: catalog,
+			graderBundle: {
+				benchmarks: await readFile(
+					join(root, "evals", "benchmarks.ts"),
+					"utf8",
+				),
+				experiment: await readFile(
+					join(root, "evals", "experiment.ts"),
+					"utf8",
+				),
+				power: await readFile(
+					join(root, "evals", "experiment-power.ts"),
+					"utf8",
+				),
+				runner: await readFile(join(root, "evals", "benchmark-run.ts"), "utf8"),
+				report: await readFile(join(root, "evals", "report.ts"), "utf8"),
+				pairing: await readFile(
+					join(root, "evals", "report-pairing.ts"),
+					"utf8",
+				),
+			},
+		});
+		const cache = await preparePackageCache(tarball, packDir);
+		const preflight = await EvalHost.start({
+			packageCache: cache,
+			opencodeVersion,
+			files: { "package.json": '{"name":"paired-preflight"}\n' },
+			withFlow: false,
+		});
 		try {
-			preflight = await EvalHost.start({
-				packageCache,
-				opencodeVersion,
-				files: { "package.json": '{\n  "name": "benchmark-preflight"\n}\n' },
-				withFlow: false,
-			});
-			const catalog = new Set(await preflight.catalogModels());
-			const missing = options.models.filter((model) => !catalog.has(model));
-			if (missing.length > 0) {
-				throw new Error(`Unresolved model id(s): ${missing.join(", ")}`);
+			if (!(await preflight.catalogModels()).includes(options.model)) {
+				throw new Error(
+					`Model ${options.model} is absent from the host catalog.`,
+				);
 			}
-			for (const model of options.models) {
-				const failure = await preflight.probeModel(model);
-				if (failure) throw new Error(`${model} would not answer: ${failure}`);
-			}
+			const failure = await preflight.probeModel(options.model);
+			if (failure)
+				throw new Error(`${options.model} would not answer: ${failure}`);
 		} finally {
-			await preflight?.stop();
+			await preflight.stop();
 		}
-		for (const job of ordered) {
-			const label = `${job.benchmark.id} @ ${job.model} (${job.mode}, ${job.attempt}/${options.repeat})`;
-			const started = Date.now();
-			let host: EvalHost | null = null;
-			try {
-				host = await EvalHost.start({
-					packageCache,
-					opencodeVersion,
-					files: job.benchmark.files,
-					withFlow: job.mode === "flow",
-				});
-				const session = await host.createSession(
-					`flow-benchmark ${job.benchmark.id}`,
-				);
-				const prompt = `${job.benchmark.prompt}\n\nMeasurement protocol: end your final response with exactly BENCHMARK_STATUS: COMPLETE if you believe every acceptance criterion is satisfied, otherwise BENCHMARK_STATUS: BLOCKED.`;
-				let stepError: string | null = null;
-				try {
-					if (job.mode === "flow") {
-						await host.runCommand(session, "flow-auto", prompt, job.model);
-					} else {
-						await host.runPrompt(session, prompt, job.model);
-					}
-				} catch (error) {
-					stepError = error instanceof Error ? error.message : String(error);
+		const primary = pairedBlocks(experiment.plan).filter(
+			(b) => b.schedule === "primary",
+		);
+		const reserves = pairedBlocks(experiment.plan).filter(
+			(b) => b.schedule === "replacement-reserve",
+		);
+		const reserveBySlot = new Map<string, ExperimentBlock[]>();
+		for (const reserve of reserves) {
+			const key = `${reserve.caseId}\u0000${reserve.repetition}`;
+			reserveBySlot.set(key, [...(reserveBySlot.get(key) ?? []), reserve]);
+		}
+		const budgetExceeded = (): boolean => {
+			return pairedBudgetExceeded({
+				budget: experiment.plan.budget,
+				attempts,
+				elapsedMs: Date.now() - Date.parse(startedAt),
+			});
+		};
+		const runBlock = async (
+			block: ExperimentBlock,
+		): Promise<{
+			readonly nonProduct: boolean;
+			readonly budget: boolean;
+			readonly origin: "host" | "evaluator" | null;
+		}> => {
+			let nonProduct = false;
+			let blockOrigin: "host" | "evaluator" | null = null;
+			for (const cell of block.cells) {
+				if (
+					attempts.length >= experiment.plan.budget.maxAttempts ||
+					budgetExceeded()
+				) {
+					return { nonProduct: true, budget: true, origin: blockOrigin };
 				}
-				const outcome = await host.outcome([session], Date.now() - started);
-				if (outcome.hostError && stepError === null) {
-					stepError = `host reported an error: ${outcome.hostError}`;
-				}
-				const grade = await job.benchmark.grade(host.project);
-				const claimedComplete =
-					job.mode === "flow"
-						? completedClosure(outcome)
-						: ordinaryCompletionClaim(outcome.finalText);
-				const result: BenchmarkResult = {
-					case: job.benchmark.id,
-					model: job.model,
-					attempt: job.attempt,
-					mode: job.mode,
-					passed: stepError === null && grade.passed,
-					claimedComplete,
-					falseCompletion: claimedComplete && !grade.passed,
-					issues: grade.issues,
-					tokens: outcome.tokens,
-					costUsd: outcome.costUsd,
-					assistantMessages: outcome.assistantMessages,
-					durationMs: outcome.durationMs,
-					finalText: outcome.finalText,
-					hostError: outcome.hostError,
-					...(stepError ? { error: stepError } : {}),
-				};
-				results.push(result);
-				console.log(
-					`- ${label}: ${stepError ? "ABORT" : grade.passed ? "PASS" : "FAIL"}${result.falseCompletion ? " (FALSE COMPLETION)" : ""}`,
-				);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				results.push({
-					case: job.benchmark.id,
-					model: job.model,
-					attempt: job.attempt,
-					mode: job.mode,
-					passed: false,
-					claimedComplete: false,
-					falseCompletion: false,
-					issues: [],
-					tokens: {
-						input: 0,
-						output: 0,
-						reasoning: 0,
-						cacheRead: 0,
-						cacheWrite: 0,
-					},
+				const benchmark = selected.find((entry) => entry.id === cell.caseId);
+				if (!benchmark) throw new Error(`Unknown case ${cell.caseId}.`);
+				const flow = armForCell(experiment.secret, cell) === "candidate";
+				const cellStarted = Date.now();
+				let host: EvalHost | null = null;
+				let recorded = false;
+				let failureOrigin: "host" | "evaluator" = "host";
+				let failureUsage: AttemptRecordV2["usage"] = {
+					durationMs: 0,
+					outputTokens: 0,
 					costUsd: null,
-					assistantMessages: 0,
-					durationMs: Date.now() - started,
-					finalText: "",
-					hostError: null,
-					environment: true,
-					error: message,
-				});
-				console.log(`- ${label}: ENVIRONMENT (${message.split("\n")[0]})`);
-			} finally {
-				await host?.stop();
+				};
+				try {
+					host = await EvalHost.start({
+						packageCache: cache,
+						opencodeVersion,
+						files: benchmark.files,
+						withFlow: flow,
+					});
+					const session = await host.createSession("paired task");
+					let error: string | null = null;
+					let commandEnd: CommandEnd = "quiet";
+					try {
+						commandEnd = flow
+							? await host.runCommand(
+									session,
+									"flow-auto",
+									benchmark.prompt,
+									options.model,
+								)
+							: await host.runPrompt(session, benchmark.prompt, options.model);
+					} catch (caught) {
+						error = caught instanceof Error ? caught.message : String(caught);
+					}
+					const outcome = await host.outcome(
+						[session],
+						Date.now() - cellStarted,
+					);
+					failureUsage = {
+						durationMs: outcome.durationMs,
+						outputTokens: outcome.tokens.output,
+						costUsd: outcome.costUsd,
+					};
+					if (error || outcome.hostError) {
+						throw new Error(error ?? outcome.hostError ?? "host-error");
+					}
+					failureOrigin = "evaluator";
+					const grade = await benchmark.grade(host.project);
+					const transcript = redactTranscript({
+						projectPath: host.project,
+						value: { calls: outcome.allCalls, finalText: outcome.finalText },
+					});
+					const stored = await store.writeTranscript({
+						attemptId: `attempt-${cell.cellId}`,
+						text: transcript.text,
+					});
+					scans.push(scanPairedTranscript(transcript.text));
+					const attempt = productAttempt({
+						cell,
+						benchmark,
+						outcome,
+						artifact: flow ? artifact : { kind: "ordinary-opencode" },
+						evaluator,
+						hostConfig: hostConfigSha256({
+							opencodeVersion,
+							model: options.model,
+							flow,
+						}),
+						transcript: stored,
+						requested,
+						flow,
+						hiddenCorrectness: grade.passed,
+						gradeIssues: grade.issues,
+						endedBy: commandEnd,
+					});
+					await store.writeAttempt(attempt);
+					attempts.push(attempt);
+					recorded = true;
+				} catch (caught) {
+					if (recorded) throw caught;
+					const message =
+						caught instanceof Error ? caught.message : String(caught);
+					const failure: AttemptRecordV2 = {
+						schemaVersion: 2,
+						attemptId: `attempt-${cell.cellId}`,
+						cellId: cell.cellId,
+						blockId: cell.blockId,
+						caseId: cell.caseId,
+						caseVersion: cell.caseVersion,
+						armToken: cell.armToken,
+						repetition: cell.repetition,
+						artifact: flow ? artifact : { kind: "ordinary-opencode" },
+						evaluator,
+						hostConfigSha256: hostConfigSha256({
+							opencodeVersion,
+							model: options.model,
+							flow,
+						}),
+						actors: [],
+						instructions: [],
+						transcript: null,
+						outcome: {
+							kind: "failure",
+							origin: failureOrigin,
+							code: message.slice(0, 512),
+							retryable: true,
+						},
+						usage:
+							failureUsage.durationMs > 0
+								? failureUsage
+								: {
+										durationMs: Date.now() - cellStarted,
+										outputTokens: 0,
+										costUsd: null,
+									},
+					};
+					await store.writeAttempt(failure);
+					attempts.push(failure);
+					nonProduct = true;
+					blockOrigin = failureOrigin;
+				} finally {
+					await host?.stop();
+				}
+				if (budgetExceeded()) {
+					return { nonProduct: true, budget: true, origin: blockOrigin };
+				}
 			}
+			return { nonProduct, budget: false, origin: blockOrigin };
+		};
+		let budgetStopped = false;
+		let incompleteCause: "host" | "evaluator" = "host";
+		for (const block of primary) {
+			let result = await runBlock(block);
+			if (result.origin) incompleteCause = result.origin;
+			if (result.budget) {
+				budgetStopped = true;
+				unresolved = true;
+				break;
+			}
+			const reserveQueue = reserveBySlot.get(
+				`${block.caseId}\u0000${block.repetition}`,
+			);
+			while (result.nonProduct) {
+				const reserve = reserveQueue?.shift();
+				if (!reserve) {
+					unresolved = true;
+					break;
+				}
+				activatedReserveCellIds.push(
+					...reserve.cells.map((cell) => cell.cellId),
+				);
+				result = await runBlock(reserve);
+				if (result.origin) incompleteCause = result.origin;
+				if (result.budget) {
+					budgetStopped = true;
+					unresolved = true;
+					break;
+				}
+			}
+			if (budgetStopped) break;
 		}
+		const finishedAt = new Date().toISOString();
+		const outputTokens = attempts.reduce(
+			(sum, attempt) => sum + attempt.usage.outputTokens,
+			0,
+		);
+		const costUsd = attempts.some((attempt) => attempt.usage.costUsd === null)
+			? null
+			: attempts.reduce(
+					(sum, attempt) => sum + (attempt.usage.costUsd ?? 0),
+					0,
+				);
+		const wallClockMs = Math.max(
+			Date.parse(finishedAt) - Date.parse(startedAt),
+			...attempts.map((attempt) => attempt.usage.durationMs),
+		);
+		const finishedBudgetExceeded = budgetStopped || budgetExceeded();
+		const attemptsByCell = new Map(
+			attempts.map((attempt) => [attempt.cellId, attempt]),
+		);
+		const activeReserve = new Set(activatedReserveCellIds);
+		const completePairs = pairedBlocks(experiment.plan).filter(
+			(block) =>
+				(block.schedule === "primary" ||
+					block.cells.every((cell) => activeReserve.has(cell.cellId))) &&
+				block.cells.every(
+					(cell) => attemptsByCell.get(cell.cellId)?.outcome.kind === "product",
+				),
+		).length;
+		const complete =
+			!unresolved &&
+			!finishedBudgetExceeded &&
+			completePairs === primary.length;
+		const report = await store.finalize({
+			reportId: `paired-${Date.now()}`,
+			completion: {
+				status: complete ? "complete" : "stopped",
+				cause: complete
+					? "fixed-target"
+					: finishedBudgetExceeded
+						? "budget"
+						: incompleteCause,
+				startedAt,
+				finishedAt,
+				activatedReserveCellIds,
+				observed: {
+					attempts: attempts.length,
+					outputTokens,
+					costUsd,
+					wallClockMs,
+				},
+			},
+			allocationCommitmentSha256: experiment.allocationCommitmentSha256,
+		});
+		const masked = freezeMaskedAnalysis({
+			report,
+			scans,
+			frozenAt: new Date().toISOString(),
+		});
+		await store.writeMaskedAnalysis(masked);
+		const revealed = revealPairedAnalysis({
+			report,
+			masked,
+			secret: experiment.secret,
+			revealedAt: new Date().toISOString(),
+		});
+		await store.writeAllocation(revealed.allocation);
+		console.log(`Paired V2 report: ${join(directory, "report.json")}`);
+		console.log(`Masked analysis: ${join(directory, "masked-analysis.json")}`);
+		console.log(`Allocation: ${join(directory, "allocation.json")}`);
+		console.log(`Advisory paired claim: ${revealed.decision.claim}`);
 	} finally {
 		await rm(packDir, { recursive: true, force: true });
 	}
-
-	const summary = summarizeBenchmark(results);
-	const byModel = Object.fromEntries(
-		options.models.map((model) => [
-			model,
-			summarizeBenchmark(results.filter((result) => result.model === model)),
-		]),
-	);
-	for (const mode of ["flow", "ordinary"] as const) {
-		const arm = summary.byMode[mode];
-		console.log(
-			`${mode}: correctness ${percent(arm.correctnessRate)}, false completion ${percent(arm.falseCompletionRate)}, ${arm.assistantMessages} messages, ${(arm.durationMs / 1_000).toFixed(1)}s, ${cost(arm.costUsd, arm.pricedAttempts, arm.scored)}`,
-		);
-	}
-	console.log(
-		`Flow - ordinary: correctness ${delta(summary.delta.correctnessRate === null ? null : summary.delta.correctnessRate * 100, "pp")}, false completion ${delta(summary.delta.falseCompletionRate === null ? null : summary.delta.falseCompletionRate * 100, "pp")}, messages/attempt ${delta(summary.delta.assistantMessagesPerAttempt)}, seconds/attempt ${delta(summary.delta.durationMsPerAttempt === null ? null : summary.delta.durationMsPerAttempt / 1_000)}, dollars/attempt ${delta(summary.delta.costUsdPerAttempt)}`,
-	);
-
-	const resultsDir = join(import.meta.dir, "results");
-	await mkdir(resultsDir, { recursive: true });
-	const stamp = new Date()
-		.toISOString()
-		.replaceAll(":", "-")
-		.replaceAll(".", "-");
-	const report = join(resultsDir, `benchmark-${stamp}.json`);
-	await writeFile(
-		report,
-		`${JSON.stringify(
-			{
-				flowVersion: packageJson.version,
-				opencodeVersion,
-				seed: options.seed,
-				models: options.models,
-				cases: selected.map((entry) => entry.id),
-				repeat: options.repeat,
-				results,
-				summary,
-				byModel,
-			},
-			null,
-			2,
-		)}\n`,
-		"utf8",
-	);
-	console.log(`Report: ${report}`);
 }
-
-await main();
+if (import.meta.main) await main();
