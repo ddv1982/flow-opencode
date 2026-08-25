@@ -46,7 +46,10 @@ export function canonicalJson(value: unknown): string {
 	throw new Error("Canonical JSON requires JSON values.");
 }
 
-export function canonicalSha256(domain: string, value: unknown): string {
+export function canonicalSha256(
+	domain: string,
+	value: unknown,
+): `sha256:${string}` {
 	return `sha256:${createHash("sha256")
 		.update(`${domain}\u0000`)
 		.update(canonicalJson(value))
