@@ -45,6 +45,11 @@ failures separately.
 The final four-model Interrogate recheck reported no critical or warning findings.
 `phase-11-final-interrogate.md` preserves each final response.
 
+CI exposed one stale hand-written inspect cassette that still encoded the old
+free-form contract. The cassette now uses the exact certificate in both its failed
+blocking finding and final response, and the committed replay gate reproduces all
+13 cassettes.
+
 Deslop kept the Bun-specific behavior in one eval-only adapter. Generic short
 requests and Flow runtime code remain unchanged. The final repository gate passes
 534 tests with one intentional live-smoke skip and no failures. The three existing
