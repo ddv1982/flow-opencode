@@ -982,6 +982,8 @@ export class EvalHost {
 		packageCache: string;
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
+		/** Pins the hidden reviewer child independently from the command model. */
+		reviewerModel?: string;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
 	}): Promise<EvalHost> {
@@ -1055,6 +1057,9 @@ export class EvalHost {
 				cwd: project,
 				env: {
 					...process.env,
+					...(options.reviewerModel
+						? { OPENCODE_FLOW_REVIEWER_MODEL: options.reviewerModel }
+						: {}),
 					HOME: childHome,
 					XDG_CACHE_HOME: childCache,
 					XDG_CONFIG_HOME: join(childHome, ".config"),
