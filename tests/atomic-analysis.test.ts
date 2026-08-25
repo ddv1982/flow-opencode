@@ -278,9 +278,9 @@ function releaseExpected(report: ValidatedReport): ReleaseExpectedProvenance {
 		kind: "release",
 		artifact: first.artifact,
 		evaluator: first.evaluator,
-		hostConfigSha256: first.hostConfigSha256,
 		attempts: report.attempts.map((attempt) => ({
 			cellId: attempt.cellId,
+			hostConfigSha256: attempt.hostConfigSha256,
 			actors: attempt.actors.map(expectedActor),
 			instructions: attempt.instructions,
 		})),
@@ -362,6 +362,23 @@ describe("v2 atomic release decisions", () => {
 		expect(decision.reasons.map((reason) => reason.code)).toEqual(
 			expect.arrayContaining(["false-completion", "campaign-stopped"]),
 		);
+	});
+
+	test("accepts distinct frozen host configurations for different model cells", () => {
+		const raw = buildRateReport();
+		const second = raw.attempts[1];
+		if (second === undefined)
+			throw new Error("Expected second provider attempt.");
+		second.hostConfigSha256 = DIGEST_A;
+		const catalog = mustCatalog(rateCatalog());
+		const report = mustReport(raw, catalog);
+		expect(
+			deriveReleaseDecision({
+				report,
+				catalog,
+				expected: releaseExpected(report),
+			}).verdict,
+		).toBe("VERIFIED");
 	});
 
 	test("keeps report-only stops and provenance out of the release verdict", () => {

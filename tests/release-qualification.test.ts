@@ -2,11 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RELEASE_PASS_RATES } from "../evals/release-policy.js";
+import { campaignPlanSha256 } from "../evals/report.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import {
+	decisionRecordFor,
 	mergeReports,
 	providers,
 	qualificationFailures,
+	qualifyV2,
 	writeQualificationRecord,
 } from "../scripts/qualify-release.js";
 
@@ -31,6 +35,157 @@ const GATED = [
 	"resumes-after-interruption",
 	"unprovable-claim-refused",
 ];
+
+const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
+
+const V2_CATALOG = [
+	{
+		caseId: "v2-case",
+		caseVersion: 1,
+		evidenceClass: "conformance",
+		oracle: "durable-state",
+		release: "required",
+		minProviders: 1,
+		minScoredAttempts: 1,
+		minPassRate: 1,
+		reviewerPromotionRecordSha256: null,
+	},
+];
+
+const V2_ARTIFACT = {
+	packageVersion: "8.1.1",
+	sourceCommit: "commit",
+	sourceTreeSha256: digest("a"),
+	tarballSha256: digest("b"),
+	unpackedManifestSha256: digest("c"),
+};
+
+function v2Report(stopped = false) {
+	const model = {
+		routeProvider: "openai",
+		gateway: null,
+		family: "gpt",
+		model: "test",
+		revision: null,
+	};
+	const plan = {
+		schemaVersion: 1 as const,
+		planId: "v2-plan",
+		planSha256: digest("d"),
+		randomizationSeed: "seed",
+		cells: [
+			{
+				cellId: "cell",
+				blockId: "block",
+				caseId: "v2-case",
+				caseVersion: 1,
+				armToken: null,
+				repetition: 0,
+				managerModel: model,
+				reviewerModel: null,
+				schedule: "primary" as const,
+			},
+		],
+		abortPolicy: { retry: "never" as const, maxReplacementBlocks: 0 },
+		stoppingRule: { kind: "fixed-attempts" as const, count: 1 },
+		analysis: {
+			kind: "rate" as const,
+			primaryOutcome: "pass",
+			versionSha256: digest("e"),
+		},
+		budget: {
+			maxUsd: 1,
+			unknownCostPolicy: "stop" as const,
+			maxOutputTokens: 10,
+			maxWallClockMs: 10_000,
+			maxAttempts: 1,
+		},
+	};
+	plan.planSha256 = campaignPlanSha256(plan);
+	return {
+		schemaVersion: 2 as const,
+		reportId: stopped ? "v2-stopped" : "v2-verified",
+		plan,
+		attempts: [
+			{
+				schemaVersion: 2 as const,
+				attemptId: "attempt",
+				cellId: "cell",
+				blockId: "block",
+				caseId: "v2-case",
+				caseVersion: 1,
+				armToken: null,
+				repetition: 0,
+				artifact: V2_ARTIFACT,
+				evaluator: {
+					sourceCommit: "evaluator",
+					caseCatalogSha256: digest("f"),
+					policyCatalogSha256: digest("0"),
+					graderBundleSha256: digest("1"),
+				},
+				hostConfigSha256: digest("2"),
+				actors: stopped
+					? []
+					: [
+							{
+								role: "manager" as const,
+								requestedModel: model,
+								actualModel: { kind: "observed" as const, value: model },
+								sessionIds: ["session"],
+							},
+						],
+				instructions: stopped
+					? []
+					: [
+							{
+								source: "command" as const,
+								name: "eval",
+								sequence: 0,
+								sha256: digest("3"),
+								bytes: 1,
+							},
+						],
+				transcript: stopped
+					? null
+					: { sha256: digest("4"), artifact: "attempt.json" },
+				outcome: stopped
+					? {
+							kind: "failure" as const,
+							origin: "host" as const,
+							code: "down",
+							retryable: true,
+						}
+					: {
+							kind: "product" as const,
+							passed: true,
+							endedBy: "quiet" as const,
+							issues: [],
+							evidence: {
+								kind: "conformance" as const,
+								falseCompletion: false,
+								unsubmittedReviews: 0,
+								facts: {},
+							},
+						},
+				usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
+			},
+		],
+		completion: {
+			status: stopped ? ("stopped" as const) : ("complete" as const),
+			cause: stopped ? ("host" as const) : ("fixed-target" as const),
+			startedAt: "2026-08-25T00:00:00.000Z",
+			finishedAt: "2026-08-25T00:00:01.000Z",
+			activatedReserveCellIds: [],
+			observed: {
+				attempts: 1,
+				outputTokens: 1,
+				costUsd: 0,
+				wallClockMs: 1_000,
+			},
+		},
+		allocationCommitmentSha256: null,
+	};
+}
 
 function report(overrides: {
 	models?: string[];
@@ -80,6 +235,9 @@ function report(overrides: {
 }
 
 describe("release qualification", () => {
+	test("shares the v2 required-case policy with the live runner", () => {
+		expect(Object.keys(RELEASE_PASS_RATES).sort()).toEqual([...GATED].sort());
+	});
 	test("qualifies a clean two-provider report", () => {
 		expect(qualificationFailures(report({}))).toEqual([]);
 	});
@@ -455,5 +613,68 @@ describe("qualification records", () => {
 		await expect(
 			writeQualificationRecord("9.0.0", measured, [], directory, "8.1.1"),
 		).rejects.toThrow(/requires the report's flowVersion/);
+	});
+});
+
+describe("v2 qualification cutover", () => {
+	test("derives and records all three decision verdicts from explicit atomic inputs", () => {
+		const verified = qualifyV2({
+			reportInput: v2Report(),
+			catalogInput: V2_CATALOG,
+			artifact: V2_ARTIFACT,
+		});
+		expect(verified.decision.verdict).toBe("VERIFIED");
+		const first = decisionRecordFor(verified);
+		expect(first.verdict).toBe("VERIFIED");
+		expect(first).toEqual(decisionRecordFor(verified));
+		expect(first).toMatchObject({
+			reportSha256: expect.stringMatching(/^sha256:/),
+			artifactSha256: expect.stringMatching(/^sha256:/),
+			evaluatorSha256: expect.stringMatching(/^sha256:/),
+			policySha256: expect.stringMatching(/^sha256:/),
+			actorSha256: expect.stringMatching(/^sha256:/),
+			analyzerSha256: expect.stringMatching(/^sha256:/),
+			expectedProvenanceSha256: expect.stringMatching(/^sha256:/),
+			decisionInputSha256: expect.stringMatching(/^sha256:/),
+		});
+
+		const notVerified = qualifyV2({
+			reportInput: v2Report(),
+			catalogInput: V2_CATALOG,
+			artifact: { ...V2_ARTIFACT, tarballSha256: digest("9") },
+		});
+		expect(notVerified.decision.verdict).toBe("NOT VERIFIED");
+
+		const inconclusive = qualifyV2({
+			reportInput: v2Report(true),
+			catalogInput: V2_CATALOG,
+			artifact: V2_ARTIFACT,
+		});
+		expect(inconclusive.decision.verdict).toBe("INCONCLUSIVE");
+	});
+
+	test("rejects legacy summary-only input rather than converting it", () => {
+		expect(() =>
+			qualifyV2({
+				reportInput: report({}),
+				catalogInput: V2_CATALOG,
+				artifact: V2_ARTIFACT,
+			}),
+		).toThrow("Invalid v2 report");
+	});
+
+	test("requires explicit report, catalog, and artifact paths in the CLI", async () => {
+		const process = Bun.spawn(["bun", "run", "scripts/qualify-release.ts"], {
+			cwd: new URL("..", import.meta.url).pathname,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const [stdout, stderr, exitCode] = await Promise.all([
+			new Response(process.stdout).text(),
+			new Response(process.stderr).text(),
+			process.exited,
+		]);
+		expect(exitCode).not.toBe(0);
+		expect(`${stdout}${stderr}`).toContain("Usage: bun run qualify");
 	});
 });

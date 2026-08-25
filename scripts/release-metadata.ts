@@ -1,5 +1,8 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { canonicalJson } from "../evals/canonical-json.js";
+import { inspectArtifact } from "../evals/provenance.js";
+import type { ArtifactIdentity } from "../evals/report.js";
 
 export type ReleaseMetadataInput = {
 	packageVersion: string;
@@ -62,50 +65,97 @@ export function isMajorRelease(version: string): boolean {
 }
 
 /**
- * Why a qualification record does not qualify this version, or null when it
- * does. The record is a checklist with a filename, not a proof: a human can
- * write one by hand. The point is that a major tag is refused without one, so
- * skipping the qualification run has to show up in the release diff.
- *
- * `flowVersion` is not checked here. Qualification runs against the current
- * build; the bump commit then cuts the release, so the record's flowVersion is
- * the pre-bump version by design. `writeQualificationRecord` binds the report
- * to that build at record time.
+ * Why a v2 decision record does not qualify this version, or null when it does.
+ * The release path accepts only a parsed, three-valued decision whose measured
+ * artifact package version is exact and whose verdict is VERIFIED.
  */
 export function qualificationRecordIssue(
 	version: string,
 	record: unknown,
+	expectedArtifact?: ArtifactIdentity,
 ): string | null {
-	const entry = record as { version?: unknown; verdict?: unknown } | null;
-	if (!entry || typeof entry !== "object") {
+	if (!record || typeof record !== "object" || Array.isArray(record)) {
 		return `no qualification record exists for ${version}`;
 	}
-	if (entry.version !== version) {
-		return `the qualification record names ${String(entry.version)}, not ${version}`;
+	const entry = record as {
+		schemaVersion?: unknown;
+		reportId?: unknown;
+		verdict?: unknown;
+		artifact?: ArtifactIdentity | null;
+		reportSha256?: unknown;
+		artifactSha256?: unknown;
+		evaluatorSha256?: unknown;
+		catalogSha256?: unknown;
+		policySha256?: unknown;
+		actorSha256?: unknown;
+		analyzerSha256?: unknown;
+		expectedProvenanceSha256?: unknown;
+		decisionInputSha256?: unknown;
+	};
+	if (entry.schemaVersion !== 1 || typeof entry.reportId !== "string") {
+		return `the qualification record for ${version} is not a v2 decision record`;
 	}
-	if (entry.verdict !== "QUALIFIED") {
-		return `the qualification record for ${version} has verdict ${String(entry.verdict)}, not QUALIFIED`;
+	if (entry.artifact?.packageVersion !== version) {
+		return `the qualification artifact names ${String(entry.artifact?.packageVersion)}, not ${version}`;
+	}
+	if (entry.verdict !== "VERIFIED") {
+		return `the qualification record for ${version} has verdict ${String(entry.verdict)}, not VERIFIED`;
+	}
+	const digests = [
+		entry.reportSha256,
+		entry.artifactSha256,
+		entry.evaluatorSha256,
+		entry.catalogSha256,
+		entry.policySha256,
+		entry.actorSha256,
+		entry.analyzerSha256,
+		entry.expectedProvenanceSha256,
+		entry.decisionInputSha256,
+	];
+	if (
+		!digests.every(
+			(digest) =>
+				typeof digest === "string" && /^sha256:[a-f0-9]{64}$/.test(digest),
+		)
+	) {
+		return `the qualification record for ${version} is missing v2 decision digests`;
+	}
+	if (
+		expectedArtifact &&
+		canonicalJson(entry.artifact) !== canonicalJson(expectedArtifact)
+	) {
+		return `the qualification artifact does not match the rebuilt artifact for ${version}`;
 	}
 	return null;
 }
 
 export async function assertQualificationRecord(
 	version: string,
-	directory = join("evals", "qualification"),
+	directory = join("evals", "decisions"),
+	expectedArtifact?: ArtifactIdentity,
 ): Promise<void> {
 	if (!isMajorRelease(version)) return;
-	let record: unknown = null;
+	let records: unknown[] = [];
 	try {
-		record = JSON.parse(
-			await readFile(join(directory, `${version}.json`), "utf8"),
+		const { readdir } = await import("node:fs/promises");
+		records = await Promise.all(
+			(await readdir(directory))
+				.filter((name) => name.endsWith(".json"))
+				.map(async (name) =>
+					JSON.parse(await readFile(join(directory, name), "utf8")),
+				),
 		);
 	} catch {
-		record = null;
+		records = [];
 	}
-	const issue = qualificationRecordIssue(version, record);
-	if (issue) {
+	if (
+		!records.some(
+			(record) =>
+				qualificationRecordIssue(version, record, expectedArtifact) === null,
+		)
+	) {
 		throw new Error(
-			`Major release ${version} cannot proceed: ${issue}. Run \`bun run qualify -- --record ${version}\` against a qualifying report and commit the record.`,
+			`Major release ${version} cannot proceed: no exact VERIFIED v2 decision record exists. Run \`bun run qualify -- --report <report> --catalog <catalog> --artifact <artifact>\` and commit the decision.`,
 		);
 	}
 }
@@ -125,6 +175,7 @@ function optionValue(
 async function main(args: readonly string[]): Promise<void> {
 	let tag: string | undefined;
 	let notesFile: string | undefined;
+	let artifactPath: string | undefined;
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
 		switch (argument) {
@@ -134,6 +185,10 @@ async function main(args: readonly string[]): Promise<void> {
 				break;
 			case "--notes-file":
 				notesFile = optionValue(args, index, argument);
+				index += 1;
+				break;
+			case "--artifact":
+				artifactPath = optionValue(args, index, argument);
 				index += 1;
 				break;
 			default:
@@ -153,7 +208,17 @@ async function main(args: readonly string[]): Promise<void> {
 		...(tag ? { tag } : {}),
 		changelog: await readFile("CHANGELOG.md", "utf8"),
 	});
-	await assertQualificationRecord(packageMetadata.version);
+	const expectedArtifact = artifactPath
+		? await inspectArtifact({
+				repositoryRoot: join(import.meta.dir, ".."),
+				tarballPath: artifactPath,
+			})
+		: undefined;
+	await assertQualificationRecord(
+		packageMetadata.version,
+		undefined,
+		expectedArtifact,
+	);
 	if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
 	process.stdout.write(
 		`Release metadata matches ${packageMetadata.version}.\n`,

@@ -18,7 +18,41 @@
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+	deriveReleaseDecision,
+	type ExpectedActorProvenance,
+	type ReleaseDecision,
+	type ReleaseExpectedProvenance,
+} from "../evals/analysis.js";
+import { canonicalJson, canonicalSha256 } from "../evals/canonical-json.js";
+import {
+	parseCaseCatalog,
+	type ValidatedCaseCatalog,
+} from "../evals/catalog.js";
+import { inspectArtifact } from "../evals/provenance.js";
+import {
+	type ArtifactIdentity,
+	parseReport,
+	type ValidatedReport,
+} from "../evals/report.js";
 import { isMajorRelease } from "./release-metadata.js";
+
+export type DecisionRecord = {
+	readonly schemaVersion: 1;
+	readonly reportId: string;
+	readonly verdict: "VERIFIED" | "NOT VERIFIED" | "INCONCLUSIVE";
+	readonly reportSha256: string;
+	readonly artifactSha256: string;
+	readonly evaluatorSha256: string;
+	readonly catalogSha256: string;
+	readonly policySha256: string;
+	readonly actorSha256: string;
+	readonly analyzerSha256: string;
+	readonly expectedProvenanceSha256: string;
+	readonly decisionInputSha256: string;
+	readonly artifact: ArtifactIdentity;
+	readonly reasons: readonly string[];
+};
 
 /**
  * Minimum share of scored attempts a scenario must pass, per scenario.
@@ -447,7 +481,211 @@ export function qualificationFailures(report: Report): string[] {
 	return failures;
 }
 
+export function expectedProvenanceFor(
+	report: ValidatedReport,
+	artifact: ArtifactIdentity,
+): ReleaseExpectedProvenance {
+	const first = report.attempts[0];
+	if (!first) throw new Error("A v2 qualification report requires an attempt.");
+	return {
+		kind: "release",
+		artifact,
+		evaluator: first.evaluator,
+		attempts: report.attempts.map((attempt) => ({
+			cellId: attempt.cellId,
+			hostConfigSha256: attempt.hostConfigSha256,
+			actors: attempt.actors.map(
+				(actor): ExpectedActorProvenance => ({
+					role: actor.role,
+					requestedModel: actor.requestedModel,
+					actualModel:
+						actor.actualModel.kind === "observed"
+							? { kind: "observed", value: actor.actualModel.value }
+							: {
+									kind: "allow-unobserved",
+									value: actor.requestedModel,
+									reason: actor.actualModel.reason,
+								},
+				}),
+			),
+			instructions: attempt.instructions,
+		})),
+	};
+}
+
+export function qualifyV2(input: {
+	readonly reportInput: unknown;
+	readonly catalogInput: unknown;
+	readonly artifact: ArtifactIdentity;
+}): {
+	readonly report: ValidatedReport;
+	readonly catalog: ValidatedCaseCatalog;
+	readonly decision: ReleaseDecision;
+	readonly expected: ReleaseExpectedProvenance;
+} {
+	const catalog = parseCaseCatalog(input.catalogInput);
+	if (!catalog.ok) {
+		throw new Error(
+			`Invalid v2 catalog: ${catalog.issues
+				.map((issue) => `${issue.path} ${issue.message}`)
+				.join("; ")}`,
+		);
+	}
+	const parsed = parseReport(input.reportInput, catalog.value);
+	if (!parsed.ok) {
+		throw new Error(
+			`Invalid v2 report: ${parsed.issues
+				.map((issue) => `${issue.path} ${issue.message}`)
+				.join("; ")}`,
+		);
+	}
+	const expected = expectedProvenanceFor(parsed.value, input.artifact);
+	return {
+		report: parsed.value,
+		catalog: catalog.value,
+		expected,
+		decision: deriveReleaseDecision({
+			report: parsed.value,
+			catalog: catalog.value,
+			expected,
+		}),
+	};
+}
+
+export function decisionRecordFor(input: {
+	readonly report: ValidatedReport;
+	readonly catalog: ValidatedCaseCatalog;
+	readonly expected: ReleaseExpectedProvenance;
+	readonly decision: ReleaseDecision;
+}): DecisionRecord {
+	const reportSha256 = canonicalSha256("flow-decision-report-v1", input.report);
+	const artifactSha256 = canonicalSha256(
+		"flow-decision-artifact-v1",
+		input.expected.artifact,
+	);
+	const evaluatorSha256 = canonicalSha256(
+		"flow-decision-evaluator-v1",
+		input.expected.evaluator,
+	);
+	const catalogSha256 = canonicalSha256(
+		"flow-decision-catalog-v1",
+		input.catalog,
+	);
+	const policySha256 = canonicalSha256("flow-decision-policy-v1", {
+		plan: input.report.plan,
+		catalogSha256,
+	});
+	const actorSha256 = canonicalSha256(
+		"flow-decision-actors-v1",
+		input.expected.attempts.map((attempt) => ({
+			cellId: attempt.cellId,
+			actors: attempt.actors,
+		})),
+	);
+	const analyzerSha256 = canonicalSha256("flow-decision-analyzer-v1", {
+		module: "evals/analysis.ts",
+		decisionSchemaVersion: 1,
+	});
+	const expectedProvenanceSha256 = canonicalSha256(
+		"flow-decision-expected-provenance-v1",
+		input.expected,
+	);
+	const decisionInputSha256 = canonicalSha256("flow-decision-input-v1", {
+		reportSha256,
+		artifactSha256,
+		evaluatorSha256,
+		catalogSha256,
+		policySha256,
+		actorSha256,
+		analyzerSha256,
+		expectedProvenanceSha256,
+	});
+	return {
+		schemaVersion: 1,
+		reportId: input.report.reportId,
+		verdict: input.decision.verdict,
+		reportSha256,
+		artifactSha256,
+		evaluatorSha256,
+		catalogSha256,
+		policySha256,
+		actorSha256,
+		analyzerSha256,
+		expectedProvenanceSha256,
+		decisionInputSha256,
+		artifact: input.expected.artifact,
+		reasons: input.decision.reasons.map((reason) => reason.message),
+	};
+}
+
+export async function writeDecisionRecord(input: {
+	readonly record: DecisionRecord;
+	readonly directory: string;
+}): Promise<string> {
+	await mkdir(input.directory, { recursive: true });
+	const path = join(input.directory, `${input.record.reportId}.json`);
+	await writeFile(path, canonicalJson(input.record), "utf8");
+	return path;
+}
+
+function requiredOption(
+	options: Readonly<Record<string, string>>,
+	name: string,
+): string {
+	const value = options[name];
+	if (!value) {
+		throw new Error(
+			"Usage: bun run qualify -- --report <v2-report.json> --catalog <catalog.json> --artifact <artifact.tgz> [--decisions-dir <dir>]",
+		);
+	}
+	return value;
+}
+
 async function main(): Promise<void> {
+	const args = process.argv.slice(2);
+	const options: Record<string, string> = {};
+	for (let index = 0; index < args.length; index += 1) {
+		const option = args[index];
+		if (
+			option !== "--report" &&
+			option !== "--catalog" &&
+			option !== "--artifact" &&
+			option !== "--decisions-dir"
+		) {
+			throw new Error(
+				"Usage: bun run qualify -- --report <v2-report.json> --catalog <catalog.json> --artifact <artifact.tgz> [--decisions-dir <dir>]",
+			);
+		}
+		const value = args[index + 1];
+		if (!value || value.startsWith("--"))
+			throw new Error(`${option} requires a value.`);
+		options[option] = value;
+		index += 1;
+	}
+	const reportPath = requiredOption(options, "--report");
+	const catalogPath = requiredOption(options, "--catalog");
+	const artifactPath = requiredOption(options, "--artifact");
+	const artifact = await inspectArtifact({
+		repositoryRoot: join(import.meta.dir, ".."),
+		tarballPath: artifactPath,
+	});
+	const result = qualifyV2({
+		reportInput: JSON.parse(await readFile(reportPath, "utf8")),
+		catalogInput: JSON.parse(await readFile(catalogPath, "utf8")),
+		artifact,
+	});
+	const record = decisionRecordFor(result);
+	const path = await writeDecisionRecord({
+		record,
+		directory:
+			options["--decisions-dir"] ??
+			join(import.meta.dir, "..", "evals", "decisions"),
+	});
+	process.stdout.write(`${record.verdict}: ${path}\n`);
+	if (record.verdict !== "VERIFIED") process.exitCode = 1;
+}
+
+export async function historicalSummaryQualification(): Promise<void> {
 	const args = process.argv.slice(2);
 	let recordVersion: string | undefined;
 	const paths: string[] = [];

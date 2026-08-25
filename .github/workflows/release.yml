@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - 'v*'
-    branches:
-      - main
 
 permissions:
   contents: write
@@ -30,17 +28,10 @@ jobs:
           tag="v${version}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "${tag}" ]]; then
+          if [[ "${GITHUB_REF_NAME}" != "${tag}" ]]; then
             echo "::error::Release tag/version mismatch: tag=${GITHUB_REF_NAME}, package.json=${version}."
             exit 1
           fi
-
-          if [[ "${GITHUB_REF_TYPE}" == "branch" ]] && git ls-remote --exit-code --tags origin "refs/tags/${tag}" >/dev/null; then
-            echo "Tag ${tag} already exists; skipping release on main."
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
           echo "publish=true" >> "$GITHUB_OUTPUT"
 
   release:
@@ -86,8 +77,20 @@ jobs:
         run: |
           set -euo pipefail
           bun pm pack --destination .
+
+      - name: Verify exact VERIFIED V2 artifact decision
+        shell: bash
+        run: |
+          set -euo pipefail
           tarball="$(ls opencode-plugin-flow-*.tgz)"
+          bun run release:metadata -- --tag "${{ needs.decide.outputs.tag }}" --notes-file release-notes.md --artifact "$tarball"
           shasum -a 256 "$tarball" > "${tarball}.sha256"
+
+      # Temporary Phase 5 stop: the exact manual OpenCode canary is owned by Phase 9.
+      - name: Require Phase 9 canary
+        run: |
+          echo "::error::Release blocked: canary-not-enabled until Phase 9 release alignment is implemented."
+          exit 1
 
       - name: Publish to npm
         shell: bash

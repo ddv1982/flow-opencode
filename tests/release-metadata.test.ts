@@ -27,6 +27,29 @@ async function recordDirectory(): Promise<string> {
 }
 
 const VERSION = "6.0.0";
+const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
+const artifact = (packageVersion: string) => ({
+	packageVersion,
+	sourceCommit: "commit",
+	sourceTreeSha256: digest("a"),
+	tarballSha256: digest("b"),
+	unpackedManifestSha256: digest("c"),
+});
+const decisionRecord = (packageVersion: string, verdict = "VERIFIED") => ({
+	schemaVersion: 1,
+	reportId: "report",
+	verdict,
+	artifact: artifact(packageVersion),
+	reportSha256: digest("d"),
+	artifactSha256: digest("e"),
+	evaluatorSha256: digest("f"),
+	catalogSha256: digest("9"),
+	policySha256: digest("0"),
+	actorSha256: digest("1"),
+	analyzerSha256: digest("2"),
+	expectedProvenanceSha256: digest("3"),
+	decisionInputSha256: digest("4"),
+});
 const exactChangelog = [
 	"# Changelog",
 	"",
@@ -83,7 +106,7 @@ describe("release metadata", () => {
 	test("refuses a major release with no qualification record", async () => {
 		const directory = await recordDirectory();
 		await expect(assertQualificationRecord("7.0.0", directory)).rejects.toThrow(
-			/no qualification record exists for 7\.0\.0/,
+			/no exact VERIFIED v2 decision record exists/,
 		);
 		await expect(
 			assertQualificationRecord("7.1.0", directory),
@@ -93,11 +116,11 @@ describe("release metadata", () => {
 		).resolves.toBeUndefined();
 	});
 
-	test("accepts a matching QUALIFIED record and refuses mismatches", async () => {
+	test("accepts only an exact VERIFIED v2 record and refuses mismatches", async () => {
 		const directory = await recordDirectory();
 		await writeFile(
-			join(directory, "7.0.0.json"),
-			JSON.stringify({ version: "7.0.0", verdict: "QUALIFIED" }),
+			join(directory, "report.json"),
+			JSON.stringify(decisionRecord("7.0.0")),
 		);
 		await expect(
 			assertQualificationRecord("7.0.0", directory),
@@ -108,21 +131,30 @@ describe("release metadata", () => {
 		);
 		expect(
 			qualificationRecordIssue("8.0.0", {
-				version: "7.0.0",
-				verdict: "QUALIFIED",
+				...decisionRecord("7.0.0"),
 			}),
-		).toMatch(/names 7\.0\.0, not 8\.0\.0/);
+		).toMatch(/artifact names 7\.0\.0, not 8\.0\.0/);
 		expect(
 			qualificationRecordIssue("8.0.0", {
-				version: "8.0.0",
-				verdict: "NOT QUALIFIED",
+				...decisionRecord("8.0.0", "NOT VERIFIED"),
 			}),
-		).toMatch(/not QUALIFIED/);
+		).toMatch(/not VERIFIED/);
 		expect(
 			qualificationRecordIssue("8.0.0", {
-				version: "8.0.0",
-				verdict: "QUALIFIED",
+				...decisionRecord("8.0.0"),
 			}),
 		).toBeNull();
+		expect(
+			qualificationRecordIssue("8.0.0", decisionRecord("8.0.0"), {
+				...artifact("8.0.0"),
+				tarballSha256: digest("9"),
+			}),
+		).toMatch(/does not match the rebuilt artifact/);
+		expect(
+			qualificationRecordIssue("8.0.0", {
+				...decisionRecord("8.0.0"),
+				analyzerSha256: "sha256:short",
+			}),
+		).toMatch(/missing v2 decision digests/);
 	});
 });

@@ -109,9 +109,9 @@ function releaseExpected(report: ValidatedReport): ReleaseExpectedProvenance {
 		kind: "release",
 		artifact: first.artifact,
 		evaluator: first.evaluator,
-		hostConfigSha256: first.hostConfigSha256,
 		attempts: report.attempts.map((attempt) => ({
 			cellId: attempt.cellId,
+			hostConfigSha256: attempt.hostConfigSha256,
 			actors: attempt.actors.map(expectedActor),
 			instructions: attempt.instructions,
 		})),
@@ -452,9 +452,9 @@ function pairedExpected(report: ValidatedReport): PairedExpectedProvenance {
 		kind: "paired",
 		artifacts: [V2_ARTIFACT_A, V2_ARTIFACT_B],
 		evaluator: first.evaluator,
-		hostConfigSha256: first.hostConfigSha256,
 		attempts: report.attempts.map((attempt) => ({
 			cellId: attempt.cellId,
+			hostConfigSha256: attempt.hostConfigSha256,
 			actors: attempt.actors.map(expectedActor),
 			instructions: attempt.instructions,
 		})),
