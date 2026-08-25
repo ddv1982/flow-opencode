@@ -17,12 +17,14 @@ import {
 	compileFlowPromptSurface,
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
+import { canonicalSha256 } from "./canonical-json.js";
 import {
 	buildCassette,
 	type Cassette,
 	cassetteFileName,
 	type FidelityNote,
 } from "./cassette.js";
+import { parseCaseCatalog, type ValidatedCaseCatalog } from "./catalog.js";
 import {
 	askedQuestions,
 	askedScoring,
@@ -57,11 +59,17 @@ import {
 	tarballSha256,
 } from "./provenance.js";
 import type {
+	ActorIdentity,
 	ArtifactIdentity,
+	AttemptRecordV2,
+	CampaignCompletion,
+	CampaignPlan,
 	EvaluatorIdentity,
 	InstructionDelivery,
 	ModelIdentity,
 } from "./report.js";
+import { campaignPlanSha256 } from "./report.js";
+import { createReportStore } from "./report-store.js";
 import { SCENARIOS } from "./scenarios.js";
 
 const SURFACES: FlowPromptSurfaceName[] = [
@@ -179,6 +187,161 @@ function legacyRequestedModel(modelId: string): ModelIdentity {
 		family: routedModel,
 		revision: null,
 	});
+}
+
+const V2_ANALYSIS_DIGEST = canonicalSha256("flow-v2-analysis-v1", {
+	kind: "rate",
+	primaryOutcome: "conformance-pass",
+});
+
+function caseCatalogFor(
+	scenarios: readonly (typeof SCENARIOS)[number][],
+): ValidatedCaseCatalog {
+	const parsed = parseCaseCatalog(
+		scenarios.map((scenario) => ({
+			caseId: scenario.id,
+			caseVersion: 1,
+			evidenceClass: "conformance" as const,
+			oracle: "durable-state" as const,
+			release: "report-only" as const,
+			minProviders: 1,
+			minScoredAttempts: 1,
+			minPassRate: 1,
+			reviewerPromotionRecordSha256: null,
+		})),
+	);
+	if (!parsed.ok) {
+		throw new Error(
+			`Could not construct v2 scenario catalog: ${parsed.issues
+				.map((issue) => issue.message)
+				.join("; ")}`,
+		);
+	}
+	return parsed.value;
+}
+
+function campaignPlanFor(input: {
+	readonly models: readonly string[];
+	readonly scenarios: readonly (typeof SCENARIOS)[number][];
+	readonly repeat: number;
+	readonly opencodeVersion: string;
+}): CampaignPlan {
+	const cells = input.models.flatMap((model, modelIndex) =>
+		input.scenarios.flatMap((scenario, scenarioIndex) =>
+			Array.from({ length: input.repeat }, (_, repetition) => {
+				const slot =
+					modelIndex * input.scenarios.length * input.repeat +
+					scenarioIndex * input.repeat +
+					repetition;
+				const identity = canonicalSha256("flow-v2-cell-v1", {
+					model,
+					scenario: scenario.id,
+					repetition,
+				});
+				return {
+					cellId: `cell-${identity.slice("sha256:".length)}`,
+					blockId: `block-${slot}`,
+					caseId: scenario.id,
+					caseVersion: 1,
+					armToken: null,
+					repetition,
+					managerModel: legacyRequestedModel(model),
+					reviewerModel: null,
+					schedule: "primary" as const,
+				};
+			}),
+		),
+	);
+	const plan = {
+		schemaVersion: 1 as const,
+		planId: "flow-v2-primary-matrix",
+		planSha256: `sha256:${"0".repeat(64)}`,
+		randomizationSeed: canonicalSha256("flow-v2-seed-v1", {
+			models: input.models,
+			scenarios: input.scenarios.map((scenario) => scenario.id),
+			repeat: input.repeat,
+			opencodeVersion: input.opencodeVersion,
+		}),
+		cells,
+		abortPolicy: { retry: "never" as const, maxReplacementBlocks: 0 },
+		stoppingRule: {
+			kind: "fixed-attempts" as const,
+			count: cells.length,
+		},
+		analysis: {
+			kind: "rate" as const,
+			primaryOutcome: "conformance-pass",
+			versionSha256: V2_ANALYSIS_DIGEST,
+		},
+		budget: {
+			maxUsd: null,
+			unknownCostPolicy: "token-wall-clock-bounds" as const,
+			maxOutputTokens: Math.max(1, cells.length) * 200_000,
+			maxWallClockMs: Math.max(1, cells.length) * 20 * 60_000,
+			maxAttempts: cells.length,
+		},
+	};
+	plan.planSha256 = campaignPlanSha256(plan);
+	return plan;
+}
+
+function reportActor(
+	actor: RunResult["provenance"]["actors"][number],
+): ActorIdentity | null {
+	if (actor.sessionIds.length === 0) return null;
+	const actualModel =
+		actor.actualModel.kind === "observed"
+			? {
+					kind: "unobserved" as const,
+					reason: `Host observed providerID=${actor.actualModel.value.providerID} modelID=${actor.actualModel.value.modelID}; full family, gateway, and revision identity is unavailable.`,
+				}
+			: actor.actualModel;
+	return {
+		role: actor.role,
+		requestedModel: actor.requestedModel,
+		actualModel,
+		sessionIds: [...actor.sessionIds],
+	};
+}
+
+function attemptOutcome(result: RunResult): AttemptRecordV2["outcome"] {
+	if (result.environment || result.error !== undefined) {
+		return {
+			kind: "failure",
+			origin: "host",
+			code: result.environment ? "environment" : "attempt-error",
+			retryable: true,
+		};
+	}
+	if (result.unscored) {
+		return {
+			kind: "unscored-escalation",
+			reason:
+				result.questions[0] ?? "The model escalated without a scored outcome.",
+		};
+	}
+	return {
+		kind: "product",
+		passed: result.passed,
+		endedBy: result.escalated ? "user-escalation" : "quiet",
+		issues: result.passed
+			? []
+			: result.issues.length > 0
+				? [...result.issues]
+				: ["The scenario did not satisfy its durable-state checks."],
+		evidence: {
+			kind: "conformance",
+			falseCompletion: result.honesty.falseCompletion,
+			unsubmittedReviews: result.reviewer.unsubmitted,
+			facts: {
+				scenario: result.scenario,
+				model: result.model,
+				attempt: result.attempt,
+				flowCalls: result.flowCalls.length,
+				guidanceLoads: result.provenance.instructions.length,
+			},
+		},
+	};
 }
 
 /** One attempt to run, and the slot its result belongs in. */
@@ -437,6 +600,25 @@ async function main(): Promise<void> {
 	);
 
 	const packDir = await mkdtemp(join(tmpdir(), "flow-eval-pack-"));
+	const reportDir = join(repositoryRoot, "evals", "results");
+	await mkdir(reportDir, { recursive: true });
+	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+	const v2Directory = join(reportDir, `${stamp}.v2`);
+	const v2Catalog = caseCatalogFor(selected);
+	const v2Plan = campaignPlanFor({
+		models,
+		scenarios: selected,
+		repeat,
+		opencodeVersion,
+	});
+	const reportStore = createReportStore({
+		directory: v2Directory,
+		catalog: v2Catalog,
+	});
+	await reportStore.initialize(v2Plan);
+	const campaignStartedAt = new Date().toISOString();
+	const campaignCells = v2Plan.cells;
+	const v2Attempts: AttemptRecordV2[] = [];
 	const results: RunResult[] = [];
 	// One decision-layer recording per attempt that reached the model, so the run's
 	// findings can be re-derived against a changed runtime without paying again.
@@ -459,7 +641,7 @@ async function main(): Promise<void> {
 					freshSession: step.freshSession === true,
 				})),
 			})),
-			policyCatalog: { models, repeat, opencodeVersion },
+			policyCatalog: v2Catalog,
 			graderBundle: { sourceTreeSha256: artifact.sourceTreeSha256 },
 		});
 		const packageCache = await preparePackageCache(tarball, packDir);
@@ -467,6 +649,67 @@ async function main(): Promise<void> {
 			throw new Error("Packed artifact changed before host installation.");
 		}
 		await preflight(packageCache, opencodeVersion, models);
+		const persistV2Attempt = async (
+			result: RunResult,
+			cell: CampaignPlan["cells"][number],
+			scenario: (typeof SCENARIOS)[number],
+		): Promise<void> => {
+			const attemptId = `attempt-${cell.cellId}`;
+			const storedTranscript = await reportStore.writeTranscript({
+				attemptId,
+				text: result.provenance.transcript.text,
+			});
+			if (storedTranscript.sha256 !== result.provenance.transcript.sha256) {
+				throw new Error(
+					"Persisted transcript does not match provenance digest.",
+				);
+			}
+			const commandInstructions = scenario.steps.map((step, sequence) =>
+				instructionDelivery({
+					source: "command",
+					name: step.command,
+					sequence,
+					text: `/${step.command} ${step.arguments}`.trim(),
+				}),
+			);
+			const guidanceInstructions = result.provenance.instructions.map(
+				(instruction, sequence) => ({
+					...instruction,
+					sequence: commandInstructions.length + sequence,
+				}),
+			);
+			const instructions = [...commandInstructions, ...guidanceInstructions];
+			const actors = result.provenance.actors
+				.map(reportActor)
+				.filter((actor): actor is ActorIdentity => actor !== null);
+			const attemptRecord: AttemptRecordV2 = {
+				schemaVersion: 2,
+				attemptId,
+				cellId: cell.cellId,
+				blockId: cell.blockId,
+				caseId: cell.caseId,
+				caseVersion: cell.caseVersion,
+				armToken: cell.armToken,
+				repetition: cell.repetition,
+				artifact: result.provenance.artifact,
+				evaluator: result.provenance.evaluator,
+				hostConfigSha256: result.provenance.hostConfigSha256,
+				actors,
+				instructions: [...instructions],
+				transcript: {
+					sha256: storedTranscript.sha256,
+					artifact: storedTranscript.artifact,
+				},
+				outcome: attemptOutcome(result),
+				usage: {
+					durationMs: result.durationMs,
+					outputTokens: result.tokens.output,
+					costUsd: result.costUsd,
+				},
+			};
+			await reportStore.writeAttempt(attemptRecord);
+			v2Attempts.push(attemptRecord);
+		};
 		// One queue per model, run concurrently. The attempts are already independent —
 		// each boots its own OpenCode host on its own free port over its own temp
 		// workspace — so the sequential loop this replaces was spending 2.5h of wall
@@ -679,6 +922,10 @@ async function main(): Promise<void> {
 										: scoreLabel
 					}`,
 				);
+				const cell = campaignCells[job.slot];
+				if (!cell)
+					throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
+				await persistV2Attempt(result, cell, scenario);
 				return { slot: job.slot, result, cassette };
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
@@ -690,58 +937,63 @@ async function main(): Promise<void> {
 				// Reaching here means the scenario never got a model turn, with one
 				// exception: a host that answered but rejected every turn is thrown
 				// above and is equally not a prompt result.
+				const result: RunResult = {
+					scenario: scenario.id,
+					model,
+					attempt,
+					passed: false,
+					environment: true,
+					issues: [],
+					tokens: {
+						input: 0,
+						output: 0,
+						reasoning: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+					},
+					costUsd: null,
+					assistantMessages: 0,
+					flowCalls: [],
+					sessionBoundaries: [],
+					documents: [],
+					honesty: completionHonesty(null),
+					reviewer: reviewerActivity([]),
+					operational: operationalMetrics([], {
+						flowCalls: [],
+						assistantMessages: 0,
+						durationMs: Date.now() - started,
+					}),
+					refusedBroadScope: 0,
+					guidanceSkips: 0,
+					finalText: "",
+					questions: [],
+					durationMs: Date.now() - started,
+					hostError: null,
+					provenance: {
+						artifact,
+						evaluator,
+						hostConfigSha256: hostConfigSha256({
+							opencodeVersion,
+							plugin: `opencode-plugin-flow@${packageJson.version}`,
+							model,
+							reviewerModel: requestedReviewerModel,
+							reviewerSteps: requestedReviewerSteps,
+							platform: hostPlatform,
+						}),
+						actors: [],
+						instructions: [],
+						transcript,
+					},
+					error: message,
+				};
+				const cell = campaignCells[job.slot];
+				if (!cell)
+					throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
+				await persistV2Attempt(result, cell, scenario);
 				return {
 					slot: job.slot,
 					cassette,
-					result: {
-						scenario: scenario.id,
-						model,
-						attempt,
-						passed: false,
-						environment: true,
-						issues: [],
-						tokens: {
-							input: 0,
-							output: 0,
-							reasoning: 0,
-							cacheRead: 0,
-							cacheWrite: 0,
-						},
-						costUsd: null,
-						assistantMessages: 0,
-						flowCalls: [],
-						sessionBoundaries: [],
-						documents: [],
-						honesty: completionHonesty(null),
-						reviewer: reviewerActivity([]),
-						operational: operationalMetrics([], {
-							flowCalls: [],
-							assistantMessages: 0,
-							durationMs: Date.now() - started,
-						}),
-						refusedBroadScope: 0,
-						guidanceSkips: 0,
-						finalText: "",
-						questions: [],
-						durationMs: Date.now() - started,
-						hostError: null,
-						provenance: {
-							artifact,
-							evaluator,
-							hostConfigSha256: hostConfigSha256({
-								opencodeVersion,
-								plugin: `opencode-plugin-flow@${packageJson.version}`,
-								model,
-								reviewerModel: requestedReviewerModel,
-								reviewerSteps: requestedReviewerSteps,
-								platform: hostPlatform,
-							}),
-							actors: [],
-							instructions: [],
-							transcript,
-						},
-						error: message,
-					},
+					result,
 				};
 			} finally {
 				await host?.stop();
@@ -758,6 +1010,51 @@ async function main(): Promise<void> {
 	} finally {
 		await rm(packDir, { recursive: true, force: true });
 	}
+	const v2Complete =
+		results.length === v2Plan.cells.length &&
+		v2Attempts.length === v2Plan.cells.length &&
+		v2Attempts.every((attempt) => attempt.outcome.kind === "product");
+	const v2CostUsd = v2Attempts.some((attempt) => attempt.usage.costUsd === null)
+		? null
+		: v2Attempts.reduce(
+				(total, attempt) => total + (attempt.usage.costUsd ?? 0),
+				0,
+			);
+	const v2FinishedAt = new Date().toISOString();
+	const v2Completion: CampaignCompletion = {
+		status: v2Complete ? "complete" : "stopped",
+		cause: v2Complete
+			? "fixed-target"
+			: results.some(
+						(result) => result.environment || result.error !== undefined,
+					)
+				? "host"
+				: results.some((result) => result.unscored)
+					? "operator"
+					: "evaluator",
+		startedAt: campaignStartedAt,
+		finishedAt: v2FinishedAt,
+		activatedReserveCellIds: [],
+		observed: {
+			attempts: v2Attempts.length,
+			outputTokens: v2Attempts.reduce(
+				(total, attempt) => total + attempt.usage.outputTokens,
+				0,
+			),
+			costUsd: v2CostUsd,
+			wallClockMs: Math.max(
+				Date.parse(v2FinishedAt) - Date.parse(campaignStartedAt),
+				...v2Attempts.map((attempt) => attempt.usage.durationMs),
+			),
+		},
+	};
+	await reportStore.finalize({
+		reportId: `flow-v2-${stamp}`,
+		completion: v2Completion,
+		allocationCommitmentSha256: null,
+	});
+	const v2ReportPath = join(v2Directory, "report.json");
+	console.log(`V2 report: ${v2ReportPath}`);
 
 	console.log(`\n${formatTable(results)}\n`);
 	// An abort is excluded for the same reason an allowed ask is: the run never
@@ -889,9 +1186,6 @@ async function main(): Promise<void> {
 		);
 	}
 
-	const reportDir = join(repositoryRoot, "evals", "results");
-	await mkdir(reportDir, { recursive: true });
-	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 	const reportPath = join(reportDir, `${stamp}.json`);
 	await writeFile(
 		reportPath,
