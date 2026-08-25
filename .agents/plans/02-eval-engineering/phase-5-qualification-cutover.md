@@ -38,3 +38,5 @@ The old implicit newest-report command must fail with a usage error.
 Stop gate. Complete the throughput checkpoint in the overview before adding new
 evidence families. Publication must already be inside the new decision system,
 even though it remains disabled until Phase 9 adds canary evidence.
+
+Evidence. [Interrogate and throughput checkpoint](evidence/phase-5-review.md).
