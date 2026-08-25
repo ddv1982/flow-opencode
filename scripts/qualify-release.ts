@@ -17,7 +17,7 @@
 // and the reasoning.
 
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import {
 	deriveReleaseDecision,
 	type ExpectedActorProvenance,
@@ -35,7 +35,11 @@ import {
 	parseReport,
 	type ValidatedReport,
 } from "../evals/report.js";
-import { isMajorRelease } from "./release-metadata.js";
+import {
+	type CanaryRecord,
+	canaryRecordIssue as verifyCanaryRecord,
+} from "./eval-canary.js";
+import { canaryRecordIssue, isMajorRelease } from "./release-metadata.js";
 
 export type DecisionRecord = {
 	readonly schemaVersion: 1;
@@ -50,6 +54,7 @@ export type DecisionRecord = {
 	readonly analyzerSha256: string;
 	readonly expectedProvenanceSha256: string;
 	readonly decisionInputSha256: string;
+	readonly canarySha256: string | null;
 	readonly artifact: ArtifactIdentity;
 	readonly reasons: readonly string[];
 };
@@ -517,11 +522,13 @@ export function qualifyV2(input: {
 	readonly reportInput: unknown;
 	readonly catalogInput: unknown;
 	readonly artifact: ArtifactIdentity;
+	readonly canary?: CanaryRecord | null;
 }): {
 	readonly report: ValidatedReport;
 	readonly catalog: ValidatedCaseCatalog;
 	readonly decision: ReleaseDecision;
 	readonly expected: ReleaseExpectedProvenance;
+	readonly canary: CanaryRecord | null;
 } {
 	const catalog = parseCaseCatalog(input.catalogInput);
 	if (!catalog.ok) {
@@ -540,6 +547,14 @@ export function qualifyV2(input: {
 		);
 	}
 	const expected = expectedProvenanceFor(parsed.value, input.artifact);
+	if (input.canary) {
+		const canaryIssue = canaryRecordIssue(
+			input.artifact.packageVersion,
+			input.canary,
+			input.artifact,
+		);
+		if (canaryIssue) throw new Error(canaryIssue);
+	}
 	return {
 		report: parsed.value,
 		catalog: catalog.value,
@@ -549,6 +564,7 @@ export function qualifyV2(input: {
 			catalog: catalog.value,
 			expected,
 		}),
+		canary: input.canary ?? null,
 	};
 }
 
@@ -557,6 +573,7 @@ export function decisionRecordFor(input: {
 	readonly catalog: ValidatedCaseCatalog;
 	readonly expected: ReleaseExpectedProvenance;
 	readonly decision: ReleaseDecision;
+	readonly canarySha256?: string | null;
 }): DecisionRecord {
 	const reportSha256 = canonicalSha256("flow-decision-report-v1", input.report);
 	const artifactSha256 = canonicalSha256(
@@ -599,6 +616,7 @@ export function decisionRecordFor(input: {
 		actorSha256,
 		analyzerSha256,
 		expectedProvenanceSha256,
+		canarySha256: input.canarySha256 ?? null,
 	});
 	return {
 		schemaVersion: 1,
@@ -612,6 +630,7 @@ export function decisionRecordFor(input: {
 		actorSha256,
 		analyzerSha256,
 		expectedProvenanceSha256,
+		canarySha256: input.canarySha256 ?? null,
 		decisionInputSha256,
 		artifact: input.expected.artifact,
 		reasons: input.decision.reasons.map((reason) => reason.message),
@@ -623,8 +642,19 @@ export async function writeDecisionRecord(input: {
 	readonly directory: string;
 }): Promise<string> {
 	await mkdir(input.directory, { recursive: true });
-	const path = join(input.directory, `${input.record.reportId}.json`);
-	await writeFile(path, canonicalJson(input.record), "utf8");
+	const suffix = input.record.canarySha256
+		? `-canary-${input.record.canarySha256.slice("sha256:".length, "sha256:".length + 12)}`
+		: "";
+	const path = join(input.directory, `${input.record.reportId}${suffix}.json`);
+	const bytes = canonicalJson(input.record);
+	try {
+		await writeFile(path, bytes, { encoding: "utf8", flag: "wx" });
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+		if ((await readFile(path, "utf8")) !== bytes) {
+			throw new Error(`Immutable decision record conflicts: ${path}`);
+		}
+	}
 	return path;
 }
 
@@ -635,7 +665,7 @@ function requiredOption(
 	const value = options[name];
 	if (!value) {
 		throw new Error(
-			"Usage: bun run qualify -- --report <v2-report.json> --catalog <catalog.json> --artifact <artifact.tgz> [--decisions-dir <dir>]",
+			"Usage: bun run qualify -- --report <v2-report.json> --catalog <catalog.json> --artifact <artifact.tgz> [--canary <canary.json>] [--decisions-dir <dir>]",
 		);
 	}
 	return value;
@@ -650,10 +680,11 @@ async function main(): Promise<void> {
 			option !== "--report" &&
 			option !== "--catalog" &&
 			option !== "--artifact" &&
+			option !== "--canary" &&
 			option !== "--decisions-dir"
 		) {
 			throw new Error(
-				"Usage: bun run qualify -- --report <v2-report.json> --catalog <catalog.json> --artifact <artifact.tgz> [--decisions-dir <dir>]",
+				"Usage: bun run qualify -- --report <v2-report.json> --catalog <catalog.json> --artifact <artifact.tgz> [--canary <canary.json>] [--decisions-dir <dir>]",
 			);
 		}
 		const value = args[index + 1];
@@ -669,12 +700,28 @@ async function main(): Promise<void> {
 		repositoryRoot: join(import.meta.dir, ".."),
 		tarballPath: artifactPath,
 	});
+	const canary = options["--canary"]
+		? (JSON.parse(await readFile(options["--canary"], "utf8")) as CanaryRecord)
+		: null;
+	if (canary && options["--canary"]) {
+		const canaryIssue = await verifyCanaryRecord({
+			version: artifact.packageVersion,
+			record: canary,
+			expectedArtifact: artifact,
+			directory: dirname(options["--canary"]),
+		});
+		if (canaryIssue) throw new Error(canaryIssue);
+	}
 	const result = qualifyV2({
 		reportInput: JSON.parse(await readFile(reportPath, "utf8")),
 		catalogInput: JSON.parse(await readFile(catalogPath, "utf8")),
 		artifact,
+		canary,
 	});
-	const record = decisionRecordFor(result);
+	const record = decisionRecordFor({
+		...result,
+		canarySha256: result.canary?.recordSha256 ?? null,
+	});
 	const path = await writeDecisionRecord({
 		record,
 		directory:

@@ -636,7 +636,14 @@ describe("v2 qualification cutover", () => {
 			analyzerSha256: expect.stringMatching(/^sha256:/),
 			expectedProvenanceSha256: expect.stringMatching(/^sha256:/),
 			decisionInputSha256: expect.stringMatching(/^sha256:/),
+			canarySha256: null,
 		});
+		const canaryBound = decisionRecordFor({
+			...verified,
+			canarySha256: digest("9"),
+		});
+		expect(canaryBound.canarySha256).toBe(digest("9"));
+		expect(canaryBound.decisionInputSha256).not.toBe(first.decisionInputSha256);
 
 		const notVerified = qualifyV2({
 			reportInput: v2Report(),

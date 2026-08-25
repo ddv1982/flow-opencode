@@ -504,12 +504,17 @@ describe("Flow documentation contract", () => {
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
 		expect(combined).toContain("npm publish");
 		const release = await readFile(".github/workflows/release.yml", "utf8");
-		expect(release).toMatch(/^ {2}push:\n {4}tags:/m);
-		expect(release).not.toContain("branches:");
+		expect(release).toMatch(/^ {2}push:\n {4}branches:/m);
+		expect(release).toContain("tags:");
 		expect(release).toContain('tag="v${version}"');
 		expect(release).toContain('--target "${GITHUB_SHA}"');
-		expect(release).toContain("Verify exact VERIFIED V2 artifact decision");
-		expect(release).toContain("canary-not-enabled");
+		expect(release).toContain(
+			"Verify exact VERIFIED V2 artifact decision and fresh canary",
+		);
+		expect(release).toContain("bun run eval:canary -- verify");
+		expect(release).toContain("--mode dry-run");
+		expect(release).toContain("evals/canary/${version}.json");
+		expect(release).not.toContain("canary-not-enabled");
 
 		// Model-driven evals need credentials and cost real money, so they run on a
 		// schedule and never on a pull request. `evals.yml` is the one workflow allowed
@@ -537,7 +542,7 @@ describe("Flow documentation contract", () => {
 				await readFile(join(".github/workflows", gate), "utf8"),
 				gate,
 			).not.toMatch(
-				/harness|lifecycle-soak|cross-version|replay-report|prompt:model-eval|bun run eval/i,
+				/harness|lifecycle-soak|cross-version|replay-report|prompt:model-eval|bun run eval(?:\s|$)/i,
 			);
 		}
 	});
