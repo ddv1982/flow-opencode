@@ -24,6 +24,17 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import {
+	extractObservedActor,
+	guidanceLoad,
+	isRecord,
+	nonEmptyString,
+	type ObservedActor,
+	type ObservedGuidanceLoad,
+	type ObservedSession,
+	reviewerActorObservation,
+	selectLineageValidatedReviewers,
+} from "./host-observation.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -118,6 +129,10 @@ export type Outcome = {
 	readonly flowCalls: readonly ObservedToolCall[];
 	/** Every tool call, including host tools like bash/edit/task. */
 	readonly allCalls: readonly ObservedToolCall[];
+	/** Actor identity observations from completed, non-error assistant messages. */
+	readonly actors?: readonly ObservedActor[];
+	/** Raw delivered flow_guidance output, with its measured UTF-8 size. */
+	readonly guidanceLoads?: readonly ObservedGuidanceLoad[];
 	/** Parsed `.flow/session.json`, or null when no active session exists. */
 	readonly session: Record<string, unknown> | null;
 	/** Parsed documents under `.flow/history/`. */
@@ -884,6 +899,9 @@ type MessageEntry = {
 	info: {
 		role: string;
 		agent?: string;
+		model?: { providerID?: unknown; modelID?: unknown };
+		providerID?: unknown;
+		modelID?: unknown;
 		time?: { created: number; completed?: number };
 		error?: unknown;
 		cost?: number;
@@ -907,6 +925,10 @@ type MessageEntry = {
 			metadata?: Record<string, unknown>;
 		};
 	}[];
+};
+
+type SessionMessages = ObservedSession & {
+	readonly messages: readonly MessageEntry[] | null;
 };
 
 /**
@@ -1310,33 +1332,43 @@ export class EvalHost {
 	 * A host that does not expose children yields nothing rather than failing —
 	 * losing the subtask transcript is a smaller loss than losing the run.
 	 */
-	private async descendantSessions(
-		sessionIds: readonly string[],
-	): Promise<string[]> {
+	private async descendantSessions(sessionIds: readonly string[]): Promise<{
+		readonly sessions: readonly ObservedSession[];
+		readonly endpointFailed: boolean;
+	}> {
 		const known = new Set(sessionIds);
-		const found: string[] = [];
+		const found: ObservedSession[] = [];
+		let endpointFailed = false;
 		let frontier = [...sessionIds];
 		while (frontier.length > 0) {
 			const next: string[] = [];
 			for (const parent of frontier) {
-				let children: { id?: string }[];
+				let children: unknown;
 				try {
-					children = (await fetchJson(
+					children = await fetchJson(
 						`${this.baseUrl}/session/${parent}/children`,
-					)) as { id?: string }[];
+					);
 				} catch {
+					endpointFailed = true;
 					continue;
 				}
 				for (const child of Array.isArray(children) ? children : []) {
-					if (typeof child.id !== "string" || known.has(child.id)) continue;
-					known.add(child.id);
-					found.push(child.id);
-					next.push(child.id);
+					if (!isRecord(child)) continue;
+					const id = nonEmptyString(child.id);
+					if (!id || known.has(id)) continue;
+					const childSession: ObservedSession = {
+						id,
+						agent: nonEmptyString(child.agent),
+						parentID: nonEmptyString(child.parentID),
+					};
+					known.add(id);
+					found.push(childSession);
+					next.push(id);
 				}
 			}
 			frontier = next;
 		}
-		return found;
+		return { sessions: found, endpointFailed };
 	}
 
 	/**
@@ -1356,19 +1388,27 @@ export class EvalHost {
 		sessionIds: readonly string[],
 		durationMs: number,
 	): Promise<Outcome> {
-		const ordered = [
-			...sessionIds,
-			...(await this.descendantSessions(sessionIds)),
+		const descendantResult = await this.descendantSessions(sessionIds);
+		const descendants = descendantResult.sessions;
+		const sessionRecords: readonly ObservedSession[] = [
+			...sessionIds.map((id) => ({ id, agent: null, parentID: null })),
+			...descendants,
 		];
+		const ordered = sessionRecords.map((session) => session.id);
 		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
+		const sessionMessages: SessionMessages[] = [];
 		for (const [sessionIndex, sessionId] of ordered.entries()) {
-			let entries: MessageEntry[];
+			let entries: MessageEntry[] | null;
 			try {
 				entries = (await this.messages(sessionId)) as MessageEntry[];
 			} catch {
-				continue;
+				entries = null;
 			}
-			for (const entry of entries) messages.push({ sessionIndex, entry });
+			const session = sessionRecords[sessionIndex];
+			if (session) sessionMessages.push({ ...session, messages: entries });
+			if (entries) {
+				for (const entry of entries) messages.push({ sessionIndex, entry });
+			}
 		}
 		messages.sort(
 			(left, right) =>
@@ -1388,6 +1428,8 @@ export class EvalHost {
 		let assistantMessages = 0;
 		let hostError: string | null = null;
 		let finalText = "";
+		const guidanceLoads: ObservedGuidanceLoad[] = [];
+		let guidanceSequence = 0;
 
 		for (const { sessionIndex, entry } of messages) {
 			if (entry.info.role === "assistant") {
@@ -1450,12 +1492,55 @@ export class EvalHost {
 					rawOutput: raw,
 					metadata: part.state?.metadata ?? {},
 				});
+				if (part.tool === "flow_guidance") {
+					const input = part.state?.input ?? {};
+					guidanceLoads.push(
+						guidanceLoad({
+							sequence: guidanceSequence,
+							sessionIndex,
+							agent: entry.info.agent ?? "",
+							id: nonEmptyString(input.id),
+							rawOutput: raw,
+						}),
+					);
+					guidanceSequence += 1;
+				}
 			}
 		}
+		const parentSessions = sessionMessages.filter((session) =>
+			sessionIds.includes(session.id),
+		);
+		const reviewerSessions = selectLineageValidatedReviewers(
+			sessionIds,
+			descendants,
+		);
+		const reviewerActor = reviewerActorObservation({
+			childEndpointFailed: descendantResult.endpointFailed,
+			sessions: reviewerSessions.flatMap((session) => {
+				const messagesForSession = sessionMessages.find(
+					(candidate) => candidate.id === session.id,
+				);
+				return messagesForSession
+					? [{ id: session.id, messages: messagesForSession.messages }]
+					: [];
+			}),
+		});
+		const actors: readonly ObservedActor[] = [
+			extractObservedActor({
+				role: "manager",
+				sessions: parentSessions.map((session) => ({
+					id: session.id,
+					messages: session.messages,
+				})),
+			}),
+			reviewerActor,
+		];
 
 		return {
 			allCalls,
 			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
+			actors,
+			guidanceLoads,
 			session: await this.readJson(join(this.project, ".flow", "session.json")),
 			archives: await this.readArchives(),
 			finalText,

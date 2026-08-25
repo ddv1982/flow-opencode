@@ -47,6 +47,21 @@ import {
 	type ReviewerActivity,
 	reviewerActivity,
 } from "./metrics.js";
+import {
+	evaluatorIdentity,
+	hostConfigSha256,
+	inspectArtifact,
+	instructionDelivery,
+	normalizeRequestedModel,
+	redactTranscript,
+	tarballSha256,
+} from "./provenance.js";
+import type {
+	ArtifactIdentity,
+	EvaluatorIdentity,
+	InstructionDelivery,
+	ModelIdentity,
+} from "./report.js";
 import { SCENARIOS } from "./scenarios.js";
 
 const SURFACES: FlowPromptSurfaceName[] = [
@@ -129,6 +144,17 @@ type RunResult = {
 	questions: readonly string[];
 	durationMs: number;
 	hostError: string | null;
+	provenance: {
+		readonly artifact: ArtifactIdentity;
+		readonly evaluator: EvaluatorIdentity;
+		readonly hostConfigSha256: string;
+		readonly actors: readonly (NonNullable<Outcome["actors"]>[number] & {
+			readonly requestedModelId: string;
+			readonly requestedModel: ModelIdentity;
+		})[];
+		readonly instructions: readonly InstructionDelivery[];
+		readonly transcript: { readonly sha256: string; readonly text: string };
+	};
 	error?: string;
 };
 
@@ -143,6 +169,17 @@ type RunResult = {
  * three hours under a twenty-minute cap.
  */
 const MAX_CONCURRENCY = 4;
+
+function legacyRequestedModel(modelId: string): ModelIdentity {
+	const boundary = modelId.indexOf("/");
+	const routedModel = boundary >= 0 ? modelId.slice(boundary + 1) : modelId;
+	return normalizeRequestedModel({
+		modelId,
+		gateway: routedModel.includes("/") ? modelId.slice(0, boundary) : null,
+		family: routedModel,
+		revision: null,
+	});
+}
 
 /** One attempt to run, and the slot its result belongs in. */
 type Job = {
@@ -406,10 +443,29 @@ async function main(): Promise<void> {
 	const cassettes: Cassette[] = [];
 	const hostPlatform = normalizeEvidencePlatform(process.platform);
 	try {
-		const packageCache = await preparePackageCache(
-			await packPlugin(repositoryRoot, packDir),
-			packDir,
-		);
+		const tarball = await packPlugin(repositoryRoot, packDir);
+		const artifact = await inspectArtifact({
+			repositoryRoot,
+			tarballPath: tarball,
+		});
+		const evaluator = evaluatorIdentity({
+			sourceCommit: artifact.sourceCommit,
+			caseCatalog: selected.map((scenario) => ({
+				id: scenario.id,
+				files: Object.keys(scenario.files).sort(),
+				steps: scenario.steps.map((step) => ({
+					command: step.command,
+					arguments: step.arguments,
+					freshSession: step.freshSession === true,
+				})),
+			})),
+			policyCatalog: { models, repeat, opencodeVersion },
+			graderBundle: { sourceTreeSha256: artifact.sourceTreeSha256 },
+		});
+		const packageCache = await preparePackageCache(tarball, packDir);
+		if ((await tarballSha256(tarball)) !== artifact.tarballSha256) {
+			throw new Error("Packed artifact changed before host installation.");
+		}
 		await preflight(packageCache, opencodeVersion, models);
 		// One queue per model, run concurrently. The attempts are already independent —
 		// each boots its own OpenCode host on its own free port over its own temp
@@ -431,6 +487,15 @@ async function main(): Promise<void> {
 		/** One attempt, start to finish, printing a single line when it lands. */
 		const runAttempt = async (job: Job): Promise<Recorded> => {
 			const { model, scenario, attempt } = job;
+			const requestedReviewerModel =
+				process.env.OPENCODE_FLOW_REVIEWER_MODEL?.trim() || model;
+			const reviewerStepsText =
+				process.env.OPENCODE_FLOW_REVIEWER_STEPS?.trim() ?? "";
+			const requestedReviewerSteps =
+				/^[1-9][0-9]*$/.test(reviewerStepsText) &&
+				Number(reviewerStepsText) <= 1000
+					? Number(reviewerStepsText)
+					: null;
 			const label = `${scenario.id} @ ${model} (${attempt}/${repeat})`;
 			let cassette: Cassette | null = null;
 			const started = Date.now();
@@ -502,6 +567,31 @@ async function main(): Promise<void> {
 					...(outcome.session ? [outcome.session] : []),
 					...outcome.archives,
 				] as MetricSession[];
+				const actors = (outcome.actors ?? []).map((actor) => ({
+					...actor,
+					requestedModelId:
+						actor.role === "manager" ? model : requestedReviewerModel,
+					requestedModel: legacyRequestedModel(
+						actor.role === "manager" ? model : requestedReviewerModel,
+					),
+				}));
+				const instructions = (outcome.guidanceLoads ?? []).map((load) =>
+					instructionDelivery({
+						source: "guidance",
+						name: load.id ?? "unknown-guidance",
+						sequence: load.sequence,
+						text: load.rawOutput,
+					}),
+				);
+				const transcript = redactTranscript({
+					projectPath: host.project,
+					value: {
+						actors,
+						guidanceLoads: outcome.guidanceLoads ?? [],
+						calls: outcome.allCalls,
+						finalText: outcome.finalText,
+					},
+				});
 				const result: RunResult = {
 					scenario: scenario.id,
 					model,
@@ -532,6 +622,21 @@ async function main(): Promise<void> {
 					questions: askedQuestions(outcome),
 					durationMs: outcome.durationMs,
 					hostError: outcome.hostError,
+					provenance: {
+						artifact,
+						evaluator,
+						hostConfigSha256: hostConfigSha256({
+							opencodeVersion,
+							plugin: `opencode-plugin-flow@${packageJson.version}`,
+							model,
+							reviewerModel: requestedReviewerModel,
+							reviewerSteps: requestedReviewerSteps,
+							platform: hostPlatform,
+						}),
+						actors,
+						instructions,
+						transcript,
+					},
 				};
 				const fidelity: FidelityNote[] = [];
 				if (stepError) fidelity.push("run-aborted");
@@ -577,6 +682,10 @@ async function main(): Promise<void> {
 				return { slot: job.slot, result, cassette };
 			} catch (error) {
 				const message = error instanceof Error ? error.message : String(error);
+				const transcript = redactTranscript({
+					projectPath: host?.project ?? "",
+					value: { environmentError: message },
+				});
 				console.log(`- ${label} ... ENVIRONMENT (${message.split("\n")[0]})`);
 				// Reaching here means the scenario never got a model turn, with one
 				// exception: a host that answered but rejected every turn is thrown
@@ -616,6 +725,21 @@ async function main(): Promise<void> {
 						questions: [],
 						durationMs: Date.now() - started,
 						hostError: null,
+						provenance: {
+							artifact,
+							evaluator,
+							hostConfigSha256: hostConfigSha256({
+								opencodeVersion,
+								plugin: `opencode-plugin-flow@${packageJson.version}`,
+								model,
+								reviewerModel: requestedReviewerModel,
+								reviewerSteps: requestedReviewerSteps,
+								platform: hostPlatform,
+							}),
+							actors: [],
+							instructions: [],
+							transcript,
+						},
 						error: message,
 					},
 				};
