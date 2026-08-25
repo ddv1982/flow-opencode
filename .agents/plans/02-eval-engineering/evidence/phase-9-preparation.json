@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "status": "incomplete",
+  "reason": "maintainer-run-opencode-canary-pending",
+  "releaseTag": "v8.1.1",
+  "artifact": {
+    "packageVersion": "8.1.1",
+    "sourceCommit": "647729c87d98fd773bc57355b31b2ac6ea7ab958",
+    "sourceTreeSha256": "sha256:cfbda87999aeffcfaaf1571d44ada3155e4ab5812e64c6bc7ac5129d8a3c9dcb",
+    "tarballSha256": "sha256:ea83bd80ae830781cc63983eb3b7138ce4d9e3f8fa21d94a753d16fcb85fcc24",
+    "unpackedManifestSha256": "sha256:60ae7a2de693c735bbace6cc331f556210673ec0e83fbc17d01fe6c752bd430a"
+  },
+  "artifactSha256": "sha256:3e5c3dca41ddeb6424a5f876005db56a2c5a1bb5466b99c148f539f77901d304",
+  "checklistVersion": "phase9-canary-v1",
+  "checklistSha256": "sha256:bcaa925277568ce9b67c50f0785c3bfbadfa5bb40a6f36b39fad63c21a605110",
+  "pluginEntrySha256": "sha256:43ff17acb2d51279e28b806fdb7022b2f5d065bd8ee4ba2ae121542937420dfc",
+  "preparedSha256": "sha256:8fad620fe38ff76a109a11baa5d71d8c045046e8aa840e70fa186b2ff455a844",
+  "fixtureHost": "opencode-1.18.6",
+  "fixtureAutoLoadVerified": true,
+  "fixtureObservedSurfaces": [
+    "flow-reviewer",
+    "flow-auto",
+    "flow-status"
+  ],
+  "dryRunVerdict": "INCONCLUSIVE",
+  "strictTagGateBlocked": true,
+  "expectedCanaryPath": "evals/canary/8.1.1.json",
+  "expectedDecisionState": "VERIFIED with matching non-null canarySha256",
+  "releaseRequested": false
+}

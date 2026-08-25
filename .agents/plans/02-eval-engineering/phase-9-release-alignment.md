@@ -35,3 +35,13 @@ rebuild the same tarball hash and preserve deterministic checks in the publish j
 
 Stop gate. This final phase remains `INCONCLUSIVE` until the maintainer completes
 the canary. It does not block Phases 0 through 8.
+
+## Outcome
+
+Infrastructure implemented and verified. Exact-artifact preparation, strict
+passed/failed/incomplete records, sanitized evidence, expiry, canary-bound decision
+hashes, main dry-run verification, and tag-only strict publication are live. The
+prepared fixture loads Flow on OpenCode 1.18.6. The phase remains `INCONCLUSIVE`
+because the maintainer-run canary and resulting canary-bound decision are pending;
+no release was requested. See `evidence/phase-9-architecture.md`,
+`evidence/phase-9-review.md`, and `evidence/phase-9-preparation.json`.
