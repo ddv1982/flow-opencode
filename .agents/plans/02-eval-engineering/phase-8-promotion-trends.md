@@ -31,3 +31,12 @@ change one compatibility-key field and prove comparison refuses.
 
 Stop gate. Legacy reports are never backfilled. A case becomes a release regression
 only after its calibration predicate is recorded.
+
+## Outcome
+
+Implemented and verified. Five benchmark cases now carry versioned contamination
+notes and twelve executable mutation controls. Structured cards expose missing and
+failed evidence. Strict parsed-report comparisons allow different candidate
+artifacts while refusing case, policy, oracle, evaluator, host, actor, or
+instruction drift. Every case remains report-only and no legacy report is
+backfilled. See `evidence/phase-8-review.md`.
