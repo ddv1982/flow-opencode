@@ -1,8 +1,84 @@
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import { canonicalJson } from "../evals/canonical-json.js";
+import { dirname, join } from "node:path";
+import { canonicalJson, canonicalSha256 } from "../evals/canonical-json.js";
 import { inspectArtifact } from "../evals/provenance.js";
 import type { ArtifactIdentity } from "../evals/report.js";
+import {
+	artifactIdentitySha256,
+	CANARY_CHECKLIST_SHA256,
+	CANARY_CHECKLIST_VERSION,
+	type CanaryRecord,
+	canaryRecordSha256,
+	parseCanaryRecord,
+	canaryRecordIssue as verifyCanaryRecord,
+} from "./eval-canary.js";
+
+export function canaryRecordIssue(
+	version: string,
+	record: unknown,
+	expectedArtifact: ArtifactIdentity,
+	expectedTag = `v${version}`,
+	now = new Date(),
+): string | null {
+	if (!record || typeof record !== "object" || Array.isArray(record))
+		return `no canary record exists for ${version}`;
+	const entry = record as Partial<CanaryRecord>;
+	if (entry.schemaVersion !== 1 || entry.status !== "passed")
+		return `the canary for ${version} is not a passed v1 record`;
+	if (entry.releaseTag !== expectedTag)
+		return `the canary tag ${String(entry.releaseTag)} does not match ${expectedTag}`;
+	if (canonicalJson(entry.artifact) !== canonicalJson(expectedArtifact))
+		return `the canary artifact does not match the rebuilt artifact for ${version}`;
+	const parsed = parseCanaryRecord(record);
+	if (!parsed.ok) return `the canary record for ${version} is invalid`;
+	const { recordSha256: _recordSha256, ...recordWithoutHash } = parsed.value;
+	if (parsed.value.recordSha256 !== canaryRecordSha256(recordWithoutHash))
+		return `the canary record for ${version} has an invalid digest`;
+	if (
+		entry.artifactSha256 !== artifactIdentitySha256(expectedArtifact) ||
+		entry.checklistVersion !== CANARY_CHECKLIST_VERSION ||
+		entry.checklistSha256 !== CANARY_CHECKLIST_SHA256 ||
+		Object.values(entry.checks ?? {}).length === 0 ||
+		Object.values(entry.checks ?? {}).some((passed) => !passed)
+	)
+		return `the canary checklist for ${version} is incomplete or failed`;
+	if (
+		typeof entry.operator !== "string" ||
+		entry.operator.trim() === "" ||
+		typeof entry.hostConfigSha256 !== "string" ||
+		!/^sha256:[a-f0-9]{64}$/.test(entry.hostConfigSha256) ||
+		!Array.isArray(entry.actors) ||
+		entry.actors.length === 0
+	)
+		return `the canary for ${version} is missing operator, host, or actor evidence`;
+	const recorded = Date.parse(entry.recordedAt ?? "");
+	const expires = Date.parse(entry.expiresAt ?? "");
+	if (
+		!Number.isFinite(recorded) ||
+		!Number.isFinite(expires) ||
+		recorded >= expires
+	)
+		return `the canary timestamps for ${version} are invalid`;
+	if (recorded > now.getTime())
+		return `the canary for ${version} is future-dated`;
+	if (expires <= now.getTime()) return `the canary for ${version} is stale`;
+	for (const artifact of [
+		entry.artifacts?.session,
+		entry.artifacts?.transcript,
+	]) {
+		if (
+			!artifact ||
+			typeof artifact.path !== "string" ||
+			artifact.path.startsWith("/") ||
+			artifact.path.split("/").includes("..") ||
+			!/^sha256:[a-f0-9]{64}$/.test(artifact.sha256) ||
+			!Number.isSafeInteger(artifact.bytes) ||
+			artifact.bytes < 0
+		)
+			return `the canary redacted artifacts for ${version} are invalid`;
+	}
+	return null;
+}
 
 export type ReleaseMetadataInput = {
 	packageVersion: string;
@@ -73,6 +149,7 @@ export function qualificationRecordIssue(
 	version: string,
 	record: unknown,
 	expectedArtifact?: ArtifactIdentity,
+	expectedCanarySha256?: string,
 ): string | null {
 	if (!record || typeof record !== "object" || Array.isArray(record)) {
 		return `no qualification record exists for ${version}`;
@@ -90,6 +167,7 @@ export function qualificationRecordIssue(
 		actorSha256?: unknown;
 		analyzerSha256?: unknown;
 		expectedProvenanceSha256?: unknown;
+		canarySha256?: unknown;
 		decisionInputSha256?: unknown;
 	};
 	if (entry.schemaVersion !== 1 || typeof entry.reportId !== "string") {
@@ -126,6 +204,23 @@ export function qualificationRecordIssue(
 	) {
 		return `the qualification artifact does not match the rebuilt artifact for ${version}`;
 	}
+	if (expectedCanarySha256 !== undefined) {
+		if (entry.canarySha256 !== expectedCanarySha256)
+			return `the qualification record for ${version} is not bound to the exact canary`;
+		const expectedDecisionInput = canonicalSha256("flow-decision-input-v1", {
+			reportSha256: entry.reportSha256,
+			artifactSha256: entry.artifactSha256,
+			evaluatorSha256: entry.evaluatorSha256,
+			catalogSha256: entry.catalogSha256,
+			policySha256: entry.policySha256,
+			actorSha256: entry.actorSha256,
+			analyzerSha256: entry.analyzerSha256,
+			expectedProvenanceSha256: entry.expectedProvenanceSha256,
+			canarySha256: entry.canarySha256,
+		});
+		if (entry.decisionInputSha256 !== expectedDecisionInput)
+			return `the qualification decision input does not bind the exact canary for ${version}`;
+	}
 	return null;
 }
 
@@ -134,7 +229,6 @@ export async function assertQualificationRecord(
 	directory = join("evals", "decisions"),
 	expectedArtifact?: ArtifactIdentity,
 ): Promise<void> {
-	if (!isMajorRelease(version)) return;
 	let records: unknown[] = [];
 	try {
 		const { readdir } = await import("node:fs/promises");
@@ -155,9 +249,100 @@ export async function assertQualificationRecord(
 		)
 	) {
 		throw new Error(
-			`Major release ${version} cannot proceed: no exact VERIFIED v2 decision record exists. Run \`bun run qualify -- --report <report> --catalog <catalog> --artifact <artifact>\` and commit the decision.`,
+			`Release ${version} cannot proceed: no exact VERIFIED v2 decision record exists. Run \`bun run qualify -- --report <report> --catalog <catalog> --artifact <artifact>\` and commit the decision.`,
 		);
 	}
+}
+
+export async function assertStrictReleaseEvidence(input: {
+	readonly version: string;
+	readonly decisionsDirectory?: string;
+	readonly canaryPath: string;
+	readonly expectedArtifact: ArtifactIdentity;
+	readonly tag?: string;
+	readonly now?: Date;
+}): Promise<void> {
+	const tag = input.tag ?? `v${input.version}`;
+	const canary = JSON.parse(
+		await readFile(input.canaryPath, "utf8"),
+	) as unknown;
+	const canaryIssue = canaryRecordIssue(
+		input.version,
+		canary,
+		input.expectedArtifact,
+		tag,
+		input.now,
+	);
+	if (canaryIssue) throw new Error(canaryIssue);
+	const evidenceIssue = await verifyCanaryRecord({
+		version: input.version,
+		record: canary,
+		expectedArtifact: input.expectedArtifact,
+		directory: dirname(input.canaryPath),
+		...(input.now ? { now: input.now } : {}),
+	});
+	if (evidenceIssue) throw new Error(evidenceIssue);
+	const canaryHash = (canary as CanaryRecord).recordSha256;
+	let records: unknown[] = [];
+	try {
+		const { readdir } = await import("node:fs/promises");
+		records = await Promise.all(
+			(await readdir(input.decisionsDirectory ?? join("evals", "decisions")))
+				.filter((name) => name.endsWith(".json"))
+				.map(async (name) =>
+					JSON.parse(
+						await readFile(
+							join(
+								input.decisionsDirectory ?? join("evals", "decisions"),
+								name,
+							),
+							"utf8",
+						),
+					),
+				),
+		);
+	} catch {
+		records = [];
+	}
+	const match = records.find((record) => {
+		const entry = record as {
+			readonly reportSha256?: unknown;
+			readonly artifactSha256?: unknown;
+			readonly evaluatorSha256?: unknown;
+			readonly catalogSha256?: unknown;
+			readonly policySha256?: unknown;
+			readonly actorSha256?: unknown;
+			readonly analyzerSha256?: unknown;
+			readonly expectedProvenanceSha256?: unknown;
+			readonly canarySha256?: unknown;
+			readonly decisionInputSha256?: unknown;
+		};
+		const decisionInputSha256 = canonicalSha256("flow-decision-input-v1", {
+			reportSha256: entry.reportSha256,
+			artifactSha256: entry.artifactSha256,
+			evaluatorSha256: entry.evaluatorSha256,
+			catalogSha256: entry.catalogSha256,
+			policySha256: entry.policySha256,
+			actorSha256: entry.actorSha256,
+			analyzerSha256: entry.analyzerSha256,
+			expectedProvenanceSha256: entry.expectedProvenanceSha256,
+			canarySha256: canaryHash,
+		});
+		return (
+			entry.canarySha256 === canaryHash &&
+			entry.decisionInputSha256 === decisionInputSha256 &&
+			qualificationRecordIssue(
+				input.version,
+				record,
+				input.expectedArtifact,
+				canaryHash,
+			) === null
+		);
+	});
+	if (!match)
+		throw new Error(
+			`Release ${input.version} cannot proceed: no exact VERIFIED canary-bound v2 decision record exists.`,
+		);
 }
 
 function optionValue(
@@ -176,6 +361,7 @@ async function main(args: readonly string[]): Promise<void> {
 	let tag: string | undefined;
 	let notesFile: string | undefined;
 	let artifactPath: string | undefined;
+	let canaryPath: string | undefined;
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
 		switch (argument) {
@@ -189,6 +375,10 @@ async function main(args: readonly string[]): Promise<void> {
 				break;
 			case "--artifact":
 				artifactPath = optionValue(args, index, argument);
+				index += 1;
+				break;
+			case "--canary":
+				canaryPath = optionValue(args, index, argument);
 				index += 1;
 				break;
 			default:
@@ -214,11 +404,24 @@ async function main(args: readonly string[]): Promise<void> {
 				tarballPath: artifactPath,
 			})
 		: undefined;
-	await assertQualificationRecord(
-		packageMetadata.version,
-		undefined,
-		expectedArtifact,
-	);
+	if (artifactPath && tag) {
+		if (!canaryPath)
+			throw new Error("Strict tag release metadata requires --canary.");
+		if (!expectedArtifact)
+			throw new Error("Strict tag release metadata requires an artifact.");
+		await assertStrictReleaseEvidence({
+			version: packageMetadata.version,
+			tag,
+			canaryPath,
+			expectedArtifact,
+		});
+	} else if (artifactPath) {
+		process.stdout.write(
+			`INCONCLUSIVE: rebuilt artifact ${packageMetadata.version} has no strict tag evidence.\n`,
+		);
+		if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
+		return;
+	}
 	if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
 	process.stdout.write(
 		`Release metadata matches ${packageMetadata.version}.\n`,
