@@ -299,6 +299,12 @@ declare function analyzePairs(report: ValidatedReport, masked: MaskedAnalysisRec
 };
 ```
 
+Phase 2 implements the pure release decision without a canary input. Phase 9 adds
+the canary gate at the release-alignment boundary. Phase 2 paired analysis returns
+only opaque complete, incomplete, tie, and arm-win counts. Phase 7 adds masked
+allocation, directional risk difference, and bootstrap intervals. Release sample
+and pass floors apply per represented scheduled provider within each required case.
+
 Parsing and provenance validation happen once at the JSON boundary. Internal
 analysis trusts `ValidatedReport`. CLI, filesystem, host, and provider concerns
 stay in thin shells.
