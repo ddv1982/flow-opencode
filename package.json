@@ -33,6 +33,7 @@
 		"clean": "bun run scripts/clean-dist.ts",
 		"eval": "bun run evals/run.ts",
 		"eval:smoke": "bun run evals/run.ts -- --repeat 1",
+		"eval:canary": "bun run scripts/eval-canary.ts",
 		"benchmark": "bun run evals/benchmark-run.ts",
 		"lint": "bunx biome check biome.json src tests scripts evals --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"release:metadata": "bun run scripts/release-metadata.ts",
