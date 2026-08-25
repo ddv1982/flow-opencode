@@ -504,9 +504,12 @@ describe("Flow documentation contract", () => {
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
 		expect(combined).toContain("npm publish");
 		const release = await readFile(".github/workflows/release.yml", "utf8");
-		expect(release).toMatch(/^ {4}branches:\n {6}- main$/m);
+		expect(release).toMatch(/^ {2}push:\n {4}tags:/m);
+		expect(release).not.toContain("branches:");
 		expect(release).toContain('tag="v${version}"');
 		expect(release).toContain('--target "${GITHUB_SHA}"');
+		expect(release).toContain("Verify exact VERIFIED V2 artifact decision");
+		expect(release).toContain("canary-not-enabled");
 
 		// Model-driven evals need credentials and cost real money, so they run on a
 		// schedule and never on a pull request. `evals.yml` is the one workflow allowed
@@ -516,6 +519,13 @@ describe("Flow documentation contract", () => {
 		// beyond one provider (docs/adr/0010-declared-canonical-gate.md).
 		const evals = await readFile(".github/workflows/evals.yml", "utf8");
 		expect(evals).toContain("bun run eval");
+		expect(evals).toContain("V2 report:");
+		expect(evals).toContain("bun run qualify -- --report");
+		expect(evals).toContain("steps.run.outputs.catalog");
+		expect(evals).toContain("steps.run.outputs.artifact");
+		expect(evals).toContain("--decisions-dir");
+		expect(evals).toContain("eval-v2-decision");
+		expect(evals).toContain("if: always()");
 		expect(evals).toContain("schedule:");
 		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);
 		for (const gate of [

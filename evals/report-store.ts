@@ -138,6 +138,8 @@ async function readJson(path: string): Promise<unknown> {
 export class ReportStore {
 	private readonly attemptsDirectory: string;
 	private readonly transcriptsDirectory: string;
+	private readonly catalogPath: string;
+	private readonly artifactPath: string;
 	private readonly planPath: string;
 	private readonly completionPath: string;
 	private readonly reportPath: string;
@@ -153,6 +155,8 @@ export class ReportStore {
 		this.hooks = hooks;
 		this.attemptsDirectory = join(directory, "attempts");
 		this.transcriptsDirectory = join(directory, "transcripts");
+		this.catalogPath = join(directory, "catalog.json");
+		this.artifactPath = join(directory, "artifact.tgz");
 		this.planPath = join(directory, "plan.json");
 		this.completionPath = join(directory, "completion.json");
 		this.reportPath = join(directory, "report.json");
@@ -163,6 +167,24 @@ export class ReportStore {
 		return writeImmutable(
 			this.planPath,
 			Buffer.from(canonicalJson(plan)),
+			this.hooks,
+		);
+	}
+
+	async writeCatalog(
+		catalog: ValidatedCaseCatalog,
+	): Promise<"written" | "replayed"> {
+		return writeImmutable(
+			this.catalogPath,
+			Buffer.from(canonicalJson(catalog)),
+			this.hooks,
+		);
+	}
+
+	async writeArtifact(artifactPath: string): Promise<"written" | "replayed"> {
+		return writeImmutable(
+			this.artifactPath,
+			await readFile(artifactPath),
 			this.hooks,
 		);
 	}

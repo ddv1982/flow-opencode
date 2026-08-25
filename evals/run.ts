@@ -58,6 +58,11 @@ import {
 	redactTranscript,
 	tarballSha256,
 } from "./provenance.js";
+import {
+	RELEASE_MIN_PROVIDERS,
+	RELEASE_MIN_SCORED_ATTEMPTS,
+	RELEASE_PASS_RATES,
+} from "./release-policy.js";
 import type {
 	ActorIdentity,
 	ArtifactIdentity,
@@ -198,17 +203,24 @@ function caseCatalogFor(
 	scenarios: readonly (typeof SCENARIOS)[number][],
 ): ValidatedCaseCatalog {
 	const parsed = parseCaseCatalog(
-		scenarios.map((scenario) => ({
-			caseId: scenario.id,
-			caseVersion: 1,
-			evidenceClass: "conformance" as const,
-			oracle: "durable-state" as const,
-			release: "report-only" as const,
-			minProviders: 1,
-			minScoredAttempts: 1,
-			minPassRate: 1,
-			reviewerPromotionRecordSha256: null,
-		})),
+		scenarios.map((scenario) => {
+			const minPassRate = RELEASE_PASS_RATES[scenario.id] ?? null;
+			return {
+				caseId: scenario.id,
+				caseVersion: 1,
+				evidenceClass: "conformance" as const,
+				oracle: "durable-state" as const,
+				release:
+					minPassRate === null
+						? ("report-only" as const)
+						: ("required" as const),
+				minProviders: minPassRate === null ? 1 : RELEASE_MIN_PROVIDERS,
+				minScoredAttempts:
+					minPassRate === null ? 1 : RELEASE_MIN_SCORED_ATTEMPTS,
+				minPassRate,
+				reviewerPromotionRecordSha256: null,
+			};
+		}),
 	);
 	if (!parsed.ok) {
 		throw new Error(
@@ -616,6 +628,7 @@ async function main(): Promise<void> {
 		catalog: v2Catalog,
 	});
 	await reportStore.initialize(v2Plan);
+	await reportStore.writeCatalog(v2Catalog);
 	const campaignStartedAt = new Date().toISOString();
 	const campaignCells = v2Plan.cells;
 	const v2Attempts: AttemptRecordV2[] = [];
@@ -630,6 +643,7 @@ async function main(): Promise<void> {
 			repositoryRoot,
 			tarballPath: tarball,
 		});
+		await reportStore.writeArtifact(tarball);
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
 			caseCatalog: selected.map((scenario) => ({

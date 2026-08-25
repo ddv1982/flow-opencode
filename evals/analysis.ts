@@ -29,13 +29,13 @@ export type ExpectedActorProvenance = {
 
 export type ExpectedAttemptProvenance = {
 	readonly cellId: string;
+	readonly hostConfigSha256: string;
 	readonly actors: readonly ExpectedActorProvenance[];
 	readonly instructions: readonly InstructionDelivery[];
 };
 
 type CommonExpectedProvenance = {
 	readonly evaluator: EvaluatorIdentity;
-	readonly hostConfigSha256: string;
 	readonly attempts: readonly ExpectedAttemptProvenance[];
 };
 
@@ -249,7 +249,7 @@ function compareCommonProvenance(
 				"Evaluator identity does not match expected provenance.",
 			);
 		}
-		if (attempt.hostConfigSha256 !== expected.hostConfigSha256) {
+		if (attempt.hostConfigSha256 !== expectedAttempt.hostConfigSha256) {
 			mismatch(
 				mismatches,
 				attempt.attemptId,

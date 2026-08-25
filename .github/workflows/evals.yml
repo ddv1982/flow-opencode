@@ -83,6 +83,7 @@ jobs:
           fi
 
       - name: Run the eval matrix
+        id: run
         if: steps.matrix.outputs.models != ''
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -96,19 +97,74 @@ jobs:
         # A failing scenario must still publish its report: the durable documents are
         # the only way to read why, and paying for the pass twice is the alternative.
         continue-on-error: true
-        run: bun run eval -- --repeat "$REPEAT"
+        run: |
+          set -o pipefail
+          set +e
+          bun run eval -- --repeat "$REPEAT" 2>&1 | tee eval-v2.log
+          status=${PIPESTATUS[0]}
+          set -e
+          report="$(sed -n 's/^V2 report: //p' eval-v2.log | tail -n 1)"
+          if [ -z "$report" ] || [ ! -f "$report" ]; then
+            echo "::error::The evaluator did not print an existing V2 report path."
+            exit 1
+          fi
+          campaign_dir="$(dirname "$report")"
+          catalog="$campaign_dir/catalog.json"
+          artifact="$campaign_dir/artifact.tgz"
+          if [ ! -f "$catalog" ]; then
+            echo "::error::V2 campaign plan/catalog was not persisted at $catalog."
+            exit 1
+          fi
+          if [ ! -f "$artifact" ]; then
+            echo "::error::Measured artifact was not persisted at $artifact."
+            exit 1
+          fi
+          {
+            printf 'report=%s\n' "$report"
+            printf 'campaign=%s\n' "$campaign_dir"
+            printf 'catalog=%s\n' "$catalog"
+            printf 'artifact=%s\n' "$artifact"
+          } >> "$GITHUB_OUTPUT"
+          exit "$status"
 
       # Before qualification, so a NOT QUALIFIED verdict still leaves the report that
       # explains it. Publishing after the gate meant the one run worth reading was the
       # one whose artifact was skipped.
       - name: Publish the report
-        if: steps.matrix.outputs.models != ''
+        if: always() && steps.matrix.outputs.models != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval-report
-          path: evals/results/
+          name: eval-v2-report
+          path: |
+            ${{ steps.run.outputs.report }}
+            ${{ steps.run.outputs.campaign }}
+            eval-v2.log
           retention-days: 90
 
       - name: Apply release-qualification thresholds
-        if: steps.matrix.outputs.models != ''
-        run: bun run qualify
+        id: qualify
+        if: always() && steps.matrix.outputs.models != '' && steps.run.outputs.report != ''
+        continue-on-error: true
+        run: |
+          set +e
+          mkdir -p evals/decisions
+          bun run qualify -- --report "${{ steps.run.outputs.report }}" --catalog "${{ steps.run.outputs.catalog }}" --artifact "${{ steps.run.outputs.artifact }}" --decisions-dir evals/decisions 2>&1 | tee qualification.log
+          status=${PIPESTATUS[0]}
+          decision_path="$(sed -n -E 's/^(VERIFIED|NOT VERIFIED|INCONCLUSIVE): (.*)$/\2/p' qualification.log | tail -n 1)"
+          if [ -z "$decision_path" ] || [ ! -f "$decision_path" ]; then
+            echo "::error::Qualifier did not print an existing decision path."
+            exit 1
+          fi
+          printf 'decision=%s\n' "$decision_path" >> "$GITHUB_OUTPUT"
+          exit "$status"
+
+      - name: Publish the decision artifacts
+        if: always() && steps.matrix.outputs.models != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eval-v2-decision
+          path: |
+            qualification.log
+            ${{ steps.qualify.outputs.decision }}
+          if-no-files-found: warn
+          retention-days: 90
