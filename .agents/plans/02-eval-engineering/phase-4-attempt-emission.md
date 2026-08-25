@@ -17,6 +17,8 @@ complete v2 campaign from the existing live runner.
 - `tests/eval-reporting.test.ts`. Inject failures before write, after file sync,
   after rename, and before directory sync. Cover resume, duplicate ids, reserve
   activation, deterministic order, and unknown-cost stops.
+- `tests/report-store.test.ts`. Isolate persistence faults, concurrent claims,
+  transcript binding, immutable replay, and truncated-ledger finalization.
 
 ## Data structures
 
@@ -32,3 +34,6 @@ and prove no scored attempt is replaced and no truncated ledger looks complete.
 
 Stop gate. No qualifier cutover until one live v2 report validates without
 placeholder provenance or policy.
+
+Evidence. [Final paid v2 pilot](evidence/phase-4-pilot.json) and
+[Interrogate review](evidence/phase-4-review.md).
