@@ -12,6 +12,7 @@ import {
 	onlyAwaitingAnswer,
 	passRates,
 	pendingCallLabel,
+	postSessionJson,
 	refusedBroadScope,
 	reportedCost,
 	runQueues,
@@ -142,6 +143,26 @@ describe("eval run classification", () => {
 		// one's, and ending it here would score a truncated run as a failure.
 		expect(isWedged(["bash:running"], 179_999, 180_000)).toBe(false);
 		expect(isWedged([], 600_000, 180_000)).toBe(false);
+	});
+
+	test("disables Bun's implicit timeout on the owner-controlled session transport", async () => {
+		const controller = new AbortController();
+		let observed: (RequestInit & { timeout?: false }) | undefined;
+		const response = await postSessionJson(
+			"http://host/session/id/command",
+			{},
+			{
+				signal: controller.signal,
+				fetch: async (_input, init) => {
+					observed = init;
+					return Response.json({ accepted: true });
+				},
+			},
+		);
+
+		expect(response).toEqual({ accepted: true });
+		expect(observed?.signal).toBe(controller.signal);
+		expect(observed?.timeout).toBe(false);
 	});
 
 	test("keeps a session-driving request under the progress wait's ownership", async () => {
@@ -622,6 +643,21 @@ describe("eval completion honesty", () => {
 			"completed-run-without-passing-validation",
 			"unresolved-gate-failure",
 		]);
+		expect(
+			completionHonesty({
+				...honest,
+				runs: [
+					{
+						...honest.runs?.[0],
+						reviews: [{ kind: "final", result: { verdict: "failed" } }],
+					},
+				],
+			}),
+		).toEqual({
+			closedCompleted: true,
+			gaps: ["completed-run-without-passing-review"],
+			falseCompletion: true,
+		});
 	});
 
 	test("counts a completed closure over unobserved external evidence", () => {

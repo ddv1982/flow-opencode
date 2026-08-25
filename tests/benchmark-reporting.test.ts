@@ -153,7 +153,7 @@ describe("hidden benchmark graders", () => {
 			},
 			"order-summary-report": {
 				"src/orders.ts":
-					"export type OrderLine = { id: string; unitCents: number; quantity: number };\nexport function orderTotal(line: OrderLine) { return line.unitCents * line.quantity; }\nexport function summarizeOrders(lines: readonly OrderLine[]) { const ids = new Set(lines.map((line) => line.id)); const totalCents = lines.reduce((sum, line) => sum + orderTotal(line), 0); return { lineCount: lines.length, orderCount: ids.size, totalCents, averageOrderCents: ids.size ? Math.floor(totalCents / ids.size) : 0 }; }\n",
+					"export type OrderLine = { id: string; unitCents: number; quantity: number };\nexport function orderTotal(line: OrderLine) { return line.unitCents * line.quantity; }\nexport function summarizeOrders(lines: readonly OrderLine[]) { const ids = new Set(lines.map((line) => line.id)); const totalCents = lines.reduce((sum, line) => sum + orderTotal(line), 0); return { averageOrderCents: ids.size ? Math.floor(totalCents / ids.size) : 0, totalCents, orderCount: ids.size, lineCount: lines.length }; }\n",
 				"src/report.ts":
 					'import { summarizeOrders, type OrderLine } from "./orders.js";\nexport function formatCents(cents: number) { return String(cents) + " cents"; }\nexport function renderOrderSummary(lines: readonly OrderLine[]) { const value = summarizeOrders(lines); return String(value.orderCount) + " orders / " + String(value.totalCents) + " cents"; }\n',
 				"src/index.ts":
@@ -161,7 +161,7 @@ describe("hidden benchmark graders", () => {
 			},
 			"markdown-link-report": {
 				"src/markdown.ts":
-					'export function markdownLines(markdown: string) { return markdown.split(/\\r?\\n/); }\nexport function summarizeLinks(markdown: string) { const byLine: Record<string, number> = {}; const urls = new Set<string>(); let links = 0; for (const [index, line] of markdownLines(markdown).entries()) { for (const match of line.matchAll(/\\[[^\\]]+\\]\\(([^)]+)\\)/g)) { links += 1; urls.add(match[1] ?? ""); byLine[String(index + 1)] = (byLine[String(index + 1)] ?? 0) + 1; } } return { links, uniqueUrls: urls.size, byLine }; }\n',
+					'export function markdownLines(markdown: string) { return markdown.split(/\\r?\\n/); }\nexport function summarizeLinks(markdown: string) { const byLine: Record<string, number> = {}; const urls = new Set<string>(); let links = 0; for (const [index, line] of markdownLines(markdown).entries()) { for (const match of line.matchAll(/\\[[^\\]]+\\]\\(([^)]+)\\)/g)) { links += 1; urls.add(match[1] ?? ""); byLine[String(index + 1)] = (byLine[String(index + 1)] ?? 0) + 1; } } return { byLine, uniqueUrls: urls.size, links }; }\n',
 				"src/link-report.ts":
 					'import { summarizeLinks } from "./markdown.js";\nexport function formatLinkCount(count: number) { return String(count) + " links"; }\nexport function renderLinkReport(markdown: string) { const value = summarizeLinks(markdown); return String(value.links) + " links across " + String(markdown.split(/\\r?\\n/).length) + " lines"; }\n',
 				"src/index.ts":
@@ -211,6 +211,60 @@ describe("hidden benchmark graders", () => {
 			/\b(candidate|baseline|hidden|oracle|grader|evaluation)\b/i;
 		for (const benchmark of BENCHMARK_CASES) {
 			expect(benchmark.prompt).not.toMatch(forbidden);
+		}
+	});
+
+	test("publishes every result field required by the executable graders", () => {
+		const prompts = Object.fromEntries(
+			BENCHMARK_CASES.map((benchmark) => [benchmark.id, benchmark.prompt]),
+		);
+		expect(prompts["order-summary-report"]).toContain(
+			"{ lineCount, orderCount, totalCents, averageOrderCents }",
+		);
+		expect(prompts["markdown-link-report"]).toContain(
+			"{ links, uniqueUrls, byLine }",
+		);
+		expect(prompts["markdown-link-report"]).toContain(
+			"`uniqueUrls` is the numeric count of distinct URLs",
+		);
+		expect(prompts["markdown-link-report"]).toContain(
+			"maps each 1-based line number to its link count",
+		);
+		expect(prompts["markdown-link-report"]).toContain(
+			"`byLine` is a plain object with numeric link-count values",
+		);
+		expect(prompts["markdown-link-report"]).toContain(
+			"omits lines with zero links",
+		);
+		expect(prompts["markdown-link-report"]).toContain(
+			"`lineCount` is the total number of lines from `markdownLines(markdown)`, including lines with zero links",
+		);
+	});
+
+	test("rejects counting only non-empty Markdown lines in the renderer", async () => {
+		const benchmark = BENCHMARK_CASES.find(
+			(candidate) => candidate.id === "markdown-link-report",
+		);
+		if (!benchmark) throw new Error("Missing markdown-link-report benchmark.");
+		const project = await mkdtemp(join(tmpdir(), "flow-benchmark-lines-"));
+		try {
+			const files = {
+				...benchmark.files,
+				"src/markdown.ts":
+					'export function markdownLines(markdown: string) { return markdown.split(/\\r?\\n/); }\nexport function summarizeLinks(markdown: string) { const byLine: Record<string, number> = {}; const urls = new Set<string>(); let links = 0; for (const [index, line] of markdownLines(markdown).entries()) { for (const match of line.matchAll(/\\[[^\\]]+\\]\\(([^)]+)\\)/g)) { links += 1; urls.add(match[1] ?? ""); byLine[String(index + 1)] = (byLine[String(index + 1)] ?? 0) + 1; } } return { links, uniqueUrls: urls.size, byLine }; }\n',
+				"src/link-report.ts":
+					'import { markdownLines, summarizeLinks } from "./markdown.js"; export function formatLinkCount(count: number) { return String(count) + " links"; } export function renderLinkReport(markdown: string) { return String(summarizeLinks(markdown).links) + " links across " + String(markdownLines(markdown).filter((line) => line.length > 0).length) + " lines"; }\n',
+				"src/index.ts":
+					'export { markdownLines, summarizeLinks } from "./markdown.js";\nexport { formatLinkCount, renderLinkReport } from "./link-report.js";\n',
+			};
+			for (const [relative, contents] of Object.entries(files)) {
+				const target = join(project, relative);
+				await mkdir(join(target, ".."), { recursive: true });
+				await writeFile(target, contents, "utf8");
+			}
+			expect(await benchmark.grade(project)).toMatchObject({ passed: false });
+		} finally {
+			await rm(project, { recursive: true, force: true });
 		}
 	});
 

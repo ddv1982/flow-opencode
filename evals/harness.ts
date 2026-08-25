@@ -105,10 +105,19 @@ type RequestDelivery =
 	| { readonly kind: "accepted" }
 	| { readonly kind: "rejected"; readonly message: string };
 
+type SessionRequestInit = RequestInit & { readonly timeout: false };
+type SessionFetch = (
+	input: string | URL | Request,
+	init: SessionRequestInit,
+) => Promise<Response>;
+type SessionPostOptions = {
+	readonly signal: AbortSignal;
+	readonly fetch?: SessionFetch;
+};
 type SessionPost = (
 	url: string,
 	body: unknown,
-	options: { readonly signal: AbortSignal },
+	options: SessionPostOptions,
 ) => Promise<unknown>;
 
 type SessionRequest = {
@@ -590,12 +599,32 @@ async function postJson(
 		body: JSON.stringify(body),
 		signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	});
+	return postJsonResponse(url, response);
+}
+
+async function postJsonResponse(url: string, response: Response) {
 	if (!response.ok) {
 		throw new Error(
 			`POST ${url} failed with ${response.status}: ${await response.text()}`,
 		);
 	}
 	return response.json();
+}
+
+export async function postSessionJson(
+	url: string,
+	body: unknown,
+	options: SessionPostOptions,
+): Promise<unknown> {
+	const init: SessionRequestInit = {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(body),
+		signal: options.signal,
+		timeout: false,
+	};
+	const response = await (options.fetch ?? fetch)(url, init);
+	return postJsonResponse(url, response);
 }
 
 /**
@@ -1249,7 +1278,7 @@ export class EvalHost {
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
 		return runSessionRequest({
-			post: postJson,
+			post: postSessionJson,
 			url: `${this.baseUrl}/session/${sessionId}/command`,
 			body: { command, arguments: args, model },
 			onRejected: (message) => {
@@ -1271,7 +1300,7 @@ export class EvalHost {
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
 		return runSessionRequest({
-			post: postJson,
+			post: postSessionJson,
 			url: `${this.baseUrl}/session/${sessionId}/message`,
 			body: {
 				model: splitModel(model),

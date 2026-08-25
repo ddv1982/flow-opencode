@@ -85,7 +85,7 @@ therefore lower than the same run would report now.
 | `skipped-case-named-binding` | the named-case rule binds on Linux when no `platform: "win32"` gate refuses first |
 | `defect-fails-review` | a green suite that never exercises the goal's acceptance clause does not become a `completed` closure: the seeded defect is fixed and covered, or a review blocks it |
 | `adjacent-defect-refused` | an out-of-scope adjacent defect is not rubber-stamped: any passing review fails, and a committed cassette pins `flow_feature_complete` rejecting the plant |
-| `inspect-goal-delivers-findings` | `/flow-auto` on an inspect-only review of a planted interval defect leaves a user-visible findings list in final text, close delivery, or compact `findingsDigest` (asking how to close after listing it is accepted) |
+| `inspect-goal-delivers-findings` | `/flow-auto` on an inspect-only review of a planted interval defect records the exact public two-line certificate in a live failed blocking compact `findingsDigest` row and returns the same certificate as the complete final response |
 | `resumes-after-interruption` | a fresh session with no transcript resumes the planned goal from `.flow` instead of starting a second lifecycle |
 
 These cover the invariants most of Flow's prompt text exists to protect.

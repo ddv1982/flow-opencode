@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "command": "bun run scripts/probe-long-session-transport.ts --delay-ms 310000",
+  "delayMs": 310000,
+  "results": [
+    {
+      "client": "fetch",
+      "result": "error",
+      "elapsedMs": 300010,
+      "errorName": "TimeoutError",
+      "errorMessage": "The operation timed out."
+    },
+    {
+      "client": "postSessionJson",
+      "result": "ok",
+      "elapsedMs": 310010
+    },
+    {
+      "client": "node:http",
+      "result": "ok",
+      "elapsedMs": 310011
+    }
+  ]
+}
