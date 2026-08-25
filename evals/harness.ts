@@ -105,6 +105,67 @@ type RequestDelivery =
 	| { readonly kind: "accepted" }
 	| { readonly kind: "rejected"; readonly message: string };
 
+type SessionPost = (
+	url: string,
+	body: unknown,
+	options: { readonly signal: AbortSignal },
+) => Promise<unknown>;
+
+type SessionRequest = {
+	readonly state: () => RequestDelivery;
+	readonly cancel: () => void;
+	readonly settled: Promise<void>;
+};
+
+function startSessionRequest(input: {
+	readonly post: SessionPost;
+	readonly url: string;
+	readonly body: unknown;
+	readonly onRejected: (message: string) => void;
+}): SessionRequest {
+	const controller = new AbortController();
+	const cancellation = new Error("Session request cancelled by eval harness.");
+	let cancelled = false;
+	let delivery: RequestDelivery = { kind: "pending" };
+	const settled = input
+		.post(input.url, input.body, { signal: controller.signal })
+		.then(
+			() => {
+				if (!cancelled) delivery = { kind: "accepted" };
+			},
+			(error) => {
+				if (error === cancellation) return;
+				const message = String(error);
+				delivery = { kind: "rejected", message };
+				input.onRejected(message);
+			},
+		);
+	return {
+		state: () => delivery,
+		cancel: () => {
+			if (cancelled) return;
+			cancelled = true;
+			controller.abort(cancellation);
+		},
+		settled,
+	};
+}
+
+export async function runSessionRequest(input: {
+	readonly post: SessionPost;
+	readonly url: string;
+	readonly body: unknown;
+	readonly onRejected: (message: string) => void;
+	readonly wait: (request: SessionRequest) => Promise<CommandEnd>;
+}): Promise<CommandEnd> {
+	const request = startSessionRequest(input);
+	try {
+		return await input.wait(request);
+	} finally {
+		request.cancel();
+	}
+}
+
 /**
  * What the questions a run asked mean for its result.
  *
@@ -521,13 +582,13 @@ async function fetchJson(
 async function postJson(
 	url: string,
 	body: unknown,
-	timeout = REQUEST_TIMEOUT_MS,
+	options: { readonly signal?: AbortSignal } = {},
 ): Promise<unknown> {
 	const response = await fetch(url, {
 		method: "POST",
 		headers: { "content-type": "application/json" },
 		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(timeout),
+		signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 	});
 	if (!response.ok) {
 		throw new Error(
@@ -1187,23 +1248,18 @@ export class EvalHost {
 		model: string,
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
-		let delivery: RequestDelivery = { kind: "pending" };
-		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
-			command,
-			arguments: args,
-			model,
-		})
-			.then(() => {
-				delivery = { kind: "accepted" };
-			})
-			.catch((error) => {
-				const message = String(error);
+		return runSessionRequest({
+			post: postJson,
+			url: `${this.baseUrl}/session/${sessionId}/command`,
+			body: { command, arguments: args, model },
+			onRejected: (message) => {
 				this.serverLog += `\ncommand POST rejected: ${message}`;
-				delivery = { kind: "rejected", message };
-			});
-		return this.waitForQuiet(sessionId, {
-			...options,
-			requestDelivery: () => delivery,
+			},
+			wait: (request) =>
+				this.waitForQuiet(sessionId, {
+					...options,
+					request,
+				}),
 		});
 	}
 
@@ -1214,22 +1270,21 @@ export class EvalHost {
 		model: string,
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
-		let delivery: RequestDelivery = { kind: "pending" };
-		void postJson(`${this.baseUrl}/session/${sessionId}/message`, {
-			model: splitModel(model),
-			parts: [{ type: "text", text: prompt }],
-		})
-			.then(() => {
-				delivery = { kind: "accepted" };
-			})
-			.catch((error) => {
-				const message = String(error);
+		return runSessionRequest({
+			post: postJson,
+			url: `${this.baseUrl}/session/${sessionId}/message`,
+			body: {
+				model: splitModel(model),
+				parts: [{ type: "text", text: prompt }],
+			},
+			onRejected: (message) => {
 				this.serverLog += `\nmessage POST rejected: ${message}`;
-				delivery = { kind: "rejected", message };
-			});
-		return this.waitForQuiet(sessionId, {
-			...options,
-			requestDelivery: () => delivery,
+			},
+			wait: (request) =>
+				this.waitForQuiet(sessionId, {
+					...options,
+					request,
+				}),
 		});
 	}
 
@@ -1239,7 +1294,7 @@ export class EvalHost {
 			quietMs?: number;
 			timeoutMs?: number;
 			stalledMs?: number;
-			requestDelivery?: () => RequestDelivery;
+			request: SessionRequest;
 		},
 	): Promise<CommandEnd> {
 		const quietMs = options.quietMs ?? 25_000;
@@ -1263,10 +1318,15 @@ export class EvalHost {
 		let changedAt = Date.now();
 		let pending: string[] = [];
 		let suspendedMs = 0;
+		const abortWait = async () => {
+			const aborting = this.abortSession(sessionId);
+			options.request.cancel();
+			await aborting;
+		};
 		for (;;) {
 			const before = Date.now();
 			await Bun.sleep(poll);
-			const delivery = options.requestDelivery?.();
+			const delivery = options.request.state();
 			if (delivery?.kind === "rejected") {
 				throw new Error(`Host request was rejected: ${delivery.message}`);
 			}
@@ -1312,7 +1372,7 @@ export class EvalHost {
 			// attempts each burned their full twenty minutes producing nothing after the
 			// model asked.
 			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
-				await this.abortSession(sessionId);
+				await abortWait();
 				return "escalated";
 			}
 			const stalled = Date.now() - changedAt;
@@ -1329,13 +1389,13 @@ export class EvalHost {
 			// hands the remaining attempts their wall clock back. Wedges are already out
 			// of every pass-rate denominator, so nothing scored changes.
 			if (isWedged(pending, stalled, stalledMs)) {
-				await this.abortSession(sessionId);
+				await abortWait();
 				throw new Error(
 					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedged(stalled)}${suspended}`,
 				);
 			}
 			if (Date.now() > deadline) {
-				await this.abortSession(sessionId);
+				await abortWait();
 				const [count = "0", parts = "0"] = signature.split(":");
 				throw new Error(
 					(stalled >= quietMs

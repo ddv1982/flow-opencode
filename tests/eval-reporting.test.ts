@@ -15,6 +15,7 @@ import {
 	refusedBroadScope,
 	reportedCost,
 	runQueues,
+	runSessionRequest,
 	sequencer,
 	sessionBoundaries,
 	syncProviderCredentialsBack,
@@ -141,6 +142,58 @@ describe("eval run classification", () => {
 		// one's, and ending it here would score a truncated run as a failure.
 		expect(isWedged(["bash:running"], 179_999, 180_000)).toBe(false);
 		expect(isWedged([], 600_000, 180_000)).toBe(false);
+	});
+
+	test("keeps a session-driving request under the progress wait's ownership", async () => {
+		const deferred = Promise.withResolvers<unknown>();
+		let signal: AbortSignal | undefined;
+		const rejectedMessages: string[] = [];
+		const result = await runSessionRequest({
+			post: (_url, _body, options) => {
+				signal = options.signal;
+				options.signal.addEventListener("abort", () =>
+					deferred.reject(options.signal.reason),
+				);
+				return deferred.promise;
+			},
+			url: "http://host/session/id/command",
+			body: {},
+			onRejected: (message) => rejectedMessages.push(message),
+			wait: async (request) => {
+				expect(request.state()).toEqual({ kind: "pending" });
+				return "quiet";
+			},
+		});
+
+		expect(result).toBe("quiet");
+		expect(signal?.aborted).toBe(true);
+		expect(rejectedMessages).toEqual([]);
+		await deferred.promise.catch(() => {});
+	});
+
+	test("preserves an external session-driving request rejection", async () => {
+		const rejectedMessages: string[] = [];
+		const external = new Error("provider disconnected");
+		const result = await runSessionRequest({
+			post: async () => {
+				throw external;
+			},
+			url: "http://host/session/id/message",
+			body: {},
+			onRejected: (message) => rejectedMessages.push(message),
+			wait: async (request) => {
+				request.cancel();
+				await request.settled;
+				expect(request.state()).toEqual({
+					kind: "rejected",
+					message: "Error: provider disconnected",
+				});
+				return "quiet";
+			},
+		});
+
+		expect(result).toBe("quiet");
+		expect(rejectedMessages).toEqual(["Error: provider disconnected"]);
 	});
 
 	test("scores a run whose earlier step asked, because the next step answers", () => {
