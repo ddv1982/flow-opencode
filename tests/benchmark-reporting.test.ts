@@ -151,6 +151,22 @@ describe("hidden benchmark graders", () => {
 				"src/headers.ts":
 					'export function headerValue(line: string) { return line.split(":")[1]?.trim() ?? ""; }\nexport function parseHeader(line: string) { const at = line.indexOf(":"); if (at < 0) throw new Error("malformed"); return { name: line.slice(0, at).trim().toLowerCase(), value: line.slice(at + 1).trim() }; }\n',
 			},
+			"order-summary-report": {
+				"src/orders.ts":
+					"export type OrderLine = { id: string; unitCents: number; quantity: number };\nexport function orderTotal(line: OrderLine) { return line.unitCents * line.quantity; }\nexport function summarizeOrders(lines: readonly OrderLine[]) { const ids = new Set(lines.map((line) => line.id)); const totalCents = lines.reduce((sum, line) => sum + orderTotal(line), 0); return { lineCount: lines.length, orderCount: ids.size, totalCents, averageOrderCents: ids.size ? Math.floor(totalCents / ids.size) : 0 }; }\n",
+				"src/report.ts":
+					'import { summarizeOrders, type OrderLine } from "./orders.js";\nexport function formatCents(cents: number) { return String(cents) + " cents"; }\nexport function renderOrderSummary(lines: readonly OrderLine[]) { const value = summarizeOrders(lines); return String(value.orderCount) + " orders / " + String(value.totalCents) + " cents"; }\n',
+				"src/index.ts":
+					'export { orderTotal, summarizeOrders, type OrderLine } from "./orders.js";\nexport { formatCents, renderOrderSummary } from "./report.js";\n',
+			},
+			"markdown-link-report": {
+				"src/markdown.ts":
+					'export function markdownLines(markdown: string) { return markdown.split(/\\r?\\n/); }\nexport function summarizeLinks(markdown: string) { const byLine: Record<string, number> = {}; const urls = new Set<string>(); let links = 0; for (const [index, line] of markdownLines(markdown).entries()) { for (const match of line.matchAll(/\\[[^\\]]+\\]\\(([^)]+)\\)/g)) { links += 1; urls.add(match[1] ?? ""); byLine[String(index + 1)] = (byLine[String(index + 1)] ?? 0) + 1; } } return { links, uniqueUrls: urls.size, byLine }; }\n',
+				"src/link-report.ts":
+					'import { summarizeLinks } from "./markdown.js";\nexport function formatLinkCount(count: number) { return String(count) + " links"; }\nexport function renderLinkReport(markdown: string) { const value = summarizeLinks(markdown); return String(value.links) + " links across " + String(markdown.split(/\\r?\\n/).length) + " lines"; }\n',
+				"src/index.ts":
+					'export { markdownLines, summarizeLinks } from "./markdown.js";\nexport { formatLinkCount, renderLinkReport } from "./link-report.js";\n',
+			},
 		};
 
 		for (const benchmark of BENCHMARK_CASES) {
@@ -168,6 +184,57 @@ describe("hidden benchmark graders", () => {
 				});
 			} finally {
 				await rm(project, { recursive: true, force: true });
+			}
+		}
+	});
+
+	test("accepts every declared known-good mutation boundary", () => {
+		for (const benchmark of BENCHMARK_CASES) {
+			expect(benchmark.oracle.schemaVersion).toBe(1);
+			expect(benchmark.oracle.contamination.schemaVersion).toBe(1);
+			expect(benchmark.oracle.contamination.public.length).toBeGreaterThan(0);
+			expect(benchmark.oracle.contamination.withheld.length).toBeGreaterThan(0);
+			const ids = benchmark.oracle.knownBadMutations.map(
+				(mutation) => mutation.id,
+			);
+			expect(ids.length).toBeGreaterThanOrEqual(2);
+			expect(new Set(ids).size).toBe(ids.length);
+			for (const mutation of benchmark.oracle.knownBadMutations) {
+				expect(mutation.id.length).toBeGreaterThan(0);
+				expect(Object.keys(mutation.fileOverrides).length).toBeGreaterThan(0);
+			}
+		}
+	});
+
+	test("keeps evaluation labels and hidden oracle details out of prompts", () => {
+		const forbidden =
+			/\b(candidate|baseline|hidden|oracle|grader|evaluation)\b/i;
+		for (const benchmark of BENCHMARK_CASES) {
+			expect(benchmark.prompt).not.toMatch(forbidden);
+		}
+	});
+
+	test("rejects every declared known-bad mutation", async () => {
+		for (const benchmark of BENCHMARK_CASES) {
+			for (const mutation of benchmark.oracle.knownBadMutations) {
+				const project = await mkdtemp(
+					join(tmpdir(), "flow-benchmark-mutation-"),
+				);
+				try {
+					for (const [relative, contents] of Object.entries({
+						...benchmark.files,
+						...mutation.fileOverrides,
+					})) {
+						const target = join(project, relative);
+						await mkdir(join(target, ".."), { recursive: true });
+						await writeFile(target, contents, "utf8");
+					}
+					expect(await benchmark.grade(project)).toMatchObject({
+						passed: false,
+					});
+				} finally {
+					await rm(project, { recursive: true, force: true });
+				}
 			}
 		}
 	});
