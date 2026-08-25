@@ -50,6 +50,10 @@ free-form contract. The cassette now uses the exact certificate in both its fail
 blocking finding and final response, and the committed replay gate reproduces all
 13 cassettes.
 
+The automated PR review also found that the scenario catalog still described the
+superseded final-text, close-delivery, or digest rule. The catalog now states the
+exact digest-and-final conjunction.
+
 Deslop kept the Bun-specific behavior in one eval-only adapter. Generic short
 requests and Flow runtime code remain unchanged. The final repository gate passes
 534 tests with one intentional live-smoke skip and no failures. The three existing
