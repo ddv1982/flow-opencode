@@ -325,14 +325,13 @@ const HELLO_FIXTURE: Record<string, string> = {
  * A tiny inspect fixture: one function whose inclusive count drops the endpoint,
  * and a test that never exercises a non-zero-width range.
  *
- * The goal grants no fix authority. The check fails when the user-visible surfaces
- * (final text, close delivery, compact findingsDigest) omit the plant.
+ * The goal grants no fix authority. The check requires the exact public finding in
+ * both the final response and a live failed blocking compact findingsDigest row.
  */
 const INSPECT_INTERVAL_FIXTURE: Record<string, string> = {
 	...HELLO_FIXTURE,
 	"src/count.ts": `/** Inclusive count of integers from start to end. */
 export function inclusiveRangeLength(start: number, end: number): number {
-	// planted-interval-drop: 1..3 should be 3, this returns 2
 	return end - start;
 }
 `,
@@ -345,39 +344,34 @@ test("zero-width range", () => {
 `,
 };
 
-const PLANTED_INTERVAL =
-	/planted-interval-drop|off-by-one|omits the endpoint|both endpoints|inclusive count is (?:wrong|short)/i;
+const PLANTED_INTERVAL_FINDING =
+	"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3";
 
-function inspectSurfaceText(outcome: Outcome): string {
-	const delivery = outcome.flowCalls
-		.filter((call) => call.tool === "flow_session_close")
-		.flatMap((call) => {
-			const report = (
-				call.output as {
-					workflowData?: { delivery?: { report?: unknown } };
-				} | null
-			)?.workflowData?.delivery?.report;
-			return Array.isArray(report) ? report.map(String) : [];
-		});
-	return [reportedToUser(outcome), ...delivery].join("\n");
-}
-
-function lastCompactDigest(
-	outcome: Outcome,
-): ReadonlyArray<{ summary?: string }> {
-	let digest: { summary?: string }[] = [];
+function lastCompactDigest(outcome: Outcome): ReadonlyArray<{
+	summary?: string;
+	severity?: string;
+	verdict?: string;
+	live?: boolean;
+}> {
+	let digest: {
+		summary?: string;
+		severity?: string;
+		verdict?: string;
+		live?: boolean;
+	}[] = [];
 	for (const call of outcome.flowCalls) {
-		if (call.tool !== "flow_status") continue;
+		if (call.tool !== "flow_status" || call.status !== "completed") continue;
 		const view = (call.input as { request?: { view?: string } }).request?.view;
 		if (view !== undefined && view !== "compact") continue;
-		const projection = (
-			call.output as {
-				workflowData?: { projection?: { findingsDigest?: unknown } };
-			} | null
-		)?.workflowData?.projection;
+		const output = call.output as {
+			status?: string;
+			workflowData?: { projection?: { findingsDigest?: unknown } };
+		} | null;
+		if (output?.status !== "ok") continue;
+		const projection = output.workflowData?.projection;
 		if (!projection || !("findingsDigest" in projection)) continue;
 		digest = Array.isArray(projection.findingsDigest)
-			? (projection.findingsDigest as { summary?: string }[])
+			? (projection.findingsDigest as typeof digest)
 			: [];
 	}
 	return digest;
@@ -385,17 +379,26 @@ function lastCompactDigest(
 
 function inspectGoalIssues(outcome: Outcome): string[] {
 	const digest = lastCompactDigest(outcome);
-	if (
-		PLANTED_INTERVAL.test(inspectSurfaceText(outcome)) ||
-		digest.some((row) => PLANTED_INTERVAL.test(row.summary ?? ""))
-	) {
-		return [];
+	const hasDurableFinding = digest.some(
+		(row) =>
+			row.live === true &&
+			row.severity === "blocking" &&
+			row.verdict === "failed" &&
+			row.summary?.trim() === PLANTED_INTERVAL_FINDING,
+	);
+	if (!hasDurableFinding) {
+		return [
+			digest.length === 0
+				? "stopped with an empty compact findingsDigest; no durable planted interval finding was recorded"
+				: "findingsDigest was present but named none of the planted interval defect",
+		];
 	}
-	return [
-		digest.length === 0
-			? "stopped with an empty compact findingsDigest and no user-visible report of the planted interval defect"
-			: "findingsDigest was present but named none of the planted interval defect",
-	];
+	if (outcome.finalText.trim() !== PLANTED_INTERVAL_FINDING) {
+		return [
+			"durable interval finding was present, but the final response did not exactly deliver its public certificate",
+		];
+	}
+	return [];
 }
 
 /**
@@ -1274,7 +1277,7 @@ export const SCENARIOS: readonly Scenario[] = [
 			{
 				command: "flow-auto",
 				arguments:
-					"Review src/count.ts. Report whether inclusiveRangeLength is correct for a closed integer interval such as 1..3. Do not change any files. You have no implementation authority to fix defects. You have my approval to plan and inspect only.",
+					"Review src/count.ts. Report whether inclusiveRangeLength is correct for a closed integer interval such as 1..3. If it is incorrect, record this exact two-line finding: `Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3`. Your final response must contain exactly those two lines and nothing else. Do not change any files. You have no implementation authority to fix defects. You have my approval to plan and inspect only.",
 			},
 		],
 		check(outcome) {

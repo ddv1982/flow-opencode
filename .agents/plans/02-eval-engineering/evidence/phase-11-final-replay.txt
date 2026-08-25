@@ -1,0 +1,9 @@
+$ bun run replay -- --from evals/results/2026-08-25T23-11-56-290Z.cassettes
+$ bun run evals/replay-run.ts --from "evals/results/2026-08-25T23-11-56-290Z.cassettes"
+Replaying 1 cassette(s) from evals/results/2026-08-25T23-11-56-290Z.cassettes
+
+- inspect-goal-delivers-findings--xai_grok-4.6--1.json ... MATCH
+
+1/1 gated cassette(s) reproduced
+
+Cassette SHA-256: 6713bb0aad842a5ea6ad1a0033d2fc1a4120d8daa2f1a72f4a2c7bbbf4d11a12

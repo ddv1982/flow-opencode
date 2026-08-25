@@ -206,10 +206,10 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				'export { orderTotal, type OrderLine } from "./orders.js";\nexport { formatCents } from "./report.js";\n',
 		},
 		prompt:
-			"Add `summarizeOrders(lines)` to src/orders.ts and `renderOrderSummary(lines)` to src/report.ts, exporting both from src/index.ts. Summaries must count input lines, count distinct order ids, total unitCents multiplied by quantity, and floor the average total per order; an empty list returns zeros. Render the summary as `<orderCount> orders / <totalCents> cents`. Preserve orderTotal and formatCents, add focused tests, and validate end to end; you have my approval.",
+			"Add `summarizeOrders(lines)` to src/orders.ts and `renderOrderSummary(lines)` to src/report.ts, exporting both from src/index.ts. `summarizeOrders` returns exactly `{ lineCount, orderCount, totalCents, averageOrderCents }`. Count input lines, count distinct order ids, total unitCents multiplied by quantity, and floor the average total per order; an empty list returns zeros for every field. Render the summary as `<orderCount> orders / <totalCents> cents`. Preserve orderTotal and formatCents, add focused tests, and validate end to end; you have my approval.",
 		oracle: oracle(
 			[
-				"The starter modules, public function names, arithmetic rules, and output format are public.",
+				"The starter modules, public function names, exact result fields, arithmetic rules, and output format are public.",
 			],
 			[
 				"The executable duplicate-id, empty-input, and rounding checks are withheld.",
@@ -253,7 +253,7 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 		async grade(project) {
 			return hiddenBunCheck(
 				project,
-				'import { formatCents, orderTotal, renderOrderSummary, summarizeOrders } from "./src/index.ts"; const lines = [{ id: "A", unitCents: 125, quantity: 2 }, { id: "A", unitCents: 50, quantity: 1 }, { id: "B", unitCents: 201, quantity: 1 }]; const value = summarizeOrders(lines); if (orderTotal(lines[0]) !== 250 || formatCents(501) !== "501 cents" || JSON.stringify(value) !== JSON.stringify({ lineCount: 3, orderCount: 2, totalCents: 501, averageOrderCents: 250 }) || renderOrderSummary(lines) !== "2 orders / 501 cents") process.exit(1); if (JSON.stringify(summarizeOrders([])) !== JSON.stringify({ lineCount: 0, orderCount: 0, totalCents: 0, averageOrderCents: 0 })) process.exit(1);',
+				'import { formatCents, orderTotal, renderOrderSummary, summarizeOrders } from "./src/index.ts"; const exact = (actual, expected) => Object.keys(actual).sort().join("|") === Object.keys(expected).sort().join("|") && Object.entries(expected).every(([key, value]) => Object.is(actual[key], value)); const lines = [{ id: "A", unitCents: 125, quantity: 2 }, { id: "A", unitCents: 50, quantity: 1 }, { id: "B", unitCents: 201, quantity: 1 }]; const value = summarizeOrders(lines); if (orderTotal(lines[0]) !== 250 || formatCents(501) !== "501 cents" || !exact(value, { lineCount: 3, orderCount: 2, totalCents: 501, averageOrderCents: 250 }) || renderOrderSummary(lines) !== "2 orders / 501 cents") process.exit(1); if (!exact(summarizeOrders([]), { lineCount: 0, orderCount: 0, totalCents: 0, averageOrderCents: 0 })) process.exit(1);',
 			);
 		},
 	},
@@ -271,10 +271,10 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				'export { markdownLines } from "./markdown.js";\nexport { formatLinkCount } from "./link-report.js";\n',
 		},
 		prompt:
-			"Add `summarizeLinks(markdown)` to src/markdown.ts and `renderLinkReport(markdown)` to src/link-report.ts, exporting both from src/index.ts. Count Markdown inline links of the form `[label](url)`, report total links, distinct URL strings, and a `byLine` object keyed by 1-based line number. Render `<links> links across <lineCount> lines`. Preserve markdownLines and formatLinkCount, add focused tests, and validate end to end; you have my approval.",
+			"Add `summarizeLinks(markdown)` to src/markdown.ts and `renderLinkReport(markdown)` to src/link-report.ts, exporting both from src/index.ts. `summarizeLinks` returns exactly `{ links, uniqueUrls, byLine }`. `links` is the numeric count of inline links of the form `[label](url)`. `uniqueUrls` is the numeric count of distinct URLs. `byLine` is a plain object with numeric link-count values; it maps each 1-based line number to its link count, includes only lines containing at least one link, and omits lines with zero links. Render `<links> links across <lineCount> lines`, where `lineCount` is the total number of lines from `markdownLines(markdown)`, including lines with zero links. Preserve markdownLines and formatLinkCount, add focused tests, and validate end to end; you have my approval.",
 		oracle: oracle(
 			[
-				"The starter modules, inline-link syntax, public function names, and line numbering are public.",
+				"The starter modules, inline-link syntax, public function names, exact result fields, and line numbering are public.",
 			],
 			[
 				"The executable duplicate-URL, line-map, and empty-document checks are withheld.",
@@ -318,7 +318,7 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 		async grade(project) {
 			return hiddenBunCheck(
 				project,
-				'import { formatLinkCount, markdownLines, renderLinkReport, summarizeLinks } from "./src/index.ts"; const markdown = "# Guide\\n[Home](/home) and [Docs](/docs)\\n[Home](/home)\\nplain"; const value = summarizeLinks(markdown); if (JSON.stringify(markdownLines(markdown)) !== JSON.stringify(["# Guide", "[Home](/home) and [Docs](/docs)", "[Home](/home)", "plain"]) || formatLinkCount(3) !== "3 links" || JSON.stringify(value) !== JSON.stringify({ links: 3, uniqueUrls: 2, byLine: { "2": 2, "3": 1 } }) || renderLinkReport(markdown) !== "3 links across 4 lines") process.exit(1); if (JSON.stringify(summarizeLinks("")) !== JSON.stringify({ links: 0, uniqueUrls: 0, byLine: {} })) process.exit(1);',
+				'import { formatLinkCount, markdownLines, renderLinkReport, summarizeLinks } from "./src/index.ts"; const exact = (actual, expected) => Object.keys(actual).sort().join("|") === Object.keys(expected).sort().join("|") && Object.entries(expected).every(([key, value]) => typeof value === "object" ? JSON.stringify(actual[key]) === JSON.stringify(value) : Object.is(actual[key], value)); const markdown = "# Guide\\n\\n[Home](/home) and [Docs](/docs)\\n[Home](/home)\\nplain\\n"; const value = summarizeLinks(markdown); if (JSON.stringify(markdownLines(markdown)) !== JSON.stringify(["# Guide", "", "[Home](/home) and [Docs](/docs)", "[Home](/home)", "plain", ""]) || formatLinkCount(3) !== "3 links" || !exact(value, { links: 3, uniqueUrls: 2, byLine: { "3": 2, "4": 1 } }) || renderLinkReport(markdown) !== "3 links across 6 lines") process.exit(1); if (!exact(summarizeLinks(""), { links: 0, uniqueUrls: 0, byLine: {} }) || renderLinkReport("") !== "0 links across 1 lines") process.exit(1);',
 			);
 		},
 	},

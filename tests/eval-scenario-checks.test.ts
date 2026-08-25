@@ -828,6 +828,9 @@ describe("adjacent-defect-refused", () => {
 });
 
 describe("inspect-goal-delivers-findings", () => {
+	const intervalFinding =
+		"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3";
+
 	function compactStatus(digest: ReadonlyArray<{ summary: string }>) {
 		return {
 			tool: "flow_status",
@@ -837,7 +840,16 @@ describe("inspect-goal-delivers-findings", () => {
 			input: { request: { view: "compact" } },
 			output: {
 				status: "ok",
-				workflowData: { projection: { findingsDigest: digest } },
+				workflowData: {
+					projection: {
+						findingsDigest: digest.map((row) => ({
+							...row,
+							live: true,
+							severity: "blocking",
+							verdict: "failed",
+						})),
+					},
+				},
 			},
 			rawOutput: "",
 			metadata: {},
@@ -860,23 +872,22 @@ describe("inspect-goal-delivers-findings", () => {
 		};
 	}
 
-	test("passes a compact digest that names the plant", () => {
-		expect(
-			check(
-				"inspect-goal-delivers-findings",
-				outcome({
-					flowCalls: [
-						compactStatus([
-							{
-								summary:
-									"planted-interval-drop: inclusive count omits the endpoint",
-							},
-						]),
-					],
-					finalText: "Inspect complete. How should I close?",
-				}),
-			),
-		).toEqual([]);
+	test("fails when the finding stays inside a compact digest", () => {
+		const issues = check(
+			"inspect-goal-delivers-findings",
+			outcome({
+				flowCalls: [
+					compactStatus([
+						{
+							summary: intervalFinding,
+						},
+					]),
+				],
+				finalText: "Inspect complete. How should I close?",
+			}),
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain("final response");
 	});
 
 	test("fails a completed close that prints only terminal findings none", () => {
@@ -909,20 +920,202 @@ describe("inspect-goal-delivers-findings", () => {
 		expect(issues[0]).toContain("empty compact findingsDigest");
 	});
 
-	test("passes asking how to close after listing the finding", () => {
+	test("reports a missing digest without denying exact user delivery", () => {
+		const issues = check(
+			"inspect-goal-delivers-findings",
+			outcome({
+				flowCalls: [compactStatus([])],
+				finalText: intervalFinding,
+			}),
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain("empty compact findingsDigest");
+		expect(issues[0]).not.toContain("no user-visible report");
+	});
+
+	test("fails when the certificate is only delivered in a question", () => {
 		expect(
 			check(
 				"inspect-goal-delivers-findings",
 				outcome({
-					allCalls: [
-						question(
-							"inclusiveRangeLength omits the endpoint for 1..3 (off-by-one). Defer or abandon?",
-						),
+					flowCalls: [
+						compactStatus([
+							{
+								summary: intervalFinding,
+							},
+						]),
 					],
+					allCalls: [question(`${intervalFinding}\nDefer or abandon?`)],
 					finalText:
 						"Inspect found the interval bug. How do you want to close?",
 				}),
 			),
+		).toHaveLength(1);
+	});
+
+	test("passes the public actual and expected finding contract", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [
+						compactStatus([
+							{
+								summary: intervalFinding,
+							},
+						]),
+					],
+					session: session({
+						features: [{ id: "inspect", title: "Inspect range" }],
+						runs: [
+							{
+								featureId: "inspect",
+								state: "completed",
+								reviews: [
+									{
+										kind: "final",
+										result: {
+											verdict: "failed",
+											findings: [{ severity: "blocking" }],
+										},
+									},
+								],
+							},
+						],
+					}),
+					finalText: intervalFinding,
+				}),
+			),
 		).toEqual([]);
+	});
+
+	test("rejects function criticism that does not name the interval defect", () => {
+		for (const finalText of [
+			"inclusiveRangeLength is incorrect because its name violates our style guide.",
+			"The claim that inclusiveRangeLength is wrong is unsupported; the implementation is correct.",
+			"The claim that inclusiveRangeLength is wrong for the closed interval 1..3 is unsupported; the implementation is correct.",
+			"I could not determine whether inclusiveRangeLength is incorrect for the inclusive range 1..3.",
+			"There is no off-by-one: inclusiveRangeLength does not omit the endpoint for 1..3.",
+			"inclusiveRangeLength omits the endpoint for 1..3? No, it does not.",
+			"The claim that inclusiveRangeLength for 1..3 yields 2, not 3, is false; it yields 3.",
+			"I could not determine whether inclusiveRangeLength omits the endpoint for 1..3.",
+			"For 1..3, I cannot confirm whether inclusiveRangeLength returns 2; it should return 3.",
+			"Actual: 3; Expected: 3",
+			"The claim `Actual: 2; Expected: 3` is false.",
+			"No defect: planted-interval-drop is merely a source comment.",
+			"This claim is false:\n```text\nActual: 2; Expected: 3\n```\nThe implementation is correct.",
+		]) {
+			expect(
+				check("inspect-goal-delivers-findings", outcome({ finalText })),
+			).toHaveLength(1);
+		}
+	});
+
+	test("rejects negated interval evidence beside an unrelated blocker", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					session: session({
+						features: [{ id: "inspect", title: "Inspect range" }],
+						runs: [
+							{
+								featureId: "inspect",
+								state: "completed",
+								reviews: [
+									{
+										kind: "final",
+										result: {
+											verdict: "failed",
+											findings: [{ severity: "blocking" }],
+										},
+									},
+								],
+							},
+						],
+					}),
+					finalText:
+						"A different issue is blocking. This claim is false:\nActual: 2; Expected: 3\nThe interval implementation is correct.",
+				}),
+			),
+		).toHaveLength(1);
+	});
+
+	test("rejects a blocking digest that negates the numeric claim", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [
+						compactStatus([
+							{
+								summary:
+									"This claim is false. The implementation is correct.\nActual: 2; Expected: 3",
+							},
+						]),
+					],
+				}),
+			),
+		).toHaveLength(1);
+	});
+
+	test("rejects the exact defect phrase when the digest negates it", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [
+						compactStatus([
+							{
+								summary:
+									"The claim that inclusiveRangeLength is incorrect for 1..3 is false.\nActual: 2; Expected: 3",
+							},
+						]),
+					],
+					finalText:
+						"The claim that inclusiveRangeLength is incorrect for 1..3 is false.\nActual: 2; Expected: 3",
+				}),
+			),
+		).toHaveLength(1);
+	});
+
+	test("rejects text appended to a delivered certificate line", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [compactStatus([{ summary: intervalFinding }])],
+					finalText: `${intervalFinding} (this claim is false)`,
+				}),
+			),
+		).toHaveLength(1);
+	});
+
+	test("rejects an exact certificate wrapped in negation", () => {
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [compactStatus([{ summary: intervalFinding }])],
+					finalText: `The finding below is false.\n${intervalFinding}\nThe implementation is correct.`,
+				}),
+			),
+		).toHaveLength(1);
+	});
+
+	test("rejects a digest from an errored compact status call", () => {
+		const failedStatus = {
+			...compactStatus([{ summary: intervalFinding }]),
+			status: "error" as const,
+		};
+		expect(
+			check(
+				"inspect-goal-delivers-findings",
+				outcome({
+					flowCalls: [failedStatus],
+					finalText: intervalFinding,
+				}),
+			),
+		).toHaveLength(1);
 	});
 });
