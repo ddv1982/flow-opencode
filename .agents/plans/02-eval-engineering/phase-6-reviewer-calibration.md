@@ -34,3 +34,12 @@ measurement, not calibration by itself.
 Stop gate. Release promotion needs a preregistered human-labelled set, at least two
 raters per case, Krippendorff alpha at or above 0.8, and confidence bounds that meet
 the recorded detection and false-positive thresholds.
+
+## Outcome
+
+Implemented and verified. The packed-host pilot exercised two real reviewer child
+assignments with durable submissions and exact fixed labels. It detected the
+planted defect and passed the clean control, but remains advisory because the
+sample is below the preregistered floor, confidence bounds miss promotion
+thresholds, and the pinned host cannot expose a full reviewer identity. See
+`evidence/phase-6-review.md` and `evidence/phase-6-pilot.json`.
