@@ -4,6 +4,17 @@ import { dirname, join } from "node:path";
 import { canonicalJson } from "./canonical-json.js";
 import type { ValidatedCaseCatalog } from "./catalog.js";
 import {
+	type AllocationRecord,
+	AllocationRecordSchema,
+	type AllocationSecret,
+	allocationCommitmentSha256,
+	type MaskedAnalysisRecord,
+	MaskedAnalysisRecordSchema,
+	maskedAnalysisSha256,
+	pairedReportSha256,
+	validateMaskedAnalysis,
+} from "./experiment.js";
+import {
 	type AttemptRecordV2,
 	type CampaignCompletion,
 	type CampaignPlan,
@@ -116,6 +127,7 @@ async function writeImmutable(
 			if (existing.equals(bytes)) return "replayed";
 			fail(`Immutable report store entry conflicts: ${path}.`);
 		}
+		await syncDirectory(dirname(path));
 		await checkpoint(hooks, "after-rename");
 		await unlink(temporary);
 		await checkpoint(hooks, "before-directory-sync");
@@ -143,6 +155,8 @@ export class ReportStore {
 	private readonly planPath: string;
 	private readonly completionPath: string;
 	private readonly reportPath: string;
+	private readonly maskedAnalysisPath: string;
+	private readonly allocationPath: string;
 	private readonly catalog: ValidatedCaseCatalog;
 	private readonly hooks: ReportStoreHooks;
 
@@ -160,6 +174,8 @@ export class ReportStore {
 		this.planPath = join(directory, "plan.json");
 		this.completionPath = join(directory, "completion.json");
 		this.reportPath = join(directory, "report.json");
+		this.maskedAnalysisPath = join(directory, "masked-analysis.json");
+		this.allocationPath = join(directory, "allocation.json");
 	}
 
 	async initialize(plan: CampaignPlan): Promise<"written" | "replayed"> {
@@ -289,6 +305,79 @@ export class ReportStore {
 		await writeImmutable(this.completionPath, completionBytes, this.hooks);
 		await writeImmutable(this.reportPath, reportBytes, this.hooks);
 		return parsed.value;
+	}
+
+	private async finalizedReport(): Promise<ValidatedReport> {
+		const parsed = parseReport(await readJson(this.reportPath), this.catalog);
+		if (!parsed.ok) fail("Stored finalized report is invalid.");
+		return parsed.value;
+	}
+
+	async writeMaskedAnalysis(
+		record: MaskedAnalysisRecord,
+	): Promise<"written" | "replayed"> {
+		const parsed = MaskedAnalysisRecordSchema.safeParse(record);
+		if (!parsed.success || maskedAnalysisSha256(record) !== record.sha256) {
+			fail("Masked analysis record is invalid.");
+		}
+		const report = await this.finalizedReport();
+		if (
+			!validateMaskedAnalysis(report, record) ||
+			record.reportId !== report.reportId ||
+			record.planSha256 !== report.plan.planSha256 ||
+			record.reportSha256 !== pairedReportSha256(report) ||
+			record.allocationCommitmentSha256 !== report.allocationCommitmentSha256
+		) {
+			fail("Masked analysis does not bind the finalized report.");
+		}
+		return writeImmutable(
+			this.maskedAnalysisPath,
+			Buffer.from(canonicalJson(record)),
+			this.hooks,
+		);
+	}
+
+	async writeAllocation(
+		record: AllocationRecord,
+	): Promise<"written" | "replayed"> {
+		if (!AllocationRecordSchema.safeParse(record).success) {
+			fail("Allocation record is invalid.");
+		}
+		let maskedInput: unknown;
+		try {
+			maskedInput = await readJson(this.maskedAnalysisPath);
+		} catch {
+			fail("Allocation requires a durable masked analysis.");
+		}
+		const masked = MaskedAnalysisRecordSchema.safeParse(maskedInput);
+		if (
+			!masked.success ||
+			maskedAnalysisSha256(masked.data) !== masked.data.sha256 ||
+			record.maskedAnalysisSha256 !== masked.data.sha256
+		) {
+			fail("Allocation requires the exact durable masked analysis.");
+		}
+		const report = await this.finalizedReport();
+		const secret: AllocationSecret = {
+			schemaVersion: 1,
+			planSha256: record.planSha256,
+			nonce: record.nonce,
+			blocks: record.blocks,
+		};
+		if (
+			record.reportId !== report.reportId ||
+			record.planSha256 !== report.plan.planSha256 ||
+			record.reportSha256 !== pairedReportSha256(report) ||
+			record.allocationCommitmentSha256 !== report.allocationCommitmentSha256 ||
+			record.allocationCommitmentSha256 !== allocationCommitmentSha256(secret)
+		) {
+			fail("Allocation does not bind the finalized paired report.");
+		}
+		return writeImmutable(
+			this.allocationPath,
+			Buffer.from(canonicalJson(record)),
+			this.hooks,
+		);
 	}
 }
 

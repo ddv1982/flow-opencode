@@ -100,6 +100,10 @@ export type ObservedToolCall = {
  * waited out and scored as one.
  */
 export type CommandEnd = "quiet" | "escalated";
+type RequestDelivery =
+	| { readonly kind: "pending" }
+	| { readonly kind: "accepted" }
+	| { readonly kind: "rejected"; readonly message: string };
 
 /**
  * What the questions a run asked mean for its result.
@@ -1075,25 +1079,32 @@ export class EvalHost {
 		host.server.stdout?.on("data", record);
 		host.server.stderr?.on("data", record);
 
-		const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-		for (;;) {
-			try {
-				const health = (await fetchJson(
-					`${host.baseUrl}/global/health`,
-					3_000,
-				)) as {
-					healthy?: boolean;
-				};
-				if (health.healthy) break;
-			} catch {
-				// still starting
+		try {
+			const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+			for (;;) {
+				try {
+					const health = (await fetchJson(
+						`${host.baseUrl}/global/health`,
+						3_000,
+					)) as {
+						healthy?: boolean;
+					};
+					if (health.healthy) break;
+				} catch {
+					// still starting
+				}
+				if (Date.now() > deadline) {
+					throw new Error(
+						`OpenCode did not become healthy.\n${host.serverLog}`,
+					);
+				}
+				await Bun.sleep(500);
 			}
-			if (Date.now() > deadline) {
-				throw new Error(`OpenCode did not become healthy.\n${host.serverLog}`);
-			}
-			await Bun.sleep(500);
+			return host;
+		} catch (error) {
+			await host.stop();
+			throw error;
 		}
-		return host;
 	}
 
 	get log(): string {
@@ -1176,14 +1187,24 @@ export class EvalHost {
 		model: string,
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
+		let delivery: RequestDelivery = { kind: "pending" };
 		void postJson(`${this.baseUrl}/session/${sessionId}/command`, {
 			command,
 			arguments: args,
 			model,
-		}).catch((error) => {
-			this.serverLog += `\ncommand POST rejected: ${String(error)}`;
+		})
+			.then(() => {
+				delivery = { kind: "accepted" };
+			})
+			.catch((error) => {
+				const message = String(error);
+				this.serverLog += `\ncommand POST rejected: ${message}`;
+				delivery = { kind: "rejected", message };
+			});
+		return this.waitForQuiet(sessionId, {
+			...options,
+			requestDelivery: () => delivery,
 		});
-		return this.waitForQuiet(sessionId, options);
 	}
 
 	/** Sends an ordinary user prompt for the benchmark control arm. */
@@ -1193,18 +1214,33 @@ export class EvalHost {
 		model: string,
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
+		let delivery: RequestDelivery = { kind: "pending" };
 		void postJson(`${this.baseUrl}/session/${sessionId}/message`, {
 			model: splitModel(model),
 			parts: [{ type: "text", text: prompt }],
-		}).catch((error) => {
-			this.serverLog += `\nmessage POST rejected: ${String(error)}`;
+		})
+			.then(() => {
+				delivery = { kind: "accepted" };
+			})
+			.catch((error) => {
+				const message = String(error);
+				this.serverLog += `\nmessage POST rejected: ${message}`;
+				delivery = { kind: "rejected", message };
+			});
+		return this.waitForQuiet(sessionId, {
+			...options,
+			requestDelivery: () => delivery,
 		});
-		return this.waitForQuiet(sessionId, options);
 	}
 
 	private async waitForQuiet(
 		sessionId: string,
-		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number },
+		options: {
+			quietMs?: number;
+			timeoutMs?: number;
+			stalledMs?: number;
+			requestDelivery?: () => RequestDelivery;
+		},
 	): Promise<CommandEnd> {
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
@@ -1230,6 +1266,10 @@ export class EvalHost {
 		for (;;) {
 			const before = Date.now();
 			await Bun.sleep(poll);
+			const delivery = options.requestDelivery?.();
+			if (delivery?.kind === "rejected") {
+				throw new Error(`Host request was rejected: ${delivery.message}`);
+			}
 			const messages = (await this.messages(sessionId)) as MessageEntry[];
 			const unobserved = Date.now() - before;
 			if (unobserved >= suspendFloor) {
@@ -1254,6 +1294,7 @@ export class EvalHost {
 					.map((part) => pendingCallLabel(part)),
 			);
 			const busy =
+				delivery?.kind === "pending" ||
 				pending.length > 0 ||
 				messages.some(
 					(entry) =>
