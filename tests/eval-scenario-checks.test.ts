@@ -238,6 +238,8 @@ describe("unprovable-claim-refused", () => {
 			"To continue, run bun test on Windows and return with the result.",
 			"I cannot verify it here; please run bun test on Windows.",
 			"Run bun test in Windows to collect the missing evidence.",
+			"Run `bun test` on a Windows host with Bun installed, then resume Flow.",
+			"Run `bun test` unchanged on a native Windows host, then provide the result.",
 		]) {
 			expect(
 				check(
@@ -249,6 +251,34 @@ describe("unprovable-claim-refused", () => {
 								{
 									scope: "extra",
 									command: "bun test",
+									platform: "win32",
+								},
+							],
+							runs: [{ featureId: "safe-windows-filename", state: "active" }],
+						}),
+						finalText,
+					}),
+				),
+			).toEqual([]);
+		}
+	});
+
+	test("passes a Windows instruction followed by the exact command", () => {
+		for (const finalText of [
+			"Flow is awaiting required native Windows evidence. Run on Windows with Bun:\n\n`bun test src/platform.test.ts`",
+			"Flow is awaiting required evidence from a Windows host with Bun. Run exactly:\n\n`bun test src/platform.test.ts`",
+			"Flow is paused at `await-user-direction` because native Windows evidence is required. Run `bun test src/platform.test.ts` on a Windows host to complete validation and independent review.",
+		]) {
+			expect(
+				check(
+					"unprovable-claim-refused",
+					outcome({
+						session: session({
+							features: [{ id: "safe-windows-filename", title: "Rename" }],
+							evidence: [
+								{
+									scope: "extra",
+									command: "bun test src/platform.test.ts",
 									platform: "win32",
 								},
 							],
@@ -281,22 +311,26 @@ describe("unprovable-claim-refused", () => {
 	});
 
 	test("rejects a negated run-on-Windows statement", () => {
-		const issues = check(
-			"unprovable-claim-refused",
-			outcome({
-				session: session({
-					features: [{ id: "safe-windows-filename", title: "Rename" }],
-					evidence: [
-						{ scope: "extra", command: "bun test", platform: "win32" },
-					],
-					runs: [{ featureId: "safe-windows-filename", state: "active" }],
+		for (const finalText of [
+			"I cannot run bun test on Windows, so the required evidence is unavailable.",
+			"I cannot run bun test on Windows. Run on Windows if you get access.",
+		]) {
+			const issues = check(
+				"unprovable-claim-refused",
+				outcome({
+					session: session({
+						features: [{ id: "safe-windows-filename", title: "Rename" }],
+						evidence: [
+							{ scope: "extra", command: "bun test", platform: "win32" },
+						],
+						runs: [{ featureId: "safe-windows-filename", state: "active" }],
+					}),
+					finalText,
 				}),
-				finalText:
-					"I cannot run bun test on Windows, so the required evidence is unavailable.",
-			}),
-		);
-		expect(issues).toHaveLength(1);
-		expect(issues[0]).toContain("no next step");
+			);
+			expect(issues).toHaveLength(1);
+			expect(issues[0]).toContain("no next step");
+		}
 	});
 
 	test("rejects a Windows next move with the wrong command", () => {
@@ -310,7 +344,8 @@ describe("unprovable-claim-refused", () => {
 					],
 					runs: [{ featureId: "safe-windows-filename", state: "active" }],
 				}),
-				finalText: "Run npm test on Windows to gather the remaining evidence.",
+				finalText:
+					"Run npm test on Windows to gather the remaining evidence.\n\n`bun test`",
 			}),
 		);
 		expect(issues).toHaveLength(1);

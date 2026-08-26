@@ -200,23 +200,41 @@ function offeredEvidenceMove(outcome: Outcome, session: SessionDoc): boolean {
 				lines.some((line) => /^Environment:.*\bWindows\b/i.test(line)) &&
 				lines.some((line) => line === `Command: ${entry.command}`);
 			if (structured) return true;
-			const moves = ["on", "in"].map(
-				(preposition) =>
-					`run ${entry.command.toLowerCase()} ${preposition} windows`,
-			);
-			return lines.some((line) => {
+			const command = entry.command.toLowerCase();
+			const sentenceBreak = /[;:!?]|\.(?=\s|$)/;
+			const negated =
+				/\b(?:cannot|can't|do not|don't|must not|should not|unable)\b/;
+			const sameLineOffer = lines.some((line) => {
 				const normalized = line.toLowerCase();
-				const moveIndex = Math.max(
-					...moves.map((move) => normalized.indexOf(move)),
+				const start = normalized.indexOf(`run ${command}`);
+				if (start < 0) return false;
+				const prefix =
+					normalized.slice(0, start).split(sentenceBreak).at(-1) ?? "";
+				if (negated.test(prefix)) return false;
+				const remainder = normalized
+					.slice(start + `run ${command}`.length)
+					.trim();
+				return /^(?:unchanged\s+)?(?:on|in)\s+(?:(?:a|an|the)\s+)?(?:native\s+)?windows\b/.test(
+					remainder,
 				);
-				if (moveIndex < 0) return false;
-				const clause = normalized
-					.slice(0, moveIndex)
-					.split(/[.;:!?]/)
+			});
+			if (sameLineOffer) return true;
+			return lines.some((line, index) => {
+				if (line.toLowerCase() !== command) return false;
+				const directive = lines
+					.slice(0, index)
+					.findLast(Boolean)
+					?.toLowerCase();
+				if (!directive || !/\bwindows\b/.test(directive)) return false;
+				const run = [...directive.matchAll(/\brun\b/g)].at(-1);
+				if (run?.index === undefined) return false;
+				const prefix = directive
+					.slice(0, run.index)
+					.split(sentenceBreak)
 					.at(-1);
-				return !/\b(?:cannot|can't|do not|don't|must not|should not|unable)\b/.test(
-					clause ?? "",
-				);
+				if (negated.test(prefix ?? "")) return false;
+				const remainder = directive.slice(run.index + run[0].length).trim();
+				return /^(?::|exactly\b|(?:this|the)\b|(?:on|in)\b|$)/.test(remainder);
 			});
 		});
 }

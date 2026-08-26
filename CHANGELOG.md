@@ -12,10 +12,10 @@ Long Grok eval turns no longer fail at Bun's implicit five-minute fetch cutoff.
   empty Markdown.
 - Release matrices now predeclare three attempts for 100% cases and ten for 90%
   cases. They refuse an unpinned Bun before model calls and pass their measured
-  artifact directly to canary preparation.
-- The inspect scenario uses one exact public finding certificate in both durable
-  review state and the complete final response. The committed replay corpus and
-  maintainer catalog use the same contract.
+  artifact directly to canary preparation. Windows handoff grading accepts the
+  exact command in natural instructions, not one fixed sentence shape.
+- Inspect evals require one exact finding certificate in durable review state and
+  the final response.
 - A final run with unsatisfied extra evidence now projects
   `await-user-direction` before review and offers the declared environment,
   deferred closure, or abandoned closure as explicit next moves.
