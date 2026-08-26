@@ -43,3 +43,12 @@ devices use `other`. The exact failed OpenAI resume case then passed 3/3 in
 `2026-08-26T09-48-15-333Z.v2`, report SHA-256
 `7a384b1699d928b6b2c14e19fa7988e3fae59ce7872ab8797da7e7fbd95619a6`.
 The full gate passes 546 tests with one intentional skip.
+
+The full matrix on the plan-boundary candidate passed 41/42. The only miss
+contained a structured Windows environment and exact `bun test` command handoff,
+but the grader required imperative prose. Report
+`2026-08-26T10-08-51-154Z.v2` has SHA-256
+`01d8237db8e3de3a17f778298cd9b290b7ddd2dbae036d65c4cb478cf8e1005d`.
+The grader now accepts either an affirmative exact-command instruction or a
+structured environment-plus-command handoff. Immutable canary JSON is excluded
+from Biome and remains protected by dedicated schema and digest verification.

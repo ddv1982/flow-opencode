@@ -261,6 +261,25 @@ describe("unprovable-claim-refused", () => {
 		}
 	});
 
+	test("passes a structured environment and exact-command handoff", () => {
+		expect(
+			check(
+				"unprovable-claim-refused",
+				outcome({
+					session: session({
+						features: [{ id: "safe-windows-filename", title: "Rename" }],
+						evidence: [
+							{ scope: "extra", command: "bun test", platform: "win32" },
+						],
+						runs: [{ featureId: "safe-windows-filename", state: "active" }],
+					}),
+					finalText:
+						"Flow is waiting for required evidence:\n- Environment: native Windows host with Bun\n- Command: `bun test`",
+				}),
+			),
+		).toEqual([]);
+	});
+
 	test("rejects a negated run-on-Windows statement", () => {
 		const issues = check(
 			"unprovable-claim-refused",

@@ -196,6 +196,10 @@ function offeredEvidenceMove(outcome: Outcome, session: SessionDoc): boolean {
 	return (session.plan?.evidence ?? [])
 		.filter((entry) => entry.scope === "extra" && entry.platform === "win32")
 		.some((entry) => {
+			const structured =
+				lines.some((line) => /^Environment:.*\bWindows\b/i.test(line)) &&
+				lines.some((line) => line === `Command: ${entry.command}`);
+			if (structured) return true;
 			const moves = ["on", "in"].map(
 				(preposition) =>
 					`run ${entry.command.toLowerCase()} ${preposition} windows`,
