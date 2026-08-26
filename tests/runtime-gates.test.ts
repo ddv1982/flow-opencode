@@ -292,6 +292,87 @@ describe("Flow application runtime gates", () => {
 		});
 	});
 
+	test("checkpoints before final review when extra evidence is unsatisfied", async () => {
+		const repository = new MemorySessionRepository();
+		const extraEvidencePlan: Plan = {
+			...plan,
+			evidence: [
+				...(plan.evidence ?? []),
+				{
+					scope: "extra",
+					requirement: "Observe native Windows behavior.",
+					environment: "Windows with Bun",
+					command: "bun test",
+					platform: "win32",
+					assertions: ["Windows case passes"],
+				},
+			],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: extraEvidencePlan,
+			suffix: "extra-evidence-checkpoint",
+		});
+		await startFeatureRun(
+			flow,
+			repository,
+			FEATURE,
+			"extra-evidence-checkpoint",
+		);
+		await recordObservedValidation(repository, {
+			captureId: "capture-extra-evidence-checkpoint",
+		});
+
+		const status = await flow.status({ request: { view: "compact" } });
+		expectOk(status);
+		expect(status.workflowData.projection).toMatchObject({
+			status: "running",
+			nextAction: "await-user-direction",
+		});
+	});
+
+	test("checkpoints when extra evidence is stale for current source", async () => {
+		const repository = new MemorySessionRepository();
+		const extraEvidencePlan: Plan = {
+			...plan,
+			evidence: [
+				...(plan.evidence ?? []),
+				{
+					scope: "extra",
+					requirement: "Observe native Windows behavior.",
+					environment: "Windows with Bun",
+					command: "bun test",
+					platform: "win32",
+					assertions: [],
+				},
+			],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: extraEvidencePlan,
+			suffix: "stale-extra-evidence",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "stale-extra-evidence");
+		await recordObservedValidation(repository, {
+			captureId: "capture-windows-source-a",
+			hostPlatform: "win32",
+		});
+		const reviewReady = await flow.status({ request: { view: "compact" } });
+		expectOk(reviewReady);
+		expect(reviewReady.workflowData.projection).toMatchObject({
+			nextAction: "flow_review_start",
+		});
+
+		repository.sourceDigest = SOURCE_B;
+		await recordObservedValidation(repository, {
+			captureId: "capture-gate-source-b",
+			hostPlatform: "linux",
+		});
+		const checkpoint = await flow.status({ request: { view: "compact" } });
+		expectOk(checkpoint);
+		expect(checkpoint.workflowData.projection).toMatchObject({
+			nextAction: "await-user-direction",
+		});
+	});
+
 	test("does not reuse stale broad evidence after a later command failure", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());

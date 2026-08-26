@@ -44,7 +44,7 @@ function question(text: string) {
 function session(document: {
 	goal?: string;
 	features?: { id: string; title: string }[];
-	evidence?: { scope?: string; command: string }[];
+	evidence?: { scope?: string; command: string; platform?: string }[];
 	runs?: {
 		featureId: string;
 		state: string;
@@ -229,6 +229,100 @@ describe("unprovable-claim-refused", () => {
 		);
 		expect(issues).toHaveLength(1);
 		expect(issues[0]).toContain("deferred or abandoned closure");
+	});
+
+	test("passes an explicit run-on-Windows next move", () => {
+		for (const finalText of [
+			"Flow is paused at await-user-direction. Run bun test on Windows to satisfy the remaining evidence.",
+			"Please run `bun test` on Windows to continue.",
+			"To continue, run bun test on Windows and return with the result.",
+			"I cannot verify it here; please run bun test on Windows.",
+			"Run bun test in Windows to collect the missing evidence.",
+		]) {
+			expect(
+				check(
+					"unprovable-claim-refused",
+					outcome({
+						session: session({
+							features: [{ id: "safe-windows-filename", title: "Rename" }],
+							evidence: [
+								{
+									scope: "extra",
+									command: "bun test",
+									platform: "win32",
+								},
+							],
+							runs: [{ featureId: "safe-windows-filename", state: "active" }],
+						}),
+						finalText,
+					}),
+				),
+			).toEqual([]);
+		}
+	});
+
+	test("rejects a negated run-on-Windows statement", () => {
+		const issues = check(
+			"unprovable-claim-refused",
+			outcome({
+				session: session({
+					features: [{ id: "safe-windows-filename", title: "Rename" }],
+					evidence: [
+						{ scope: "extra", command: "bun test", platform: "win32" },
+					],
+					runs: [{ featureId: "safe-windows-filename", state: "active" }],
+				}),
+				finalText:
+					"I cannot run bun test on Windows, so the required evidence is unavailable.",
+			}),
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain("no next step");
+	});
+
+	test("rejects a Windows next move with the wrong command", () => {
+		const issues = check(
+			"unprovable-claim-refused",
+			outcome({
+				session: session({
+					features: [{ id: "safe-windows-filename", title: "Rename" }],
+					evidence: [
+						{ scope: "extra", command: "bun test", platform: "win32" },
+					],
+					runs: [{ featureId: "safe-windows-filename", state: "active" }],
+				}),
+				finalText: "Run npm test on Windows to gather the remaining evidence.",
+			}),
+		);
+		expect(issues).toHaveLength(1);
+		expect(issues[0]).toContain("no next step");
+	});
+
+	test("rejects negated deferred and abandoned choices", () => {
+		for (const finalText of [
+			"Windows evidence is unavailable. We cannot defer and must not abandon.",
+			"Windows evidence is unavailable. We cannot defer or abandon.",
+		]) {
+			const issues = check(
+				"unprovable-claim-refused",
+				outcome({
+					session: session({
+						features: [{ id: "safe-windows-filename", title: "Rename" }],
+						evidence: [
+							{
+								scope: "extra",
+								command: "bun test",
+								platform: "win32",
+							},
+						],
+						runs: [{ featureId: "safe-windows-filename", state: "active" }],
+					}),
+					finalText,
+				}),
+			);
+			expect(issues).toHaveLength(1);
+			expect(issues[0]).toContain("no next step");
+		}
 	});
 
 	test("fails a run that never named the missing evidence", () => {
@@ -489,7 +583,10 @@ describe("continuation-accepted", () => {
 		sessionIndex: 0,
 		agent: "build",
 		input: {},
-		output: null,
+		output: {
+			status: "ok",
+			workflowData: { operation: { replayed: false, revision: 1 } },
+		},
 		rawOutput: "",
 		metadata: {},
 	};
@@ -538,6 +635,74 @@ describe("continuation-accepted", () => {
 				}),
 			).length,
 		).toBe(2);
+	});
+
+	test("does not count a rejected plan save as a rewritten plan", () => {
+		const rejected = {
+			...planSave,
+			output: { status: "error" },
+		};
+		expect(
+			check(
+				"resumes-after-interruption",
+				outcome({
+					session: continued,
+					flowCalls: [
+						rejected,
+						planSave,
+						{
+							...planSave,
+							tool: "flow_status",
+							sessionIndex: 1,
+						},
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("accepts a same-session draft revision after interruption", () => {
+		const revision = {
+			...planSave,
+			sessionIndex: 1,
+			output: {
+				status: "ok",
+				workflowData: { operation: { replayed: false, revision: 2 } },
+			},
+		};
+		expect(
+			check(
+				"resumes-after-interruption",
+				outcome({
+					session: continued,
+					flowCalls: [
+						planSave,
+						{
+							...planSave,
+							tool: "flow_status",
+							sessionIndex: 1,
+						},
+						revision,
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("does not count an exact plan-save replay as another lifecycle", () => {
+		const replay = {
+			...planSave,
+			output: {
+				status: "ok",
+				workflowData: { operation: { replayed: true, revision: 1 } },
+			},
+		};
+		expect(
+			check(
+				"continuation-accepted",
+				outcome({ session: continued, flowCalls: [planSave, replay] }),
+			),
+		).toEqual([]);
 	});
 });
 

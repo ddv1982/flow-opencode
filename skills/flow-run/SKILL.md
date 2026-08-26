@@ -101,9 +101,6 @@ compact status before mutating.
 For the final feature, run the plan's gate command at broad scope after the
 last relevant edit.
 
-An evidence command that cannot pass withholds completed closure. Reach the
-passing command, or ask the user to choose deferred or abandoned closure.
-
 ## Review
 
 After successful applicable validation, call `flow_review_start` with a fresh
@@ -122,6 +119,9 @@ feature.
 Follow `nextAction` with the one detail projection for routing, then print
 compact `findingsDigest` as the user-facing list. The runtime already weighs
 `failedReviewCount` and `blockedFeature.scopeBlocker`.
+
+- Running `await-user-direction` means plan evidence is unsatisfied. Offer its
+  exact command and environment, defer, or abandon. Do not review or reset.
 
 - Ready `await-user-direction` has no blocked run left to reset. Identify the
   planned feature whose latest relevant reviewed outcome remains failed and

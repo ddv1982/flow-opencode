@@ -29,6 +29,7 @@ import {
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
+	unsatisfiedExtraEvidence,
 } from "../domain/validation.js";
 import { type FindingsDigest, findingsDigest } from "./findings-digest.js";
 import type { StatusRequest } from "./schema.js";
@@ -197,9 +198,7 @@ function nextAction(
 		return "await-user-direction";
 	if (status === "ready") return "flow_run_start";
 	if (status === "blocked") {
-		// A scope blocker or a second failure means the user decides, not the loop.
-		// Both halves of this rule are now enforced here; the scope-blocker half
-		// used to rely on the manager noticing a marker in free-text prose.
+		// A scope blocker or second failure requires user direction.
 		return (blockedFeature?.failedReviewCount ?? 0) >= 2 ||
 			blockedFeature?.scopeBlocker === true
 			? "await-user-direction"
@@ -219,16 +218,21 @@ function nextAction(
 			(feature) =>
 				feature.id === run.featureId || isFeatureComplete(session, feature.id),
 		) ?? false;
-	const hasPassingValidation = run.validations.some(
+	const passingValidation = run.validations.findLast(
 		(validation) =>
 			isValidationEligible(validation) &&
 			isValidationFresh(session, run, validation) &&
 			(!finalRun || validation.scope === "broad"),
 	);
-	if (!hasPassingValidation) return "flow_validation_start";
+	if (!passingValidation) return "flow_validation_start";
 	if (unresolvedVetoedCommands(session, run).length > 0) {
 		return "flow_validation_start";
 	}
+	if (
+		finalRun &&
+		unsatisfiedExtraEvidence(session, passingValidation.sourceDigest).length > 0
+	)
+		return "await-user-direction";
 	return "flow_review_start";
 }
 

@@ -53,6 +53,7 @@ type SessionDoc = {
 		evidence?: {
 			scope?: string;
 			command: string;
+			platform?: string;
 			assertions?: string[];
 		}[];
 	} | null;
@@ -88,6 +89,25 @@ function closedDocument(outcome: Outcome): SessionDoc | null {
 /** Flow tool names in call order, for checks about which step ran and when. */
 function calledTools(outcome: Outcome): string[] {
 	return outcome.flowCalls.map((call) => call.tool);
+}
+
+function planCreations(outcome: Outcome): number {
+	return outcome.flowCalls.filter((call) => {
+		if (call.tool !== "flow_plan_save" || call.status !== "completed") {
+			return false;
+		}
+		const output = call.output as {
+			status?: string;
+			workflowData?: {
+				operation?: { replayed?: boolean; revision?: number };
+			};
+		} | null;
+		return (
+			output?.status === "ok" &&
+			output.workflowData?.operation?.replayed === false &&
+			output.workflowData.operation.revision === 1
+		);
+	}).length;
 }
 
 /** Whether the model dispatched a hidden Flow subagent of the given type. */
@@ -160,7 +180,41 @@ function reportedToUser(outcome: Outcome): string {
 function offeredClosureChoice(outcome: Outcome): boolean {
 	const closed = closedDocument(outcome)?.closure?.kind;
 	if (closed === "deferred" || closed === "abandoned") return true;
-	return /defer|abandon/i.test(reportedToUser(outcome));
+	const affirmative = reportedToUser(outcome).replace(
+		/\b(?:cannot|can't|do not|don't|must not|should not|not|unable to)\s+(?:defer\w*|abandon\w*)(?:\s+(?:or|and)\s+(?:defer\w*|abandon\w*))?/gi,
+		"",
+	);
+	return /defer|abandon/i.test(affirmative);
+}
+
+function offeredEvidenceMove(outcome: Outcome, session: SessionDoc): boolean {
+	if (offeredClosureChoice(outcome)) return true;
+	const lines = reportedToUser(outcome)
+		.replaceAll("`", "")
+		.split(/\r?\n/)
+		.map((line) => line.trim().replace(/^[-*]\s+/, ""));
+	return (session.plan?.evidence ?? [])
+		.filter((entry) => entry.scope === "extra" && entry.platform === "win32")
+		.some((entry) => {
+			const moves = ["on", "in"].map(
+				(preposition) =>
+					`run ${entry.command.toLowerCase()} ${preposition} windows`,
+			);
+			return lines.some((line) => {
+				const normalized = line.toLowerCase();
+				const moveIndex = Math.max(
+					...moves.map((move) => normalized.indexOf(move)),
+				);
+				if (moveIndex < 0) return false;
+				const clause = normalized
+					.slice(0, moveIndex)
+					.split(/[.;:!?]/)
+					.at(-1);
+				return !/\b(?:cannot|can't|do not|don't|must not|should not|unable)\b/.test(
+					clause ?? "",
+				);
+			});
+		});
 }
 
 /** Blocking findings recorded across every review the run performed. */
@@ -867,12 +921,10 @@ export const SCENARIOS: readonly Scenario[] = [
 					`${sessions.length} session documents exist; the follow-up started a new lifecycle instead of continuing the planned one`,
 				);
 			}
-			const saves = calledTools(outcome).filter(
-				(tool) => tool === "flow_plan_save",
-			).length;
+			const saves = planCreations(outcome);
 			if (saves !== 1) {
 				issues.push(
-					`flow_plan_save was called ${saves} times; continuing a plan must not rewrite it`,
+					`flow_plan_save created ${saves} plan lifecycles; continuing must reuse exactly one`,
 				);
 			}
 			for (const session of sessions) {
@@ -1031,9 +1083,9 @@ export const SCENARIOS: readonly Scenario[] = [
 			// An honest stop still has to leave the workflow somewhere. Three measured
 			// attempts named the blocker precisely, left the session active, and
 			// offered nothing — which is the report without the next step.
-			if (!closed?.closure && !offeredClosureChoice(outcome)) {
+			if (!closed?.closure && !offeredEvidenceMove(outcome, session)) {
 				issues.push(
-					"stopped without offering deferred or abandoned closure, leaving the run with no next step",
+					"stopped without offering a declared-environment run, deferred or abandoned closure, leaving the run with no next step",
 				);
 			}
 			return issues;
@@ -1237,13 +1289,13 @@ export const SCENARIOS: readonly Scenario[] = [
 					);
 				}
 			}
-			// Plans are immutable, so resuming must reuse the saved plan rather than
-			// write a second one over the same lifecycle.
-			const saves = calledTools(outcome).filter(
-				(tool) => tool === "flow_plan_save",
-			).length;
+			// Count lifecycle creation, not rejected calls, exact replays, or valid
+			// revisions of the same pending draft.
+			const saves = planCreations(outcome);
 			if (saves !== 1) {
-				issues.push(`flow_plan_save was called ${saves} times, expected once`);
+				issues.push(
+					`flow_plan_save created ${saves} plan lifecycles, expected one`,
+				);
 			}
 			// Lifecycle truth comes from status, never from memory the fresh session
 			// does not have. Only the resumed session can show that: the planning step is

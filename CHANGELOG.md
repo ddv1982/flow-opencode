@@ -15,8 +15,10 @@ Long Grok eval turns no longer fail at Bun's implicit five-minute fetch cutoff.
 - The inspect scenario uses one exact public finding certificate in both durable
   review state and the complete final response. The committed replay corpus and
   maintainer catalog use the same contract.
-- **Session v5 schema:** unchanged. Runtime commands, tools, and workflow behavior
-  are unchanged.
+- A final run with unsatisfied extra evidence now projects
+  `await-user-direction` before review and offers the declared environment,
+  deferred closure, or abandoned closure as explicit next moves.
+- **Session v5 schema:** unchanged. Runtime commands and tools are unchanged.
 
 Install or update:
 

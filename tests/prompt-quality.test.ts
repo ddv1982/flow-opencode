@@ -260,6 +260,15 @@ describe("Flow prompt structure", () => {
 		expect(getFlowGuidance("flow").content).toContain("findingsDigest");
 	});
 
+	test("makes the unsatisfied-evidence checkpoint explicit", () => {
+		expect(getFlowGuidance("flow-run").content).toContain(
+			"Running `await-user-direction` means plan evidence is unsatisfied",
+		);
+		expect(getFlowGuidance("flow-run").content).toContain(
+			"exact command and environment, defer, or abandon",
+		);
+	});
+
 	test("continues a reviewer matrix only when the packet asked for one", () => {
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
 		expect(reviewer).toContain("riskLenses");
