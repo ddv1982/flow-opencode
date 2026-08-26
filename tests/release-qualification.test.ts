@@ -2,7 +2,10 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RELEASE_PASS_RATES } from "../evals/release-policy.js";
+import {
+	RELEASE_CASE_SAMPLING,
+	RELEASE_PASS_RATES,
+} from "../evals/release-policy.js";
 import { campaignPlanSha256 } from "../evals/report.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import {
@@ -220,7 +223,17 @@ function report(overrides: {
 					scenarios.flatMap((scenario) =>
 						models.map((model) => [
 							`${scenario} @ ${model}`,
-							{ passed: 3, attempts: 3, unscored: 0 },
+							{
+								passed:
+									RELEASE_CASE_SAMPLING[
+										scenario as keyof typeof RELEASE_CASE_SAMPLING
+									]?.attemptsPerModel ?? 3,
+								attempts:
+									RELEASE_CASE_SAMPLING[
+										scenario as keyof typeof RELEASE_CASE_SAMPLING
+									]?.attemptsPerModel ?? 3,
+								unscored: 0,
+							},
 						]),
 					),
 				),
@@ -343,8 +356,8 @@ describe("release qualification", () => {
 						aborted: 1,
 					},
 					"failing-gate-blocks @ openai/gpt-5.6": {
-						passed: 3,
-						attempts: 3,
+						passed: 10,
+						attempts: 10,
 						unscored: 0,
 						aborted: 0,
 					},
@@ -442,8 +455,8 @@ describe("merging a re-run into a matrix", () => {
 	};
 	const RERUN = {
 		"failing-gate-blocks @ anthropic/claude-opus-5": {
-			passed: 3,
-			attempts: 3,
+			passed: 10,
+			attempts: 10,
 			unscored: 0,
 			aborted: 0,
 		},
@@ -484,7 +497,7 @@ describe("merging a re-run into a matrix", () => {
 		const merged = mergeReports([base(), rerun()]);
 		expect(merged.failures).toEqual([]);
 		expect(qualificationFailures(merged.report)).toEqual([]);
-		expect(merged.notes.join()).toContain("superseded by 3/3");
+		expect(merged.notes.join()).toContain("superseded by 10/10");
 	});
 
 	test("takes the newer measurement whichever order the reports are given", () => {
@@ -651,6 +664,18 @@ describe("v2 qualification cutover", () => {
 			artifact: { ...V2_ARTIFACT, tarballSha256: digest("9") },
 		});
 		expect(notVerified.decision.verdict).toBe("NOT VERIFIED");
+
+		const evidenceOnlyDrift = qualifyV2({
+			reportInput: v2Report(),
+			catalogInput: V2_CATALOG,
+			artifact: {
+				...V2_ARTIFACT,
+				sourceCommit: "tag-commit-after-evidence",
+				sourceTreeSha256: digest("8"),
+			},
+		});
+		expect(evidenceOnlyDrift.decision.verdict).toBe("VERIFIED");
+		expect(evidenceOnlyDrift.expected.artifact).toEqual(V2_ARTIFACT);
 
 		const inconclusive = qualifyV2({
 			reportInput: v2Report(true),

@@ -19,7 +19,7 @@ import {
 	normalizeRecorded,
 	scrubSecrets,
 } from "../evals/cassette.js";
-import { inspectArtifact } from "../evals/provenance.js";
+import { inspectArtifact, samePackedArtifact } from "../evals/provenance.js";
 import type { ActorIdentity, ArtifactIdentity } from "../evals/report.js";
 
 export const CANARY_CHECKLIST_VERSION = "phase9-canary-v1";
@@ -541,7 +541,7 @@ export async function canaryRecordIssue(input: {
 	const record = parsed.value;
 	if (record.artifact.packageVersion !== input.version)
 		return "Canary artifact version does not match the release.";
-	if (canonicalJson(record.artifact) !== canonicalJson(input.expectedArtifact))
+	if (!samePackedArtifact(record.artifact, input.expectedArtifact))
 		return "Canary artifact does not match the rebuilt artifact.";
 	if (record.status !== "passed") return `Canary status is ${record.status}.`;
 	const now = (input.now ?? new Date()).getTime();

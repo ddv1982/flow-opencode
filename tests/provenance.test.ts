@@ -13,6 +13,7 @@ import {
 	instructionDelivery,
 	normalizeRequestedModel,
 	redactTranscript,
+	samePackedArtifact,
 	unpackedManifestSha256,
 } from "../evals/provenance.js";
 
@@ -122,6 +123,32 @@ describe("eval provenance", () => {
 		expect(secondIdentity.unpackedManifestSha256).not.toBe(
 			firstIdentity.unpackedManifestSha256,
 		);
+	});
+
+	test("separates packed identity from source provenance", () => {
+		const packed = {
+			packageVersion: "1.2.3",
+			sourceCommit: "candidate",
+			sourceTreeSha256: "sha256:a".padEnd(71, "a"),
+			tarballSha256: "sha256:b".padEnd(71, "b"),
+			unpackedManifestSha256: "sha256:c".padEnd(71, "c"),
+		};
+		const sourceDrift = {
+			...packed,
+			sourceCommit: "tag-after-evidence",
+			sourceTreeSha256: "sha256:d".padEnd(71, "d"),
+		};
+		const tarballDrift = {
+			...packed,
+			tarballSha256: "sha256:e".padEnd(71, "e"),
+		};
+		const manifestDrift = {
+			...packed,
+			unpackedManifestSha256: "sha256:f".padEnd(71, "f"),
+		};
+		expect(samePackedArtifact(packed, sourceDrift)).toBe(true);
+		expect(samePackedArtifact(packed, tarballDrift)).toBe(false);
+		expect(samePackedArtifact(packed, manifestDrift)).toBe(false);
 	});
 
 	test("rejects duplicate archive paths", async () => {

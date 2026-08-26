@@ -1,11 +1,8 @@
 #!/usr/bin/env bun
 // Applies the published release-qualification thresholds to an eval report.
 //
-//   bun run qualify                       # newest report in evals/results/
-//   bun run qualify evals/results/x.json  # one exact report
-//   bun run qualify base.json rerun.json  # a matrix plus the pairs it re-measured
-//   bun run qualify -- --record 9.0.0     # on a pass, write the committed record
-//                                         # release-metadata requires for a major
+//   bun run qualify -- --report <report.json> --catalog <catalog.json>
+//     --artifact <artifact.tgz> [--canary <canary.json>]
 //
 // The thresholds live here rather than in prose because "the evals looked fine" was
 // the entire release bar: every recorded pass rate was read by eye, from one model,
@@ -30,6 +27,7 @@ import {
 	type ValidatedCaseCatalog,
 } from "../evals/catalog.js";
 import { inspectArtifact } from "../evals/provenance.js";
+import { RELEASE_CASE_SAMPLING } from "../evals/release-policy.js";
 import {
 	type ArtifactIdentity,
 	parseReport,
@@ -73,12 +71,6 @@ export type DecisionRecord = {
  * report also prints per-pair rates.
  */
 const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
-	"happy-path": 1,
-	"plan-only-stops": 1,
-	"goal-change-refused": 1,
-	"failing-gate-blocks": 0.9,
-	"resumes-after-interruption": 1,
-	"unprovable-claim-refused": 0.9,
 	// Measured, and not gated at 1.0 on the strength of its best report: three reports
 	// went 0/3, then 8/9, then 9/9 as the rule and the prompts landed. 17/18 across the
 	// two reports that measured the finished rule is what 0.9 records. The pair that
@@ -120,26 +112,22 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// fails a silent pass, and `evals/cassettes/` pins a reviewer rejection of the
 	// plant. Gating the rate still waits for a matrix.
 	"inspect-goal-delivers-findings": null,
-	// Ungated until a matrix exists. Measures whether `/flow-auto` on an inspect
-	// goal leaves a user-visible findings list (final text, close delivery, or
-	// compact findingsDigest) rather than going silent.
+	// Ungated until a qualifying matrix exists. Measures whether `/flow-auto` on an
+	// inspect goal records the exact public certificate in a live failed blocking
+	// compact digest and returns the same certificate as the complete final response.
+	...Object.fromEntries(
+		Object.entries(RELEASE_CASE_SAMPLING).map(([id, policy]) => [
+			id,
+			policy.minPassRate,
+		]),
+	),
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */
 const MIN_PROVIDERS = 2;
 
-/**
- * The minimum number of *scored* attempts behind a gated pass rate.
- *
- * A rate is a fraction, and only the numerator was ever checked. An attempt that
- * ended with the model asking the user is excluded from the denominator, so a
- * measured run cleared a 100% threshold on two attempts instead of three — and the
- * excluded one was the attempt that behaved correctly. Three is the documented
- * default `--repeat`, so a report below it means re-run that pair, not accept a
- * quietly smaller sample.
- */
-const MIN_SCORED_ATTEMPTS = 3;
-
+// Each release case carries its own scored-attempt floor in
+// RELEASE_CASE_SAMPLING. A partial campaign cannot shrink that denominator.
 type Report = {
 	flowVersion?: string;
 	opencodeVersion?: string;
@@ -470,9 +458,12 @@ export function qualificationFailures(report: Report): string[] {
 			);
 			continue;
 		}
-		if (rate.attempts < MIN_SCORED_ATTEMPTS) {
+		const minimum =
+			RELEASE_CASE_SAMPLING[scenario as keyof typeof RELEASE_CASE_SAMPLING]
+				?.attemptsPerModel ?? 1;
+		if (rate.attempts < minimum) {
 			failures.push(
-				`${label}: only ${rate.attempts} attempt(s) scored (${rate.unscored} excluded); a gated rate needs at least ${MIN_SCORED_ATTEMPTS}, so re-run this pair`,
+				`${label}: only ${rate.attempts} attempt(s) scored (${rate.unscored} excluded); this gated rate needs at least ${minimum}, so re-run this pair`,
 			);
 			continue;
 		}
@@ -546,7 +537,14 @@ export function qualifyV2(input: {
 				.join("; ")}`,
 		);
 	}
-	const expected = expectedProvenanceFor(parsed.value, input.artifact);
+	const measuredArtifact = parsed.value.attempts[0]?.artifact;
+	if (!measuredArtifact) {
+		throw new Error("A v2 qualification report requires an attempt.");
+	}
+	if ("kind" in measuredArtifact) {
+		throw new Error("A v2 qualification report requires a Flow artifact.");
+	}
+	const expected = expectedProvenanceFor(parsed.value, measuredArtifact);
 	if (input.canary) {
 		const canaryIssue = canaryRecordIssue(
 			input.artifact.packageVersion,
@@ -563,6 +561,7 @@ export function qualifyV2(input: {
 			report: parsed.value,
 			catalog: catalog.value,
 			expected,
+			promotionArtifact: input.artifact,
 		}),
 		canary: input.canary ?? null,
 	};

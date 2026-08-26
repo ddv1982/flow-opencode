@@ -65,9 +65,8 @@ Follow compact `nextAction` in this order:
 - `flow_review_start`: read execution status and continue at **Review**.
 - Any other action: report it and stop.
 
-Use execution status for active scope and revision. Stay inside the feature.
-Out-of-plan work stops. Use `flow_feature_reset` for a wrong design; do not
-layer retries.
+Use execution status for scope and revision. Stay in the feature; reset a wrong
+design instead of layering retries.
 
 ## Implement
 
@@ -92,6 +91,8 @@ A failed, incomplete, or source-drifted observation of a plan-listed command or
 of the declared gate command blocks review until that same command passes for
 current source.
 
+A gate that cannot pass must ask the user to defer or abandon before returning.
+
 Every host-observed validation advances revision. The `[flow-validation]`
 marker reports `passed`, `recordedRevision`, and declared `assertions`. Use
 `recordedRevision` for the next `flow_validation_start`, or for
@@ -100,9 +101,6 @@ compact status before mutating.
 
 For the final feature, run the plan's gate command at broad scope after the
 last relevant edit.
-
-An evidence command that cannot pass withholds completed closure. Reach the
-passing command, or ask the user to choose deferred or abandoned closure.
 
 ## Review
 
@@ -122,6 +120,9 @@ feature.
 Follow `nextAction` with the one detail projection for routing, then print
 compact `findingsDigest` as the user-facing list. The runtime already weighs
 `failedReviewCount` and `blockedFeature.scopeBlocker`.
+
+- Running `await-user-direction` means plan evidence is unsatisfied. Offer its
+  command byte-for-byte and environment, defer, or abandon. Do not review or reset.
 
 - Ready `await-user-direction` has no blocked run left to reset. Identify the
   planned feature whose latest relevant reviewed outcome remains failed and

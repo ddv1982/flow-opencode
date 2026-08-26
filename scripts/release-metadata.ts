@@ -1,8 +1,11 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { canonicalJson, canonicalSha256 } from "../evals/canonical-json.js";
-import { inspectArtifact } from "../evals/provenance.js";
-import type { ArtifactIdentity } from "../evals/report.js";
+import { canonicalSha256 } from "../evals/canonical-json.js";
+import { inspectArtifact, samePackedArtifact } from "../evals/provenance.js";
+import {
+	type ArtifactIdentity,
+	ArtifactIdentitySchema,
+} from "../evals/report.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
@@ -27,15 +30,15 @@ export function canaryRecordIssue(
 		return `the canary for ${version} is not a passed v1 record`;
 	if (entry.releaseTag !== expectedTag)
 		return `the canary tag ${String(entry.releaseTag)} does not match ${expectedTag}`;
-	if (canonicalJson(entry.artifact) !== canonicalJson(expectedArtifact))
-		return `the canary artifact does not match the rebuilt artifact for ${version}`;
 	const parsed = parseCanaryRecord(record);
 	if (!parsed.ok) return `the canary record for ${version} is invalid`;
+	if (!samePackedArtifact(parsed.value.artifact, expectedArtifact))
+		return `the canary artifact does not match the rebuilt artifact for ${version}`;
 	const { recordSha256: _recordSha256, ...recordWithoutHash } = parsed.value;
 	if (parsed.value.recordSha256 !== canaryRecordSha256(recordWithoutHash))
 		return `the canary record for ${version} has an invalid digest`;
 	if (
-		entry.artifactSha256 !== artifactIdentitySha256(expectedArtifact) ||
+		entry.artifactSha256 !== artifactIdentitySha256(parsed.value.artifact) ||
 		entry.checklistVersion !== CANARY_CHECKLIST_VERSION ||
 		entry.checklistSha256 !== CANARY_CHECKLIST_SHA256 ||
 		Object.values(entry.checks ?? {}).length === 0 ||
@@ -173,7 +176,11 @@ export function qualificationRecordIssue(
 	if (entry.schemaVersion !== 1 || typeof entry.reportId !== "string") {
 		return `the qualification record for ${version} is not a v2 decision record`;
 	}
-	if (entry.artifact?.packageVersion !== version) {
+	const parsedArtifact = ArtifactIdentitySchema.safeParse(entry.artifact);
+	if (!parsedArtifact.success) {
+		return `the qualification artifact for ${version} is invalid`;
+	}
+	if (parsedArtifact.data.packageVersion !== version) {
 		return `the qualification artifact names ${String(entry.artifact?.packageVersion)}, not ${version}`;
 	}
 	if (entry.verdict !== "VERIFIED") {
@@ -199,8 +206,14 @@ export function qualificationRecordIssue(
 		return `the qualification record for ${version} is missing v2 decision digests`;
 	}
 	if (
+		entry.artifactSha256 !==
+		canonicalSha256("flow-decision-artifact-v1", parsedArtifact.data)
+	) {
+		return `the qualification artifact digest for ${version} is invalid`;
+	}
+	if (
 		expectedArtifact &&
-		canonicalJson(entry.artifact) !== canonicalJson(expectedArtifact)
+		!samePackedArtifact(parsedArtifact.data, expectedArtifact)
 	) {
 		return `the qualification artifact does not match the rebuilt artifact for ${version}`;
 	}

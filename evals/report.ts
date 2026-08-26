@@ -48,7 +48,7 @@ const ObservedModelIdentitySchema = z.discriminatedUnion("kind", [
 	z.object({ kind: z.literal("unobserved"), reason: TextSchema }).strict(),
 ]);
 
-const ArtifactIdentitySchema = z
+export const ArtifactIdentitySchema = z
 	.object({
 		packageVersion: TextSchema,
 		sourceCommit: TextSchema,

@@ -23,11 +23,6 @@ on:
         description: Comma-separated providerID/modelID list
         required: false
         type: string
-      repeat:
-        description: Attempts per scenario and model
-        required: false
-        default: "3"
-        type: string
 
 permissions:
   contents: read
@@ -90,17 +85,13 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FLOW_EVAL_MODEL: ${{ steps.matrix.outputs.models }}
           FLOW_EVAL_NO_AUTH_COPY: "1"
-          # Through the environment, not interpolated into the script: a dispatch
-          # input is caller text, and `run:` splices it before any shell quoting
-          # applies. The runner rejects a non-integer itself.
-          REPEAT: ${{ inputs.repeat || '3' }}
         # A failing scenario must still publish its report: the durable documents are
         # the only way to read why, and paying for the pass twice is the alternative.
         continue-on-error: true
         run: |
           set -o pipefail
           set +e
-          bun run eval -- --repeat "$REPEAT" 2>&1 | tee eval-v2.log
+          bun run eval -- --release 2>&1 | tee eval-v2.log
           status=${PIPESTATUS[0]}
           set -e
           report="$(sed -n 's/^V2 report: //p' eval-v2.log | tail -n 1)"
