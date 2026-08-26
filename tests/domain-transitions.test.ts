@@ -1280,6 +1280,35 @@ describe("Session v5 domain state machine", () => {
 		).toThrow("must declare `platform`");
 	});
 
+	test("refuses OS extra evidence on the gate platform", () => {
+		const original = oneFeaturePlan([PROSE_VALIDATION]);
+		const base: Plan = {
+			...original,
+			evidence: original.evidence?.map((entry) => ({
+				...entry,
+				platform: "darwin",
+			})),
+		};
+		expect(() =>
+			saveDraft(deterministicEnvironment(), {
+				plan: {
+					...base,
+					evidence: [
+						...(base.evidence ?? []),
+						{
+							scope: "extra",
+							requirement: "Run a focused test on this host.",
+							environment: "Current repository host",
+							command: "bun test src/greet.test.ts",
+							platform: "darwin",
+							assertions: ["farewell test passes"],
+						},
+					],
+				},
+			}),
+		).toThrow("Extra OS evidence must use a different platform");
+	});
+
 	test("keeps a non-OS environment on the declared command alone", () => {
 		const environment = deterministicEnvironment();
 		// `other` is the honest answer for a service, credential, or device: Flow

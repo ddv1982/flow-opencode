@@ -173,13 +173,22 @@ function assertDeclaredEvidence(plan: Plan): void {
 	}
 	if (plan.evidence.some((entry) => entry.platform === undefined)) {
 		fail(
-			"Every `evidence` entry must declare `platform`: the operating system that can observe it (`win32`, `darwin`, or `linux`), or `other` when the missing environment is a service, credential, setting, or device rather than an OS.",
+			"Every `evidence` entry must declare `platform`: `win32`, `darwin`, `linux`, or `other` for non-OS evidence.",
 		);
 	}
 	if (plan.evidence.some((entry) => entry.assertions === undefined)) {
 		fail(
-			"Every `evidence` entry must declare `assertions`: the test case names whose passing is that observation. Declare an empty list when the evidence is not a test result.",
+			"Every `evidence` entry must declare `assertions`; use an empty list for non-test evidence.",
 		);
+	}
+	const gatePlatform = gates[0]?.platform;
+	if (
+		gatePlatform !== "other" &&
+		plan.evidence.some(
+			(entry) => entry.scope === "extra" && entry.platform === gatePlatform,
+		)
+	) {
+		fail("Extra OS evidence must use a different platform from the gate.");
 	}
 }
 

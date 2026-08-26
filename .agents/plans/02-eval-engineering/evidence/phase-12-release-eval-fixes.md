@@ -31,3 +31,15 @@ failed the same missing-choice check. Its report SHA-256 is
 `c97eebb4e725f15620f9360b63936fc7f66605e30d88eed9ace2fff319f5f498`.
 The final guide restores that rule and requires extra-evidence handoff to copy the
 plan command byte-for-byte. This matrix and its canary are diagnostic only.
+
+The final full candidate matrix, `2026-08-26T03-22-55-256Z.v2`, passed 41/42.
+Its only miss durably saved a same-platform focused command as extra evidence,
+then stopped at the resulting assertion checkpoint. The report SHA-256 is
+`2a3f552de47c12bb18d6b16b1a75fd0b7bde69d15d8b60c5a8a638046f7a752e`.
+
+Plan save now rejects OS extra evidence on the gate platform. Current-host focused
+checks stay in feature validation; non-OS services, credentials, settings, and
+devices use `other`. The exact failed OpenAI resume case then passed 3/3 in
+`2026-08-26T09-48-15-333Z.v2`, report SHA-256
+`7a384b1699d928b6b2c14e19fa7988e3fae59ce7872ab8797da7e7fbd95619a6`.
+The full gate passes 546 tests with one intentional skip.
