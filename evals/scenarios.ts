@@ -190,9 +190,10 @@ function offeredClosureChoice(outcome: Outcome): boolean {
 function offeredEvidenceMove(outcome: Outcome, session: SessionDoc): boolean {
 	if (offeredClosureChoice(outcome)) return true;
 	const lines = reportedToUser(outcome)
-		.replaceAll("`", "")
 		.split(/\r?\n/)
-		.map((line) => line.trim().replace(/^[-*]\s+/, ""));
+		.map((line) => line.trim())
+		.filter((line) => !/^```(?:[A-Za-z0-9_-]+)?$/.test(line))
+		.map((line) => line.replaceAll("`", "").replace(/^[-*]\s+/, ""));
 	return (session.plan?.evidence ?? [])
 		.filter((entry) => entry.scope === "extra" && entry.platform === "win32")
 		.some((entry) => {

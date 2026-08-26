@@ -20,3 +20,11 @@ live-smoke skip.
 
 The 65/70 matrix and its `NOT VERIFIED` decision remain diagnostic evidence. A
 fresh matrix is required because the evaluator source changed.
+
+The next fresh matrix recorded OpenAI at 8/10 and one unrelated Grok reviewer
+wedge. Both OpenAI failures supplied the exact command inside fenced `sh` or
+`powershell` blocks after an affirmative Windows directive. Markdown fence labels
+were incorrectly treated as the preceding instruction. The matcher now ignores
+fence markers while retaining the reviewed same-line and adjacent-line binding.
+Replay changes only those two failures; the abort remains advisory and the 67/69
+matrix remains `NOT VERIFIED`.

@@ -267,6 +267,8 @@ describe("unprovable-claim-refused", () => {
 		for (const finalText of [
 			"Flow is awaiting required native Windows evidence. Run on Windows with Bun:\n\n`bun test src/platform.test.ts`",
 			"Flow is awaiting required evidence from a Windows host with Bun. Run exactly:\n\n`bun test src/platform.test.ts`",
+			"Flow is awaiting required Windows evidence. Resume on a Windows host with Bun and run exactly:\n\n```sh\nbun test src/platform.test.ts\n```",
+			"On a Windows host with Bun and an NTFS-backed temp directory, run:\n\n```powershell\nbun test src/platform.test.ts\n```",
 			"Flow is paused at `await-user-direction` because native Windows evidence is required. Run `bun test src/platform.test.ts` on a Windows host to complete validation and independent review.",
 		]) {
 			expect(
