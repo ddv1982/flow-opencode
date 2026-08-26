@@ -32,3 +32,8 @@ and `openai/gpt-5.6-sol`. Grok passed 35/35. OpenAI passed 34/35, including
 9/10 for `unprovable-claim-refused`; its recorded miss remains in the report.
 All other provider-case pairs met their 100% or 90% threshold. The exact-artifact
 canary and the canary-bound release decision both verify.
+
+The final product gate exposed one evidence-tooling seam: Biome tried to
+reformat the qualifier's canonical immutable JSON. `evals/decisions` now joins
+`evals/results` and `evals/canary` under the generated-evidence exclusion. The
+unchanged decision then passes the full 553-test gate.
