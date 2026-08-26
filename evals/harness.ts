@@ -24,6 +24,7 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import {
 	extractObservedActor,
 	guidanceLoad,
@@ -937,17 +938,20 @@ function summarizeError(failure: unknown): string {
 export async function packPlugin(
 	repositoryRoot: string,
 	into: string,
+	toolchain: BunToolchain,
 ): Promise<string> {
-	const build = spawnSync("bun", ["run", "build"], {
+	const build = runPinnedBunSync(toolchain, ["run", "build"], {
 		cwd: repositoryRoot,
-		encoding: "utf8",
 	});
 	if (build.status !== 0)
 		throw new Error(`build failed:\n${build.stdout}\n${build.stderr}`);
-	const pack = spawnSync("bun", ["pm", "pack", "--destination", into], {
-		cwd: repositoryRoot,
-		encoding: "utf8",
-	});
+	const pack = runPinnedBunSync(
+		toolchain,
+		["pm", "pack", "--destination", into],
+		{
+			cwd: repositoryRoot,
+		},
+	);
 	if (pack.status !== 0)
 		throw new Error(`pack failed:\n${pack.stdout}\n${pack.stderr}`);
 	return join(into, `opencode-plugin-flow-${packageJson.version}.tgz`);
@@ -965,6 +969,7 @@ export async function packPlugin(
 export async function preparePackageCache(
 	tarball: string,
 	into: string,
+	toolchain: BunToolchain,
 ): Promise<string> {
 	const cache = join(into, `opencode-plugin-flow@${packageJson.version}`);
 	await mkdir(cache, { recursive: true });
@@ -973,9 +978,8 @@ export async function preparePackageCache(
 		`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${tarball}` } }, null, 2)}\n`,
 		"utf8",
 	);
-	const install = spawnSync("bun", ["install"], {
+	const install = runPinnedBunSync(toolchain, ["install"], {
 		cwd: cache,
-		encoding: "utf8",
 	});
 	if (install.status !== 0)
 		throw new Error(`cache install failed:\n${install.stderr}`);
@@ -1072,6 +1076,7 @@ export class EvalHost {
 
 	/** Boots a throwaway OpenCode host over a git fixture. */
 	static async start(options: {
+		toolchain: BunToolchain;
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
 		opencodeVersion: string;
@@ -1138,8 +1143,9 @@ export class EvalHost {
 		const port = await availablePort();
 		host.baseUrl = `http://127.0.0.1:${port}`;
 		host.server = spawn(
-			"bunx",
+			options.toolchain.executable,
 			[
+				"x",
 				`opencode-ai@${options.opencodeVersion}`,
 				"serve",
 				"--port",
@@ -1150,7 +1156,7 @@ export class EvalHost {
 			{
 				cwd: project,
 				env: {
-					...process.env,
+					...options.toolchain.environment,
 					...(options.reviewerModel
 						? { OPENCODE_FLOW_REVIEWER_MODEL: options.reviewerModel }
 						: {}),

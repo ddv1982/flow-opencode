@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { currentBunToolchain } from "./bun-toolchain.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import { parseCaseCatalog } from "./catalog.js";
 import {
@@ -207,6 +208,7 @@ export function reviewerOutcome(
 
 async function main(): Promise<void> {
 	const options = parseArgs(process.argv.slice(2));
+	const toolchain = currentBunToolchain(packageJson.packageManager);
 	const cases = REVIEWER_CASES.slice(0, options.limit);
 	const model = requestedModel(options.model);
 	const repositoryRoot = join(import.meta.dir, "..");
@@ -224,7 +226,7 @@ async function main(): Promise<void> {
 	await store.writeCatalog(catalog);
 	const startedAt = new Date().toISOString();
 	try {
-		const tarball = await packPlugin(repositoryRoot, packDir);
+		const tarball = await packPlugin(repositoryRoot, packDir, toolchain);
 		const artifact = await inspectArtifact({
 			repositoryRoot,
 			tarballPath: tarball,
@@ -239,7 +241,7 @@ async function main(): Promise<void> {
 			policyCatalog: catalog,
 			graderBundle: { sourceTreeSha256: artifact.sourceTreeSha256 },
 		});
-		const packageCache = await preparePackageCache(tarball, packDir);
+		const packageCache = await preparePackageCache(tarball, packDir, toolchain);
 		const attempts: AttemptRecordV2[] = [];
 		for (const [index, entry] of cases.entries()) {
 			const cell = plan.cells[index];
@@ -249,6 +251,7 @@ async function main(): Promise<void> {
 			let attempt: AttemptRecordV2;
 			try {
 				host = await EvalHost.start({
+					toolchain,
 					packageCache,
 					opencodeVersion,
 					files: entry.files,

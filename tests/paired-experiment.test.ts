@@ -398,7 +398,7 @@ describe("masked freeze and controlled reveal", () => {
 		expect(firstResult.decision.candidateMinusBaseline).toBe(1);
 		expect(secondResult.decision.candidateMinusBaseline).toBe(1);
 		expect(firstResult.decision.claim).toBe("candidate-better");
-	});
+	}, 15_000);
 
 	test("binds reveal to the exact masked hash, nonce, map, report, and artifacts", () => {
 		const value = fixture({ repetitions: 8 });

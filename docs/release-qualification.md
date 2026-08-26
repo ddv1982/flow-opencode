@@ -87,12 +87,13 @@ direction. The cadence follows from that:
 
 ```bash
 bun run eval -- --release --model <anthropic-id> --model <openai-id>
-bun pm pack --destination .release-artifacts
-bun run eval:canary -- prepare --artifact <tgz> --out <canary-dir>
+bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.
 bun run eval:canary -- record <record-options>
-bun run qualify -- --report <report.json> --catalog <catalog.json> \
-  --artifact <tgz> --canary evals/canary/<version>.json
+bun run qualify -- --report <campaign-dir>/report.json \
+  --catalog <campaign-dir>/catalog.json \
+  --artifact <campaign-dir>/artifact.tgz \
+  --canary evals/canary/<version>.json
 ```
 
 Only the full matrix qualifies a release. The cheaper tiers — a free replay of

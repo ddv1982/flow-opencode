@@ -94,6 +94,8 @@ describe("release eval sampling", () => {
 			["--scenario", "happy-path"],
 			["--repeat"],
 			["--scenario"],
+			["--repeat=3"],
+			["--scenario=happy-path"],
 		]) {
 			const child = Bun.spawn(
 				[

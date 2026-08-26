@@ -1,9 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { type ChildProcess, spawn } from "node:child_process";
 import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+	currentBunToolchain,
+	runPinnedBunSync,
+} from "../evals/bun-toolchain.js";
+import { packPlugin } from "../evals/harness.js";
 import packageJson from "../package.json" with { type: "json" };
 import {
 	buildHostEvidenceCapabilities,
@@ -460,6 +465,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 		"loads the packed plugin and enforces the small public surface",
 		async () => {
 			const repositoryRoot = join(import.meta.dir, "..");
+			const toolchain = currentBunToolchain(packageJson.packageManager);
 			const scratch = await mkdtemp(join(tmpdir(), "flow-live-smoke-"));
 			const childHome = join(scratch, "home");
 			const childCache = join(scratch, "cache");
@@ -467,20 +473,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 			await mkdir(childHome, { recursive: true });
 			await mkdir(join(project, ".opencode"), { recursive: true });
 
-			const build = spawnSync("bun", ["run", "build"], {
-				cwd: repositoryRoot,
-				encoding: "utf8",
-			});
-			expect(build.status, `${build.stdout}\n${build.stderr}`).toBe(0);
-			const pack = spawnSync("bun", ["pm", "pack", "--destination", scratch], {
-				cwd: repositoryRoot,
-				encoding: "utf8",
-			});
-			expect(pack.status, `${pack.stdout}\n${pack.stderr}`).toBe(0);
-			const tarball = join(
-				scratch,
-				`opencode-plugin-flow-${packageJson.version}.tgz`,
-			);
+			const tarball = await packPlugin(repositoryRoot, scratch, toolchain);
 			expect((await lstat(tarball)).isFile()).toBe(true);
 
 			// Populate OpenCode's exact-version package cache from the candidate
@@ -497,9 +490,8 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${tarball}` } }, null, 2)}\n`,
 				"utf8",
 			);
-			const install = spawnSync("bun", ["install"], {
+			const install = runPinnedBunSync(toolchain, ["install"], {
 				cwd: packageCache,
-				encoding: "utf8",
 			});
 			expect(install.status, `${install.stdout}\n${install.stderr}`).toBe(0);
 			await writeFile(
@@ -511,8 +503,9 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 			const port = await availablePort();
 			const baseUrl = `http://127.0.0.1:${port}`;
 			const server = spawn(
-				"bunx",
+				toolchain.executable,
 				[
+					"x",
 					`opencode-ai@${OPENCODE_VERSION}`,
 					"serve",
 					"--port",
@@ -523,7 +516,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				{
 					cwd: project,
 					env: {
-						...process.env,
+						...toolchain.environment,
 						HOME: childHome,
 						OPENCODE_TEST_HOME: childHome,
 						XDG_CACHE_HOME: childCache,

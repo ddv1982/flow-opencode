@@ -6,6 +6,7 @@ import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import type { BenchmarkCase } from "./benchmark.js";
 import { BENCHMARK_CASES } from "./benchmarks.js";
+import { currentBunToolchain } from "./bun-toolchain.js";
 import { parseCaseCatalog } from "./catalog.js";
 import {
 	armForCell,
@@ -268,6 +269,7 @@ export function pairedBudgetExceeded(input: {
 
 async function main(): Promise<void> {
 	const options = args(process.argv.slice(2));
+	const toolchain = currentBunToolchain(packageJson.packageManager);
 	const selected = options.cases.length
 		? BENCHMARK_CASES.filter((c) => options.cases.includes(c.id))
 		: BENCHMARK_CASES;
@@ -321,7 +323,7 @@ async function main(): Promise<void> {
 	let unresolved = false;
 	const startedAt = new Date().toISOString();
 	try {
-		const tarball = await packPlugin(root, packDir);
+		const tarball = await packPlugin(root, packDir, toolchain);
 		const artifact = await inspectArtifact({
 			repositoryRoot: root,
 			tarballPath: tarball,
@@ -356,8 +358,9 @@ async function main(): Promise<void> {
 				),
 			},
 		});
-		const cache = await preparePackageCache(tarball, packDir);
+		const cache = await preparePackageCache(tarball, packDir, toolchain);
 		const preflight = await EvalHost.start({
+			toolchain,
 			packageCache: cache,
 			opencodeVersion,
 			files: { "package.json": '{"name":"paired-preflight"}\n' },
@@ -423,6 +426,7 @@ async function main(): Promise<void> {
 				};
 				try {
 					host = await EvalHost.start({
+						toolchain,
 						packageCache: cache,
 						opencodeVersion,
 						files: benchmark.files,
