@@ -28,3 +28,8 @@ were incorrectly treated as the preceding instruction. The matcher now ignores
 fence markers while retaining the reviewed same-line and adjacent-line binding.
 Replay changes only those two failures; the abort remains advisory and the 67/69
 matrix remains `NOT VERIFIED`.
+
+The final matrix on merged main completed 70/70 with Grok and OpenAI both at
+35/35. It recorded no abort, false completion, or unsubmitted review. The live
+OpenCode canary used that campaign's stored artifact directly and passed all six
+checks. The canary-bound release decision is `VERIFIED`.
