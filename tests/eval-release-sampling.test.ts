@@ -117,4 +117,41 @@ describe("release eval sampling", () => {
 			);
 		}
 	});
+
+	test("rejects a release with fewer than two route providers", async () => {
+		const child = Bun.spawn(
+			[
+				"bun",
+				"run",
+				"evals/run.ts",
+				"--model",
+				"xai/not-a-real-model-a",
+				"--model",
+				"xai/not-a-real-model-b",
+				"--release",
+			],
+			{ cwd: new URL("..", import.meta.url).pathname, stderr: "pipe" },
+		);
+		const [exitCode, stderr] = await Promise.all([
+			child.exited,
+			new Response(child.stderr).text(),
+		]);
+		expect(exitCode).toBe(2);
+		expect(stderr).toContain(
+			"--release requires at least 2 distinct route providers",
+		);
+	});
+
+	test("does not consume a flag as a model value", async () => {
+		const child = Bun.spawn(
+			["bun", "run", "evals/run.ts", "--model", "--release"],
+			{ cwd: new URL("..", import.meta.url).pathname, stderr: "pipe" },
+		);
+		const [exitCode, stderr] = await Promise.all([
+			child.exited,
+			new Response(child.stderr).text(),
+		]);
+		expect(exitCode).toBe(2);
+		expect(stderr).toContain("--model requires a value");
+	});
 });

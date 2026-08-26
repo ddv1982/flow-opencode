@@ -20,3 +20,9 @@ The scheduled model-eval workflow now uses `--release`. Both the V2 catalog and 
 legacy qualification reader derive their thresholds and attempt floors from the
 same policy table. Focused sampling and qualification tests pass 30 cases. The
 full repository gate passes 551 tests with one intentional live-smoke skip.
+
+The post-implementation Interrogate review found two release CLI boundary gaps.
+Release mode accepted one route provider even though qualification requires two,
+and a missing option value could consume `--release`. Focused tests reproduced
+both failures before the fix. The runner now rejects both cases before host
+startup. The full gate passes 553 tests with one intentional live-smoke skip.

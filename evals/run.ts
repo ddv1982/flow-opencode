@@ -426,12 +426,22 @@ function parseArgs(argv: string[]) {
 	const models: string[] = [];
 	const scenarios: string[] = [];
 	let repeat = 1;
-	let repeatProvided = false;
-	let release = false;
+	const release = argv.includes("--release");
 	let concurrency = 0;
+	if (release && (argv.includes("--repeat") || argv.includes("--scenario"))) {
+		console.error("--release cannot be combined with --repeat or --scenario.");
+		process.exit(2);
+	}
 	for (let index = 0; index < argv.length; index += 1) {
-		const flag = argv[index];
+		const flag = argv[index] ?? "";
 		const value = argv[index + 1];
+		if (
+			["--model", "--scenario", "--repeat", "--concurrency"].includes(flag) &&
+			(!value || value.startsWith("--"))
+		) {
+			console.error(`${flag} requires a value.`);
+			process.exit(2);
+		}
 		if (flag === "--model" && value) {
 			models.push(value);
 			index += 1;
@@ -440,10 +450,7 @@ function parseArgs(argv: string[]) {
 			index += 1;
 		} else if (flag === "--repeat" && value) {
 			repeat = Number.parseInt(value, 10);
-			repeatProvided = true;
 			index += 1;
-		} else if (flag === "--release") {
-			release = true;
 		} else if (flag === "--concurrency" && value) {
 			concurrency = Number.parseInt(value, 10);
 			index += 1;
@@ -469,12 +476,22 @@ function parseArgs(argv: string[]) {
 		console.error("--repeat must be a positive integer.");
 		process.exit(2);
 	}
-	if (
-		release &&
-		(repeatProvided || argv.includes("--repeat") || argv.includes("--scenario"))
-	) {
-		console.error("--release cannot be combined with --repeat or --scenario.");
-		process.exit(2);
+	if (release) {
+		const providers = new Set<string>();
+		for (const model of models) {
+			try {
+				providers.add(legacyRequestedModel(model).routeProvider);
+			} catch (error) {
+				console.error(error instanceof Error ? error.message : String(error));
+				process.exit(2);
+			}
+		}
+		if (providers.size < RELEASE_MIN_PROVIDERS) {
+			console.error(
+				`--release requires at least ${RELEASE_MIN_PROVIDERS} distinct route providers.`,
+			);
+			process.exit(2);
+		}
 	}
 	if (
 		concurrency !== 0 &&
