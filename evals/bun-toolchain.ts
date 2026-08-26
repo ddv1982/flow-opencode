@@ -1,5 +1,5 @@
 import { type SpawnSyncReturns, spawnSync } from "node:child_process";
-import { delimiter, dirname } from "node:path";
+import { basename, delimiter, dirname } from "node:path";
 
 export type BunToolchain = {
 	readonly executable: string;
@@ -28,6 +28,11 @@ export function bunToolchainFor(input: {
 	if (input.actualVersion !== expectedVersion) {
 		throw new Error(
 			`Flow evals require bun@${expectedVersion} from package.json, but this process is bun@${input.actualVersion}. Run the command with the pinned Bun before generating evidence.`,
+		);
+	}
+	if (!["bun", "bun.exe"].includes(basename(input.executable).toLowerCase())) {
+		throw new Error(
+			"Flow evals require a verified executable named bun or bun.exe so nested package scripts use the same runtime.",
 		);
 	}
 	const executableDirectory = dirname(input.executable);

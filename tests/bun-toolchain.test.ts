@@ -29,6 +29,14 @@ describe("pinned Bun toolchain", () => {
 				environment: { PATH: "/usr/bin" },
 			}),
 		).toThrow(/require bun@1\.3\.14.*bun@1\.3\.5/i);
+		expect(() =>
+			bunToolchainFor({
+				packageManager: "bun@1.3.14",
+				actualVersion: "1.3.14",
+				executable: "/tools/bun-1.3.14",
+				environment: { PATH: "/usr/bin" },
+			}),
+		).toThrow(/executable named bun/i);
 	});
 
 	test("pins nested package scripts to the verified executable", () => {
