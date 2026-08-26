@@ -12,6 +12,8 @@ Long Grok eval turns no longer fail at Bun's implicit five-minute fetch cutoff.
 - Benchmark prompts now publish every graded result field. Hidden graders ignore
   property insertion order and cover sparse Markdown line maps, blank lines, and
   empty documents.
+- Release matrices now predeclare three attempts for 100% cases and ten for 90%
+  cases, so published thresholds match their measured denominators.
 - The inspect scenario uses one exact public finding certificate in both durable
   review state and the complete final response. The committed replay corpus and
   maintainer catalog use the same contract.

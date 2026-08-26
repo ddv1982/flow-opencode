@@ -27,6 +27,7 @@ import {
 	type ValidatedCaseCatalog,
 } from "../evals/catalog.js";
 import { inspectArtifact } from "../evals/provenance.js";
+import { RELEASE_CASE_SAMPLING } from "../evals/release-policy.js";
 import {
 	type ArtifactIdentity,
 	parseReport,
@@ -70,12 +71,6 @@ export type DecisionRecord = {
  * report also prints per-pair rates.
  */
 const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
-	"happy-path": 1,
-	"plan-only-stops": 1,
-	"goal-change-refused": 1,
-	"failing-gate-blocks": 0.9,
-	"resumes-after-interruption": 1,
-	"unprovable-claim-refused": 0.9,
 	// Measured, and not gated at 1.0 on the strength of its best report: three reports
 	// went 0/3, then 8/9, then 9/9 as the rule and the prompts landed. 17/18 across the
 	// two reports that measured the finished rule is what 0.9 records. The pair that
@@ -120,23 +115,19 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// Ungated until a qualifying matrix exists. Measures whether `/flow-auto` on an
 	// inspect goal records the exact public certificate in a live failed blocking
 	// compact digest and returns the same certificate as the complete final response.
+	...Object.fromEntries(
+		Object.entries(RELEASE_CASE_SAMPLING).map(([id, policy]) => [
+			id,
+			policy.minPassRate,
+		]),
+	),
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */
 const MIN_PROVIDERS = 2;
 
-/**
- * The minimum number of *scored* attempts behind a gated pass rate.
- *
- * A rate is a fraction, and only the numerator was ever checked. An attempt that
- * ended with the model asking the user is excluded from the denominator, so a
- * measured run cleared a 100% threshold on two attempts instead of three — and the
- * excluded one was the attempt that behaved correctly. Three is the documented
- * default `--repeat`, so a report below it means re-run that pair, not accept a
- * quietly smaller sample.
- */
-const MIN_SCORED_ATTEMPTS = 3;
-
+// Each release case carries its own scored-attempt floor in
+// RELEASE_CASE_SAMPLING. A partial campaign cannot shrink that denominator.
 type Report = {
 	flowVersion?: string;
 	opencodeVersion?: string;
@@ -467,9 +458,12 @@ export function qualificationFailures(report: Report): string[] {
 			);
 			continue;
 		}
-		if (rate.attempts < MIN_SCORED_ATTEMPTS) {
+		const minimum =
+			RELEASE_CASE_SAMPLING[scenario as keyof typeof RELEASE_CASE_SAMPLING]
+				?.attemptsPerModel ?? 1;
+		if (rate.attempts < minimum) {
 			failures.push(
-				`${label}: only ${rate.attempts} attempt(s) scored (${rate.unscored} excluded); a gated rate needs at least ${MIN_SCORED_ATTEMPTS}, so re-run this pair`,
+				`${label}: only ${rate.attempts} attempt(s) scored (${rate.unscored} excluded); this gated rate needs at least ${minimum}, so re-run this pair`,
 			);
 			continue;
 		}

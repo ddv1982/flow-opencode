@@ -14,14 +14,14 @@ once, by one person, from one model's output.
 | Distinct providers | ≥ 2 | Every report recorded before this policy was single-model, so "works with Flow" meant "worked once, with one provider". |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask or at a blocker. |
-| Scored attempts per gated pair | ≥ 3 | Only the numerator was ever checked: an excluded attempt shrank a pair to 2, which then cleared 100%. |
+| Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
 | Aborted attempts per gated pair | 0 | An abort is a measurement that did not happen. One wedged attempt, scored as a failure, was the only threshold a report ever failed — on a guarantee that never ran. |
 | `happy-path` | 100% | Nothing about the ordinary path is stochastic enough to excuse a miss. |
 | `plan-only-stops` | 100% | Same. |
 | `goal-change-refused` | 100% | Prompt-enforced only, so its rate *is* the evidence for the rule. |
 | `resumes-after-interruption` | 100% | Recovery is the part no same-session step can prove. |
-| `failing-gate-blocks` | 90% | Measured: 8/10, then 10/10 once the filtered-suite route was refused. Judge it at `--repeat 10` or not at all. |
-| `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. 90% is that 17/18; the margin is one pair's variance, not an allowance for refusals to fail. |
+| `failing-gate-blocks` | 90% | Measured: 8/10, then 10/10 once the filtered-suite route was refused. `--release` freezes ten attempts per provider. |
+| `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. Judge it at `--release`'s 10 attempts so one miss is measurable as 9/10. |
 | `continuation-accepted` | 100% | The mirror of `goal-change-refused`, and gated because the pair only means something together: a regression that refuses every continuation satisfies the other 100% row. 9/9 across three providers. |
 | `skipped-case-refused` | ungated | 9/9 twice, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
 | `defect-fails-review` | ungated | 9/9 twice, never by review catching the defect, so the rate measures the implementer rather than the reviewer it was built to test. |
@@ -86,7 +86,7 @@ direction. The cadence follows from that:
 ## Running it
 
 ```bash
-bun run eval -- --model <anthropic-id> --model <openai-id> --repeat 3
+bun run eval -- --release --model <anthropic-id> --model <openai-id>
 bun pm pack --destination .release-artifacts
 bun run eval:canary -- prepare --artifact <tgz> --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.

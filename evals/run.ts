@@ -59,9 +59,8 @@ import {
 	tarballSha256,
 } from "./provenance.js";
 import {
+	RELEASE_CASE_SAMPLING,
 	RELEASE_MIN_PROVIDERS,
-	RELEASE_MIN_SCORED_ATTEMPTS,
-	RELEASE_PASS_RATES,
 } from "./release-policy.js";
 import type {
 	ActorIdentity,
@@ -199,12 +198,16 @@ const V2_ANALYSIS_DIGEST = canonicalSha256("flow-v2-analysis-v1", {
 	primaryOutcome: "conformance-pass",
 });
 
-function caseCatalogFor(
+export function caseCatalogFor(
 	scenarios: readonly (typeof SCENARIOS)[number][],
 ): ValidatedCaseCatalog {
 	const parsed = parseCaseCatalog(
 		scenarios.map((scenario) => {
-			const minPassRate = RELEASE_PASS_RATES[scenario.id] ?? null;
+			const releaseSampling =
+				RELEASE_CASE_SAMPLING[
+					scenario.id as keyof typeof RELEASE_CASE_SAMPLING
+				];
+			const minPassRate = releaseSampling?.minPassRate ?? null;
 			return {
 				caseId: scenario.id,
 				caseVersion: 1,
@@ -216,7 +219,7 @@ function caseCatalogFor(
 						: ("required" as const),
 				minProviders: minPassRate === null ? 1 : RELEASE_MIN_PROVIDERS,
 				minScoredAttempts:
-					minPassRate === null ? 1 : RELEASE_MIN_SCORED_ATTEMPTS,
+					minPassRate === null ? 1 : releaseSampling.attemptsPerModel,
 				minPassRate,
 				reviewerPromotionRecordSha256: null,
 			};
@@ -232,19 +235,38 @@ function caseCatalogFor(
 	return parsed.value;
 }
 
-function campaignPlanFor(input: {
+export type EvalSampling =
+	| { readonly kind: "ordinary"; readonly repeat: number }
+	| { readonly kind: "release" };
+
+export function attemptsForScenario(
+	scenarioId: string,
+	sampling: EvalSampling,
+): number {
+	if (sampling.kind === "ordinary") return sampling.repeat;
+	const policy =
+		RELEASE_CASE_SAMPLING[scenarioId as keyof typeof RELEASE_CASE_SAMPLING];
+	if (!policy) throw new Error(`No release sampling policy for ${scenarioId}.`);
+	return policy.attemptsPerModel;
+}
+
+export function releaseScenarios(): readonly (typeof SCENARIOS)[number][] {
+	return SCENARIOS.filter((scenario) => scenario.id in RELEASE_CASE_SAMPLING);
+}
+
+export function campaignPlanFor(input: {
 	readonly models: readonly string[];
 	readonly scenarios: readonly (typeof SCENARIOS)[number][];
-	readonly repeat: number;
+	readonly sampling: EvalSampling;
 	readonly opencodeVersion: string;
 }): CampaignPlan {
-	const cells = input.models.flatMap((model, modelIndex) =>
-		input.scenarios.flatMap((scenario, scenarioIndex) =>
-			Array.from({ length: input.repeat }, (_, repetition) => {
-				const slot =
-					modelIndex * input.scenarios.length * input.repeat +
-					scenarioIndex * input.repeat +
-					repetition;
+	let slot = 0;
+	const cells = input.models.flatMap((model) =>
+		input.scenarios.flatMap((scenario) => {
+			const attempts = attemptsForScenario(scenario.id, input.sampling);
+			return Array.from({ length: attempts }, (_, repetition) => {
+				const block = slot;
+				slot += 1;
 				const identity = canonicalSha256("flow-v2-cell-v1", {
 					model,
 					scenario: scenario.id,
@@ -252,7 +274,7 @@ function campaignPlanFor(input: {
 				});
 				return {
 					cellId: `cell-${identity.slice("sha256:".length)}`,
-					blockId: `block-${slot}`,
+					blockId: `block-${block}`,
 					caseId: scenario.id,
 					caseVersion: 1,
 					armToken: null,
@@ -261,8 +283,8 @@ function campaignPlanFor(input: {
 					reviewerModel: null,
 					schedule: "primary" as const,
 				};
-			}),
-		),
+			});
+		}),
 	);
 	const plan = {
 		schemaVersion: 1 as const,
@@ -271,7 +293,9 @@ function campaignPlanFor(input: {
 		randomizationSeed: canonicalSha256("flow-v2-seed-v1", {
 			models: input.models,
 			scenarios: input.scenarios.map((scenario) => scenario.id),
-			repeat: input.repeat,
+			...(input.sampling.kind === "ordinary"
+				? { repeat: input.sampling.repeat }
+				: { releaseSampling: RELEASE_CASE_SAMPLING }),
 			opencodeVersion: input.opencodeVersion,
 		}),
 		cells,
@@ -357,12 +381,33 @@ function attemptOutcome(result: RunResult): AttemptRecordV2["outcome"] {
 }
 
 /** One attempt to run, and the slot its result belongs in. */
-type Job = {
+export type Job = {
 	readonly model: string;
 	readonly scenario: (typeof SCENARIOS)[number];
 	readonly attempt: number;
+	readonly scheduledAttempts: number;
 	readonly slot: number;
 };
+
+export function jobsFor(
+	models: readonly string[],
+	scenarios: readonly (typeof SCENARIOS)[number][],
+	sampling: EvalSampling,
+): Job[][] {
+	let slot = 0;
+	return models.map((model) =>
+		scenarios.flatMap((scenario) => {
+			const scheduledAttempts = attemptsForScenario(scenario.id, sampling);
+			return Array.from({ length: scheduledAttempts }, (_, index) => ({
+				model,
+				scenario,
+				attempt: index + 1,
+				scheduledAttempts,
+				slot: slot++,
+			}));
+		}),
+	);
+}
 
 /** What one attempt produced: always a result, a cassette only if it reached a model. */
 type Recorded = {
@@ -381,6 +426,8 @@ function parseArgs(argv: string[]) {
 	const models: string[] = [];
 	const scenarios: string[] = [];
 	let repeat = 1;
+	let repeatProvided = false;
+	let release = false;
 	let concurrency = 0;
 	for (let index = 0; index < argv.length; index += 1) {
 		const flag = argv[index];
@@ -393,13 +440,16 @@ function parseArgs(argv: string[]) {
 			index += 1;
 		} else if (flag === "--repeat" && value) {
 			repeat = Number.parseInt(value, 10);
+			repeatProvided = true;
 			index += 1;
+		} else if (flag === "--release") {
+			release = true;
 		} else if (flag === "--concurrency" && value) {
 			concurrency = Number.parseInt(value, 10);
 			index += 1;
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
-				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id>] [--repeat <n>] [--concurrency <n>]",
+				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id> --repeat <n> | --release] [--concurrency <n>]",
 			);
 			process.exit(0);
 		}
@@ -417,6 +467,13 @@ function parseArgs(argv: string[]) {
 	}
 	if (!Number.isSafeInteger(repeat) || repeat < 1) {
 		console.error("--repeat must be a positive integer.");
+		process.exit(2);
+	}
+	if (
+		release &&
+		(repeatProvided || argv.includes("--repeat") || argv.includes("--scenario"))
+	) {
+		console.error("--release cannot be combined with --repeat or --scenario.");
 		process.exit(2);
 	}
 	if (
@@ -439,7 +496,10 @@ function parseArgs(argv: string[]) {
 			`--concurrency ${concurrency} lowered to ${workers}: at most one worker per model, and at most ${MAX_CONCURRENCY} overall.`,
 		);
 	}
-	return { models, scenarios, repeat, concurrency: workers };
+	const sampling: EvalSampling = release
+		? { kind: "release" }
+		: { kind: "ordinary", repeat };
+	return { models, scenarios, sampling, concurrency: workers };
 }
 
 /** Bytes of prompt text this build ships, per surface and in total. */
@@ -581,12 +641,15 @@ async function preflight(
 }
 
 async function main(): Promise<void> {
-	const { models, scenarios, repeat, concurrency } = parseArgs(
+	const { models, scenarios, sampling, concurrency } = parseArgs(
 		process.argv.slice(2),
 	);
-	const selected = scenarios.length
-		? SCENARIOS.filter((scenario) => scenarios.includes(scenario.id))
-		: SCENARIOS;
+	const selected =
+		sampling.kind === "release"
+			? releaseScenarios()
+			: scenarios.length
+				? SCENARIOS.filter((scenario) => scenarios.includes(scenario.id))
+				: SCENARIOS;
 	if (selected.length === 0) {
 		console.error(
 			`No scenario matched. Available: ${SCENARIOS.map((scenario) => scenario.id).join(", ")}`,
@@ -605,7 +668,7 @@ async function main(): Promise<void> {
 		`Prompt footprint: ${footprint.total} bytes across ${SURFACES.length} surfaces`,
 	);
 	console.log(
-		`Running ${selected.length} scenario(s) x ${models.length} model(s) x ${repeat} attempt(s)` +
+		`Running ${sampling.kind === "release" ? "release sample: " : ""}${selected.length} scenario(s) x ${models.length} model(s), ${models.length * selected.reduce((total, scenario) => total + attemptsForScenario(scenario.id, sampling), 0)} scheduled attempt(s)` +
 			(concurrency > 1
 				? `, ${concurrency} models at a time — lines land as attempts finish, not in order\n`
 				: "\n"),
@@ -620,7 +683,7 @@ async function main(): Promise<void> {
 	const v2Plan = campaignPlanFor({
 		models,
 		scenarios: selected,
-		repeat,
+		sampling,
 		opencodeVersion,
 	});
 	const reportStore = createReportStore({
@@ -729,21 +792,10 @@ async function main(): Promise<void> {
 		// workspace — so the sequential loop this replaces was spending 2.5h of wall
 		// clock on 2.5h of model time for no reason. Keyed by model so a queue never
 		// contends with itself for a single provider's rate limit.
-		const queues: Job[][] = [];
-		let slot = 0;
-		for (const model of models) {
-			const queue: Job[] = [];
-			for (const scenario of selected) {
-				for (let attempt = 1; attempt <= repeat; attempt += 1) {
-					queue.push({ model, scenario, attempt, slot });
-					slot += 1;
-				}
-			}
-			queues.push(queue);
-		}
+		const queues = jobsFor(models, selected, sampling);
 		/** One attempt, start to finish, printing a single line when it lands. */
 		const runAttempt = async (job: Job): Promise<Recorded> => {
-			const { model, scenario, attempt } = job;
+			const { model, scenario, attempt, scheduledAttempts } = job;
 			const requestedReviewerModel =
 				process.env.OPENCODE_FLOW_REVIEWER_MODEL?.trim() || model;
 			const reviewerStepsText =
@@ -753,7 +805,7 @@ async function main(): Promise<void> {
 				Number(reviewerStepsText) <= 1000
 					? Number(reviewerStepsText)
 					: null;
-			const label = `${scenario.id} @ ${model} (${attempt}/${repeat})`;
+			const label = `${scenario.id} @ ${model} (${attempt}/${scheduledAttempts})`;
 			let cassette: Cassette | null = null;
 			const started = Date.now();
 			let host: EvalHost | null = null;
@@ -1273,4 +1325,4 @@ async function main(): Promise<void> {
 	process.exit(scored.length > 0 && passed === scored.length ? 0 : 1);
 }
 
-await main();
+if (import.meta.main) await main();

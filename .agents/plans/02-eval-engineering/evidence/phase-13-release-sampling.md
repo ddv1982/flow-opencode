@@ -1,0 +1,22 @@
+# Phase 13 release sampling
+
+Repeated release matrices showed that a 90% threshold over three attempts behaves
+as a hidden 100% threshold: one miss produces 2/3. Existing reports remain
+immutable and are not pooled or reinterpreted.
+
+Architect Arena candidates converged on an opt-in `--release` mode. The independent
+judge selected a unified per-case policy table and explicit sampling counts. Five
+100% cases schedule three attempts per provider. `failing-gate-blocks` and
+`unprovable-claim-refused` schedule ten, so 9/10 passes and 8/10 fails. A
+two-provider release freezes 70 cells before the first model call.
+
+`--release` selects exactly the required cases and rejects `--repeat` or
+`--scenario`, including missing-value forms. Ordinary eval commands preserve their
+existing counts, cell IDs, and randomization seeds. The existing V2 plan schema
+already binds mixed allocations through literal cells, stopping count, budgets,
+and plan hash.
+
+The scheduled model-eval workflow now uses `--release`. Both the V2 catalog and the
+legacy qualification reader derive their thresholds and attempt floors from the
+same policy table. Focused sampling and qualification tests pass 30 cases. The
+full repository gate passes 551 tests with one intentional live-smoke skip.

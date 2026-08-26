@@ -301,7 +301,7 @@ than during work:
 | --- | --- | --- | --- |
 | Replay | `bun run replay` | free | does the runtime still reach the same outcome on decisions a model already made? |
 | Smoke | `bun run eval:smoke -- --model <id>` | one model, one attempt | did a prompt change break the ordinary path? |
-| Matrix | `bun run eval -- --model <a> --model <b> --repeat 3` | real money | may this be released? |
+| Matrix | `bun run eval -- --release --model <a> --model <b>` | real money | may this be released? |
 
 Only the matrix qualifies a release. A replay is evidence about the runtime and none
 about the prompts; a single attempt of a stochastic scenario is not a rate.
@@ -418,7 +418,7 @@ caution. The report records every question, so read those and the run's
 `failing-gate-blocks` is the scenario to be most careful with. It passed at
 roughly even odds at 6.8.0 and 6.9.0, then five of five once, which read as a fix
 and was not: ten attempts on the same tree measured 8/10, and the two failures
-were a real hole. Judge it at `--repeat 10` or not at all — at five attempts its
+were a real hole. Judge it through `--release` — at five attempts its
 own variance is wider than any prompt change worth making, and a clean five is
 what a two-in-ten failure rate looks like a third of the time. Every failure of it recorded so far is the same one --
 closed as `completed` over a gate that cannot pass. Whether that is a dishonest report or a real observation is worth
