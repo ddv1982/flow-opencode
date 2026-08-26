@@ -23,3 +23,11 @@ suite passes 82 tests after them. The full gate passes 545 tests with one
 intentional live-smoke skip, and the final multi-model review reports no critical
 or warning findings. The earlier qualification and canary artifacts remain
 diagnostic and cannot qualify the changed packed candidate.
+
+The second frozen 42-attempt matrix, `2026-08-26T02-07-37-746Z.v2`, proved
+resume at 3/3 on both providers but exposed that moving the evidence checkpoint
+instruction had removed the separate red-gate handoff rule. All six red-gate cells
+failed the same missing-choice check. Its report SHA-256 is
+`c97eebb4e725f15620f9360b63936fc7f66605e30d88eed9ace2fff319f5f498`.
+The final guide restores that rule and requires extra-evidence handoff to copy the
+plan command byte-for-byte. This matrix and its canary are diagnostic only.

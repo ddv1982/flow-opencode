@@ -265,7 +265,10 @@ describe("Flow prompt structure", () => {
 			"Running `await-user-direction` means plan evidence is unsatisfied",
 		);
 		expect(getFlowGuidance("flow-run").content).toContain(
-			"exact command and environment, defer, or abandon",
+			"command byte-for-byte and environment, defer, or abandon",
+		);
+		expect(getFlowGuidance("flow-run").content).toContain(
+			"A gate that cannot pass must ask the user to defer or abandon",
 		);
 	});
 
