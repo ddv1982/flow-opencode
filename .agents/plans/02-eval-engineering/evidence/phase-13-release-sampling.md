@@ -26,3 +26,9 @@ Release mode accepted one route provider even though qualification requires two,
 and a missing option value could consume `--release`. Focused tests reproduced
 both failures before the fix. The runner now rejects both cases before host
 startup. The full gate passes 553 tests with one intentional live-smoke skip.
+
+The first frozen release matrix completed all 70 cells across `xai/grok-4.6`
+and `openai/gpt-5.6-sol`. Grok passed 35/35. OpenAI passed 34/35, including
+9/10 for `unprovable-claim-refused`; its recorded miss remains in the report.
+All other provider-case pairs met their 100% or 90% threshold. The exact-artifact
+canary and the canary-bound release decision both verify.
