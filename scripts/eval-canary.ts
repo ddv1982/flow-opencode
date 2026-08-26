@@ -99,8 +99,10 @@ const ChecksSchema = z
 	.strict();
 const PackageMetadataSchema = z
 	.object({
-		dependencies: z.record(TextSchema, TextSchema).optional(),
-		devDependencies: z.record(TextSchema, TextSchema).optional(),
+		dependencies: z.object({ zod: TextSchema }).passthrough(),
+		devDependencies: z
+			.object({ "@opencode-ai/plugin": TextSchema })
+			.passthrough(),
 	})
 	.passthrough();
 const EvidenceRefSchema = z
@@ -366,8 +368,8 @@ export async function prepareCanary(input: {
 				private: true,
 				dependencies: {
 					"@opencode-ai/plugin":
-						packageMetadata.devDependencies?.["@opencode-ai/plugin"],
-					zod: packageMetadata.dependencies?.zod,
+						packageMetadata.devDependencies["@opencode-ai/plugin"],
+					zod: packageMetadata.dependencies.zod,
 				},
 			},
 			null,

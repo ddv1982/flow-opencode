@@ -19,6 +19,6 @@ longer accepts a free artifact path.
 
 Focused tests reproduced the wrong-version exit, the free-artifact canary path,
 and equals-form release overrides before the fixes. The final local gate passes
-559 tests with one intentional live-smoke skip. The earlier canary, decision, and
+560 tests with one intentional live-smoke skip. The earlier canary, decision, and
 70-cell report remain unchanged diagnostic evidence; none qualifies a new
 artifact.

@@ -23,8 +23,8 @@ type ArchiveEntry = {
 
 export type PackedPackageManifest = {
 	readonly version: string;
-	readonly dependencies?: Record<string, string>;
-	readonly devDependencies?: Record<string, string>;
+	readonly dependencies?: Record<string, unknown>;
+	readonly devDependencies?: Record<string, unknown>;
 };
 
 export type WorkingSourceIdentity = Pick<
@@ -171,18 +171,16 @@ function packageManifest(
 	}
 	const dependencies = Reflect.get(parsed, "dependencies");
 	const devDependencies = Reflect.get(parsed, "devDependencies");
+	const record = (value: unknown): Record<string, unknown> | undefined =>
+		value && typeof value === "object" && !Array.isArray(value)
+			? Object.fromEntries(Object.entries(value))
+			: undefined;
+	const dependencyRecord = record(dependencies);
+	const devDependencyRecord = record(devDependencies);
 	return {
 		version,
-		...(dependencies &&
-		typeof dependencies === "object" &&
-		!Array.isArray(dependencies)
-			? { dependencies: dependencies as Record<string, string> }
-			: {}),
-		...(devDependencies &&
-		typeof devDependencies === "object" &&
-		!Array.isArray(devDependencies)
-			? { devDependencies: devDependencies as Record<string, string> }
-			: {}),
+		...(dependencyRecord ? { dependencies: dependencyRecord } : {}),
+		...(devDependencyRecord ? { devDependencies: devDependencyRecord } : {}),
 	};
 }
 
