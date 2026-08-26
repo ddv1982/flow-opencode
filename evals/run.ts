@@ -17,6 +17,7 @@ import {
 	compileFlowPromptSurface,
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
+import { type BunToolchain, currentBunToolchain } from "./bun-toolchain.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import {
 	buildCassette,
@@ -428,7 +429,16 @@ function parseArgs(argv: string[]) {
 	let repeat = 1;
 	const release = argv.includes("--release");
 	let concurrency = 0;
-	if (release && (argv.includes("--repeat") || argv.includes("--scenario"))) {
+	if (
+		release &&
+		argv.some(
+			(argument) =>
+				argument === "--repeat" ||
+				argument.startsWith("--repeat=") ||
+				argument === "--scenario" ||
+				argument.startsWith("--scenario="),
+		)
+	) {
 		console.error("--release cannot be combined with --repeat or --scenario.");
 		process.exit(2);
 	}
@@ -673,6 +683,13 @@ async function main(): Promise<void> {
 		);
 		process.exit(2);
 	}
+	let toolchain: BunToolchain;
+	try {
+		toolchain = currentBunToolchain(packageJson.packageManager);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exit(2);
+	}
 
 	const repositoryRoot = join(import.meta.dir, "..");
 	const opencodeVersion =
@@ -718,7 +735,7 @@ async function main(): Promise<void> {
 	const cassettes: Cassette[] = [];
 	const hostPlatform = normalizeEvidencePlatform(process.platform);
 	try {
-		const tarball = await packPlugin(repositoryRoot, packDir);
+		const tarball = await packPlugin(repositoryRoot, packDir, toolchain);
 		const artifact = await inspectArtifact({
 			repositoryRoot,
 			tarballPath: tarball,
@@ -738,7 +755,7 @@ async function main(): Promise<void> {
 			policyCatalog: v2Catalog,
 			graderBundle: { sourceTreeSha256: artifact.sourceTreeSha256 },
 		});
-		const packageCache = await preparePackageCache(tarball, packDir);
+		const packageCache = await preparePackageCache(tarball, packDir, toolchain);
 		if ((await tarballSha256(tarball)) !== artifact.tarballSha256) {
 			throw new Error("Packed artifact changed before host installation.");
 		}

@@ -2,6 +2,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import {
 	EvalHost,
 	packPlugin,
@@ -599,14 +600,16 @@ function sessionId(attempt: EndpointAttempt): string | null {
 
 async function runProbe(args: ProbeArgs): Promise<HostEvidenceCapabilities> {
 	const repositoryRoot = join(import.meta.dir, "..");
+	const toolchain = currentBunToolchain(packageJson.packageManager);
 	const packDir = await mkdtemp(join(tmpdir(), "flow-metadata-probe-"));
 	const previousReviewerSteps = process.env.OPENCODE_FLOW_REVIEWER_STEPS;
 	process.env.OPENCODE_FLOW_REVIEWER_STEPS = String(REVIEWER_STEP_LIMIT);
 	let host: EvalHost | null = null;
 	try {
 		const packageCache = await preparePackageCache(
-			await packPlugin(repositoryRoot, packDir),
+			await packPlugin(repositoryRoot, packDir, toolchain),
 			packDir,
+			toolchain,
 		);
 		host = await EvalHost.start({
 			packageCache,

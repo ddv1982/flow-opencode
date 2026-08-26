@@ -24,6 +24,7 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import {
 	extractObservedActor,
 	guidanceLoad,
@@ -937,17 +938,20 @@ function summarizeError(failure: unknown): string {
 export async function packPlugin(
 	repositoryRoot: string,
 	into: string,
+	toolchain: BunToolchain,
 ): Promise<string> {
-	const build = spawnSync("bun", ["run", "build"], {
+	const build = runPinnedBunSync(toolchain, ["run", "build"], {
 		cwd: repositoryRoot,
-		encoding: "utf8",
 	});
 	if (build.status !== 0)
 		throw new Error(`build failed:\n${build.stdout}\n${build.stderr}`);
-	const pack = spawnSync("bun", ["pm", "pack", "--destination", into], {
-		cwd: repositoryRoot,
-		encoding: "utf8",
-	});
+	const pack = runPinnedBunSync(
+		toolchain,
+		["pm", "pack", "--destination", into],
+		{
+			cwd: repositoryRoot,
+		},
+	);
 	if (pack.status !== 0)
 		throw new Error(`pack failed:\n${pack.stdout}\n${pack.stderr}`);
 	return join(into, `opencode-plugin-flow-${packageJson.version}.tgz`);
@@ -965,6 +969,7 @@ export async function packPlugin(
 export async function preparePackageCache(
 	tarball: string,
 	into: string,
+	toolchain: BunToolchain,
 ): Promise<string> {
 	const cache = join(into, `opencode-plugin-flow@${packageJson.version}`);
 	await mkdir(cache, { recursive: true });
@@ -973,9 +978,8 @@ export async function preparePackageCache(
 		`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${tarball}` } }, null, 2)}\n`,
 		"utf8",
 	);
-	const install = spawnSync("bun", ["install"], {
+	const install = runPinnedBunSync(toolchain, ["install"], {
 		cwd: cache,
-		encoding: "utf8",
 	});
 	if (install.status !== 0)
 		throw new Error(`cache install failed:\n${install.stderr}`);

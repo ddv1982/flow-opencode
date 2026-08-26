@@ -6,14 +6,13 @@ One short entry per release, written for users deciding whether to upgrade.
 
 Long Grok eval turns no longer fail at Bun's implicit five-minute fetch cutoff.
 
-- Eval-owned OpenCode session requests keep their explicit cancellation and stall
-  guards while disabling Bun's shorter implicit timeout. A retained 310-second
-  probe covers the boundary.
-- Benchmark prompts now publish every graded result field. Hidden graders ignore
-  property insertion order and cover sparse Markdown line maps, blank lines, and
-  empty documents.
+- Eval OpenCode requests keep their cancellation and stall guards without Bun's
+  five-minute fetch cutoff.
+- Hidden benchmark graders ignore property order and cover sparse, blank, or
+  empty Markdown.
 - Release matrices now predeclare three attempts for 100% cases and ten for 90%
-  cases, so published thresholds match their measured denominators.
+  cases. They refuse an unpinned Bun before model calls and pass their measured
+  artifact directly to canary preparation.
 - The inspect scenario uses one exact public finding certificate in both durable
   review state and the complete final response. The committed replay corpus and
   maintainer catalog use the same contract.

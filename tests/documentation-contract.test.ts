@@ -506,14 +506,14 @@ describe("Flow documentation contract", () => {
 		const release = await readFile(".github/workflows/release.yml", "utf8");
 		expect(release).toMatch(/^ {2}push:\n {4}branches:/m);
 		expect(release).toContain("tags:");
-		expect(release).toContain('tag="v${version}"');
-		expect(release).toContain('--target "${GITHUB_SHA}"');
+		expect(release).toMatch(/tag="v\$\{version\}"/);
+		expect(release).toMatch(/--target "\$\{GITHUB_SHA\}"/);
 		expect(release).toContain(
 			"Verify exact VERIFIED V2 artifact decision and fresh canary",
 		);
 		expect(release).toContain("bun run eval:canary -- verify");
 		expect(release).toContain("--mode dry-run");
-		expect(release).toContain("evals/canary/${version}.json");
+		expect(release).toMatch(/evals\/canary\/\$\{version\}\.json/);
 		expect(release).not.toContain("canary-not-enabled");
 
 		// Model-driven evals need credentials and cost real money, so they run on a
@@ -533,6 +533,12 @@ describe("Flow documentation contract", () => {
 		expect(evals).toContain("if: always()");
 		expect(evals).toContain("schedule:");
 		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);
+		const qualification = await readFile(
+			"docs/release-qualification.md",
+			"utf8",
+		);
+		expect(qualification).toContain("eval:canary -- prepare --report");
+		expect(qualification).not.toContain("bun pm pack --destination");
 		for (const gate of [
 			"ci.yml",
 			"release.yml",

@@ -21,6 +21,7 @@ import {
 } from "../evals/cassette.js";
 import { inspectArtifact, samePackedArtifact } from "../evals/provenance.js";
 import type { ActorIdentity, ArtifactIdentity } from "../evals/report.js";
+import { reportArtifactForCanary } from "../evals/report-artifact.js";
 
 export const CANARY_CHECKLIST_VERSION = "phase9-canary-v1";
 export const CANARY_CHECK_IDS = [
@@ -320,13 +321,20 @@ export async function prepareCanary(input: {
 		repositoryRoot: input.repositoryRoot,
 		tarballPath: input.artifactPath,
 	});
-	const pluginEntry = extractPluginEntry(input.artifactPath);
 	const fixture = join(input.outputDirectory, "fixture");
 	await mkdir(join(fixture, ".opencode", "plugins"), { recursive: true });
-	await copyFile(
-		input.artifactPath,
-		join(input.outputDirectory, "artifact.tgz"),
-	);
+	const copiedArtifactPath = join(input.outputDirectory, "artifact.tgz");
+	await copyFile(input.artifactPath, copiedArtifactPath);
+	const copiedArtifact = await inspectArtifact({
+		repositoryRoot: input.repositoryRoot,
+		tarballPath: copiedArtifactPath,
+	});
+	if (!samePackedArtifact(artifact, copiedArtifact)) {
+		throw new Error(
+			"Copied canary artifact does not match its campaign bytes.",
+		);
+	}
+	const pluginEntry = extractPluginEntry(copiedArtifactPath);
 	await writeFile(
 		join(fixture, ".opencode", "plugins", "flow.js"),
 		pluginEntry,
@@ -382,6 +390,24 @@ export async function prepareCanary(input: {
 		Buffer.from(canonicalJson(prepared)),
 	);
 	return prepared;
+}
+
+export async function prepareCanaryFromReport(input: {
+	readonly repositoryRoot: string;
+	readonly reportPath: string;
+	readonly outputDirectory: string;
+	readonly preparedAt?: Date;
+}): Promise<PreparedCanary> {
+	const reportArtifact = await reportArtifactForCanary({
+		repositoryRoot: input.repositoryRoot,
+		reportPath: input.reportPath,
+	});
+	return prepareCanary({
+		repositoryRoot: input.repositoryRoot,
+		artifactPath: reportArtifact.artifactPath,
+		outputDirectory: input.outputDirectory,
+		...(input.preparedAt ? { preparedAt: input.preparedAt } : {}),
+	});
 }
 
 function redactEvidence(value: unknown, projectPath: string): unknown {
@@ -610,6 +636,12 @@ function required(args: readonly string[], name: string): string {
 	return value;
 }
 
+function hasOption(args: readonly string[], name: string): boolean {
+	return args.some(
+		(argument) => argument === name || argument.startsWith(`${name}=`),
+	);
+}
+
 async function json(path: string): Promise<unknown> {
 	return JSON.parse(await readFile(path, "utf8"));
 }
@@ -624,9 +656,14 @@ async function main(args: readonly string[]): Promise<void> {
 		return;
 	}
 	if (command === "prepare") {
-		const prepared = await prepareCanary({
+		if (hasOption(args, "--artifact")) {
+			throw new Error(
+				"prepare requires --report; free artifact paths are refused.",
+			);
+		}
+		const prepared = await prepareCanaryFromReport({
 			repositoryRoot,
-			artifactPath: required(args, "--artifact"),
+			reportPath: required(args, "--report"),
 			outputDirectory: required(args, "--out"),
 		});
 		process.stdout.write(

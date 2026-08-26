@@ -322,6 +322,32 @@ async function run(command: readonly string[], cwd: string): Promise<void> {
 }
 
 describe("canary preparation", () => {
+	test("rejects a free artifact path at the release CLI", async () => {
+		for (const argv of [
+			["--artifact", "candidate.tgz"],
+			["--artifact=candidate.tgz"],
+		]) {
+			const child = Bun.spawn(
+				[
+					"bun",
+					"run",
+					"scripts/eval-canary.ts",
+					"prepare",
+					...argv,
+					"--out",
+					"prepared",
+				],
+				{ cwd: new URL("..", import.meta.url).pathname, stderr: "pipe" },
+			);
+			const [exitCode, stderr] = await Promise.all([
+				child.exited,
+				new Response(child.stderr).text(),
+			]);
+			expect(exitCode).toBe(1);
+			expect(stderr).toContain("prepare requires --report");
+		}
+	});
+
 	test("builds an exact local-plugin fixture from the tarball", async () => {
 		const root = await mkdtemp(join(tmpdir(), "flow-canary-package-"));
 		const output = await mkdtemp(join(tmpdir(), "flow-canary-output-"));
