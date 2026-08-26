@@ -1076,6 +1076,7 @@ export class EvalHost {
 
 	/** Boots a throwaway OpenCode host over a git fixture. */
 	static async start(options: {
+		toolchain: BunToolchain;
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
 		opencodeVersion: string;
@@ -1142,8 +1143,9 @@ export class EvalHost {
 		const port = await availablePort();
 		host.baseUrl = `http://127.0.0.1:${port}`;
 		host.server = spawn(
-			"bunx",
+			options.toolchain.executable,
 			[
+				"x",
 				`opencode-ai@${options.opencodeVersion}`,
 				"serve",
 				"--port",
@@ -1154,7 +1156,7 @@ export class EvalHost {
 			{
 				cwd: project,
 				env: {
-					...process.env,
+					...options.toolchain.environment,
 					...(options.reviewerModel
 						? { OPENCODE_FLOW_REVIEWER_MODEL: options.reviewerModel }
 						: {}),

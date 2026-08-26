@@ -503,8 +503,9 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 			const port = await availablePort();
 			const baseUrl = `http://127.0.0.1:${port}`;
 			const server = spawn(
-				"bunx",
+				toolchain.executable,
 				[
+					"x",
 					`opencode-ai@${OPENCODE_VERSION}`,
 					"serve",
 					"--port",
@@ -515,7 +516,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				{
 					cwd: project,
 					env: {
-						...process.env,
+						...toolchain.environment,
 						HOME: childHome,
 						OPENCODE_TEST_HOME: childHome,
 						XDG_CACHE_HOME: childCache,

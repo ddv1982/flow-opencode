@@ -616,12 +616,14 @@ async function preflight(
 	packageCache: string,
 	opencodeVersion: string,
 	models: readonly string[],
+	toolchain: BunToolchain,
 ): Promise<void> {
 	process.stdout.write("- preflight: resolving model ids ... ");
 	let host: EvalHost | null = null;
 	let fatal: string | null = null;
 	try {
 		host = await EvalHost.start({
+			toolchain,
 			packageCache,
 			opencodeVersion,
 			files: { "package.json": '{\n  "name": "preflight"\n}\n' },
@@ -759,7 +761,7 @@ async function main(): Promise<void> {
 		if ((await tarballSha256(tarball)) !== artifact.tarballSha256) {
 			throw new Error("Packed artifact changed before host installation.");
 		}
-		await preflight(packageCache, opencodeVersion, models);
+		await preflight(packageCache, opencodeVersion, models, toolchain);
 		const persistV2Attempt = async (
 			result: RunResult,
 			cell: CampaignPlan["cells"][number],
@@ -845,6 +847,7 @@ async function main(): Promise<void> {
 			let host: EvalHost | null = null;
 			try {
 				host = await EvalHost.start({
+					toolchain,
 					packageCache,
 					opencodeVersion,
 					files: scenario.files,

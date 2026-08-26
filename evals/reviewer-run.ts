@@ -251,6 +251,7 @@ async function main(): Promise<void> {
 			let attempt: AttemptRecordV2;
 			try {
 				host = await EvalHost.start({
+					toolchain,
 					packageCache,
 					opencodeVersion,
 					files: entry.files,

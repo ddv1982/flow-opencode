@@ -165,6 +165,8 @@ describe("report artifact handoff", () => {
 				name: "opencode-plugin-flow",
 				version: "1.2.3",
 				files: ["dist/index.js"],
+				dependencies: { zod: "4.4.3" },
+				devDependencies: { "@opencode-ai/plugin": "1.18.6" },
 			}),
 		);
 		for (const command of [

@@ -19,7 +19,11 @@ import {
 	normalizeRecorded,
 	scrubSecrets,
 } from "../evals/cassette.js";
-import { inspectArtifact, samePackedArtifact } from "../evals/provenance.js";
+import {
+	inspectArtifact,
+	packedPackageManifest,
+	samePackedArtifact,
+} from "../evals/provenance.js";
 import type { ActorIdentity, ArtifactIdentity } from "../evals/report.js";
 import { reportArtifactForCanary } from "../evals/report-artifact.js";
 
@@ -93,6 +97,12 @@ const ChecksSchema = z
 		"closes-with-delivery": z.boolean(),
 	})
 	.strict();
+const PackageMetadataSchema = z
+	.object({
+		dependencies: z.record(TextSchema, TextSchema).optional(),
+		devDependencies: z.record(TextSchema, TextSchema).optional(),
+	})
+	.passthrough();
 const EvidenceRefSchema = z
 	.object({
 		path: TextSchema,
@@ -288,16 +298,12 @@ async function writeImmutable(path: string, bytes: Buffer): Promise<void> {
 	}
 }
 
-function extractPluginEntry(artifactPath: string): Buffer {
+function extractArtifactFile(artifactPath: string, member: string): Buffer {
 	for (const command of ["bsdtar", "tar"]) {
-		const result = spawnSync(
-			command,
-			["-xOf", artifactPath, "package/dist/index.js"],
-			{
-				encoding: "buffer",
-				maxBuffer: 32 * 1024 * 1024,
-			},
-		);
+		const result = spawnSync(command, ["-xOf", artifactPath, member], {
+			encoding: "buffer",
+			maxBuffer: 32 * 1024 * 1024,
+		});
 		if (result.status === 0 && Buffer.isBuffer(result.stdout))
 			return result.stdout;
 		if (
@@ -306,21 +312,29 @@ function extractPluginEntry(artifactPath: string): Buffer {
 		)
 			continue;
 	}
-	throw new Error(
-		"Canary preparation could not extract package/dist/index.js.",
-	);
+	throw new Error(`Canary preparation could not extract ${member}.`);
 }
 
 export async function prepareCanary(input: {
 	readonly repositoryRoot: string;
 	readonly artifactPath: string;
+	readonly expectedArtifact?: ArtifactIdentity;
 	readonly outputDirectory: string;
 	readonly preparedAt?: Date;
 }): Promise<PreparedCanary> {
-	const artifact = await inspectArtifact({
+	const inspectedArtifact = await inspectArtifact({
 		repositoryRoot: input.repositoryRoot,
 		tarballPath: input.artifactPath,
 	});
+	if (
+		input.expectedArtifact &&
+		!samePackedArtifact(input.expectedArtifact, inspectedArtifact)
+	) {
+		throw new Error(
+			"Canary artifact does not match the measured campaign artifact.",
+		);
+	}
+	const artifact = input.expectedArtifact ?? inspectedArtifact;
 	const fixture = join(input.outputDirectory, "fixture");
 	await mkdir(join(fixture, ".opencode", "plugins"), { recursive: true });
 	const copiedArtifactPath = join(input.outputDirectory, "artifact.tgz");
@@ -334,17 +348,17 @@ export async function prepareCanary(input: {
 			"Copied canary artifact does not match its campaign bytes.",
 		);
 	}
-	const pluginEntry = extractPluginEntry(copiedArtifactPath);
+	const pluginEntry = extractArtifactFile(
+		copiedArtifactPath,
+		"package/dist/index.js",
+	);
+	const packageMetadata = PackageMetadataSchema.parse(
+		await packedPackageManifest(copiedArtifactPath),
+	);
 	await writeFile(
 		join(fixture, ".opencode", "plugins", "flow.js"),
 		pluginEntry,
 	);
-	const packageMetadata = JSON.parse(
-		await readFile(join(input.repositoryRoot, "package.json"), "utf8"),
-	) as {
-		dependencies?: Record<string, string>;
-		devDependencies?: Record<string, string>;
-	};
 	await writeFile(
 		join(fixture, ".opencode", "package.json"),
 		`${JSON.stringify(
@@ -405,6 +419,7 @@ export async function prepareCanaryFromReport(input: {
 	return prepareCanary({
 		repositoryRoot: input.repositoryRoot,
 		artifactPath: reportArtifact.artifactPath,
+		expectedArtifact: reportArtifact.artifact,
 		outputDirectory: input.outputDirectory,
 		...(input.preparedAt ? { preparedAt: input.preparedAt } : {}),
 	});

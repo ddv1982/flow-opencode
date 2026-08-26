@@ -612,6 +612,7 @@ async function runProbe(args: ProbeArgs): Promise<HostEvidenceCapabilities> {
 			toolchain,
 		);
 		host = await EvalHost.start({
+			toolchain,
 			packageCache,
 			opencodeVersion: args.opencodeVersion,
 			files: { "README.md": "# Metadata probe\n" },

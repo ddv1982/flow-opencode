@@ -21,6 +21,12 @@ type ArchiveEntry = {
 	readonly bytes: Buffer;
 };
 
+export type PackedPackageManifest = {
+	readonly version: string;
+	readonly dependencies?: Record<string, string>;
+	readonly devDependencies?: Record<string, string>;
+};
+
 export type WorkingSourceIdentity = Pick<
 	ArtifactIdentity,
 	"sourceCommit" | "sourceTreeSha256"
@@ -143,7 +149,9 @@ async function archiveEntries(
 	return entries.toSorted((left, right) => left.path.localeCompare(right.path));
 }
 
-function packageVersion(entries: readonly ArchiveEntry[]): string {
+function packageManifest(
+	entries: readonly ArchiveEntry[],
+): PackedPackageManifest {
 	const manifest = entries.find(
 		(entry) => entry.path === "package/package.json",
 	);
@@ -161,7 +169,27 @@ function packageVersion(entries: readonly ArchiveEntry[]): string {
 			"Packed artifact package.json must contain a string version.",
 		);
 	}
-	return version;
+	const dependencies = Reflect.get(parsed, "dependencies");
+	const devDependencies = Reflect.get(parsed, "devDependencies");
+	return {
+		version,
+		...(dependencies &&
+		typeof dependencies === "object" &&
+		!Array.isArray(dependencies)
+			? { dependencies: dependencies as Record<string, string> }
+			: {}),
+		...(devDependencies &&
+		typeof devDependencies === "object" &&
+		!Array.isArray(devDependencies)
+			? { devDependencies: devDependencies as Record<string, string> }
+			: {}),
+	};
+}
+
+export async function packedPackageManifest(
+	tarballPath: string,
+): Promise<PackedPackageManifest> {
+	return packageManifest(await archiveEntries(tarballPath));
 }
 
 async function gitCommit(repositoryRoot: string): Promise<string> {
@@ -213,7 +241,7 @@ export async function inspectArtifact(input: {
 		throw new Error("Packed artifact changed while computing provenance.");
 	}
 	return {
-		packageVersion: packageVersion(entries),
+		packageVersion: packageManifest(entries).version,
 		...source,
 		tarballSha256: tarballDigest,
 		unpackedManifestSha256: canonicalSha256(

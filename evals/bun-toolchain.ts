@@ -31,18 +31,23 @@ export function bunToolchainFor(input: {
 		);
 	}
 	const executableDirectory = dirname(input.executable);
-	const pathKey =
-		Object.keys(input.environment).find(
-			(key) => key.toLowerCase() === "path",
-		) ?? "PATH";
-	const inheritedPath = input.environment[pathKey];
+	const inheritedPath =
+		input.environment.PATH ??
+		Object.entries(input.environment).find(
+			([key]) => key.toLowerCase() === "path",
+		)?.[1];
+	const environment = Object.fromEntries(
+		Object.entries(input.environment).filter(
+			([key]) => key.toLowerCase() !== "path",
+		),
+	);
 	return {
 		executable: input.executable,
 		actualVersion: input.actualVersion,
 		expectedVersion,
 		environment: {
-			...input.environment,
-			[pathKey]: inheritedPath
+			...environment,
+			PATH: inheritedPath
 				? `${executableDirectory}${delimiter}${inheritedPath}`
 				: executableDirectory,
 		},

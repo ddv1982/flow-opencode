@@ -360,6 +360,7 @@ async function main(): Promise<void> {
 		});
 		const cache = await preparePackageCache(tarball, packDir, toolchain);
 		const preflight = await EvalHost.start({
+			toolchain,
 			packageCache: cache,
 			opencodeVersion,
 			files: { "package.json": '{"name":"paired-preflight"}\n' },
@@ -425,6 +426,7 @@ async function main(): Promise<void> {
 				};
 				try {
 					host = await EvalHost.start({
+						toolchain,
 						packageCache: cache,
 						opencodeVersion,
 						files: benchmark.files,

@@ -51,6 +51,20 @@ describe("pinned Bun toolchain", () => {
 		expect(result.stdout).toBe(Bun.version);
 	});
 
+	test("normalizes duplicate path keys before launching children", () => {
+		const toolchain = bunToolchainFor({
+			packageManager: `bun@${Bun.version}`,
+			actualVersion: Bun.version,
+			executable: process.execPath,
+			environment: { PATH: "/canonical", Path: "/ambiguous" },
+		});
+		expect(toolchain.environment.Path).toBeUndefined();
+		expect(toolchain.environment.PATH?.split(delimiter)).toEqual([
+			dirname(process.execPath),
+			"/canonical",
+		]);
+	});
+
 	test("release eval refuses the wrong Bun before host preflight", async () => {
 		if (Bun.version === "1.3.14") return;
 		const child = Bun.spawn(

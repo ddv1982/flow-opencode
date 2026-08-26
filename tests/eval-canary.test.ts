@@ -363,8 +363,8 @@ describe("canary preparation", () => {
 				name: "opencode-plugin-flow",
 				version: "1.2.3",
 				files: ["dist/index.js"],
-				dependencies: { zod: "4.4.3" },
-				devDependencies: { "@opencode-ai/plugin": "1.18.6" },
+				dependencies: { zod: "4.4.2" },
+				devDependencies: { "@opencode-ai/plugin": "1.18.5" },
 			}),
 		);
 		for (const args of [
@@ -377,6 +377,23 @@ describe("canary preparation", () => {
 			await run(args, root);
 		await run(["bun", "pm", "pack", "--destination", output], root);
 		const artifactPath = join(output, "opencode-plugin-flow-1.2.3.tgz");
+		await writeFile(
+			join(root, "package.json"),
+			JSON.stringify({
+				name: "opencode-plugin-flow",
+				version: "1.2.3",
+				dependencies: { zod: "9.9.9" },
+				devDependencies: { "@opencode-ai/plugin": "9.9.9" },
+			}),
+		);
+		await expect(
+			prepareCanary({
+				repositoryRoot: root,
+				artifactPath,
+				expectedArtifact: artifact,
+				outputDirectory: join(output, "mismatched"),
+			}),
+		).rejects.toThrow(/does not match the measured campaign artifact/);
 		const prepared = await prepareCanary({
 			repositoryRoot: root,
 			artifactPath,
@@ -393,5 +410,19 @@ describe("canary preparation", () => {
 		expect(await readFile(join(output, "prepared/artifact.tgz"))).toEqual(
 			await readFile(artifactPath),
 		);
+		expect(
+			JSON.parse(
+				await readFile(
+					join(output, "prepared/fixture/.opencode/package.json"),
+					"utf8",
+				),
+			),
+		).toEqual({
+			private: true,
+			dependencies: {
+				"@opencode-ai/plugin": "1.18.5",
+				zod: "4.4.2",
+			},
+		});
 	});
 });
