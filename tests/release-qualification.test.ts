@@ -652,6 +652,18 @@ describe("v2 qualification cutover", () => {
 		});
 		expect(notVerified.decision.verdict).toBe("NOT VERIFIED");
 
+		const evidenceOnlyDrift = qualifyV2({
+			reportInput: v2Report(),
+			catalogInput: V2_CATALOG,
+			artifact: {
+				...V2_ARTIFACT,
+				sourceCommit: "tag-commit-after-evidence",
+				sourceTreeSha256: digest("8"),
+			},
+		});
+		expect(evidenceOnlyDrift.decision.verdict).toBe("VERIFIED");
+		expect(evidenceOnlyDrift.expected.artifact).toEqual(V2_ARTIFACT);
+
 		const inconclusive = qualifyV2({
 			reportInput: v2Report(true),
 			catalogInput: V2_CATALOG,

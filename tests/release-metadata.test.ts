@@ -54,7 +54,10 @@ const decisionRecord = (packageVersion: string, verdict = "VERIFIED") => ({
 	verdict,
 	artifact: artifact(packageVersion),
 	reportSha256: digest("d"),
-	artifactSha256: digest("e"),
+	artifactSha256: canonicalSha256(
+		"flow-decision-artifact-v1",
+		artifact(packageVersion),
+	),
 	evaluatorSha256: digest("f"),
 	catalogSha256: digest("9"),
 	policySha256: digest("0"),
@@ -239,6 +242,12 @@ describe("release metadata", () => {
 			}),
 		).toBeNull();
 		expect(
+			qualificationRecordIssue("8.0.0", {
+				...decisionRecord("8.0.0"),
+				artifactSha256: digest("e"),
+			}),
+		).toMatch(/artifact digest/);
+		expect(
 			qualificationRecordIssue("8.0.0", decisionRecord("8.0.0"), {
 				...artifact("8.0.0"),
 				tarballSha256: digest("9"),
@@ -256,7 +265,12 @@ describe("release metadata", () => {
 		const decisions = await recordDirectory();
 		const canaries = await recordDirectory();
 		const version = "8.1.1";
-		const expected = artifact(version);
+		const recorded = artifact(version);
+		const expected = {
+			...recorded,
+			sourceCommit: "tag-commit-after-evidence",
+			sourceTreeSha256: digest("8"),
+		};
 		const canary = canaryRecord(version);
 		await mkdir(join(canaries, "artifacts"), { recursive: true });
 		await writeFile(join(canaries, "artifacts", "session.json"), "session");
@@ -270,7 +284,7 @@ describe("release metadata", () => {
 			JSON.stringify({
 				...canaryBoundDecision(version, canary.recordSha256),
 				reportId: "report-canary",
-				artifact: expected,
+				artifact: recorded,
 			}),
 		);
 		await expect(

@@ -26,6 +26,11 @@ export type WorkingSourceIdentity = Pick<
 	"sourceCommit" | "sourceTreeSha256"
 >;
 
+export type PackedArtifactIdentity = Pick<
+	ArtifactIdentity,
+	"packageVersion" | "tarballSha256" | "unpackedManifestSha256"
+>;
+
 export type RequestedModelInput = {
 	readonly modelId: string;
 	readonly gateway: string | null;
@@ -220,6 +225,17 @@ export async function inspectArtifact(input: {
 			})),
 		),
 	};
+}
+
+export function samePackedArtifact(
+	left: PackedArtifactIdentity,
+	right: PackedArtifactIdentity,
+): boolean {
+	return (
+		left.packageVersion === right.packageVersion &&
+		left.tarballSha256 === right.tarballSha256 &&
+		left.unpackedManifestSha256 === right.unpackedManifestSha256
+	);
 }
 
 export function evaluatorIdentity(

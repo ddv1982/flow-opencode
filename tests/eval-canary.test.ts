@@ -257,6 +257,19 @@ describe("canary recording", () => {
 				now: new Date("2026-08-25T01:00:00.000Z"),
 			}),
 		).toBeNull();
+		expect(
+			await canaryRecordIssue({
+				version: "1.2.3",
+				record: first.record,
+				expectedArtifact: {
+					...artifact,
+					sourceCommit: "tag-commit-after-evidence",
+					sourceTreeSha256: digest("8"),
+				},
+				directory: join(root, "evals/canary"),
+				now: new Date("2026-08-25T01:00:00.000Z"),
+			}),
+		).toBeNull();
 		const stored = [
 			await readFile(
 				join(root, "evals/canary/artifacts/1.2.3-session.json"),

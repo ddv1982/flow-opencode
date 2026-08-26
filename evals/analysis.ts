@@ -1,5 +1,6 @@
 import { canonicalJson } from "./canonical-json.js";
 import type { ValidatedCaseCatalog } from "./catalog.js";
+import { samePackedArtifact } from "./provenance.js";
 import type {
 	ArtifactIdentity,
 	EvaluatorIdentity,
@@ -457,8 +458,9 @@ export function deriveReleaseDecision(input: {
 	readonly report: ValidatedReport;
 	readonly catalog: ValidatedCaseCatalog;
 	readonly expected: ReleaseExpectedProvenance;
+	readonly promotionArtifact?: ArtifactIdentity;
 }): ReleaseDecision {
-	const { report, catalog, expected } = input;
+	const { report, catalog, expected, promotionArtifact } = input;
 	const reasons: DecisionReason[] = [];
 	const cases: CaseReleaseCounts[] = [];
 	const attemptsByCell = new Map(
@@ -477,6 +479,17 @@ export function deriveReleaseDecision(input: {
 			)
 			.map((cell) => cell.cellId),
 	);
+	if (
+		promotionArtifact &&
+		!samePackedArtifact(expected.artifact, promotionArtifact)
+	) {
+		decisionReason(
+			reasons,
+			"hard",
+			"provenance-mismatch",
+			"artifact.packed: measured package does not match the promotion candidate.",
+		);
+	}
 
 	for (const mismatchItem of compareExpectedProvenanceWithin(
 		report,

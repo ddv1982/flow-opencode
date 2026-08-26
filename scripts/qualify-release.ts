@@ -1,11 +1,8 @@
 #!/usr/bin/env bun
 // Applies the published release-qualification thresholds to an eval report.
 //
-//   bun run qualify                       # newest report in evals/results/
-//   bun run qualify evals/results/x.json  # one exact report
-//   bun run qualify base.json rerun.json  # a matrix plus the pairs it re-measured
-//   bun run qualify -- --record 9.0.0     # on a pass, write the committed record
-//                                         # release-metadata requires for a major
+//   bun run qualify -- --report <report.json> --catalog <catalog.json>
+//     --artifact <artifact.tgz> [--canary <canary.json>]
 //
 // The thresholds live here rather than in prose because "the evals looked fine" was
 // the entire release bar: every recorded pass rate was read by eye, from one model,
@@ -120,9 +117,9 @@ const PASS_RATE_THRESHOLDS: Readonly<Record<string, number | null>> = {
 	// fails a silent pass, and `evals/cassettes/` pins a reviewer rejection of the
 	// plant. Gating the rate still waits for a matrix.
 	"inspect-goal-delivers-findings": null,
-	// Ungated until a matrix exists. Measures whether `/flow-auto` on an inspect
-	// goal leaves a user-visible findings list (final text, close delivery, or
-	// compact findingsDigest) rather than going silent.
+	// Ungated until a qualifying matrix exists. Measures whether `/flow-auto` on an
+	// inspect goal records the exact public certificate in a live failed blocking
+	// compact digest and returns the same certificate as the complete final response.
 };
 
 /** The minimum number of distinct providers a qualifying report must exercise. */
@@ -546,7 +543,14 @@ export function qualifyV2(input: {
 				.join("; ")}`,
 		);
 	}
-	const expected = expectedProvenanceFor(parsed.value, input.artifact);
+	const measuredArtifact = parsed.value.attempts[0]?.artifact;
+	if (!measuredArtifact) {
+		throw new Error("A v2 qualification report requires an attempt.");
+	}
+	if ("kind" in measuredArtifact) {
+		throw new Error("A v2 qualification report requires a Flow artifact.");
+	}
+	const expected = expectedProvenanceFor(parsed.value, measuredArtifact);
 	if (input.canary) {
 		const canaryIssue = canaryRecordIssue(
 			input.artifact.packageVersion,
@@ -563,6 +567,7 @@ export function qualifyV2(input: {
 			report: parsed.value,
 			catalog: catalog.value,
 			expected,
+			promotionArtifact: input.artifact,
 		}),
 		canary: input.canary ?? null,
 	};

@@ -2,6 +2,28 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.1.2] - 2026-08-26
+
+Long Grok eval turns no longer fail at Bun's implicit five-minute fetch cutoff.
+
+- Eval-owned OpenCode session requests keep their explicit cancellation and stall
+  guards while disabling Bun's shorter implicit timeout. A retained 310-second
+  probe covers the boundary.
+- Benchmark prompts now publish every graded result field. Hidden graders ignore
+  property insertion order and cover sparse Markdown line maps, blank lines, and
+  empty documents.
+- The inspect scenario uses one exact public finding certificate in both durable
+  review state and the complete final response. The committed replay corpus and
+  maintainer catalog use the same contract.
+- **Session v5 schema:** unchanged. Runtime commands, tools, and workflow behavior
+  are unchanged.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.1.2 --global --force
+```
+
 ## [8.1.1] - 2026-08-21
 
 A crashed host no longer wedges the session lock.

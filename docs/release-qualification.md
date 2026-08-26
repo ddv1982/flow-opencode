@@ -73,11 +73,10 @@ direction. The cadence follows from that:
 - **Freeze on the public surface** while the guarantees are being measured: tools,
   commands, guides, agents, and the Session v5 shape. Additive optional fields are
   allowed; removals and renames are not.
-- **No major release** without a committed qualification record.
-  `bun run qualify -- --record <version>` writes
-  `evals/qualification/<version>.json` on a pass of a report whose
-  `flowVersion` matches this repository, and release metadata refuses
-  the tag without it. A `CHANGELOG` entry states the schema impact explicitly.
+- **No release** without a committed exact V2 decision and fresh canary.
+  `bun run qualify` writes the decision under `evals/decisions`; release metadata
+  refuses a tag without its matching `evals/canary` evidence. A `CHANGELOG` entry
+  states the schema impact explicitly.
 - **Patch releases** for defects and host-compatibility fixes, which is what the
   weekly OpenCode compatibility smoke exists to catch early.
 - **Deprecate before removing.** A surface that is going away is announced in one
@@ -88,7 +87,12 @@ direction. The cadence follows from that:
 
 ```bash
 bun run eval -- --model <anthropic-id> --model <openai-id> --repeat 3
-bun run qualify
+bun pm pack --destination .release-artifacts
+bun run eval:canary -- prepare --artifact <tgz> --out <canary-dir>
+# Run the prepared fixture, then record its session and transcript.
+bun run eval:canary -- record <record-options>
+bun run qualify -- --report <report.json> --catalog <catalog.json> \
+  --artifact <tgz> --canary evals/canary/<version>.json
 ```
 
 Only the full matrix qualifies a release. The cheaper tiers — a free replay of

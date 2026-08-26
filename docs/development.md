@@ -144,10 +144,11 @@ deterministic hook and lifecycle gates.
 
 ## Release
 
-A release also needs a qualification pass: `bun run eval` against at least two
-providers, then `bun run qualify`, whose thresholds are published in
-[release qualification](release-qualification.md). The scheduled
-`.github/workflows/evals.yml` produces the same report weekly.
+A release needs a V2 qualification report from at least two providers, a canary of
+the exact packed artifact, and a canary-bound decision. Pass `--report`, `--catalog`,
+`--artifact`, and `--canary` to `bun run qualify`. Commit `evals/canary` and
+`evals/decisions` before tagging. [Release qualification](release-qualification.md)
+publishes the thresholds and commands.
 
 Release tags use `v<package-version>`. Blocking release checks include the
 normal repository gate, package smoke, packed live OpenCode smoke, package

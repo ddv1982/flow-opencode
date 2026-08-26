@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "8.1.1",
+	"version": "8.1.2",
 	"description": "Small durable planning, validation, and review workflow for OpenCode",
 	"type": "module",
 	"repository": {
