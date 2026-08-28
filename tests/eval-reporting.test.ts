@@ -37,6 +37,7 @@ import {
 	operationalMetrics,
 	reviewerActivity,
 } from "../evals/metrics.js";
+import { bestEffortEvaluation } from "../evals/run.js";
 
 // Running the harness needs credentials and money, so the rules that decide what
 // a run *means* are proven here instead. Two were wrong in recorded runs: unpriced
@@ -45,6 +46,15 @@ import {
 // rest exist so a recovery failure, and a scenario nothing scored, can be read
 // from the report at all.
 describe("eval run classification", () => {
+	test("preserves the primary path when fallback enrichment throws again", () => {
+		const fallback: string[] = [];
+		expect(
+			bestEffortEvaluation(() => {
+				throw new Error("secondary transform repeated");
+			}, fallback),
+		).toBe(fallback);
+	});
+
 	test("ends the wait when a question is the only incomplete call", () => {
 		expect(onlyAwaitingAnswer(["question:running"])).toBe(true);
 		expect(onlyAwaitingAnswer(["question:pending", "question:running"])).toBe(

@@ -107,6 +107,61 @@ export type RetainedScenarioEvidence = z.infer<
 	typeof RetainedScenarioEvidenceSchema
 >;
 
+export function retainedFailureEvidence(input: {
+	readonly attempt: RetainedScenarioEvidence["attempt"];
+	readonly durationMs: number;
+	readonly outputTokens?: number;
+	readonly costUsd?: number | null;
+	readonly actors?: RetainedScenarioEvidence["actors"];
+	readonly guidanceLoads?: RetainedScenarioEvidence["guidanceLoads"];
+	readonly gradeInput?: RetainedScenarioEvidence["gradeInput"];
+}): RetainedScenarioEvidence {
+	const emptyGradeInput: RetainedScenarioEvidence["gradeInput"] = {
+		schemaVersion: 1,
+		flowCalls: [],
+		allCalls: [],
+		session: null,
+		archives: [],
+		finalText: "",
+	};
+	const usage = {
+		durationMs:
+			Number.isSafeInteger(input.durationMs) && input.durationMs >= 0
+				? input.durationMs
+				: 0,
+		outputTokens:
+			Number.isSafeInteger(input.outputTokens) &&
+			(input.outputTokens ?? -1) >= 0
+				? (input.outputTokens ?? 0)
+				: 0,
+		costUsd:
+			input.costUsd === null ||
+			(typeof input.costUsd === "number" &&
+				Number.isFinite(input.costUsd) &&
+				input.costUsd >= 0)
+				? input.costUsd
+				: null,
+	};
+	const common = {
+		schemaVersion: 1,
+		attempt: input.attempt,
+		usage,
+	};
+	const retained = RetainedScenarioEvidenceSchema.safeParse({
+		...common,
+		actors: input.actors ?? [],
+		guidanceLoads: input.guidanceLoads ?? [],
+		gradeInput: input.gradeInput ?? emptyGradeInput,
+	});
+	if (retained.success) return retained.data;
+	return RetainedScenarioEvidenceSchema.parse({
+		...common,
+		actors: [],
+		guidanceLoads: [],
+		gradeInput: emptyGradeInput,
+	});
+}
+
 export function pseudonymousEvalId(id: string): string {
 	return `id_${canonicalSha256("flow-eval-redacted-id-v1", id).slice("sha256:".length, "sha256:".length + 16)}`;
 }

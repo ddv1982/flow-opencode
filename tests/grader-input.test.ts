@@ -8,10 +8,83 @@ import {
 	actorsWithSessions,
 	pseudonymousEvalId,
 	RetainedScenarioEvidenceSchema,
+	retainedFailureEvidence,
 	ScenarioGradeInputSchema,
 } from "../evals/grader-input.js";
 
 describe("retained scenario grader input", () => {
+	test("retains a complete attempt envelope when the host produces no outcome", () => {
+		const evidence = retainedFailureEvidence({
+			attempt: {
+				attemptId: "attempt-cell-host-failure",
+				cellId: "cell-host-failure",
+				caseId: "happy-path",
+				repetition: 1,
+				model: {
+					routeProvider: "xai",
+					gateway: null,
+					family: "grok-4.6",
+					model: "grok-4.6",
+					revision: null,
+				},
+			},
+			durationMs: 182_000,
+		});
+		expect(RetainedScenarioEvidenceSchema.parse(evidence)).toEqual(evidence);
+		expect(evidence).toMatchObject({
+			actors: [],
+			guidanceLoads: [],
+			gradeInput: {
+				flowCalls: [],
+				allCalls: [],
+				session: null,
+				archives: [],
+				finalText: "",
+			},
+			usage: { durationMs: 182_000, outputTokens: 0, costUsd: null },
+		});
+	});
+
+	test("retains known usage and grade input after outcome collection", () => {
+		const evidence = retainedFailureEvidence({
+			attempt: {
+				attemptId: "attempt-cell-transform-failure",
+				cellId: "cell-transform-failure",
+				caseId: "happy-path",
+				repetition: 2,
+				model: {
+					routeProvider: "openai",
+					gateway: null,
+					family: "gpt-5.6-sol",
+					model: "gpt-5.6-sol",
+					revision: null,
+				},
+			},
+			durationMs: 45_000,
+			outputTokens: 321,
+			costUsd: 0.42,
+			actors: [],
+			guidanceLoads: [],
+			gradeInput: {
+				schemaVersion: 1,
+				flowCalls: [],
+				allCalls: [],
+				session: { status: "running" },
+				archives: [],
+				finalText: "partial",
+			},
+		});
+		expect(evidence.usage).toEqual({
+			durationMs: 45_000,
+			outputTokens: 321,
+			costUsd: 0.42,
+		});
+		expect(evidence.gradeInput).toMatchObject({
+			session: { status: "running" },
+			finalText: "partial",
+		});
+	});
+
 	test("accepts the complete bounded input and pseudonymizes ids deterministically", () => {
 		const parsed = ScenarioGradeInputSchema.safeParse({
 			schemaVersion: 1,

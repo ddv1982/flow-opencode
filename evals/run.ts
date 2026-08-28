@@ -48,6 +48,7 @@ import {
 	actorsWithSessions,
 	pseudonymizeEvalIds,
 	RetainedScenarioEvidenceSchema,
+	retainedFailureEvidence,
 	scenarioGradeInput,
 } from "./grader-input.js";
 import {
@@ -384,6 +385,14 @@ function attemptOutcome(
 		model: result.model,
 		attempt: result.attempt,
 	});
+}
+
+export function bestEffortEvaluation<T>(operation: () => T, fallback: T): T {
+	try {
+		return operation();
+	} catch {
+		return fallback;
+	}
 }
 
 /** One attempt to run, and the slot its result belongs in. */
@@ -888,6 +897,7 @@ async function main(): Promise<void> {
 			let cassette: Cassette | null = null;
 			const started = Date.now();
 			let host: EvalHost | null = null;
+			let observedOutcome: Outcome | null = null;
 			return preservePrimaryFailure(
 				async () => {
 					try {
@@ -960,6 +970,7 @@ async function main(): Promise<void> {
 							false,
 							() => activeHost.outcome(sessionIds, Date.now() - started),
 						);
+						observedOutcome = outcome;
 						const cell = campaignCells[job.slot];
 						if (!cell?.managerModel)
 							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
@@ -1125,9 +1136,84 @@ async function main(): Promise<void> {
 						const message =
 							error instanceof Error ? error.message : String(error);
 						const failure = evaluatorFailure(error);
+						const cell = campaignCells[job.slot];
+						if (!cell?.managerModel)
+							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
+						const durationMs = Date.now() - started;
+						const outcome = observedOutcome;
+						let retainedGradeInput:
+							| ReturnType<typeof scenarioGradeInput>
+							| undefined;
+						if (outcome) {
+							try {
+								retainedGradeInput = pseudonymizeEvalIds(
+									scenarioGradeInput(outcome),
+								);
+							} catch {
+								retainedGradeInput = undefined;
+							}
+						}
+						let observedActors: RunResultCommon["provenance"]["actors"] = [];
+						if (outcome) {
+							try {
+								observedActors = actorsWithSessions(outcome.actors ?? []).map(
+									(actor) => ({
+										...actor,
+										sessionIds: [...actor.sessionIds],
+										requestedModelId:
+											actor.role === "manager" ? model : requestedReviewerModel,
+										requestedModel: legacyRequestedModel(
+											actor.role === "manager" ? model : requestedReviewerModel,
+										),
+									}),
+								);
+							} catch {
+								observedActors = [];
+							}
+						}
+						const retainedEvidence = retainedFailureEvidence({
+							attempt: {
+								attemptId: `attempt-${cell.cellId}`,
+								cellId: cell.cellId,
+								caseId: cell.caseId,
+								repetition: cell.repetition,
+								model: cell.managerModel,
+							},
+							durationMs,
+							...(outcome
+								? {
+										outputTokens: outcome.tokens.output,
+										costUsd: outcome.costUsd,
+										actors: observedActors.map((actor) => ({
+											...actor,
+											sessionIds: [...actor.sessionIds],
+										})),
+										guidanceLoads: (outcome.guidanceLoads ?? []).map(
+											(load) => ({ ...load }),
+										),
+									}
+								: {}),
+							...(retainedGradeInput ? { gradeInput: retainedGradeInput } : {}),
+						});
 						const transcript = redactTranscript({
 							projectPath: host?.project ?? "",
-							value: { [`${failure.origin}Error`]: message },
+							value: retainedEvidence,
+						});
+						const documents = outcome
+							? ([
+									...(outcome.session ? [outcome.session] : []),
+									...outcome.archives,
+								] as MetricSession[])
+							: [];
+						const flowCalls = outcome?.flowCalls ?? [];
+						const flowCallNames = bestEffortEvaluation(
+							() => flowCalls.map((call) => call.tool),
+							[],
+						);
+						const emptyOperational = operationalMetrics([], {
+							flowCalls: [],
+							assistantMessages: 0,
+							durationMs: outcome?.durationMs ?? durationMs,
 						});
 						console.log(
 							`- ${label} ... ${failure.origin.toUpperCase()} (${message.split("\n")[0]})`,
@@ -1139,31 +1225,55 @@ async function main(): Promise<void> {
 							passed: false,
 							issues: [],
 							failure,
-							tokens: {
+							tokens: outcome?.tokens ?? {
 								input: 0,
 								output: 0,
 								reasoning: 0,
 								cacheRead: 0,
 								cacheWrite: 0,
 							},
-							costUsd: null,
-							assistantMessages: 0,
-							flowCalls: [],
-							sessionBoundaries: [],
-							documents: [],
-							honesty: completionHonesty(null),
-							reviewer: reviewerActivity([]),
-							operational: operationalMetrics([], {
-								flowCalls: [],
-								assistantMessages: 0,
-								durationMs: Date.now() - started,
-							}),
-							refusedBroadScope: 0,
-							guidanceSkips: 0,
-							finalText: "",
-							questions: [],
-							durationMs: Date.now() - started,
-							hostError: null,
+							costUsd: outcome?.costUsd ?? null,
+							assistantMessages: outcome?.assistantMessages ?? 0,
+							flowCalls: flowCallNames,
+							sessionBoundaries: bestEffortEvaluation(
+								() => sessionBoundaries(flowCalls),
+								[],
+							),
+							documents,
+							honesty: bestEffortEvaluation(
+								() =>
+									completionHonesty(
+										documents.find((document) => document.closure) ?? null,
+									),
+								completionHonesty(null),
+							),
+							reviewer: bestEffortEvaluation(
+								() => reviewerActivity(documents),
+								reviewerActivity([]),
+							),
+							operational: bestEffortEvaluation(
+								() =>
+									operationalMetrics(documents, {
+										flowCalls: flowCallNames,
+										assistantMessages: outcome?.assistantMessages ?? 0,
+										durationMs: outcome?.durationMs ?? durationMs,
+									}),
+								emptyOperational,
+							),
+							refusedBroadScope: bestEffortEvaluation(
+								() => refusedBroadScope(flowCalls),
+								0,
+							),
+							guidanceSkips: bestEffortEvaluation(
+								() => countGuidanceSkips(flowCalls),
+								0,
+							),
+							finalText: outcome?.finalText ?? "",
+							questions: outcome
+								? bestEffortEvaluation(() => askedQuestions(outcome), [])
+								: [],
+							durationMs: outcome?.durationMs ?? durationMs,
+							hostError: outcome?.providerError?.detail ?? null,
 							provenance: {
 								artifact,
 								evaluator,
@@ -1173,9 +1283,6 @@ async function main(): Promise<void> {
 								transcript,
 							},
 						};
-						const cell = campaignCells[job.slot];
-						if (!cell)
-							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
 						await persistEvaluation("attempt", () =>
 							persistV2Attempt(result, cell, scenario),
 						);
