@@ -79,6 +79,7 @@ export type DecisionReason = {
 		| "false-completion"
 		| "unsubmitted-review"
 		| "below-pass-rate"
+		| "campaign-integrity-failure"
 		| "campaign-stopped"
 		| "missing-attempt"
 		| "unscored-attempt"
@@ -480,6 +481,17 @@ export function deriveReleaseDecision(input: {
 			.map((cell) => cell.cellId),
 	);
 	if (
+		report.completion.status === "stopped" &&
+		report.completion.cause === "persistence"
+	) {
+		decisionReason(
+			reasons,
+			"hard",
+			"campaign-integrity-failure",
+			`Campaign stopped after a ${report.completion.cause} failure.`,
+		);
+	}
+	if (
 		promotionArtifact &&
 		!samePackedArtifact(expected.artifact, promotionArtifact)
 	) {
@@ -507,6 +519,19 @@ export function deriveReleaseDecision(input: {
 	for (const attempt of orderedAttempts(report)) {
 		if (!requiredKeys.has(`${attempt.caseId}\u0000${attempt.caseVersion}`)) {
 			continue;
+		}
+		if (
+			attempt.outcome.kind === "failure" &&
+			attempt.outcome.origin === "evaluator"
+		) {
+			decisionReason(
+				reasons,
+				"hard",
+				"campaign-integrity-failure",
+				`Attempt ${attempt.attemptId} failed in ${attempt.outcome.origin} code.`,
+				attempt.caseId,
+				attempt.caseVersion,
+			);
 		}
 		if (attempt.outcome.kind !== "product") continue;
 		const evidence = attempt.outcome.evidence;

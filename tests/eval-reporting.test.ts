@@ -113,6 +113,85 @@ describe("eval run classification", () => {
 		expect(peak).toBe(2);
 	});
 
+	test("stops unclaimed jobs after a fatal failure and drains in-flight work", async () => {
+		const started: string[] = [];
+		const finished: string[] = [];
+		let releaseSecond: (() => void) | undefined;
+		const secondStarted = new Promise<void>((resolve) => {
+			releaseSecond = resolve;
+		});
+		await expect(
+			runQueues(
+				[
+					["a1", "a2"],
+					["b1", "b2"],
+				],
+				2,
+				async (job) => {
+					started.push(job);
+					if (job === "a1") {
+						await secondStarted;
+						throw new Error("fatal persistence");
+					}
+					releaseSecond?.();
+					await Bun.sleep(5);
+					finished.push(job);
+					return job;
+				},
+			),
+		).rejects.toThrow("fatal persistence");
+		expect(started.sort()).toEqual(["a1", "b1"]);
+		expect(finished).toEqual(["b1"]);
+	});
+
+	test("stops after a returned integrity failure while preserving its result", async () => {
+		const started: string[] = [];
+		const done = await runQueues(
+			[
+				["a1", "a2"],
+				["b1", "b2"],
+			],
+			1,
+			async (job) => {
+				started.push(job);
+				return { job, fatal: job === "a1" };
+			},
+			(result) => result.fatal,
+		);
+		expect(started).toEqual(["a1"]);
+		expect(done).toEqual([{ job: "a1", fatal: true }]);
+	});
+
+	test("preserves an in-flight persistence error after an integrity stop", async () => {
+		let startSecond: (() => void) | undefined;
+		let releaseSecond: (() => void) | undefined;
+		const secondStarted = new Promise<void>((resolve) => {
+			startSecond = resolve;
+		});
+		const integrityStopped = new Promise<void>((resolve) => {
+			releaseSecond = resolve;
+		});
+		await expect(
+			runQueues(
+				[["evaluator"], ["persistence"]],
+				2,
+				async (job) => {
+					if (job === "evaluator") {
+						await secondStarted;
+						return { fatal: true };
+					}
+					startSecond?.();
+					await integrityStopped;
+					throw new Error("attempt write failed");
+				},
+				(result) => {
+					if (result.fatal) releaseSecond?.();
+					return result.fatal;
+				},
+			),
+		).rejects.toThrow("attempt write failed");
+	});
+
 	test("never runs two jobs from one queue at once", async () => {
 		// The whole point of keying a queue by model: overlap inside one queue would
 		// race one provider's rate limit against itself.
@@ -493,8 +572,18 @@ describe("eval pass rates", () => {
 	const attempt = (
 		scenario: string,
 		passed: boolean,
-		extra: { unscored?: boolean; environment?: boolean; error?: string } = {},
+		extra: {
+			unscored?: boolean;
+			failure?: {
+				origin: "provider" | "host" | "evaluator";
+				code: string;
+				detail: string;
+				retryable: boolean;
+			};
+		} = {},
 	) => ({ scenario, model: "m", passed, ...extra });
+	const failure = (origin: "provider" | "host" | "evaluator") =>
+		({ origin, code: "fixture", detail: "fixture", retryable: false }) as const;
 
 	test("counts passes against scored attempts only", () => {
 		expect(
@@ -514,7 +603,7 @@ describe("eval pass rates", () => {
 		// rather than as unmeasured.
 		const rates = passRates([
 			attempt("gate", false, { unscored: true }),
-			attempt("gate", false, { environment: true }),
+			attempt("gate", false, { failure: failure("host") }),
 		]);
 		expect(rates).toEqual([
 			["gate @ m", { passed: 0, attempts: 0, unscored: 2, aborted: 0 }],
@@ -533,7 +622,7 @@ describe("eval pass rates", () => {
 			passRates([
 				attempt("gate", true),
 				attempt("gate", true),
-				attempt("gate", false, { error: "wedged: bash:running" }),
+				attempt("gate", false, { failure: failure("evaluator") }),
 			]),
 		).toEqual([
 			["gate @ m", { passed: 2, attempts: 2, unscored: 0, aborted: 1 }],
@@ -541,14 +630,22 @@ describe("eval pass rates", () => {
 		expect(
 			formatRate({ passed: 2, attempts: 2, unscored: 0, aborted: 1 }),
 		).toBe("2/2  1 aborted");
-		// A lost host is still environment-blocked rather than an abort, though it
-		// carries the same `error` field.
 		expect(
-			passRates([
-				attempt("gate", false, { environment: true, error: "no credentials" }),
-			]),
+			passRates([attempt("gate", false, { failure: failure("provider") })]),
 		).toEqual([
 			["gate @ m", { passed: 0, attempts: 0, unscored: 1, aborted: 0 }],
+		]);
+	});
+
+	test("never hides evaluator failures as environment exclusions", () => {
+		expect(
+			passRates([
+				{ ...attempt("gate", false), failure: failure("provider") },
+				{ ...attempt("gate", false), failure: failure("host") },
+				{ ...attempt("gate", false), failure: failure("evaluator") },
+			]),
+		).toEqual([
+			["gate @ m", { passed: 0, attempts: 0, unscored: 2, aborted: 1 }],
 		]);
 	});
 

@@ -435,7 +435,7 @@ export async function replayCassette(
 			costUsd: null,
 			assistantMessages: cassette.assistantMessages,
 			durationMs: Date.now() - started,
-			hostError: null,
+			providerError: null,
 		};
 		return { cassette, outcome, divergences };
 	} finally {

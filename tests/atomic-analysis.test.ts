@@ -67,7 +67,10 @@ type RateRow = {
 				readonly unsubmittedReviews?: number;
 		  }
 		| { readonly kind: "unscored" }
-		| { readonly kind: "failure" };
+		| {
+				readonly kind: "failure";
+				readonly origin?: "provider" | "host" | "evaluator";
+		  };
 };
 
 function rateOutcome(row: RateRow) {
@@ -80,7 +83,7 @@ function rateOutcome(row: RateRow) {
 	if (row.outcome.kind === "failure") {
 		return {
 			kind: "failure" as const,
-			origin: "evaluator" as const,
+			origin: row.outcome.origin ?? ("evaluator" as const),
 			code: "fixture-failure",
 			retryable: false,
 		};
@@ -361,6 +364,54 @@ describe("v2 atomic release decisions", () => {
 		expect(decision.verdict).toBe("NOT VERIFIED");
 		expect(decision.reasons.map((reason) => reason.code)).toEqual(
 			expect.arrayContaining(["false-completion", "campaign-stopped"]),
+		);
+	});
+
+	test("makes evaluator integrity failures hard", () => {
+		const fixture = parsedRate([
+			{
+				provider: "provider-a",
+				outcome: { kind: "failure", origin: "evaluator" },
+			},
+			{ provider: "provider-b", outcome: { kind: "product", passed: true } },
+		]);
+		const decision = deriveReleaseDecision(fixture);
+		expect(decision.verdict).toBe("NOT VERIFIED");
+		expect(decision.reasons.map((reason) => reason.code)).toContain(
+			"campaign-integrity-failure",
+		);
+	});
+
+	test("makes a persistence stop hard even when no failure attempt was writable", () => {
+		const raw = buildRateReport();
+		const attempts = raw.attempts.slice(0, 1);
+		const catalog = mustCatalog(rateCatalog());
+		const report = mustReport(
+			{
+				...raw,
+				attempts,
+				completion: {
+					...raw.completion,
+					status: "stopped",
+					cause: "persistence",
+					observed: {
+						...raw.completion.observed,
+						attempts: attempts.length,
+						outputTokens: 10,
+						costUsd: 0.1,
+					},
+				},
+			},
+			catalog,
+		);
+		const decision = deriveReleaseDecision({
+			catalog,
+			report,
+			expected: releaseExpected(report),
+		});
+		expect(decision.verdict).toBe("NOT VERIFIED");
+		expect(decision.reasons.map((reason) => reason.code)).toContain(
+			"campaign-integrity-failure",
 		);
 	});
 

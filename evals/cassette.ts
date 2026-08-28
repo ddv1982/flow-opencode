@@ -94,7 +94,9 @@ export type FidelityNote =
 	| "no-flow-calls"
 	| "run-aborted"
 	| "run-unscored"
-	| "host-error";
+	| "host-error"
+	| "provider-error"
+	| "evaluator-error";
 
 export type Cassette = Readonly<{
 	cassetteVersion: number;
