@@ -299,7 +299,7 @@ export async function assertQualificationRecord(
 		)
 	) {
 		throw new Error(
-			`Release ${version} cannot proceed: no exact VERIFIED v2 decision record exists. Run \`bun run qualify -- --report <report> --catalog <catalog> --artifact <artifact>\` and commit the decision.`,
+			`Release ${version} cannot proceed: no exact VERIFIED v2 decision record exists. Run \`bun run qualify -- --campaign-dir <campaign> --canary <record>\` and commit the sealed bundle.`,
 		);
 	}
 }

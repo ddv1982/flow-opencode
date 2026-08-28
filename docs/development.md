@@ -144,10 +144,11 @@ deterministic hook and lifecycle gates.
 
 ## Release
 
-A release needs a V2 qualification report from at least two providers, a canary of
-the exact packed artifact, and a canary-bound decision. Pass `--report`, `--catalog`,
-`--artifact`, and `--canary` to `bun run qualify`. Commit `evals/canary` and
-`evals/decisions` before tagging. [Release qualification](release-qualification.md)
+A release needs a complete V2 campaign from at least two providers and a canary of
+the exact packed artifact. Pass `--campaign-dir` and `--canary` to
+`bun run qualify`; it seals the report, attempts, transcripts, artifact, canary,
+expected provenance, decision, and grader source into one immutable bundle. Commit
+the bundle and canary before tagging. [Release qualification](release-qualification.md)
 publishes the thresholds and commands.
 
 Release tags use `v<package-version>`. Blocking release checks include the

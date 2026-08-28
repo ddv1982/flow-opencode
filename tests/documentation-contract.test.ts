@@ -525,11 +525,8 @@ describe("Flow documentation contract", () => {
 		const evals = await readFile(".github/workflows/evals.yml", "utf8");
 		expect(evals).toContain("bun run eval");
 		expect(evals).toContain("V2 report:");
-		expect(evals).toContain("bun run qualify -- --report");
-		expect(evals).toContain("steps.run.outputs.catalog");
-		expect(evals).toContain("steps.run.outputs.artifact");
-		expect(evals).toContain("--decisions-dir");
-		expect(evals).toContain("eval-v2-decision");
+		expect(evals).toContain("sealed qualification requires");
+		expect(evals).toContain("eval-v2-qualification-input");
 		expect(evals).toContain("if: always()");
 		expect(evals).toContain("schedule:");
 		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);

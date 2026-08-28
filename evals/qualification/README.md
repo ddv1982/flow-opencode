@@ -1,10 +1,13 @@
-# Qualification records
+# Qualification bundles
 
-One JSON file per major release, written by `bun run qualify -- --record <version>`
-when a report clears every published threshold and its `flowVersion` matches
-this repository. `scripts/release-metadata.ts`
-refuses an `x.0.0` tag whose record is missing, mismatched, or not `QUALIFIED`.
+`bun run qualify -- --campaign-dir <dir> --canary <record>` writes a sealed,
+content-addressed directory under `bundles/`.
 
-This is a checklist with a filename, not a forged-proof gate. A human can write
-the file by hand. The point is that a major tag cannot be cut without one, so
-skipping the qualification run has to show up in the release diff.
+The seal binds the canonical report, catalog, policy, plan, completion, every
+attempt and redacted transcript, expected provenance, exact artifact, canary and
+its evidence, derived decision, and the complete grader source closure. The seal is
+written last. An interrupted directory is not qualification evidence; an identical
+retry completes or replays it, while conflicting bytes are refused.
+
+Bundle creation is not release authorization. The bundle retains the inputs that
+release verification will independently regrade and rederive.

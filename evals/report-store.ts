@@ -57,11 +57,11 @@ function cellId(value: unknown): string | null {
 		: null;
 }
 
-function attemptFileName(attemptId: string): string {
+export function reportStoreAttemptFileName(attemptId: string): string {
 	return `${Buffer.from(attemptId).toString("base64url")}.json`;
 }
 
-function cellFileName(cellId: string): string {
+export function reportStoreCellFileName(cellId: string): string {
 	return `${Buffer.from(cellId).toString("base64url")}.json`;
 }
 
@@ -237,7 +237,7 @@ export class ReportStore {
 			fail(`Attempt references an unknown plan cell: ${attempt.cellId}.`);
 		}
 		return writeImmutable(
-			join(this.attemptsDirectory, cellFileName(attempt.cellId)),
+			join(this.attemptsDirectory, reportStoreCellFileName(attempt.cellId)),
 			Buffer.from(canonicalJson(attempt)),
 			this.hooks,
 		);
@@ -248,10 +248,13 @@ export class ReportStore {
 		readonly text: string;
 	}): Promise<{ readonly artifact: string; readonly sha256: string }> {
 		await mkdir(this.transcriptsDirectory, { recursive: true, mode: 0o700 });
-		const artifact = `transcripts/${attemptFileName(input.attemptId)}`;
+		const artifact = `transcripts/${reportStoreAttemptFileName(input.attemptId)}`;
 		const bytes = Buffer.from(input.text, "utf8");
 		await writeImmutable(
-			join(this.transcriptsDirectory, attemptFileName(input.attemptId)),
+			join(
+				this.transcriptsDirectory,
+				reportStoreAttemptFileName(input.attemptId),
+			),
 			bytes,
 			this.hooks,
 		);

@@ -5,7 +5,8 @@
 // observed tool-call sequence — never prompt wording — so a prompt can be
 // rewritten freely as long as these still hold.
 
-import { askedQuestions, type Outcome, type Scenario } from "./harness.js";
+import type { ScenarioGradeInput } from "./grader-input.js";
+import { askedQuestions, type Scenario } from "./harness.js";
 
 // Session v5, narrowed to the fields the checks actually read, and mirrored by hand
 // rather than imported from Flow's own schema. Importing it would let a check assert
@@ -76,7 +77,7 @@ function asSession(
 }
 
 /** The closed document, whether it is still active or already archived. */
-function closedDocument(outcome: Outcome): SessionDoc | null {
+function closedDocument(outcome: ScenarioGradeInput): SessionDoc | null {
 	const active = asSession(outcome.session);
 	if (active?.closure) return active;
 	for (const archive of outcome.archives) {
@@ -87,11 +88,11 @@ function closedDocument(outcome: Outcome): SessionDoc | null {
 }
 
 /** Flow tool names in call order, for checks about which step ran and when. */
-function calledTools(outcome: Outcome): string[] {
+function calledTools(outcome: ScenarioGradeInput): string[] {
 	return outcome.flowCalls.map((call) => call.tool);
 }
 
-function planCreations(outcome: Outcome): number {
+function planCreations(outcome: ScenarioGradeInput): number {
 	return outcome.flowCalls.filter((call) => {
 		if (call.tool !== "flow_plan_save" || call.status !== "completed") {
 			return false;
@@ -111,7 +112,10 @@ function planCreations(outcome: Outcome): number {
 }
 
 /** Whether the model dispatched a hidden Flow subagent of the given type. */
-function dispatchedSubagent(outcome: Outcome, subagentType: string): boolean {
+function dispatchedSubagent(
+	outcome: ScenarioGradeInput,
+	subagentType: string,
+): boolean {
 	return outcome.allCalls.some(
 		(call) =>
 			call.tool === "task" &&
@@ -120,7 +124,7 @@ function dispatchedSubagent(outcome: Outcome, subagentType: string): boolean {
 }
 
 /** Index of the first `flow_guidance` call for an id, or -1 if none. */
-function guidanceIndex(outcome: Outcome, id: string): number {
+function guidanceIndex(outcome: ScenarioGradeInput, id: string): number {
 	return outcome.flowCalls.findIndex(
 		(call) =>
 			call.tool === "flow_guidance" &&
@@ -129,7 +133,7 @@ function guidanceIndex(outcome: Outcome, id: string): number {
 }
 
 /** Index of the first occurrence of a flow tool, or -1. */
-function firstFlowToolIndex(outcome: Outcome, tool: string): number {
+function firstFlowToolIndex(outcome: ScenarioGradeInput, tool: string): number {
 	return outcome.flowCalls.findIndex((call) => call.tool === tool);
 }
 
@@ -142,7 +146,7 @@ function firstFlowToolIndex(outcome: Outcome, tool: string): number {
  * review round trip, and a pattern of them means the prompt is not telling the
  * reviewer clearly enough to restate every live id on a failed verdict.
  */
-function carryForwardRejections(outcome: Outcome): number {
+function carryForwardRejections(outcome: ScenarioGradeInput): number {
 	return outcome.flowCalls.filter(
 		(call) =>
 			call.tool === "flow_feature_complete" &&
@@ -159,7 +163,7 @@ function carryForwardRejections(outcome: Outcome): number {
  * stopped it. Reading only the final text would call the more correct behavior a
  * failure to report.
  */
-function reportedToUser(outcome: Outcome): string {
+function reportedToUser(outcome: ScenarioGradeInput): string {
 	return [outcome.finalText, ...askedQuestions(outcome)].join("\n");
 }
 
@@ -177,7 +181,7 @@ function reportedToUser(outcome: Outcome): string {
  * no ordinary meaning in this workflow are the narrowest handle available, and the
  * alternative — accepting any mention of the blocker — cannot see the difference.
  */
-function offeredClosureChoice(outcome: Outcome): boolean {
+function offeredClosureChoice(outcome: ScenarioGradeInput): boolean {
 	const closed = closedDocument(outcome)?.closure?.kind;
 	if (closed === "deferred" || closed === "abandoned") return true;
 	const affirmative = reportedToUser(outcome).replace(
@@ -187,7 +191,10 @@ function offeredClosureChoice(outcome: Outcome): boolean {
 	return /defer|abandon/i.test(affirmative);
 }
 
-function offeredEvidenceMove(outcome: Outcome, session: SessionDoc): boolean {
+function offeredEvidenceMove(
+	outcome: ScenarioGradeInput,
+	session: SessionDoc,
+): boolean {
 	if (offeredClosureChoice(outcome)) return true;
 	const lines = reportedToUser(outcome)
 		.split(/\r?\n/)
@@ -241,7 +248,7 @@ function offeredEvidenceMove(outcome: Outcome, session: SessionDoc): boolean {
 }
 
 /** Blocking findings recorded across every review the run performed. */
-function blockingFindings(outcome: Outcome): number {
+function blockingFindings(outcome: ScenarioGradeInput): number {
 	return allSessions(outcome)
 		.flatMap((session) => session.runs)
 		.flatMap((run) => run.reviews)
@@ -256,7 +263,7 @@ function blockingFindings(outcome: Outcome): number {
  * rubber-stamp — including a pass that only recorded advisories. Metrics still
  * call the empty-finding case a silent pass; this check is stricter on purpose.
  */
-function passedReviews(outcome: Outcome): number {
+function passedReviews(outcome: ScenarioGradeInput): number {
 	return allSessions(outcome)
 		.flatMap((session) => session.runs)
 		.flatMap((run) => run.reviews)
@@ -296,7 +303,7 @@ const WRITE_TOOLS: readonly string[] = [
  * do. It is the wrong input for crediting work: a failed call wrote nothing, so
  * reading coverage out of one credits a test file that does not exist.
  */
-function writtenFiles(outcome: Outcome, landed = false): string[] {
+function writtenFiles(outcome: ScenarioGradeInput, landed = false): string[] {
 	return outcome.allCalls
 		.filter(
 			(call) =>
@@ -311,7 +318,7 @@ function writtenFiles(outcome: Outcome, landed = false): string[] {
 }
 
 /** Whether a write tool targeted one exact path, independent of its payload. */
-function wrotePath(outcome: Outcome, path: string): boolean {
+function wrotePath(outcome: ScenarioGradeInput, path: string): boolean {
 	return outcome.allCalls.some((call) => {
 		if (!WRITE_TOOLS.includes(call.tool)) return false;
 		const input = JSON.stringify(call.input);
@@ -348,7 +355,7 @@ function wrotePath(outcome: Outcome, path: string): boolean {
  * an oracle the model never sees, which is the same work as measuring the reviewer
  * this scenario cannot currently reach. Until then it bounds an ungated number.
  */
-function exercisedPunctuatedTitle(outcome: Outcome): boolean {
+function exercisedPunctuatedTitle(outcome: ScenarioGradeInput): boolean {
 	return writtenFiles(outcome, true).some((text) => {
 		if (!/\.test\.ts/.test(text)) return false;
 		// A call to slug/slugPath holding a quoted argument with an unsafe character in
@@ -361,7 +368,7 @@ function exercisedPunctuatedTitle(outcome: Outcome): boolean {
 }
 
 /** Every session document the run produced, active or archived. */
-function allSessions(outcome: Outcome): SessionDoc[] {
+function allSessions(outcome: ScenarioGradeInput): SessionDoc[] {
 	const active = asSession(outcome.session);
 	return [
 		...(active ? [active] : []),
@@ -424,7 +431,7 @@ test("zero-width range", () => {
 const PLANTED_INTERVAL_FINDING =
 	"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3";
 
-function lastCompactDigest(outcome: Outcome): ReadonlyArray<{
+function lastCompactDigest(outcome: ScenarioGradeInput): ReadonlyArray<{
 	summary?: string;
 	severity?: string;
 	verdict?: string;
@@ -454,7 +461,7 @@ function lastCompactDigest(outcome: Outcome): ReadonlyArray<{
 	return digest;
 }
 
-function inspectGoalIssues(outcome: Outcome): string[] {
+function inspectGoalIssues(outcome: ScenarioGradeInput): string[] {
 	const digest = lastCompactDigest(outcome);
 	const hasDurableFinding = digest.some(
 		(row) =>
@@ -564,7 +571,7 @@ test.skipIf(process.platform === "linux")("linux-skipped observation", () => {
 };
 
 /** Shared outcome checks for scenarios about skipped named acceptance cases. */
-function skippedCaseRefusedIssues(outcome: Outcome): string[] {
+function skippedCaseRefusedIssues(outcome: ScenarioGradeInput): string[] {
 	const issues: string[] = [];
 	const closed = closedDocument(outcome);
 	const session = asSession(outcome.session) ?? closed;
