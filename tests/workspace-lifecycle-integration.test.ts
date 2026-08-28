@@ -13,13 +13,7 @@ import {
 	loadSession,
 	sessionPath,
 } from "../src/infrastructure/fs/workspace.js";
-import {
-	flowPlanApprove,
-	flowPlanSave,
-	flowReviewStart,
-	flowRunStart,
-	flowSessionClose,
-} from "../src/infrastructure/fs/workspace-flow-service.js";
+import { createWorkspaceFlowService } from "../src/infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
@@ -66,6 +60,7 @@ function toolContext(workspace: string, agent: string): ToolContext {
 
 test("persists one complete workspace lifecycle and replays its exact close", async () => {
 	const workspace = await mkdtemp(join(tmpdir(), "flow-lifecycle-"));
+	const flow = createWorkspaceFlowService(workspace);
 	try {
 		await execFileAsync("git", ["-C", workspace, "init", "--quiet"]);
 		await writeFile(
@@ -74,7 +69,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		);
 
 		const saved = ok(
-			await flowPlanSave(workspace, {
+			await flow.planSave({
 				request: {
 					operationId: "save-lifecycle",
 					expectedRevision: 0,
@@ -112,7 +107,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		expect(savedProjection.revision).toBe(1);
 
 		const approved = ok(
-			await flowPlanApprove(workspace, {
+			await flow.planApprove({
 				request: {
 					operationId: "approve-lifecycle",
 					expectedRevision: savedProjection.revision,
@@ -121,7 +116,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		);
 		const approvedRevision = approved.workflowData.projection.revision;
 		const started = ok(
-			await flowRunStart(workspace, {
+			await flow.runStart({
 				request: {
 					operationId: "start-lifecycle",
 					expectedRevision: approvedRevision,
@@ -153,7 +148,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		});
 
 		const review = ok(
-			await flowReviewStart(workspace, {
+			await flow.reviewStart({
 				request: {
 					operationId: "review-lifecycle",
 					expectedRevision: validation.recordedRevision,
@@ -310,7 +305,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 				summary: "Lifecycle archived.",
 			},
 		};
-		const closed = ok(await flowSessionClose(workspace, closeInput));
+		const closed = ok(await flow.sessionClose(closeInput));
 		expect(closed.workflowData.delivery).toEqual({
 			goal: "Ship one file-backed lifecycle",
 			closure: {
@@ -365,7 +360,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		);
 		const archiveBeforeReplay = await readFile(archivePath, "utf8");
 		expect(JSON.parse(archiveBeforeReplay)).not.toHaveProperty("delivery");
-		const replay = ok(await flowSessionClose(workspace, closeInput));
+		const replay = ok(await flow.sessionClose(closeInput));
 		expect(replay.workflowData.operation).toMatchObject({
 			operationId: "close-lifecycle",
 			replayed: true,
