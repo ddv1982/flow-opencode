@@ -147,6 +147,7 @@ function parsedJson(value: unknown): unknown {
 type ObservedCall = Readonly<{
 	tool: string;
 	status: string;
+	sessionId: string | null;
 	input: Record<string, unknown>;
 	output: unknown;
 	metadata: Record<string, unknown>;
@@ -173,11 +174,16 @@ function transcriptShape(value: unknown): TranscriptShape {
 	};
 }
 
-function observedCall(entry: Record<string, unknown>): ObservedCall | null {
+function observedCall(
+	entry: Record<string, unknown>,
+	messageSessionId: string | null,
+): ObservedCall | null {
 	if (typeof entry.tool !== "string") return null;
 	const state = record(entry.state);
 	return {
 		tool: entry.tool,
+		sessionId:
+			typeof entry.sessionID === "string" ? entry.sessionID : messageSessionId,
 		status:
 			(typeof entry.status === "string" ? entry.status : null) ??
 			(typeof state?.status === "string" ? state.status : "unknown"),
@@ -195,7 +201,11 @@ function observedCalls(
 	return entries.flatMap((entry) =>
 		records(array(entry.parts)).flatMap((part) => {
 			if (part.type !== "tool") return [];
-			const call = observedCall(part);
+			const info = record(entry.info);
+			const call = observedCall(
+				part,
+				typeof info?.sessionID === "string" ? info.sessionID : null,
+			);
 			return call ? [call] : [];
 		}),
 	);
@@ -280,7 +290,11 @@ function modelIdentity(value: Record<string, unknown>): {
 function derivedActors(
 	entries: readonly Record<string, unknown>[],
 	calls: readonly ObservedCall[],
-): { readonly actors: readonly ActorIdentity[]; readonly complete: boolean } {
+): {
+	readonly actors: readonly ActorIdentity[];
+	readonly complete: boolean;
+	readonly managerSessionId: string | null;
+} {
 	const actors = new Map<string, ActorIdentity>();
 	const lineages: Array<{
 		readonly parent: string;
@@ -336,7 +350,8 @@ function derivedActors(
 		if (
 			identity &&
 			typeof sessionId === "string" &&
-			typeof parentSessionId === "string"
+			typeof parentSessionId === "string" &&
+			call.sessionId === parentSessionId
 		) {
 			const observedReviewer = actors.get("reviewer");
 			if (
@@ -356,19 +371,28 @@ function derivedActors(
 		manager !== undefined &&
 		reviewer !== undefined &&
 		manager.sessionIds.every((id) => !reviewer.sessionIds.includes(id));
-	const linked =
-		manager !== undefined &&
-		reviewer !== undefined &&
-		lineages.some(
-			(lineage) =>
-				manager.sessionIds.includes(lineage.parent) &&
-				reviewer.sessionIds.includes(lineage.child) &&
-				reviewer.requestedModel.routeProvider === lineage.identity.provider &&
-				reviewer.requestedModel.model === lineage.identity.model,
-		);
+	const linkedLineages =
+		manager && reviewer
+			? lineages.filter(
+					(lineage) =>
+						manager.sessionIds.includes(lineage.parent) &&
+						reviewer.sessionIds.includes(lineage.child) &&
+						reviewer.requestedModel.routeProvider ===
+							lineage.identity.provider &&
+						reviewer.requestedModel.model === lineage.identity.model,
+				)
+			: [];
+	const linkedPairs = [
+		...new Set(
+			linkedLineages.map((lineage) => `${lineage.parent}\0${lineage.child}`),
+		),
+	];
+	const managerSessionId =
+		linkedPairs.length === 1 ? (linkedPairs[0]?.split("\0")[0] ?? null) : null;
 	return {
 		actors: [...actors.values()],
-		complete: consistent && distinct && linked,
+		complete: consistent && distinct && managerSessionId !== null,
+		managerSessionId,
 	};
 }
 
@@ -463,12 +487,15 @@ export function deriveCanaryResult(input: {
 			? assuranceProjection(session.value)
 			: null;
 	const actors = derivedActors(transcript.entries, calls);
+	const managerCalls = actors.managerSessionId
+		? calls.filter((call) => call.sessionId === actors.managerSessionId)
+		: [];
 	const host = observedHost(transcript.entries);
-	const hasCompletedFlowCall = calls.some(
+	const hasCompletedFlowCall = managerCalls.some(
 		(call) => call.tool.startsWith("flow_") && call.status === "completed",
 	);
 	const loadedPlugin = loadedPluginMatches(
-		calls,
+		managerCalls,
 		input.packageVersion,
 		input.pluginEntrySha256,
 	);
@@ -495,19 +522,19 @@ export function deriveCanaryResult(input: {
 			session.value.operations.some(
 				(operation) => operation.kind === "plan-save",
 			) &&
-			completed(calls, "flow_plan_save"),
+			completed(managerCalls, "flow_plan_save"),
 		"captures-validation":
 			assurance !== null &&
 			assuranceSatisfied(assurance, "accepted-validation") &&
 			assuranceSatisfied(assurance, "canonical-gate") &&
 			assuranceSatisfied(assurance, "declared-evidence") &&
-			completed(calls, "flow_validation_start"),
+			completed(managerCalls, "flow_validation_start"),
 		"dispatches-reviewer":
 			assurance !== null &&
 			assuranceSatisfied(assurance, "recorded-completion") &&
 			actors.complete &&
-			completed(calls, "flow_review_start") &&
-			calls.some(
+			completed(managerCalls, "flow_review_start") &&
+			managerCalls.some(
 				(call) =>
 					call.tool === "task" &&
 					call.status === "completed" &&
@@ -516,7 +543,7 @@ export function deriveCanaryResult(input: {
 		"closes-with-delivery":
 			assurance !== null &&
 			assurance.conclusion === "completion-supported" &&
-			completionSupportedFromDelivery(calls, assurance),
+			completionSupportedFromDelivery(managerCalls, assurance),
 	};
 	const missing =
 		input.installation === null ||
