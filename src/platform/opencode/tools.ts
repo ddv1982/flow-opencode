@@ -64,40 +64,44 @@ function toolError(error: unknown): string {
 	return json(errorResponse(error));
 }
 
-/** Adds best-effort process-only timing and continuation observations. */
+function bestEffort<Value>(read: () => Value): Value | undefined {
+	try {
+		return read();
+	} catch {
+		return undefined;
+	}
+}
+
 function withAutoContext(
 	response: FlowToolResponse,
 	options: ToolOptions,
 	view?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
-	try {
-		if (view === "detail") {
-			const timing = options.autoTimingSnapshot?.();
-			if (timing) workflowData = { ...workflowData, autoTiming: timing };
-		}
-	} catch {}
-	try {
-		const support = options.autoContinuationSupport?.();
-		// `unknown` is withheld deliberately: before any assistant message exists it
-		// is the absence of a signal, and reporting it invites a caller to relay it as
-		// a limitation.
-		if (support === "supported" || support === "unsupported") {
-			workflowData = {
-				...workflowData,
-				autoContinuation: {
-					scope: "current-plugin-process",
-					support,
-					...(support === "unsupported"
-						? {
-								reason: "host-reports-no-assistant-message-parentage",
-								recovery: "Drive each feature with /flow-run.",
-							}
-						: {}),
-				},
-			};
-		}
-	} catch {}
+	const timing =
+		view === "detail"
+			? bestEffort(() => options.autoTimingSnapshot?.())
+			: undefined;
+	if (timing) workflowData = { ...workflowData, autoTiming: timing };
+	const support = bestEffort(() => options.autoContinuationSupport?.());
+	// `unknown` is withheld deliberately: before any assistant message exists it
+	// is the absence of a signal, and reporting it invites a caller to relay it as
+	// a limitation.
+	if (support === "supported" || support === "unsupported") {
+		workflowData = {
+			...workflowData,
+			autoContinuation: {
+				scope: "current-plugin-process",
+				support,
+				...(support === "unsupported"
+					? {
+							reason: "host-reports-no-assistant-message-parentage",
+							recovery: "Drive each feature with /flow-run.",
+						}
+					: {}),
+			},
+		};
+	}
 	return workflowData === response.workflowData
 		? response
 		: { ...response, workflowData };
