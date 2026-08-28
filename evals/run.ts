@@ -27,6 +27,19 @@ import {
 } from "./cassette.js";
 import { parseCaseCatalog, type ValidatedCaseCatalog } from "./catalog.js";
 import {
+	type AttemptFailure,
+	type DurableFailureOrigin,
+	EvaluationPersistenceError,
+	evaluateScenario,
+	evaluationPhase,
+	evaluatorFailure,
+	failureOutcome,
+	isEvaluatorFailure,
+	persistEvaluation,
+	preservePrimaryFailure,
+	strongestFailureOrigin,
+} from "./failure-origin.js";
+import {
 	askedQuestions,
 	askedScoring,
 	EvalHost,
@@ -87,18 +100,10 @@ const SURFACES: FlowPromptSurfaceName[] = [
 	"flow-worker",
 ];
 
-type RunResult = {
+type RunResultCommon = {
 	scenario: string;
 	model: string;
 	attempt: number;
-	passed: boolean;
-	/**
-	 * True when the run never reached the model: a host that would not boot, a
-	 * failed dependency install, a lost network. Such a run is no evidence about
-	 * the prompts either way, so it is excluded from the pass rate rather than
-	 * counted as a regression.
-	 */
-	environment?: boolean;
 	/** True when the model asked the user and stopped, scored or not. */
 	escalated?: boolean;
 	/**
@@ -108,7 +113,6 @@ type RunResult = {
 	 * against the prompts.
 	 */
 	unscored?: boolean;
-	issues: readonly string[];
 	tokens: Outcome["tokens"];
 	costUsd: number | null;
 	assistantMessages: number;
@@ -168,8 +172,21 @@ type RunResult = {
 		readonly instructions: readonly InstructionDelivery[];
 		readonly transcript: { readonly sha256: string; readonly text: string };
 	};
-	error?: string;
 };
+
+type RunResult = RunResultCommon &
+	(
+		| {
+				passed: boolean;
+				issues: readonly string[];
+				failure?: never;
+		  }
+		| {
+				passed: false;
+				issues: readonly [];
+				failure: AttemptFailure<DurableFailureOrigin>;
+		  }
+	);
 
 /**
  * The most attempts allowed in flight at once, however many models are named.
@@ -342,13 +359,8 @@ function reportActor(
 }
 
 function attemptOutcome(result: RunResult): AttemptRecordV2["outcome"] {
-	if (result.environment || result.error !== undefined) {
-		return {
-			kind: "failure",
-			origin: "host",
-			code: result.environment ? "environment" : "attempt-error",
-			retryable: true,
-		};
+	if (result.failure) {
+		return failureOutcome(result.failure);
 	}
 	if (result.unscored) {
 		return {
@@ -555,8 +567,7 @@ function promptFootprint(): {
  * outcome and one that reached the only end left to it.
  */
 function verdict(result: RunResult): string {
-	if (result.environment) return "ENV";
-	if (result.error) return "ABORT";
+	if (result.failure) return result.failure.origin.toUpperCase();
 	if (result.unscored) return "ASKED";
 	return `${result.passed ? "PASS" : "FAIL"}${result.escalated ? "+ASK" : ""}`;
 }
@@ -580,8 +591,8 @@ function formatTable(results: readonly RunResult[]): string {
 		String(result.tokens.output),
 		String(result.assistantMessages),
 		String(Math.round(result.durationMs / 1000)),
-		result.error
-			? `harness: ${result.error}`
+		result.failure
+			? `${result.failure.code}: ${result.failure.detail}`
 			: result.issues.length === 0
 				? "-"
 				: result.issues.join("; "),
@@ -712,7 +723,9 @@ async function main(): Promise<void> {
 
 	const packDir = await mkdtemp(join(tmpdir(), "flow-eval-pack-"));
 	const reportDir = join(repositoryRoot, "evals", "results");
-	await mkdir(reportDir, { recursive: true });
+	await persistEvaluation("report-directory", () =>
+		mkdir(reportDir, { recursive: true }),
+	);
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 	const v2Directory = join(reportDir, `${stamp}.v2`);
 	const v2Catalog = caseCatalogFor(selected);
@@ -726,8 +739,8 @@ async function main(): Promise<void> {
 		directory: v2Directory,
 		catalog: v2Catalog,
 	});
-	await reportStore.initialize(v2Plan);
-	await reportStore.writeCatalog(v2Catalog);
+	await persistEvaluation("initialize", () => reportStore.initialize(v2Plan));
+	await persistEvaluation("catalog", () => reportStore.writeCatalog(v2Catalog));
 	const campaignStartedAt = new Date().toISOString();
 	const campaignCells = v2Plan.cells;
 	const v2Attempts: AttemptRecordV2[] = [];
@@ -742,7 +755,9 @@ async function main(): Promise<void> {
 			repositoryRoot,
 			tarballPath: tarball,
 		});
-		await reportStore.writeArtifact(tarball);
+		await persistEvaluation("artifact", () =>
+			reportStore.writeArtifact(tarball),
+		);
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
 			caseCatalog: selected.map((scenario) => ({
@@ -845,265 +860,315 @@ async function main(): Promise<void> {
 			let cassette: Cassette | null = null;
 			const started = Date.now();
 			let host: EvalHost | null = null;
-			try {
-				host = await EvalHost.start({
-					toolchain,
-					packageCache,
-					opencodeVersion,
-					files: scenario.files,
-				});
-				const sessionIds = [
-					await host.createSession(`flow-eval ${scenario.id}`),
-				];
-				// A step that times out still produced tokens, messages, and tool
-				// calls, and those are the only evidence of how far the model got.
-				// Throwing here would discard them and report a run of zeroes, so
-				// the failure is remembered and the outcome collected regardless.
-				let stepError: string | null = null;
-				const escalatedSteps: number[] = [];
-				for (const [index, step] of scenario.steps.entries()) {
+			return preservePrimaryFailure(
+				async () => {
 					try {
-						if (step.freshSession) {
-							sessionIds.push(
-								await host.createSession(`flow-eval ${scenario.id} resumed`),
-							);
+						host = await EvalHost.start({
+							toolchain,
+							packageCache,
+							opencodeVersion,
+							files: scenario.files,
+						});
+						const activeHost = host;
+						const sessionIds = [
+							await evaluationPhase("host", "session-create-failed", true, () =>
+								activeHost.createSession(`flow-eval ${scenario.id}`),
+							),
+						];
+						// A step that times out still produced tokens, messages, and tool
+						// calls, and those are the only evidence of how far the model got.
+						// Throwing here would discard them and report a run of zeroes, so
+						// the failure is remembered and the outcome collected regardless.
+						let stepFailure: AttemptFailure<DurableFailureOrigin> | null = null;
+						const escalatedSteps: number[] = [];
+						for (const [index, step] of scenario.steps.entries()) {
+							try {
+								if (step.freshSession) {
+									sessionIds.push(
+										await evaluationPhase(
+											"host",
+											"session-create-failed",
+											true,
+											() =>
+												activeHost.createSession(
+													`flow-eval ${scenario.id} resumed`,
+												),
+										),
+									);
+								}
+								const end = await evaluationPhase(
+									"host",
+									"command-aborted",
+									true,
+									() =>
+										activeHost.runCommand(
+											sessionIds[sessionIds.length - 1] ?? "",
+											step.command,
+											step.arguments,
+											model,
+										),
+								);
+								if (end === "escalated") {
+									escalatedSteps.push(index);
+									// A question at the end of a non-final step is what the next step
+									// answers: three scenarios open with `flow-plan`, where asking for
+									// approval is the behaviour `plan-only-stops` gates at 100%, and
+									// the step that follows says "you have my approval". Ending the run
+									// there discarded a correct attempt — and since a gated pair needs
+									// three scored attempts, one such question failed qualification for
+									// a run that did nothing wrong. Only the last step's question ends
+									// the run; `runCommand` has already aborted the pending turn, so
+									// the session is idle and the next prompt is the answer.
+									if (index === scenario.steps.length - 1) break;
+								}
+							} catch (error) {
+								stepFailure = evaluatorFailure(error, "command-aborted");
+								break;
+							}
 						}
-						const end = await host.runCommand(
-							sessionIds[sessionIds.length - 1] ?? "",
-							step.command,
-							step.arguments,
-							model,
+						const outcome = await evaluationPhase(
+							"evaluator",
+							"outcome-collection-threw",
+							false,
+							() => activeHost.outcome(sessionIds, Date.now() - started),
 						);
-						if (end === "escalated") {
-							escalatedSteps.push(index);
-							// A question at the end of a non-final step is what the next step
-							// answers: three scenarios open with `flow-plan`, where asking for
-							// approval is the behaviour `plan-only-stops` gates at 100%, and
-							// the step that follows says "you have my approval". Ending the run
-							// there discarded a correct attempt — and since a gated pair needs
-							// three scored attempts, one such question failed qualification for
-							// a run that did nothing wrong. Only the last step's question ends
-							// the run; `runCommand` has already aborted the pending turn, so
-							// the session is idle and the next prompt is the answer.
-							if (index === scenario.steps.length - 1) break;
-						}
+						const observedFailure = outcome.providerError;
+						// Asking the user is the designed end of some scenarios, but only at the
+						// wall. `askedScoring` holds the rule and its reasoning.
+						const { escalated, unscored } = askedScoring(
+							escalatedSteps,
+							scenario.steps.length,
+							scenario.mayEscalate === true,
+						);
+						// An aborted or unscored step leaves the workflow mid-flight, so `check`
+						// would report expected-but-meaningless gaps. The stop is the finding;
+						// the collected evidence explains it.
+						const evaluation =
+							stepFailure || observedFailure || unscored
+								? null
+								: evaluateScenario(scenario.check, outcome);
+						const failure =
+							stepFailure ??
+							observedFailure ??
+							(evaluation?.kind === "failure" ? evaluation.failure : null);
+						const issues =
+							evaluation?.kind === "evaluated" ? evaluation.issues : [];
+						const documents = [
+							...(outcome.session ? [outcome.session] : []),
+							...outcome.archives,
+						] as MetricSession[];
+						const actors = (outcome.actors ?? []).map((actor) => ({
+							...actor,
+							requestedModelId:
+								actor.role === "manager" ? model : requestedReviewerModel,
+							requestedModel: legacyRequestedModel(
+								actor.role === "manager" ? model : requestedReviewerModel,
+							),
+						}));
+						const instructions = (outcome.guidanceLoads ?? []).map((load) =>
+							instructionDelivery({
+								source: "guidance",
+								name: load.id ?? "unknown-guidance",
+								sequence: load.sequence,
+								text: load.rawOutput,
+							}),
+						);
+						const transcript = redactTranscript({
+							projectPath: host.project,
+							value: {
+								actors,
+								guidanceLoads: outcome.guidanceLoads ?? [],
+								calls: outcome.allCalls,
+								finalText: outcome.finalText,
+							},
+						});
+						const common: RunResultCommon = {
+							scenario: scenario.id,
+							model,
+							attempt,
+							...(escalated ? { escalated: true } : {}),
+							...(unscored ? { unscored: true } : {}),
+							tokens: outcome.tokens,
+							costUsd: outcome.costUsd,
+							assistantMessages: outcome.assistantMessages,
+							flowCalls: outcome.flowCalls.map((call) => call.tool),
+							sessionBoundaries: sessionBoundaries(outcome.flowCalls),
+							documents,
+							honesty: completionHonesty(
+								documents.find((document) => document.closure) ?? null,
+							),
+							reviewer: reviewerActivity(documents),
+							operational: operationalMetrics(documents, {
+								flowCalls: outcome.flowCalls.map((call) => call.tool),
+								assistantMessages: outcome.assistantMessages,
+								durationMs: outcome.durationMs,
+							}),
+							refusedBroadScope: refusedBroadScope(outcome.flowCalls),
+							guidanceSkips: countGuidanceSkips(outcome.flowCalls),
+							finalText: outcome.finalText,
+							questions: askedQuestions(outcome),
+							durationMs: outcome.durationMs,
+							hostError: outcome.providerError?.detail ?? null,
+							provenance: {
+								artifact,
+								evaluator,
+								hostConfigSha256: hostConfigSha256({
+									opencodeVersion,
+									plugin: `opencode-plugin-flow@${packageJson.version}`,
+									model,
+									reviewerModel: requestedReviewerModel,
+									reviewerSteps: requestedReviewerSteps,
+									platform: hostPlatform,
+								}),
+								actors,
+								instructions,
+								transcript,
+							},
+						};
+						const result: RunResult = failure
+							? { ...common, passed: false, issues: [], failure }
+							: {
+									...common,
+									passed: !unscored && issues.length === 0,
+									issues,
+								};
+						const fidelity: FidelityNote[] = [];
+						if (stepFailure) fidelity.push("run-aborted");
+						if (unscored) fidelity.push("run-unscored");
+						if (failure?.origin === "evaluator")
+							fidelity.push("evaluator-error");
+						// Only a provider error this runner did not cause. `outcome` withholds
+						// the `MessageAbortedError` left by an abort the harness issued itself.
+						// Recording those as host errors made 19
+						// of 63 cassettes advisory, and every refusal scenario — the runs
+						// most worth gating — was among them.
+						if (outcome.providerError) fidelity.push("provider-error");
+						cassette = buildCassette({
+							flowVersion: packageJson.version,
+							scenario: scenario.id,
+							model,
+							attempt,
+							hostPlatform,
+							files: scenario.files,
+							projectPath: host.project,
+							calls: outcome.allCalls,
+							finalText: outcome.finalText,
+							assistantMessages: outcome.assistantMessages,
+							verdict: verdict(result),
+							issues,
+							falseCompletion: result.honesty.falseCompletion,
+							documents,
+							extraFidelity: fidelity,
+						});
+						const scoreLabel =
+							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
+						console.log(
+							`- ${label} ... ${
+								failure
+									? `${failure.origin.toUpperCase()} (${failure.detail.split("\n")[0]})`
+									: unscored
+										? "ASKED (the model asked the user; nothing answers, so the wait ended)"
+										: escalatedSteps.includes(scenario.steps.length - 1)
+											? `${scoreLabel} (asked the user, which this scenario allows)`
+											: escalated
+												? `${scoreLabel} (asked the user; the next step answered)`
+												: scoreLabel
+							}`,
+						);
+						const cell = campaignCells[job.slot];
+						if (!cell)
+							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
+						await persistEvaluation("attempt", () =>
+							persistV2Attempt(result, cell, scenario),
+						);
+						return { slot: job.slot, result, cassette };
 					} catch (error) {
-						stepError = error instanceof Error ? error.message : String(error);
-						break;
+						if (error instanceof EvaluationPersistenceError) throw error;
+						const message =
+							error instanceof Error ? error.message : String(error);
+						const failure = evaluatorFailure(error);
+						const transcript = redactTranscript({
+							projectPath: host?.project ?? "",
+							value: { [`${failure.origin}Error`]: message },
+						});
+						console.log(
+							`- ${label} ... ${failure.origin.toUpperCase()} (${message.split("\n")[0]})`,
+						);
+						const result: RunResult = {
+							scenario: scenario.id,
+							model,
+							attempt,
+							passed: false,
+							issues: [],
+							failure,
+							tokens: {
+								input: 0,
+								output: 0,
+								reasoning: 0,
+								cacheRead: 0,
+								cacheWrite: 0,
+							},
+							costUsd: null,
+							assistantMessages: 0,
+							flowCalls: [],
+							sessionBoundaries: [],
+							documents: [],
+							honesty: completionHonesty(null),
+							reviewer: reviewerActivity([]),
+							operational: operationalMetrics([], {
+								flowCalls: [],
+								assistantMessages: 0,
+								durationMs: Date.now() - started,
+							}),
+							refusedBroadScope: 0,
+							guidanceSkips: 0,
+							finalText: "",
+							questions: [],
+							durationMs: Date.now() - started,
+							hostError: null,
+							provenance: {
+								artifact,
+								evaluator,
+								hostConfigSha256: hostConfigSha256({
+									opencodeVersion,
+									plugin: `opencode-plugin-flow@${packageJson.version}`,
+									model,
+									reviewerModel: requestedReviewerModel,
+									reviewerSteps: requestedReviewerSteps,
+									platform: hostPlatform,
+								}),
+								actors: [],
+								instructions: [],
+								transcript,
+							},
+						};
+						const cell = campaignCells[job.slot];
+						if (!cell)
+							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
+						await persistEvaluation("attempt", () =>
+							persistV2Attempt(result, cell, scenario),
+						);
+						return {
+							slot: job.slot,
+							cassette,
+							result,
+						};
 					}
-				}
-				const outcome = await host.outcome(sessionIds, Date.now() - started);
-				// A host-level error (bad model id, missing credentials) is not a
-				// prompt result, so it must not be reported as a scenario failure.
-				if (outcome.hostError && outcome.flowCalls.length === 0) {
-					throw new Error(`host rejected the turn: ${outcome.hostError}`);
-				}
-				// Asking the user is the designed end of some scenarios, but only at the
-				// wall. `askedScoring` holds the rule and its reasoning.
-				const { escalated, unscored } = askedScoring(
-					escalatedSteps,
-					scenario.steps.length,
-					scenario.mayEscalate === true,
-				);
-				// An aborted or unscored step leaves the workflow mid-flight, so `check`
-				// would report expected-but-meaningless gaps. The stop is the finding;
-				// the collected evidence explains it.
-				const issues = stepError || unscored ? [] : scenario.check(outcome);
-				const documents = [
-					...(outcome.session ? [outcome.session] : []),
-					...outcome.archives,
-				] as MetricSession[];
-				const actors = (outcome.actors ?? []).map((actor) => ({
-					...actor,
-					requestedModelId:
-						actor.role === "manager" ? model : requestedReviewerModel,
-					requestedModel: legacyRequestedModel(
-						actor.role === "manager" ? model : requestedReviewerModel,
-					),
-				}));
-				const instructions = (outcome.guidanceLoads ?? []).map((load) =>
-					instructionDelivery({
-						source: "guidance",
-						name: load.id ?? "unknown-guidance",
-						sequence: load.sequence,
-						text: load.rawOutput,
-					}),
-				);
-				const transcript = redactTranscript({
-					projectPath: host.project,
-					value: {
-						actors,
-						guidanceLoads: outcome.guidanceLoads ?? [],
-						calls: outcome.allCalls,
-						finalText: outcome.finalText,
-					},
-				});
-				const result: RunResult = {
-					scenario: scenario.id,
-					model,
-					attempt,
-					passed: stepError === null && !unscored && issues.length === 0,
-					...(escalated ? { escalated: true } : {}),
-					...(unscored ? { unscored: true } : {}),
-					issues,
-					...(stepError ? { error: stepError } : {}),
-					tokens: outcome.tokens,
-					costUsd: outcome.costUsd,
-					assistantMessages: outcome.assistantMessages,
-					flowCalls: outcome.flowCalls.map((call) => call.tool),
-					sessionBoundaries: sessionBoundaries(outcome.flowCalls),
-					documents,
-					honesty: completionHonesty(
-						documents.find((document) => document.closure) ?? null,
-					),
-					reviewer: reviewerActivity(documents),
-					operational: operationalMetrics(documents, {
-						flowCalls: outcome.flowCalls.map((call) => call.tool),
-						assistantMessages: outcome.assistantMessages,
-						durationMs: outcome.durationMs,
-					}),
-					refusedBroadScope: refusedBroadScope(outcome.flowCalls),
-					guidanceSkips: countGuidanceSkips(outcome.flowCalls),
-					finalText: outcome.finalText,
-					questions: askedQuestions(outcome),
-					durationMs: outcome.durationMs,
-					hostError: outcome.hostError,
-					provenance: {
-						artifact,
-						evaluator,
-						hostConfigSha256: hostConfigSha256({
-							opencodeVersion,
-							plugin: `opencode-plugin-flow@${packageJson.version}`,
-							model,
-							reviewerModel: requestedReviewerModel,
-							reviewerSteps: requestedReviewerSteps,
-							platform: hostPlatform,
-						}),
-						actors,
-						instructions,
-						transcript,
-					},
-				};
-				const fidelity: FidelityNote[] = [];
-				if (stepError) fidelity.push("run-aborted");
-				if (unscored) fidelity.push("run-unscored");
-				// Only a host error this runner did not cause, which `outcome` now
-				// decides: it withholds the `MessageAbortedError` left by an abort
-				// the harness issued itself. Recording those as host errors made 19
-				// of 63 cassettes advisory, and every refusal scenario — the runs
-				// most worth gating — was among them.
-				if (outcome.hostError) fidelity.push("host-error");
-				cassette = buildCassette({
-					flowVersion: packageJson.version,
-					scenario: scenario.id,
-					model,
-					attempt,
-					hostPlatform,
-					files: scenario.files,
-					projectPath: host.project,
-					calls: outcome.allCalls,
-					finalText: outcome.finalText,
-					assistantMessages: outcome.assistantMessages,
-					verdict: verdict(result),
-					issues,
-					falseCompletion: result.honesty.falseCompletion,
-					documents,
-					extraFidelity: fidelity,
-				});
-				const scoreLabel =
-					issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
-				console.log(
-					`- ${label} ... ${
-						stepError
-							? `ABORT (${stepError.split("\n")[0]})`
-							: unscored
-								? "ASKED (the model asked the user; nothing answers, so the wait ended)"
-								: escalatedSteps.includes(scenario.steps.length - 1)
-									? `${scoreLabel} (asked the user, which this scenario allows)`
-									: escalated
-										? `${scoreLabel} (asked the user; the next step answered)`
-										: scoreLabel
-					}`,
-				);
-				const cell = campaignCells[job.slot];
-				if (!cell)
-					throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
-				await persistV2Attempt(result, cell, scenario);
-				return { slot: job.slot, result, cassette };
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				const transcript = redactTranscript({
-					projectPath: host?.project ?? "",
-					value: { environmentError: message },
-				});
-				console.log(`- ${label} ... ENVIRONMENT (${message.split("\n")[0]})`);
-				// Reaching here means the scenario never got a model turn, with one
-				// exception: a host that answered but rejected every turn is thrown
-				// above and is equally not a prompt result.
-				const result: RunResult = {
-					scenario: scenario.id,
-					model,
-					attempt,
-					passed: false,
-					environment: true,
-					issues: [],
-					tokens: {
-						input: 0,
-						output: 0,
-						reasoning: 0,
-						cacheRead: 0,
-						cacheWrite: 0,
-					},
-					costUsd: null,
-					assistantMessages: 0,
-					flowCalls: [],
-					sessionBoundaries: [],
-					documents: [],
-					honesty: completionHonesty(null),
-					reviewer: reviewerActivity([]),
-					operational: operationalMetrics([], {
-						flowCalls: [],
-						assistantMessages: 0,
-						durationMs: Date.now() - started,
-					}),
-					refusedBroadScope: 0,
-					guidanceSkips: 0,
-					finalText: "",
-					questions: [],
-					durationMs: Date.now() - started,
-					hostError: null,
-					provenance: {
-						artifact,
-						evaluator,
-						hostConfigSha256: hostConfigSha256({
-							opencodeVersion,
-							plugin: `opencode-plugin-flow@${packageJson.version}`,
-							model,
-							reviewerModel: requestedReviewerModel,
-							reviewerSteps: requestedReviewerSteps,
-							platform: hostPlatform,
-						}),
-						actors: [],
-						instructions: [],
-						transcript,
-					},
-					error: message,
-				};
-				const cell = campaignCells[job.slot];
-				if (!cell)
-					throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
-				await persistV2Attempt(result, cell, scenario);
-				return {
-					slot: job.slot,
-					cassette,
-					result,
-				};
-			} finally {
-				await host?.stop();
-			}
+				},
+				async () => {
+					const cleanupHost = host;
+					if (cleanupHost) {
+						await evaluationPhase("host", "host-cleanup-failed", true, () =>
+							cleanupHost.stop(),
+						);
+					}
+				},
+			);
 		};
 
-		const recorded = await runQueues(queues, concurrency, runAttempt);
+		const recorded = await runQueues(queues, concurrency, runAttempt, (entry) =>
+			isEvaluatorFailure(entry.result.failure?.origin),
+		);
 		for (const entry of recorded.sort(
 			(left, right) => left.slot - right.slot,
 		)) {
@@ -1124,14 +1189,15 @@ async function main(): Promise<void> {
 				0,
 			);
 	const v2FinishedAt = new Date().toISOString();
+	const stoppedOrigin = strongestFailureOrigin(
+		results.map((result) => result.failure?.origin),
+	);
 	const v2Completion: CampaignCompletion = {
 		status: v2Complete ? "complete" : "stopped",
 		cause: v2Complete
 			? "fixed-target"
-			: results.some(
-						(result) => result.environment || result.error !== undefined,
-					)
-				? "host"
+			: stoppedOrigin
+				? stoppedOrigin
 				: results.some((result) => result.unscored)
 					? "operator"
 					: "evaluator",
@@ -1151,26 +1217,27 @@ async function main(): Promise<void> {
 			),
 		},
 	};
-	await reportStore.finalize({
-		reportId: `flow-v2-${stamp}`,
-		completion: v2Completion,
-		allocationCommitmentSha256: null,
-	});
+	await persistEvaluation("finalize", () =>
+		reportStore.finalize({
+			reportId: `flow-v2-${stamp}`,
+			completion: v2Completion,
+			allocationCommitmentSha256: null,
+		}),
+	);
 	const v2ReportPath = join(v2Directory, "report.json");
 	console.log(`V2 report: ${v2ReportPath}`);
 
 	console.log(`\n${formatTable(results)}\n`);
-	// An abort is excluded for the same reason an allowed ask is: the run never
-	// reached the outcome the scenario asks about, so counting it as a failure reports
-	// a measurement that did not happen. One wedged attempt was the only reason a
-	// measured report came back NOT QUALIFIED.
 	const scored = results.filter(
-		(result) =>
-			!result.environment && !result.unscored && result.error === undefined,
+		(result) => !result.failure && !result.unscored,
 	);
-	const blocked = results.filter((result) => result.environment).length;
+	const blocked = results.filter(
+		(result) =>
+			result.failure?.origin === "provider" ||
+			result.failure?.origin === "host",
+	).length;
 	const aborted = results.filter(
-		(result) => !result.environment && result.error !== undefined,
+		(result) => result.failure?.origin === "evaluator",
 	).length;
 	const asked = results.filter((result) => result.escalated).length;
 	const askedUnscored = results.filter((result) => result.unscored).length;
@@ -1199,11 +1266,11 @@ async function main(): Promise<void> {
 	console.log(
 		`${passed}/${scored.length} passed | ${totalIn} input (+${totalCached} cached) + ${totalOut} output tokens | ${spend}${
 			blocked > 0
-				? `\n${blocked} run(s) never reached the model and are excluded; re-run them before trusting this pass rate.`
+				? `\n${blocked} provider or host failure(s) are excluded; address the external cause, then re-run them before trusting this pass rate.`
 				: ""
 		}${
 			aborted > 0
-				? `\n${aborted} run(s) aborted mid-flight and are excluded; the stop is the finding, not the outcome, so re-run them before trusting this pass rate.`
+				? `\n${aborted} evaluator failure(s) are excluded; fix the evaluator before starting a fresh campaign.`
 				: ""
 		}${
 			asked > 0
@@ -1246,7 +1313,11 @@ async function main(): Promise<void> {
 	);
 	const operational = aggregateOperationalMetrics(
 		results
-			.filter((result) => !result.environment)
+			.filter(
+				(result) =>
+					result.failure?.origin !== "provider" &&
+					result.failure?.origin !== "host",
+			)
 			.map((result) => result.operational),
 	);
 	console.log(
@@ -1290,41 +1361,43 @@ async function main(): Promise<void> {
 	}
 
 	const reportPath = join(reportDir, `${stamp}.json`);
-	await writeFile(
-		reportPath,
-		`${JSON.stringify(
-			{
-				flowVersion: packageJson.version,
-				opencodeVersion,
-				recordedAt: new Date().toISOString(),
-				promptFootprint: footprint,
-				summary: {
-					passed,
-					scored: scored.length,
-					environmentBlocked: blocked,
-					aborted,
-					escalated: asked,
-					escalationExcluded: askedUnscored,
-					total: results.length,
-					totalIn,
-					totalCached,
-					totalOut,
-					costUsd: priced.length === 0 ? null : cost,
-					costReportedRuns: priced.length,
-					passRates: Object.fromEntries(rates),
-					closedCompleted,
-					falseCompletions: falseCompletions.length,
-					reviewer,
-					broadScopeRefusals,
-					guidanceSkipped,
-					operational,
+	await persistEvaluation("legacy-report", () =>
+		writeFile(
+			reportPath,
+			`${JSON.stringify(
+				{
+					flowVersion: packageJson.version,
+					opencodeVersion,
+					recordedAt: new Date().toISOString(),
+					promptFootprint: footprint,
+					summary: {
+						passed,
+						scored: scored.length,
+						environmentBlocked: blocked,
+						aborted,
+						escalated: asked,
+						escalationExcluded: askedUnscored,
+						total: results.length,
+						totalIn,
+						totalCached,
+						totalOut,
+						costUsd: priced.length === 0 ? null : cost,
+						costReportedRuns: priced.length,
+						passRates: Object.fromEntries(rates),
+						closedCompleted,
+						falseCompletions: falseCompletions.length,
+						reviewer,
+						broadScopeRefusals,
+						guidanceSkipped,
+						operational,
+					},
+					results,
 				},
-				results,
-			},
-			null,
-			2,
-		)}\n`,
-		"utf8",
+				null,
+				2,
+			)}\n`,
+			"utf8",
+		),
 	);
 	console.log(`Report: ${reportPath}`);
 
@@ -1333,19 +1406,23 @@ async function main(): Promise<void> {
 	// which decisions are worth pinning.
 	if (cassettes.length > 0) {
 		const cassetteDir = join(reportDir, `${stamp}.cassettes`);
-		await mkdir(cassetteDir, { recursive: true });
+		await persistEvaluation("cassette-directory", () =>
+			mkdir(cassetteDir, { recursive: true }),
+		);
 		for (const cassette of cassettes) {
-			await writeFile(
-				join(
-					cassetteDir,
-					cassetteFileName(cassette.scenario, cassette.model, cassette.attempt),
+			await persistEvaluation("cassette", () =>
+				writeFile(
+					join(
+						cassetteDir,
+						cassetteFileName(
+							cassette.scenario,
+							cassette.model,
+							cassette.attempt,
+						),
+					),
+					`${JSON.stringify(cassette, null, "\t")}\n`,
+					"utf8",
 				),
-				// Tabs, because a pinned cassette lives under `evals/` and the repo
-				// formatter checks it there. Two-space candidates meant every copy into
-				// `evals/cassettes/` failed lint until it was reformatted, which is a
-				// step between reading a run and keeping it.
-				`${JSON.stringify(cassette, null, "\t")}\n`,
-				"utf8",
 			);
 		}
 		const gated = cassettes.filter(

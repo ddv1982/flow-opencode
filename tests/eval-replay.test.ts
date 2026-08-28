@@ -13,6 +13,7 @@
 import { describe, expect, test } from "bun:test";
 import { readFile } from "node:fs/promises";
 import {
+	buildCassette,
 	CASSETTE_VERSION,
 	type Cassette,
 	cassetteFileName,
@@ -211,6 +212,28 @@ function honestyOf(outcome: Awaited<ReturnType<typeof replayCassette>>) {
 }
 
 describe("decision-layer replay", () => {
+	test("retains provider failures as provider fidelity", () => {
+		const cassette = buildCassette({
+			flowVersion: "test",
+			scenario: "provider-failure",
+			model: "provider/model",
+			attempt: 1,
+			hostPlatform: "linux",
+			files: {},
+			projectPath: "/workspace",
+			calls: [],
+			finalText: "",
+			assistantMessages: 0,
+			verdict: "PROVIDER",
+			issues: [],
+			falseCompletion: false,
+			documents: [],
+			extraFidelity: ["provider-error"],
+		});
+		expect(cassette.fidelity).toContain("provider-error");
+		expect(cassette.fidelity).not.toContain("host-error");
+	});
+
 	test("reproduces a passing happy-path run with no model and no host", async () => {
 		const result = await replayCassette(happyPathCassette());
 		expect(result.divergences).toEqual([]);

@@ -287,6 +287,7 @@ const CampaignCompletionSchema = z
 			"provider",
 			"host",
 			"evaluator",
+			"persistence",
 			"operator",
 		]),
 		startedAt: TimestampSchema,

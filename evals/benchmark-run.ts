@@ -18,6 +18,18 @@ import {
 	scanPairedTranscript,
 } from "./experiment.js";
 import {
+	type AttemptFailure,
+	type DurableFailureOrigin,
+	EvaluationPersistenceError,
+	EvaluationPhaseError,
+	evaluationPhase,
+	evaluatorFailure,
+	failureOutcome,
+	isEvaluatorFailure,
+	persistEvaluation,
+	preservePrimaryFailure,
+} from "./failure-origin.js";
+import {
 	type CommandEnd,
 	EvalHost,
 	type Outcome,
@@ -312,10 +324,14 @@ async function main(): Promise<void> {
 		"results",
 		`paired-${new Date().toISOString().replace(/[:.]/g, "-")}.v2`,
 	);
-	await mkdir(join(root, "evals", "results"), { recursive: true });
+	await persistEvaluation("report-directory", () =>
+		mkdir(join(root, "evals", "results"), { recursive: true }),
+	);
 	const store = createReportStore({ directory, catalog });
-	await store.initialize(experiment.plan);
-	await store.writeCatalog(catalog);
+	await persistEvaluation("initialize", () =>
+		store.initialize(experiment.plan),
+	);
+	await persistEvaluation("catalog", () => store.writeCatalog(catalog));
 	const packDir = await mkdtemp(join(tmpdir(), "flow-paired-pack-"));
 	const attempts: AttemptRecordV2[] = [];
 	const scans: ReturnType<typeof scanPairedTranscript>[] = [];
@@ -328,7 +344,7 @@ async function main(): Promise<void> {
 			repositoryRoot: root,
 			tarballPath: tarball,
 		});
-		await store.writeArtifact(tarball);
+		await persistEvaluation("artifact", () => store.writeArtifact(tarball));
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
 			caseCatalog: selected.map((c) => ({
@@ -401,10 +417,10 @@ async function main(): Promise<void> {
 		): Promise<{
 			readonly nonProduct: boolean;
 			readonly budget: boolean;
-			readonly origin: "host" | "evaluator" | null;
+			readonly origin: DurableFailureOrigin | null;
 		}> => {
 			let nonProduct = false;
-			let blockOrigin: "host" | "evaluator" | null = null;
+			let blockOrigin: DurableFailureOrigin | null = null;
 			for (const cell of block.cells) {
 				if (
 					attempts.length >= experiment.plan.budget.maxAttempts ||
@@ -418,123 +434,163 @@ async function main(): Promise<void> {
 				const cellStarted = Date.now();
 				let host: EvalHost | null = null;
 				let recorded = false;
-				let failureOrigin: "host" | "evaluator" = "host";
+				let runFailure: AttemptFailure<DurableFailureOrigin> | null = null;
 				let failureUsage: AttemptRecordV2["usage"] = {
 					durationMs: 0,
 					outputTokens: 0,
 					costUsd: null,
 				};
-				try {
-					host = await EvalHost.start({
-						toolchain,
-						packageCache: cache,
-						opencodeVersion,
-						files: benchmark.files,
-						withFlow: flow,
-					});
-					const session = await host.createSession("paired task");
-					let error: string | null = null;
-					let commandEnd: CommandEnd = "quiet";
-					try {
-						commandEnd = flow
-							? await host.runCommand(
-									session,
-									"flow-auto",
-									benchmark.prompt,
-									options.model,
-								)
-							: await host.runPrompt(session, benchmark.prompt, options.model);
-					} catch (caught) {
-						error = caught instanceof Error ? caught.message : String(caught);
-					}
-					const outcome = await host.outcome(
-						[session],
-						Date.now() - cellStarted,
-					);
-					failureUsage = {
-						durationMs: outcome.durationMs,
-						outputTokens: outcome.tokens.output,
-						costUsd: outcome.costUsd,
-					};
-					if (error || outcome.hostError) {
-						throw new Error(error ?? outcome.hostError ?? "host-error");
-					}
-					failureOrigin = "evaluator";
-					const grade = await benchmark.grade(host.project);
-					const transcript = redactTranscript({
-						projectPath: host.project,
-						value: { calls: outcome.allCalls, finalText: outcome.finalText },
-					});
-					const stored = await store.writeTranscript({
-						attemptId: `attempt-${cell.cellId}`,
-						text: transcript.text,
-					});
-					scans.push(scanPairedTranscript(transcript.text));
-					const attempt = productAttempt({
-						cell,
-						benchmark,
-						outcome,
-						artifact: flow ? artifact : { kind: "ordinary-opencode" },
-						evaluator,
-						hostConfig: hostConfigSha256({
-							opencodeVersion,
-							model: options.model,
-							flow,
-						}),
-						transcript: stored,
-						requested,
-						flow,
-						hiddenCorrectness: grade.passed,
-						gradeIssues: grade.issues,
-						endedBy: commandEnd,
-					});
-					await store.writeAttempt(attempt);
-					attempts.push(attempt);
-					recorded = true;
-				} catch (caught) {
-					if (recorded) throw caught;
-					const message =
-						caught instanceof Error ? caught.message : String(caught);
-					const failure: AttemptRecordV2 = {
-						schemaVersion: 2,
-						attemptId: `attempt-${cell.cellId}`,
-						cellId: cell.cellId,
-						blockId: cell.blockId,
-						caseId: cell.caseId,
-						caseVersion: cell.caseVersion,
-						armToken: cell.armToken,
-						repetition: cell.repetition,
-						artifact: flow ? artifact : { kind: "ordinary-opencode" },
-						evaluator,
-						hostConfigSha256: hostConfigSha256({
-							opencodeVersion,
-							model: options.model,
-							flow,
-						}),
-						actors: [],
-						instructions: [],
-						transcript: null,
-						outcome: {
-							kind: "failure",
-							origin: failureOrigin,
-							code: message.slice(0, 512),
-							retryable: true,
-						},
-						usage:
-							failureUsage.durationMs > 0
-								? failureUsage
-								: {
-										durationMs: Date.now() - cellStarted,
-										outputTokens: 0,
-										costUsd: null,
-									},
-					};
-					await store.writeAttempt(failure);
-					attempts.push(failure);
-					nonProduct = true;
-					blockOrigin = failureOrigin;
-				} finally {
-					await host?.stop();
+				await preservePrimaryFailure(
+					async () => {
+						try {
+							host = await EvalHost.start({
+								toolchain,
+								packageCache: cache,
+								opencodeVersion,
+								files: benchmark.files,
+								withFlow: flow,
+							});
+							const activeHost = host;
+							const session = await evaluationPhase(
+								"host",
+								"session-create-failed",
+								true,
+								() => activeHost.createSession("paired task"),
+							);
+							let commandEnd: CommandEnd = "quiet";
+							try {
+								commandEnd = flow
+									? await evaluationPhase("host", "command-aborted", true, () =>
+											activeHost.runCommand(
+												session,
+												"flow-auto",
+												benchmark.prompt,
+												options.model,
+											),
+										)
+									: await evaluationPhase("host", "command-aborted", true, () =>
+											activeHost.runPrompt(
+												session,
+												benchmark.prompt,
+												options.model,
+											),
+										);
+							} catch (caught) {
+								runFailure = evaluatorFailure(caught, "command-aborted");
+							}
+							const outcome = await evaluationPhase(
+								"evaluator",
+								"outcome-collection-threw",
+								false,
+								() => activeHost.outcome([session], Date.now() - cellStarted),
+							);
+							failureUsage = {
+								durationMs: outcome.durationMs,
+								outputTokens: outcome.tokens.output,
+								costUsd: outcome.costUsd,
+							};
+							runFailure ??= outcome.providerError;
+							if (runFailure)
+								throw new EvaluationPhaseError(runFailure, runFailure);
+							const grade = await evaluationPhase(
+								"evaluator",
+								"benchmark-grade-threw",
+								false,
+								() => benchmark.grade(activeHost.project),
+							);
+							const transcript = redactTranscript({
+								projectPath: activeHost.project,
+								value: {
+									calls: outcome.allCalls,
+									finalText: outcome.finalText,
+								},
+							});
+							const stored = await persistEvaluation("transcript", () =>
+								store.writeTranscript({
+									attemptId: `attempt-${cell.cellId}`,
+									text: transcript.text,
+								}),
+							);
+							scans.push(scanPairedTranscript(transcript.text));
+							const attempt = productAttempt({
+								cell,
+								benchmark,
+								outcome,
+								artifact: flow ? artifact : { kind: "ordinary-opencode" },
+								evaluator,
+								hostConfig: hostConfigSha256({
+									opencodeVersion,
+									model: options.model,
+									flow,
+								}),
+								transcript: stored,
+								requested,
+								flow,
+								hiddenCorrectness: grade.passed,
+								gradeIssues: grade.issues,
+								endedBy: commandEnd,
+							});
+							await persistEvaluation("attempt", () =>
+								store.writeAttempt(attempt),
+							);
+							attempts.push(attempt);
+							recorded = true;
+						} catch (caught) {
+							if (caught instanceof EvaluationPersistenceError) throw caught;
+							if (recorded) throw caught;
+							const classified = evaluatorFailure(caught);
+							const failed =
+								classified.origin === "evaluator"
+									? classified
+									: (runFailure ?? classified);
+							const failure: AttemptRecordV2 = {
+								schemaVersion: 2,
+								attemptId: `attempt-${cell.cellId}`,
+								cellId: cell.cellId,
+								blockId: cell.blockId,
+								caseId: cell.caseId,
+								caseVersion: cell.caseVersion,
+								armToken: cell.armToken,
+								repetition: cell.repetition,
+								artifact: flow ? artifact : { kind: "ordinary-opencode" },
+								evaluator,
+								hostConfigSha256: hostConfigSha256({
+									opencodeVersion,
+									model: options.model,
+									flow,
+								}),
+								actors: [],
+								instructions: [],
+								transcript: null,
+								outcome: failureOutcome(failed),
+								usage:
+									failureUsage.durationMs > 0
+										? failureUsage
+										: {
+												durationMs: Date.now() - cellStarted,
+												outputTokens: 0,
+												costUsd: null,
+											},
+							};
+							await persistEvaluation("attempt", () =>
+								store.writeAttempt(failure),
+							);
+							attempts.push(failure);
+							nonProduct = true;
+							blockOrigin = failed.origin;
+						}
+					},
+					async () => {
+						const cleanupHost = host;
+						if (cleanupHost) {
+							await evaluationPhase("host", "host-cleanup-failed", true, () =>
+								cleanupHost.stop(),
+							);
+						}
+					},
+				);
+				if (isEvaluatorFailure(blockOrigin)) {
+					return { nonProduct: true, budget: false, origin: blockOrigin };
 				}
 				if (budgetExceeded()) {
 					return { nonProduct: true, budget: true, origin: blockOrigin };
@@ -543,10 +599,14 @@ async function main(): Promise<void> {
 			return { nonProduct, budget: false, origin: blockOrigin };
 		};
 		let budgetStopped = false;
-		let incompleteCause: "host" | "evaluator" = "host";
+		let incompleteCause: DurableFailureOrigin = "host";
 		for (const block of primary) {
 			let result = await runBlock(block);
 			if (result.origin) incompleteCause = result.origin;
+			if (isEvaluatorFailure(result.origin)) {
+				unresolved = true;
+				break;
+			}
 			if (result.budget) {
 				budgetStopped = true;
 				unresolved = true;
@@ -566,13 +626,17 @@ async function main(): Promise<void> {
 				);
 				result = await runBlock(reserve);
 				if (result.origin) incompleteCause = result.origin;
+				if (isEvaluatorFailure(result.origin)) {
+					unresolved = true;
+					break;
+				}
 				if (result.budget) {
 					budgetStopped = true;
 					unresolved = true;
 					break;
 				}
 			}
-			if (budgetStopped) break;
+			if (budgetStopped || isEvaluatorFailure(result.origin)) break;
 		}
 		const finishedAt = new Date().toISOString();
 		const outputTokens = attempts.reduce(
@@ -606,40 +670,46 @@ async function main(): Promise<void> {
 			!unresolved &&
 			!finishedBudgetExceeded &&
 			completePairs === primary.length;
-		const report = await store.finalize({
-			reportId: `paired-${Date.now()}`,
-			completion: {
-				status: complete ? "complete" : "stopped",
-				cause: complete
-					? "fixed-target"
-					: finishedBudgetExceeded
-						? "budget"
-						: incompleteCause,
-				startedAt,
-				finishedAt,
-				activatedReserveCellIds,
-				observed: {
-					attempts: attempts.length,
-					outputTokens,
-					costUsd,
-					wallClockMs,
+		const report = await persistEvaluation("finalize", () =>
+			store.finalize({
+				reportId: `paired-${Date.now()}`,
+				completion: {
+					status: complete ? "complete" : "stopped",
+					cause: complete
+						? "fixed-target"
+						: finishedBudgetExceeded
+							? "budget"
+							: incompleteCause,
+					startedAt,
+					finishedAt,
+					activatedReserveCellIds,
+					observed: {
+						attempts: attempts.length,
+						outputTokens,
+						costUsd,
+						wallClockMs,
+					},
 				},
-			},
-			allocationCommitmentSha256: experiment.allocationCommitmentSha256,
-		});
+				allocationCommitmentSha256: experiment.allocationCommitmentSha256,
+			}),
+		);
 		const masked = freezeMaskedAnalysis({
 			report,
 			scans,
 			frozenAt: new Date().toISOString(),
 		});
-		await store.writeMaskedAnalysis(masked);
+		await persistEvaluation("masked-analysis", () =>
+			store.writeMaskedAnalysis(masked),
+		);
 		const revealed = revealPairedAnalysis({
 			report,
 			masked,
 			secret: experiment.secret,
 			revealedAt: new Date().toISOString(),
 		});
-		await store.writeAllocation(revealed.allocation);
+		await persistEvaluation("allocation", () =>
+			store.writeAllocation(revealed.allocation),
+		);
 		console.log(`Paired V2 report: ${join(directory, "report.json")}`);
 		console.log(`Masked analysis: ${join(directory, "masked-analysis.json")}`);
 		console.log(`Allocation: ${join(directory, "allocation.json")}`);

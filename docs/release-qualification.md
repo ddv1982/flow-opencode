@@ -33,10 +33,9 @@ forces a decision about what its result is allowed to mean. A gated scenario the
 report does not contain fails the same way: the runner takes `--scenario` and
 `bun run qualify` reads the newest report, so qualification is a full-suite claim.
 
-An excluded attempt is not a smaller sample but a missing one: the runner drops one
-that aborted mid-flight, or asked where the scenario does not allow it, so a gated
-pair below the floor — or holding any abort — means re-running it, not reading the
-remainder as its rate.
+A non-product attempt never shrinks the required sample. Provider or host failure,
+or an unallowed ask, leaves an evidence gap. Evaluator failure is `NOT VERIFIED`;
+persistence failure stops without a finalized report. Re-run only external gaps.
 
 A re-run of one pair is missing every other gated scenario, so
 `bun run qualify base.json rerun.json` takes the pairs the later report measured and

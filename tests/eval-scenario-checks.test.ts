@@ -21,7 +21,7 @@ function outcome(overrides: Partial<Outcome>): Outcome {
 		costUsd: null,
 		assistantMessages: 0,
 		durationMs: 0,
-		hostError: null,
+		providerError: null,
 		...overrides,
 	};
 }

@@ -26,6 +26,14 @@ import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import {
+	type AttemptFailure,
+	attemptFailure,
+	EvaluationPhaseError,
+	evaluationPhase,
+	preservePrimaryFailure,
+	providerFailure,
+} from "./failure-origin.js";
+import {
 	extractObservedActor,
 	guidanceLoad,
 	isRecord,
@@ -234,8 +242,7 @@ export type Outcome = {
 	readonly costUsd: number | null;
 	readonly assistantMessages: number;
 	readonly durationMs: number;
-	/** True when the host reported an error on any assistant message. */
-	readonly hostError: string | null;
+	readonly providerError: AttemptFailure<"provider"> | null;
 };
 
 /**
@@ -756,24 +763,42 @@ export async function runQueues<Job, Result>(
 	queues: readonly (readonly Job[])[],
 	concurrency: number,
 	run: (job: Job) => Promise<Result>,
+	shouldStop?: (result: Result) => boolean,
 ): Promise<Result[]> {
 	const results: Result[] = [];
 	let next = 0;
+	let stopped = false;
+	let failed = false;
+	let failure: unknown;
 	await Promise.all(
 		Array.from(
 			{ length: Math.max(1, Math.min(concurrency, queues.length)) },
 			async () => {
 				for (;;) {
+					if (stopped) return;
 					// Read and advance in one synchronous step, so no two workers can claim
 					// the same queue.
 					const queue = queues[next];
 					next += 1;
 					if (!queue) return;
-					for (const job of queue) results.push(await run(job));
+					for (const job of queue) {
+						if (stopped) return;
+						try {
+							const result = await run(job);
+							results.push(result);
+							if (shouldStop?.(result)) stopped = true;
+						} catch (error) {
+							if (!failed) failure = error;
+							stopped = true;
+							failed = true;
+							return;
+						}
+					}
 				}
 			},
 		),
 	);
+	if (failed) throw failure;
 	return results;
 }
 
@@ -829,24 +854,20 @@ export function sessionBoundaries(
 }
 
 /**
- * Passes per attempt for each scenario and model pair, in run order. Attempts that
- * were not scored -- an allowed ask, a lost host -- are counted apart rather than
- * dropped, so a scenario whose every attempt went unscored still gets a row saying
- * so instead of leaving the table without a trace.
+ * Passes per attempt for each scenario and model pair, in run order. Provider and
+ * host failures or an unallowed ask are excluded gaps; evaluator failures are
+ * aborted measurements. Every scenario still gets a row.
  *
- * An abort is counted apart for the same reason and was not: a wedged attempt ends
- * with no issues and `passed: false`, which is indistinguishable in a rate from a run
- * that reached the wrong outcome. One such attempt produced the only failing
- * threshold in a measured report, on a guarantee that never ran.
  */
 export function passRates(
 	results: readonly {
 		readonly scenario: string;
 		readonly model: string;
 		readonly passed: boolean;
-		readonly environment?: boolean;
 		readonly unscored?: boolean;
-		readonly error?: string;
+		readonly failure?: {
+			readonly origin: "provider" | "host" | "evaluator";
+		};
 	}[],
 ): [string, PassRate][] {
 	const rates = new Map<string, PassRate>();
@@ -858,8 +879,13 @@ export function passRates(
 			unscored: 0,
 			aborted: 0,
 		};
-		if (result.environment || result.unscored) rate.unscored += 1;
-		else if (result.error !== undefined) rate.aborted += 1;
+		if (
+			result.unscored ||
+			result.failure?.origin === "provider" ||
+			result.failure?.origin === "host"
+		)
+			rate.unscored += 1;
+		else if (result.failure?.origin === "evaluator") rate.aborted += 1;
 		else {
 			rate.attempts += 1;
 			if (result.passed) rate.passed += 1;
@@ -1094,7 +1120,12 @@ export class EvalHost {
 		const project = join(scratch, "project");
 		await mkdir(childHome, { recursive: true });
 		await mkdir(join(project, ".opencode"), { recursive: true });
-		const credentialPaths = await carryProviderCredentials(childData);
+		const credentialPaths = await evaluationPhase(
+			"host",
+			"credential-copy-failed",
+			true,
+			() => carryProviderCredentials(childData),
+		);
 
 		// Flow derives source identity from git, so the fixture must be a repo.
 		for (const [relative, contents] of Object.entries(options.files)) {
@@ -1140,67 +1171,71 @@ export class EvalHost {
 
 		const host = new EvalHost(project, scratch);
 		host.credentialPaths = credentialPaths;
-		const port = await availablePort();
-		host.baseUrl = `http://127.0.0.1:${port}`;
-		host.server = spawn(
-			options.toolchain.executable,
-			[
-				"x",
-				`opencode-ai@${options.opencodeVersion}`,
-				"serve",
-				"--port",
-				String(port),
-				"--hostname",
-				"127.0.0.1",
-			],
-			{
-				cwd: project,
-				env: {
-					...options.toolchain.environment,
-					...(options.reviewerModel
-						? { OPENCODE_FLOW_REVIEWER_MODEL: options.reviewerModel }
-						: {}),
-					HOME: childHome,
-					XDG_CACHE_HOME: childCache,
-					XDG_CONFIG_HOME: join(childHome, ".config"),
-					XDG_DATA_HOME: childData,
-					XDG_STATE_HOME: join(childHome, ".local", "state"),
+		return evaluationPhase("host", "host-start-failed", true, async () => {
+			const port = await availablePort();
+			host.baseUrl = `http://127.0.0.1:${port}`;
+			host.server = spawn(
+				options.toolchain.executable,
+				[
+					"x",
+					`opencode-ai@${options.opencodeVersion}`,
+					"serve",
+					"--port",
+					String(port),
+					"--hostname",
+					"127.0.0.1",
+				],
+				{
+					cwd: project,
+					env: {
+						...options.toolchain.environment,
+						...(options.reviewerModel
+							? { OPENCODE_FLOW_REVIEWER_MODEL: options.reviewerModel }
+							: {}),
+						HOME: childHome,
+						XDG_CACHE_HOME: childCache,
+						XDG_CONFIG_HOME: join(childHome, ".config"),
+						XDG_DATA_HOME: childData,
+						XDG_STATE_HOME: join(childHome, ".local", "state"),
+					},
+					stdio: ["ignore", "pipe", "pipe"],
 				},
-				stdio: ["ignore", "pipe", "pipe"],
-			},
-		);
-		const record = (chunk: unknown) => {
-			host.serverLog += String(chunk);
-		};
-		host.server.stdout?.on("data", record);
-		host.server.stderr?.on("data", record);
+			);
+			const record = (chunk: unknown) => {
+				host.serverLog += String(chunk);
+			};
+			host.server.stdout?.on("data", record);
+			host.server.stderr?.on("data", record);
 
-		try {
-			const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-			for (;;) {
-				try {
-					const health = (await fetchJson(
-						`${host.baseUrl}/global/health`,
-						3_000,
-					)) as {
-						healthy?: boolean;
-					};
-					if (health.healthy) break;
-				} catch {
-					// still starting
+			try {
+				const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+				for (;;) {
+					try {
+						const health = (await fetchJson(
+							`${host.baseUrl}/global/health`,
+							3_000,
+						)) as {
+							healthy?: boolean;
+						};
+						if (health.healthy) break;
+					} catch {
+						// still starting
+					}
+					if (Date.now() > deadline) {
+						throw new Error(
+							`OpenCode did not become healthy.\n${host.serverLog}`,
+						);
+					}
+					await Bun.sleep(500);
 				}
-				if (Date.now() > deadline) {
-					throw new Error(
-						`OpenCode did not become healthy.\n${host.serverLog}`,
-					);
-				}
-				await Bun.sleep(500);
+				return host;
+			} catch (error) {
+				return preservePrimaryFailure<EvalHost>(
+					() => Promise.reject(error),
+					() => host.stop(),
+				);
 			}
-			return host;
-		} catch (error) {
-			await host.stop();
-			throw error;
-		}
+		});
 	}
 
 	get log(): string {
@@ -1542,8 +1577,11 @@ export class EvalHost {
 			let entries: MessageEntry[] | null;
 			try {
 				entries = (await this.messages(sessionId)) as MessageEntry[];
-			} catch {
-				entries = null;
+			} catch (error) {
+				throw new EvaluationPhaseError(
+					attemptFailure("host", "session-messages-read-failed", error, true),
+					error,
+				);
 			}
 			const session = sessionRecords[sessionIndex];
 			if (session) sessionMessages.push({ ...session, messages: entries });
@@ -1567,7 +1605,7 @@ export class EvalHost {
 		let costUsd = 0;
 		let costReported = false;
 		let assistantMessages = 0;
-		let hostError: string | null = null;
+		let providerError: AttemptFailure<"provider"> | null = null;
 		let finalText = "";
 		const guidanceLoads: ObservedGuidanceLoad[] = [];
 		let guidanceSequence = 0;
@@ -1593,14 +1631,14 @@ export class EvalHost {
 				const created = entry.info.time?.created;
 				if (
 					entry.info.error &&
-					!hostError &&
+					!providerError &&
 					!isSelfAbortError(
 						entry.info.error,
 						this.lastSelfAbortAt > 0 &&
 							(created === undefined || created <= this.lastSelfAbortAt),
 					)
 				)
-					hostError = JSON.stringify(entry.info.error);
+					providerError = providerFailure(entry.info.error);
 			}
 			for (const part of entry.parts) {
 				if (
@@ -1689,7 +1727,7 @@ export class EvalHost {
 			costUsd: reportedCost(costReported ? costUsd : null, tokens.output),
 			assistantMessages,
 			durationMs,
-			hostError,
+			providerError,
 		};
 	}
 
@@ -1701,8 +1739,16 @@ export class EvalHost {
 				string,
 				unknown
 			>;
-		} catch {
-			return null;
+		} catch (error) {
+			if (
+				error instanceof SyntaxError ||
+				(error instanceof Error && "code" in error && error.code === "ENOENT")
+			)
+				return null;
+			throw new EvaluationPhaseError(
+				attemptFailure("host", "workspace-read-failed", error, true),
+				error,
+			);
 		}
 	}
 
@@ -1711,8 +1757,13 @@ export class EvalHost {
 		let names: string[];
 		try {
 			names = await readdir(history);
-		} catch {
-			return [];
+		} catch (error) {
+			if (error instanceof Error && "code" in error && error.code === "ENOENT")
+				return [];
+			throw new EvaluationPhaseError(
+				attemptFailure("host", "archive-directory-read-failed", error, true),
+				error,
+			);
 		}
 		const documents: Record<string, unknown>[] = [];
 		for (const name of names
