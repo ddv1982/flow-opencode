@@ -576,6 +576,51 @@ async function availablePort(): Promise<number> {
 	throw new Error("Could not reserve a local port.");
 }
 
+function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
+	const pid = child.pid;
+	if (pid === undefined) return;
+	try {
+		if (process.platform === "win32") {
+			if (child.exitCode === null) child.kill(signal);
+		} else {
+			process.kill(-pid, signal);
+		}
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+	}
+}
+
+function processTreeAlive(child: ChildProcess): boolean {
+	const pid = child.pid;
+	if (pid === undefined) return false;
+	if (process.platform === "win32") return child.exitCode === null;
+	try {
+		process.kill(-pid, 0);
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+		throw error;
+	}
+}
+
+export async function terminateChildProcessTree(
+	child: ChildProcess,
+): Promise<void> {
+	if (!processTreeAlive(child)) return;
+	const exited = new Promise<void>((resolve) =>
+		child.once("exit", () => resolve()),
+	);
+	signalProcessTree(child, "SIGTERM");
+	const gracefulDeadline = Date.now() + 3_000;
+	while (processTreeAlive(child) && Date.now() < gracefulDeadline) {
+		await Bun.sleep(50);
+	}
+	if (processTreeAlive(child)) signalProcessTree(child, "SIGKILL");
+	if (child.exitCode === null) {
+		await Promise.race([exited, Bun.sleep(1_000)]);
+	}
+}
+
 /**
  * A GET against the child host, with a non-2xx raised rather than returned.
  *
@@ -1188,6 +1233,7 @@ export class EvalHost {
 				],
 				{
 					cwd: project,
+					detached: process.platform !== "win32",
 					env: {
 						...options.toolchain.environment,
 						...(options.reviewerModel
@@ -1229,6 +1275,20 @@ export class EvalHost {
 					}
 					await Bun.sleep(500);
 				}
+				const ready = (await postJson(
+					`${host.baseUrl}/session`,
+					{ title: "flow-eval readiness" },
+					{
+						signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+					},
+				)) as { id?: unknown };
+				if (typeof ready.id !== "string" || !ready.id) {
+					throw new Error("OpenCode readiness session had no id.");
+				}
+				await fetch(`${host.baseUrl}/session/${ready.id}`, {
+					method: "DELETE",
+					signal: AbortSignal.timeout(10_000),
+				}).catch(() => {});
 				return host;
 			} catch (error) {
 				return preservePrimaryFailure<EvalHost>(
@@ -1777,17 +1837,7 @@ export class EvalHost {
 	}
 
 	async stop(): Promise<void> {
-		if (this.server && this.server.exitCode === null) {
-			this.server.kill("SIGTERM");
-			await Promise.race([
-				new Promise<void>((resolve) =>
-					this.server?.once("exit", () => resolve()),
-				),
-				Bun.sleep(3_000).then(() => {
-					if (this.server?.exitCode === null) this.server.kill("SIGKILL");
-				}),
-			]);
-		}
+		if (this.server) await terminateChildProcessTree(this.server);
 		// Must happen before the scratch directory is removed: a refresh the child
 		// performed lives only in its copy of `auth.json`, and losing it here is
 		// exactly what silently rotates the developer's own stored refresh token

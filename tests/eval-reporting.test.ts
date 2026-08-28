@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,6 +21,7 @@ import {
 	sequencer,
 	sessionBoundaries,
 	syncProviderCredentialsBack,
+	terminateChildProcessTree,
 } from "../evals/harness.js";
 import {
 	extractObservedActor,
@@ -46,6 +48,66 @@ import { bestEffortEvaluation } from "../evals/run.js";
 // rest exist so a recovery failure, and a scenario nothing scored, can be read
 // from the report at all.
 describe("eval run classification", () => {
+	test("terminates the detached host wrapper and its child process", async () => {
+		if (process.platform === "win32") return;
+		const child = spawn("sh", ["-c", "sleep 30 & echo $!; wait"], {
+			detached: true,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		const childPid = await new Promise<number>((resolve, reject) => {
+			child.once("error", reject);
+			child.stdout?.once("data", (chunk) =>
+				resolve(Number(String(chunk).trim())),
+			);
+		});
+		await terminateChildProcessTree(child);
+		expect(child.signalCode).not.toBeNull();
+		expect(() => process.kill(childPid, 0)).toThrow();
+	});
+
+	test("gives a detached child time to finish SIGTERM cleanup", async () => {
+		if (process.platform === "win32") return;
+		const root = await mkdtemp(join(tmpdir(), "flow-process-tree-"));
+		const marker = join(root, "cleaned");
+		const ready = join(root, "ready");
+		const childScript = join(root, "child.ts");
+		const wrapperScript = join(root, "wrapper.ts");
+		await writeFile(
+			childScript,
+			`import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[3], "ready");
+process.on("SIGTERM", () => setTimeout(() => {
+  writeFileSync(process.argv[2], "done");
+  process.exit(0);
+}, 200));
+setInterval(() => {}, 1_000);
+`,
+		);
+		await writeFile(
+			wrapperScript,
+			`import { existsSync } from "node:fs";
+const child = Bun.spawn([process.execPath, process.argv[2], process.argv[3], process.argv[4]]);
+while (!existsSync(process.argv[4])) await Bun.sleep(10);
+console.log(child.pid);
+await child.exited;
+`,
+		);
+		const wrapper = spawn(
+			process.execPath,
+			[wrapperScript, childScript, marker, ready],
+			{
+				detached: true,
+				stdio: ["ignore", "pipe", "ignore"],
+			},
+		);
+		await new Promise<void>((resolve, reject) => {
+			wrapper.once("error", reject);
+			wrapper.stdout?.once("data", () => resolve());
+		});
+		await terminateChildProcessTree(wrapper);
+		expect(await readFile(marker, "utf8")).toBe("done");
+	});
+
 	test("preserves the primary path when fallback enrichment throws again", () => {
 		const fallback: string[] = [];
 		expect(
