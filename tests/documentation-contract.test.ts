@@ -502,18 +502,27 @@ describe("Flow documentation contract", () => {
 		expect(combined).toContain("bun run check");
 		expect(combined).toContain("bun run smoke:live");
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
-		expect(combined).toContain("npm publish");
+		expect(combined).toContain("scripts/release-publish.ts npm");
 		const release = await readFile(".github/workflows/release.yml", "utf8");
 		expect(release).toMatch(/^ {2}push:\n {4}branches:/m);
 		expect(release).toContain("tags:");
 		expect(release).toMatch(/tag="v\$\{version\}"/);
-		expect(release).toMatch(/--target "\$\{GITHUB_SHA\}"/);
+		expect(release).toMatch(/--commit "\$\{GITHUB_SHA\}"/);
 		expect(release).toContain(
 			"Verify independently regraded qualification bundle and fresh canary",
 		);
 		expect(release).toContain("bun run eval:canary -- verify");
 		expect(release).toContain("--mode dry-run");
 		expect(release).toMatch(/evals\/canary\/\$\{version\}\.json/);
+		expect(release.match(/^ {4}timeout-minutes:/gm)).toHaveLength(3);
+		expect(release).toContain(
+			"bun run scripts/release-publish.ts github-prepare",
+		);
+		expect(release).toContain("bun run scripts/release-publish.ts npm");
+		expect(release).toContain(
+			"bun run scripts/release-publish.ts github-publish",
+		);
+		expect(release).not.toContain("--clobber");
 		expect(release).not.toContain("canary-not-enabled");
 
 		// Model-driven evals need credentials and cost real money, so they run on a

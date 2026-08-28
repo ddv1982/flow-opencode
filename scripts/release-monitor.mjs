@@ -41,6 +41,7 @@ function usage() {
 		"  --expect <names>      Comma-separated workflow names to require",
 		"  --repo <owner/repo>   GitHub repository passed to gh --repo",
 		"  --timeout <seconds>   Maximum wait time (default: 900)",
+		"  --command-timeout <seconds> Maximum one git or gh call may take (default: 30)",
 		"  --interval <seconds>  Poll interval (default: 15)",
 		"  --once                Check once and exit without polling",
 		"  --json                Print final JSON summary",
@@ -63,6 +64,7 @@ function parseArgs(argv) {
 		expect: null,
 		repo: null,
 		timeoutMs: 900_000,
+		commandTimeoutMs: 30_000,
 		intervalMs: 15_000,
 		once: false,
 		json: false,
@@ -98,6 +100,10 @@ function parseArgs(argv) {
 				options.intervalMs = secondsToMs(readFlag(argv, index, arg), arg);
 				index += 1;
 				break;
+			case "--command-timeout":
+				options.commandTimeoutMs = secondsToMs(readFlag(argv, index, arg), arg);
+				index += 1;
+				break;
 			case "--once":
 				options.once = true;
 				break;
@@ -111,6 +117,9 @@ function parseArgs(argv) {
 			default:
 				throw new Error(`Unknown option: ${arg}`);
 		}
+	}
+	if (options.commandTimeoutMs > options.timeoutMs) {
+		throw new Error("--command-timeout cannot exceed --timeout.");
 	}
 	return {
 		...options,
@@ -127,21 +136,24 @@ function secondsToMs(value, flag) {
 	return seconds * 1000;
 }
 
-function run(command, args) {
+function run(command, args, timeoutMs) {
 	const result = spawnSync(command, args, {
 		encoding: "utf8",
 		stdio: ["ignore", "pipe", "pipe"],
+		timeout: timeoutMs,
 	});
-	if (result.status !== 0) {
-		throw new Error(
-			`${command} ${args.join(" ")} failed: ${result.stderr || result.stdout}`,
-		);
+	if (result.error || result.status !== 0) {
+		const errorDetail =
+			result.error?.code === "ETIMEDOUT"
+				? "timed out"
+				: result.error?.message || result.stderr || result.stdout;
+		throw new Error(`${command} ${args.join(" ")} failed: ${errorDetail}`);
 	}
 	return result.stdout.trim();
 }
 
-function resolveCommit(commit) {
-	return commit ?? run("git", ["rev-parse", "HEAD"]);
+function resolveCommit(commit, commandTimeoutMs) {
+	return commit ?? run("git", ["rev-parse", "HEAD"], commandTimeoutMs);
 }
 
 function workflowName(run) {
@@ -180,7 +192,7 @@ function listRuns(options) {
 		JSON_FIELDS,
 	];
 	if (options.repo) args.push("--repo", options.repo);
-	return JSON.parse(run("gh", args));
+	return JSON.parse(run("gh", args, options.commandTimeoutMs));
 }
 
 function evaluate(runs, options) {
@@ -193,7 +205,7 @@ function evaluate(runs, options) {
 	const missing = required
 		.filter((entry) => entry.run === null)
 		.map((entry) => entry.name);
-	const failed = runsForCommit.filter(
+	const failed = [...byWorkflow.values()].filter(
 		(run) =>
 			run.status === "completed" && FAILURE_CONCLUSIONS.has(run.conclusion),
 	);
@@ -263,7 +275,7 @@ async function main(argv) {
 		process.stdout.write(`${usage()}\n`);
 		return;
 	}
-	options.commit = resolveCommit(options.commit);
+	options.commit = resolveCommit(options.commit, options.commandTimeoutMs);
 	const started = Date.now();
 	let lastSummary = null;
 	while (Date.now() - started <= options.timeoutMs) {
@@ -275,7 +287,9 @@ async function main(argv) {
 		if (!options.json) {
 			process.stderr.write(`${formatSummary(lastSummary)}\n\n`);
 		}
-		await delay(options.intervalMs);
+		const remainingMs = options.timeoutMs - (Date.now() - started);
+		if (remainingMs <= 0) break;
+		await delay(Math.min(options.intervalMs, remainingMs));
 	}
 	finish(lastSummary, options.json);
 }
