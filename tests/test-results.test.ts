@@ -6,7 +6,16 @@
 // the wrong machine. These pin the other half: the same skip on the right machine.
 
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+	appendFile,
+	mkdir,
+	mkdtemp,
+	rename,
+	rm,
+	symlink,
+	truncate,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_TEST_REPORT_BYTES } from "../src/domain/limits.js";
@@ -218,6 +227,55 @@ describe("reading a report from the workspace", () => {
 		}
 	});
 
+	test("refuses an absolute path even when it names a workspace file", async () => {
+		const root = await workspace();
+		try {
+			const report = join(root, "junit.xml");
+			await writeFile(report, REPORT, "utf8");
+			expect(await readWorkspaceTestReport(root, report)).toBeNull();
+			expect(
+				await readWorkspaceTestReport(root, "C:\\workspace\\junit.xml"),
+			).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	test("refuses a final symlink that escapes the workspace", async () => {
+		const root = await workspace();
+		const outside = await mkdtemp(join(tmpdir(), "flow-report-outside-"));
+		try {
+			const outsideReport = join(outside, "junit.xml");
+			await writeFile(outsideReport, REPORT, "utf8");
+			await symlink(outsideReport, join(root, "junit.xml"), "file");
+
+			expect(await readWorkspaceTestReport(root, "junit.xml")).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
+	test("refuses a symlinked parent directory that escapes the workspace", async () => {
+		const root = await workspace();
+		const outside = await mkdtemp(join(tmpdir(), "flow-report-outside-"));
+		try {
+			await writeFile(join(outside, "junit.xml"), REPORT, "utf8");
+			await symlink(
+				outside,
+				join(root, "reports"),
+				process.platform === "win32" ? "junction" : "dir",
+			);
+
+			expect(
+				await readWorkspaceTestReport(root, "reports/junit.xml"),
+			).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+			await rm(outside, { recursive: true, force: true });
+		}
+	});
+
 	test("refuses a directory, a missing file, and anything over the cap", async () => {
 		const root = await workspace();
 		try {
@@ -226,12 +284,87 @@ describe("reading a report from the workspace", () => {
 			expect(await readWorkspaceTestReport(root, "absent.xml")).toBeNull();
 			await writeFile(
 				join(root, "huge.xml"),
-				"x".repeat(MAX_TEST_REPORT_BYTES + 1),
-				"utf8",
+				Buffer.alloc(MAX_TEST_REPORT_BYTES),
+			);
+			expect(await readWorkspaceTestReport(root, "huge.xml")).not.toBeNull();
+			await writeFile(
+				join(root, "huge.xml"),
+				Buffer.alloc(MAX_TEST_REPORT_BYTES + 1),
 			);
 			expect(await readWorkspaceTestReport(root, "huge.xml")).toBeNull();
 		} finally {
 			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	test("refuses malformed UTF-8", async () => {
+		const root = await workspace();
+		try {
+			await writeFile(join(root, "junit.xml"), Buffer.from([0xc3, 0x28]));
+			expect(await readWorkspaceTestReport(root, "junit.xml")).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	test("refuses path replacement after inspection or open", async () => {
+		for (const stage of ["inspected", "opened"] as const) {
+			const root = await workspace();
+			try {
+				const report = join(root, "junit.xml");
+				await writeFile(report, REPORT, "utf8");
+				expect(
+					await readWorkspaceTestReport(root, "junit.xml", async (at) => {
+						if (at !== stage) return;
+						await rename(report, join(root, `${stage}.xml`));
+						await writeFile(report, "replacement", "utf8");
+					}),
+				).toBeNull();
+			} finally {
+				await rm(root, { recursive: true, force: true });
+			}
+		}
+	});
+
+	test("refuses parent replacement after inspection", async () => {
+		const root = await workspace();
+		try {
+			const reports = join(root, "reports");
+			await mkdir(reports);
+			await writeFile(join(reports, "junit.xml"), REPORT, "utf8");
+			expect(
+				await readWorkspaceTestReport(
+					root,
+					"reports/junit.xml",
+					async (stage) => {
+						if (stage !== "inspected") return;
+						await rename(reports, join(root, "original-reports"));
+						await mkdir(reports);
+						await writeFile(join(reports, "junit.xml"), "replacement", "utf8");
+					},
+				),
+			).toBeNull();
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	test("refuses growth or truncation after reading", async () => {
+		for (const mutation of ["grow", "truncate"] as const) {
+			const root = await workspace();
+			try {
+				const report = join(root, "junit.xml");
+				await writeFile(report, REPORT, "utf8");
+				expect(
+					await readWorkspaceTestReport(root, "junit.xml", async (stage) => {
+						if (stage !== "read") return;
+						if (mutation === "grow") await appendFile(report, "x");
+						else await truncate(report, 1);
+					}),
+				).toBeNull();
+			} finally {
+				await rm(root, { recursive: true, force: true });
+			}
 		}
 	});
 });
