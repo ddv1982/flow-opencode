@@ -167,6 +167,15 @@ export class ValidationCaptureCoordinator {
 				"This OpenCode session already has an armed validation command.",
 			);
 		}
+		if (
+			[...this.#pending.values()].some(
+				(capture) => capture.workspace === workspace,
+			)
+		) {
+			throw new ValidationCaptureError(
+				"This workspace already has an armed validation command.",
+			);
+		}
 		if (this.#pending.size >= MAX_CAPTURES) {
 			throw new ValidationCaptureError(
 				"Flow validation capture is at capacity.",

@@ -393,12 +393,6 @@ export const ValidationStartInputSchema = z
 				featureId: FeatureIdSchema,
 				command: boundedText("Validation command"),
 				scope: z.enum(["focused", "broad"]),
-				/**
-				 * Repository-relative JUnit XML the command writes, when the plan declared
-				 * test names for it. Only the caller knows where its own command reports,
-				 * which is why this is a parameter — and why the file has to be written
-				 * after the command is armed to count for anything.
-				 */
 				resultsPath: boundedText("Validation results path", {
 					maxBytes: MAX_PATH_BYTES,
 				}).optional(),

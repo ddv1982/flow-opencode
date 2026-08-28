@@ -41,6 +41,26 @@ import {
 } from "../evals/metrics.js";
 import { bestEffortEvaluation } from "../evals/run.js";
 
+function liveProcess(pid: number): boolean {
+	if (process.platform !== "linux") {
+		try {
+			process.kill(pid, 0);
+			return true;
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+			throw error;
+		}
+	}
+	try {
+		const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
+		const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+		return fields[0] !== "Z";
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
+}
+
 // Running the harness needs credentials and money, so the rules that decide what
 // a run *means* are proven here instead. Two were wrong in recorded runs: unpriced
 // spend printed as `$0.0000`, and a session blocked on an unanswerable question
@@ -62,7 +82,7 @@ describe("eval run classification", () => {
 		});
 		await terminateChildProcessTree(child);
 		expect(child.signalCode).not.toBeNull();
-		expect(() => process.kill(childPid, 0)).toThrow();
+		expect(liveProcess(childPid)).toBe(false);
 	});
 
 	test("gives a detached child time to finish SIGTERM cleanup", async () => {

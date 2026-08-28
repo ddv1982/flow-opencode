@@ -1,4 +1,8 @@
-import { artifactIssues } from "./artifact.js";
+import {
+	artifactIssues,
+	commandUsesManagedJUnitPath,
+	MANAGED_JUNIT_PATH,
+} from "./artifact.js";
 import { MAX_REVIEW_FINDINGS, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { operationInputDigest } from "./operation.js";
 import { planIssue } from "./plan.js";
@@ -181,6 +185,14 @@ function assertDeclaredEvidence(plan: Plan): void {
 			"Every `evidence` entry must declare `assertions`; use an empty list for non-test evidence.",
 		);
 	}
+	for (const entry of plan.evidence) {
+		const named = (entry.assertions?.length ?? 0) > 0;
+		if (named && !commandUsesManagedJUnitPath(entry.command)) {
+			fail(
+				`Named evidence commands must write JUnit to ${MANAGED_JUNIT_PATH}.`,
+			);
+		}
+	}
 	const gatePlatform = gates[0]?.platform;
 	if (
 		gatePlatform !== "other" &&
@@ -313,6 +325,7 @@ export function approvePlan(
 	assertRevision(session, input.expectedRevision);
 	assertMutable(session);
 	if (!session.plan) fail("Save a plan before approving it.");
+	assertDeclaredEvidence(session.plan);
 	if (session.approval === "approved") fail("The plan is already approved.");
 	return {
 		session: commit(

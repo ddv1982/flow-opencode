@@ -16,9 +16,13 @@
 // nothing that could be a credential is ever written into one, and the recording
 // host's absolute paths are replaced by a token rather than baked in.
 
+import {
+	commandUsesManagedJUnitPath,
+	MANAGED_JUNIT_PATH,
+} from "../src/domain/artifact.js";
 import type { EvidencePlatform } from "../src/domain/session.js";
 
-export const CASSETTE_VERSION = 1;
+export const CASSETTE_VERSION = 2;
 
 /** Stands in for the recording host's project directory. */
 export const WORKSPACE_TOKEN = "<flow-eval-workspace>";
@@ -58,6 +62,8 @@ export type CassetteEvent =
 			sessionIndex: number;
 			command: string;
 			output: string;
+			resultsPath?: string | undefined;
+			testReport?: string | undefined;
 			/**
 			 * The host metadata the capture hook read: `exit`, and `truncated` or
 			 * `complete`. Recorded verbatim because a host that reports neither is a
@@ -233,6 +239,45 @@ export function stripValidationMarker(output: string): string {
 	return marker === -1 ? output : output.slice(0, marker);
 }
 
+function xml(value: string): string {
+	return value
+		.replaceAll("&", "&amp;")
+		.replaceAll('"', "&quot;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;");
+}
+
+function validationReport(output: string): string | null {
+	const marker = output.match(/\n\n\[flow-validation\]\s+([^\n]+)$/);
+	if (!marker?.[1]) return null;
+	try {
+		const parsed = JSON.parse(marker[1]) as {
+			assertions?: { name?: unknown; status?: unknown }[];
+		};
+		const cases = (parsed.assertions ?? []).flatMap((assertion) => {
+			if (
+				typeof assertion.name !== "string" ||
+				!(["passed", "failed", "skipped"] as const).some(
+					(status) => status === assertion.status,
+				)
+			)
+				return [];
+			const body =
+				assertion.status === "failed"
+					? "<failure/>"
+					: assertion.status === "skipped"
+						? "<skipped/>"
+						: "";
+			return [`<testcase name="${xml(assertion.name)}">${body}</testcase>`];
+		});
+		return cases.length === 0
+			? null
+			: `<testsuite>${cases.join("")}</testsuite>`;
+	} catch {
+		return null;
+	}
+}
+
 /** A cassette is gated only when nothing about it is known to be unreproducible. */
 export function isGated(cassette: Cassette): boolean {
 	return cassette.fidelity.length === 0;
@@ -314,6 +359,10 @@ export function buildCassette(options: {
 	readonly extraFidelity: readonly FidelityNote[];
 }): Cassette {
 	const events: CassetteEvent[] = [];
+	const pendingResults = new Map<
+		number,
+		Readonly<{ command: string; resultsPath: string }>
+	>();
 	for (const call of options.calls) {
 		if (call.status !== "completed" && call.status !== "error") continue;
 		const base = {
@@ -321,6 +370,25 @@ export function buildCassette(options: {
 			sessionIndex: call.sessionIndex,
 		} as const;
 		if (call.tool.startsWith("flow_")) {
+			if (
+				call.tool === "flow_validation_start" &&
+				observedFrom(call.output).status === "ok"
+			) {
+				const request = record(call.input.request);
+				const command = request?.command;
+				const requestedPath = request?.resultsPath;
+				if (typeof command === "string") {
+					const resultsPath =
+						typeof requestedPath === "string"
+							? requestedPath
+							: commandUsesManagedJUnitPath(command)
+								? MANAGED_JUNIT_PATH
+								: undefined;
+					if (resultsPath) {
+						pendingResults.set(call.sessionIndex, { command, resultsPath });
+					}
+				}
+			}
 			events.push({
 				kind: "flow",
 				tool: call.tool,
@@ -332,12 +400,21 @@ export function buildCassette(options: {
 		}
 		if (call.tool.toLowerCase() === "bash") {
 			const command = call.input.command;
+			const pending = pendingResults.get(call.sessionIndex);
+			pendingResults.delete(call.sessionIndex);
+			const testReport =
+				typeof command === "string" && pending?.command === command
+					? validationReport(call.rawOutput)
+					: null;
 			events.push({
 				kind: "bash",
 				...base,
 				command: typeof command === "string" ? command : "",
 				output: boundedOutput(stripValidationMarker(call.rawOutput)),
 				metadata: call.metadata,
+				...(testReport && pending
+					? { resultsPath: pending.resultsPath, testReport }
+					: {}),
 			});
 			continue;
 		}

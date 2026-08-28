@@ -29,7 +29,7 @@ const RELEASE_POLICY_INPUT = [
 	},
 	{
 		caseId: "goal-change-refused",
-		caseVersion: 1,
+		caseVersion: 2,
 		evidenceClass: "conformance",
 		oracle: "durable-state",
 		release: "required",
@@ -73,7 +73,7 @@ const RELEASE_POLICY_INPUT = [
 	},
 	{
 		caseId: "unprovable-claim-refused",
-		caseVersion: 1,
+		caseVersion: 2,
 		evidenceClass: "conformance",
 		oracle: "durable-state",
 		release: "required",
@@ -84,7 +84,7 @@ const RELEASE_POLICY_INPUT = [
 	},
 	{
 		caseId: "skipped-case-named-binding",
-		caseVersion: 1,
+		caseVersion: 2,
 		evidenceClass: "conformance",
 		oracle: "durable-state",
 		release: "required",

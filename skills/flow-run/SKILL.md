@@ -83,8 +83,11 @@ combined diff before validation.
 
 Arm each evidence command immediately before running it byte-for-byte with
 `flow_validation_start` (current revision, feature id, exact command, `scope`).
-To satisfy nonempty planned assertions, have the command write JUnit and pass
-its repository-relative `resultsPath`; omitting it records those names absent.
+For nonempty planned assertions, execute the exact command that writes the
+plan-bound JUnit path `.flow/results.xml`. Omit `resultsPath` from
+`flow_validation_start` or repeat that value exactly. Never substitute another
+path. Legacy approved plans whose command lacks the managed path must pass one
+normalized workspace-relative `resultsPath`.
 Flow records the host observation; copy no host-observed fields.
 
 `scope: "broad"` runs the plan's gate evidence command and nothing else.
@@ -93,7 +96,9 @@ A failed, incomplete, or source-drifted observation of a plan-listed command or
 of the declared gate command blocks review until that same command passes for
 current source.
 
-A gate that cannot pass must ask the user to defer or abandon before returning.
+A gate that cannot pass must leave this exact handoff before returning:
+`Environment: <declared environment>`, `Command: <exact planned command>`, and
+`Next step: Run this command there and resume Flow, or choose defer/abandon.`
 
 Every host-observed validation advances revision. The `[flow-validation]`
 marker reports `passed`, `recordedRevision`, and declared `assertions`. Use

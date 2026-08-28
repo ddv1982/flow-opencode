@@ -44,10 +44,25 @@ function question(text: string) {
 function session(document: {
 	goal?: string;
 	features?: { id: string; title: string }[];
-	evidence?: { scope?: string; command: string; platform?: string }[];
+	evidence?: {
+		scope?: string;
+		command: string;
+		platform?: string;
+		assertions?: string[];
+	}[];
 	runs?: {
 		featureId: string;
 		state: string;
+		validations?: {
+			command: string;
+			scope: string;
+			exitCode: number | null;
+			outputComplete?: boolean;
+			hostPlatform?: string;
+			resultsPath?: string;
+			ineligibleReason?: string;
+			observedAssertions?: { name: string; status: string }[];
+		}[];
 		reviews?: {
 			kind: string;
 			result: {
@@ -73,7 +88,7 @@ function session(document: {
 			featureId: run.featureId,
 			attempt: 1,
 			state: run.state,
-			validations: [],
+			validations: run.validations ?? [],
 			reviews: run.reviews ?? [],
 		})),
 		closure: document.closure ?? null,
@@ -920,6 +935,96 @@ describe("plan-only-stops", () => {
 				}),
 			),
 		).toEqual([]);
+	});
+});
+
+describe("skipped-case-named-binding", () => {
+	const command =
+		"bun test --reporter=junit --reporter-outfile=.flow/results.xml";
+	const namedEvidence = {
+		scope: "gate",
+		command,
+		platform: "linux",
+		assertions: ["linux-skipped observation"],
+	};
+
+	test("passes when the exact named case is observed running on Linux", () => {
+		expect(
+			check(
+				"skipped-case-named-binding",
+				outcome({
+					archives: [
+						session({
+							evidence: [namedEvidence],
+							features: [{ id: "reserved-names", title: "Reserved names" }],
+							runs: [
+								{
+									featureId: "reserved-names",
+									state: "completed",
+									validations: [
+										{
+											command,
+											scope: "broad",
+											exitCode: 0,
+											outputComplete: true,
+											hostPlatform: "linux",
+											resultsPath: ".flow/results.xml",
+											observedAssertions: [
+												{
+													name: "linux-skipped observation",
+													status: "passed",
+												},
+											],
+										},
+									],
+								},
+							],
+							closure: { kind: "completed" },
+						}),
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("still rejects exit zero when the named case was skipped", () => {
+		const issues = check(
+			"skipped-case-named-binding",
+			outcome({
+				archives: [
+					session({
+						evidence: [namedEvidence],
+						features: [{ id: "reserved-names", title: "Reserved names" }],
+						runs: [
+							{
+								featureId: "reserved-names",
+								state: "completed",
+								validations: [
+									{
+										command,
+										scope: "broad",
+										exitCode: 0,
+										outputComplete: true,
+										hostPlatform: "linux",
+										resultsPath: ".flow/results.xml",
+										observedAssertions: [
+											{
+												name: "linux-skipped observation",
+												status: "skipped",
+											},
+										],
+									},
+								],
+							},
+						],
+						closure: { kind: "completed" },
+					}),
+				],
+			}),
+		);
+		expect(issues).toContain(
+			"closed as completed over an acceptance case this host skips",
+		);
 	});
 });
 

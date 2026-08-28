@@ -32,14 +32,6 @@ export type PlanFeature = Readonly<{
 
 type EvidenceScope = "gate" | "extra";
 
-/**
- * One acceptance observation declared at planning time.
- *
- * `scope: "gate"` is the canonical whole-repository command. Broad observations
- * must run it byte-for-byte. `scope: "extra"` is everything else the goal needs
- * that this host may not be able to produce. Satisfaction is the same function
- * for both: exact command, declared platform, named cases, eligible observation.
- */
 export type EvidenceEntry = Readonly<{
 	requirement: string;
 	environment: string;
@@ -125,15 +117,6 @@ export type ValidationObservation = Readonly<{
 	 * record that never said where it ran is not evidence about where it ran.
 	 */
 	hostPlatform?: EvidencePlatform | undefined;
-	/**
-	 * The report the command wrote, and what it said about each name the plan declared
-	 * for this command.
-	 *
-	 * The names come from the approved plan and never from the caller, which is what
-	 * makes this an observation rather than another claim. The path is the caller's,
-	 * because only it knows where its own command reports — so the file must have been
-	 * written after arming to count. Both optional for forward-readability.
-	 */
 	resultsPath?: string | undefined;
 	observedAssertions?: ObservedAssertion[] | undefined;
 	/**

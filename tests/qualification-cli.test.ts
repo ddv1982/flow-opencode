@@ -57,9 +57,9 @@ const CASSETTES = {
 		"failing-gate-blocks--opencode_claude-sonnet-5--1.json",
 	"resumes-after-interruption":
 		"resumes-after-interruption--opencode_claude-sonnet-5--3.json",
-	"unprovable-claim-refused": "unprovable-claim-refused--xai_grok-4.5--1.json",
+	"unprovable-claim-refused": "unprovable-claim-refused--xai_grok-4.6--1.json",
 	"skipped-case-named-binding":
-		"skipped-case-named-binding--fixture_hand-written--1.json",
+		"skipped-case-named-binding--xai_grok-4.6--1.json",
 } as const;
 
 const FIXED_ROLES = [

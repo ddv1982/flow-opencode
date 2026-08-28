@@ -12,6 +12,7 @@ import type {
 import { activeRun, recordValidation } from "../domain/transitions.js";
 import {
 	declaredAssertions,
+	declaredResultsPath,
 	LONGEST_EVIDENCE_PLATFORM,
 	LONGEST_VALIDATION_INELIGIBLE_REASON,
 } from "../domain/validation.js";
@@ -24,37 +25,18 @@ export type PreparedValidation = Readonly<{
 	command: string;
 	scope: ValidationScope;
 	sourceDigest: SourceDigest;
-	/**
-	 * The host that will run this command, supplied by the caller because reading it
-	 * belongs to infrastructure. It is armed here rather than read when the
-	 * observation is persisted so the recorded host is the one Flow armed against.
-	 */
 	hostPlatform: EvidencePlatform;
-	/** The test names the approved plan declares for this exact command. */
 	assertions: readonly string[];
-	/**
-	 * Where the caller says this command writes a JUnit report.
-	 *
-	 * The one half that must come from the caller, since only it knows what its own
-	 * command does — which is why the capture adapter reads nothing from a file that
-	 * was not written after this arming.
-	 */
 	resultsPath: string | undefined;
 }>;
 
 export type ObservedValidation = PreparedValidation &
 	Readonly<{
 		captureId: string;
-		/** `null` when the host exposed no structured exit code. */
 		exitCode: number | null;
 		outputDigest: SourceDigest;
 		outputComplete: boolean;
-		/** What the report said about each declared name; absent when none were declared. */
 		observedAssertions?: ObservedAssertion[] | undefined;
-		/**
-		 * Set by the capture adapter when the host could not supply the evidence a
-		 * passing validation requires. Source drift is detected here and overrides it.
-		 */
 		ineligibleReason?: ValidationIneligibleReason | undefined;
 	}>;
 
@@ -93,8 +75,6 @@ function maximumSerializedObservation(
 		outputDigest: prepared.sourceDigest,
 		outputComplete: false,
 		hostPlatform: LONGEST_EVIDENCE_PLATFORM,
-		// The declared names and the caller's path are fixed by now, so the only free
-		// part is each outcome; `skipped` is the longest of the four.
 		observedAssertions: prepared.assertions.map((name) => ({
 			name,
 			status: "skipped" as const,
@@ -134,7 +114,24 @@ export async function prepareValidation(
 		if (run.reviews.length > 0) {
 			throw new Error("Validation cannot start after review has begun.");
 		}
-		if (input.resultsPath !== undefined && !isArtifactPath(input.resultsPath)) {
+		const assertions = declaredAssertions(session, input.command);
+		const plannedResultsPath = declaredResultsPath(session, input.command);
+		if (
+			plannedResultsPath !== undefined &&
+			input.resultsPath !== undefined &&
+			input.resultsPath !== plannedResultsPath
+		) {
+			throw new Error(
+				"Validation results path must match the approved plan exactly.",
+			);
+		}
+		const resultsPath = plannedResultsPath ?? input.resultsPath;
+		if (assertions.length > 0 && resultsPath === undefined) {
+			throw new Error(
+				"Legacy named evidence requires a workspace-relative resultsPath.",
+			);
+		}
+		if (resultsPath !== undefined && !isArtifactPath(resultsPath)) {
 			throw new Error(`Validation results path: ${ARTIFACT_PATH_MESSAGE}`);
 		}
 		const prepared = {
@@ -144,8 +141,8 @@ export async function prepareValidation(
 			scope: input.scope,
 			sourceDigest: await transaction.computeSourceDigest(),
 			hostPlatform,
-			assertions: declaredAssertions(session, input.command),
-			resultsPath: input.resultsPath,
+			assertions,
+			resultsPath,
 		};
 		assertValidationCanBeRecorded(session, prepared);
 		return prepared;

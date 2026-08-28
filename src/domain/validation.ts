@@ -1,3 +1,4 @@
+import { commandUsesManagedJUnitPath, MANAGED_JUNIT_PATH } from "./artifact.js";
 import { MAX_VALIDATION_ID_LENGTH, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import type {
 	EvidenceEntry,
@@ -105,6 +106,18 @@ export function declaredAssertions(
 				.flatMap((entry) => entry.assertions ?? []),
 		),
 	];
+}
+
+export function declaredResultsPath(
+	session: Session,
+	command: string,
+): string | undefined {
+	const named = planEvidence(session.plan).some(
+		(entry) => entry.command === command && (entry.assertions?.length ?? 0) > 0,
+	);
+	return named && commandUsesManagedJUnitPath(command)
+		? MANAGED_JUNIT_PATH
+		: undefined;
 }
 
 function sameAssertions(
@@ -261,7 +274,17 @@ function isObservedOnDeclaredPlatform(
 	return observation.hostPlatform === entry.platform;
 }
 
-/** Distinguishes missing, wrong-host, and named-case evidence for recovery. */
+function isObservedAtDeclaredPath(
+	entry: EvidenceEntry,
+	observation: ValidationObservation,
+): boolean {
+	return (
+		(entry.assertions?.length ?? 0) === 0 ||
+		!commandUsesManagedJUnitPath(entry.command) ||
+		observation.resultsPath === MANAGED_JUNIT_PATH
+	);
+}
+
 export function evidenceRefusal(
 	session: Session,
 	entry: EvidenceEntry,
@@ -272,6 +295,7 @@ export function evidenceRefusal(
 		.filter(
 			(observation) =>
 				observation.command === entry.command &&
+				isObservedAtDeclaredPath(entry, observation) &&
 				isValidationEligible(observation, sourceDigest),
 		);
 	const wrongHosts = [
@@ -300,12 +324,11 @@ export function evidenceRefusal(
 		wrongHosts.length > 0
 			? `passed on ${wrongHosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
 			: unmet
-				? `passed on ${entry.platform ?? "the declared host"} but reported no passing result for ${unmet.join(", ")}; arm it again with \`resultsPath\` naming the report the command writes, and make those cases run`
+				? `passed on ${entry.platform ?? "the declared host"} but reported no passing result for ${unmet.join(", ")}; rerun the exact approved command so ${commandUsesManagedJUnitPath(entry.command) ? MANAGED_JUNIT_PATH : "a fresh resultsPath"} reports those cases passing`
 				: `needs ${needs}`;
 	return `${JSON.stringify(entry.command)} (${detail}, for ${entry.requirement})`;
 }
 
-/** Exact command, host, named-case, eligibility, and optional-source check. */
 export function unsatisfiedEvidence(
 	session: Session,
 	sourceDigest?: SourceDigest,
@@ -318,6 +341,7 @@ export function unsatisfiedEvidence(
 			!observed.some(
 				(observation) =>
 					observation.command === entry.command &&
+					isObservedAtDeclaredPath(entry, observation) &&
 					isObservedOnDeclaredPlatform(entry, observation) &&
 					assertionsSatisfied(
 						entry.assertions ?? [],

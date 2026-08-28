@@ -13,9 +13,9 @@ labelled so there.
 The public surface — tools, commands, guides, agents, and the Session v5 shape —
 stays frozen while those guarantees are measured; additive optional fields are
 allowed, and a removal or rename waits for a major announced one release ahead.
-A new required-at-save plan declaration is a major. Today's declaration is
-`evidence`, with `scope`, `platform`, and `assertions` on each entry. Do not
-add another evidence field to close a measured cheat.
+A new required-at-save plan declaration is a major. `evidence` entries own
+`scope`, `platform`, and `assertions`; named commands bind `.flow/results.xml`.
+Do not add another evidence field to close a measured cheat.
 [Release qualification](release-qualification.md) owns the thresholds and cadence.
 
 Flow is a serial durable workflow plugin, not a general orchestration framework.

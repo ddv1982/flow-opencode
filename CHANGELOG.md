@@ -7,8 +7,9 @@ One short entry per release, written for users deciding whether to upgrade.
 Release claims now come from retained evidence instead of trusted summaries.
 
 - Declared gate assertions must be satisfied before final review and completed
-  closure. Test-report evidence is read once from a stable, bounded workspace
-  file without following symlinks.
+  closure. New named evidence writes JUnit to the plan-bound
+  `.flow/results.xml`; execution cannot substitute another path. Reports are read once
+  from a stable, bounded workspace file without following symlinks.
 - Eval failures identify the evaluator, provider, host, or persistence boundary
   that produced them. The release matrix uses repository-owned policy with enough
   attempts to measure its 90% and 100% thresholds.

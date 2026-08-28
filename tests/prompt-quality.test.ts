@@ -268,20 +268,23 @@ describe("Flow prompt structure", () => {
 			"command byte-for-byte and environment, defer, or abandon",
 		);
 		expect(getFlowGuidance("flow-run").content).toContain(
-			"A gate that cannot pass must ask the user to defer or abandon",
+			"A gate that cannot pass must leave this exact handoff",
 		);
 	});
 
 	test("binds named assertions to machine-readable test reports", () => {
 		const plan = getFlowGuidance("flow-plan").content;
 		const run = getFlowGuidance("flow-run").content;
-		expect(plan).toMatch(/never summaries such as\s+"all tests pass"/);
-		expect(plan).toContain("choose a JUnit-producing command");
-		expect(plan).toContain("Use `[]` only when");
+		expect(plan).toContain('summaries such as "all tests pass"');
+		expect(plan).toContain("command must write JUnit to `.flow/results.xml`");
+		expect(plan).toContain("--reporter-outfile=.flow/results.xml");
+		expect(plan).toContain("never use another or absolute path");
+		expect(plan).toContain("exact case honestly runnable");
 		expect(plan).toContain("whole-suite exit success");
 		expect(run).toContain("resultsPath");
-		expect(run).toContain("To satisfy nonempty planned assertions");
-		expect(run).toContain("records those names absent");
+		expect(run).toContain("plan-bound JUnit");
+		expect(run).toContain("repeat that value exactly");
+		expect(run).toContain("Environment: <declared environment>");
 	});
 
 	test("continues a reviewer matrix only when the packet asked for one", () => {

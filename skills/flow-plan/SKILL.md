@@ -53,9 +53,15 @@ Save one plan with:
   command, plus `scope: "extra"` entries for observations this host may lack.
   Each entry names `requirement`, `environment`, `command`, `platform`
   (`win32`, `darwin`, `linux`, or `other`), and `assertions`. When acceptance
-  depends on a particular test case, choose a JUnit-producing command and name
-  that exact case; never summaries such as "all tests pass". Use `[]` only when
-  evidence is not a per-test-case claim, including whole-suite exit success.
+  depends on a particular test case, name that exact case and declare
+  the command must write JUnit to `.flow/results.xml`, for example with
+  `--reporter-outfile=.flow/results.xml`; never use another or absolute path or
+  summaries such as "all tests pass". Use `assertions: []` when evidence is not a
+  per-test-case claim, including whole-suite exit success.
+  If a named acceptance case is skipped on the requested host, either make that
+  exact case honestly runnable when the approved scope permits it, or preserve it
+  as `scope: "extra"` evidence on a host where it runs. Never replace it with an
+  unnamed local check. Declare separate current-host proof with `assertions: []`.
   Broad observations run the gate command
   byte-for-byte. Extra entries may be omitted when the goal is fully observable
   here. Final review and completed closure stay refused until every extra

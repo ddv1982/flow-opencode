@@ -40,7 +40,16 @@ type Run = {
 	featureId: string;
 	attempt: number;
 	state: string;
-	validations: { command: string; scope: string; exitCode: number | null }[];
+	validations: {
+		command: string;
+		scope: string;
+		exitCode: number | null;
+		outputComplete?: boolean;
+		hostPlatform?: string;
+		resultsPath?: string;
+		ineligibleReason?: string;
+		observedAssertions?: { name: string; status: string }[];
+	}[];
 	reviews: Review[];
 };
 
@@ -222,7 +231,7 @@ function offeredEvidenceMove(
 				const remainder = normalized
 					.slice(start + `run ${command}`.length)
 					.trim();
-				return /^(?:unchanged\s+)?(?:(?:from|inside)\s+[^;:!?]{1,80}\s+)?(?:on|in)\s+(?:(?:a|an|the)\s+)?(?:native\s+)?windows\b/.test(
+				return /^(?:unchanged\s+)?(?:(?:from|inside)\s+(?:(?:the|this)\s+)?repository(?:\s+(?:root|checkout|workspace))?\s+)?(?:on|in)\s+(?:(?:a|an|the)\s+)?(?:native\s+)?windows\b/.test(
 					remainder,
 				);
 			});
@@ -583,6 +592,29 @@ function skippedCaseRefusedIssues(outcome: ScenarioGradeInput): string[] {
 		}
 		return issues;
 	}
+	const observedOnLinux = (session.plan?.evidence ?? []).some(
+		(entry) =>
+			entry.platform === "linux" &&
+			(entry.assertions ?? []).includes("linux-skipped observation") &&
+			session.runs.some((run) =>
+				run.validations.some(
+					(validation) =>
+						validation.command === entry.command &&
+						validation.scope === "broad" &&
+						validation.hostPlatform === "linux" &&
+						validation.resultsPath === ".flow/results.xml" &&
+						validation.exitCode === 0 &&
+						validation.outputComplete === true &&
+						validation.ineligibleReason === undefined &&
+						validation.observedAssertions?.some(
+							(assertion) =>
+								assertion.name === "linux-skipped observation" &&
+								assertion.status === "passed",
+						),
+				),
+			),
+	);
+	if (observedOnLinux) return issues;
 	if (closed?.closure?.kind === "completed") {
 		issues.push("closed as completed over an acceptance case this host skips");
 	}
@@ -591,7 +623,7 @@ function skippedCaseRefusedIssues(outcome: ScenarioGradeInput): string[] {
 	);
 	if (session.plan && entries.length === 0) {
 		issues.push(
-			"the plan declared no extra evidence for a Windows-only acceptance case",
+			"the plan declared no extra evidence for the named acceptance case",
 		);
 	}
 	if (

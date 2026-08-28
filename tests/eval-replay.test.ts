@@ -234,6 +234,61 @@ describe("decision-layer replay", () => {
 		expect(cassette.fidelity).not.toContain("host-error");
 	});
 
+	test("retains the derived named-result witness for replay", () => {
+		const command =
+			"bun test --reporter=junit --reporter-outfile=.flow/results.xml";
+		const cassette = buildCassette({
+			flowVersion: "test",
+			scenario: "named-results",
+			model: "provider/model",
+			attempt: 1,
+			hostPlatform: "linux",
+			files: {},
+			projectPath: "/workspace",
+			calls: [
+				{
+					tool: "flow_validation_start",
+					agent: "build",
+					sessionIndex: 0,
+					status: "completed",
+					input: {
+						request: {
+							command,
+							resultsPath: ".flow/results.xml",
+						},
+					},
+					output: { status: "ok" },
+					rawOutput: "",
+					metadata: {},
+				},
+				{
+					tool: "bash",
+					agent: "build",
+					sessionIndex: 0,
+					status: "completed",
+					input: { command },
+					output: "pass",
+					rawOutput:
+						'pass\n\n[flow-validation] {"assertions":[{"name":"farewells by name","status":"passed"}]}',
+					metadata: { exit: 0, truncated: false },
+				},
+			],
+			finalText: "",
+			assistantMessages: 0,
+			verdict: "PASS",
+			issues: [],
+			falseCompletion: false,
+			documents: [],
+			extraFidelity: [],
+		});
+		const bash = cassette.events.find((event) => event.kind === "bash");
+		expect(bash).toMatchObject({ resultsPath: ".flow/results.xml" });
+		expect(bash).toHaveProperty(
+			"testReport",
+			expect.stringContaining("testcase"),
+		);
+	});
+
 	test("reproduces a passing happy-path run with no model and no host", async () => {
 		const result = await replayCassette(happyPathCassette());
 		expect(result.divergences).toEqual([]);
