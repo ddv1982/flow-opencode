@@ -1,240 +1,31 @@
 import { errorResponse } from "../../application/flow-response.js";
-import type { ValidationStartRequest } from "../../application/schema.js";
 import {
-	ARTIFACT_PATH_MESSAGE,
-	isArtifactPath,
-} from "../../domain/artifact.js";
-import {
-	MAX_ARTIFACTS,
-	MAX_DECLARED_ASSERTIONS,
-	MAX_PATH_BYTES,
-	MAX_PLAN_BYTES,
-	MAX_PLAN_FEATURES,
-	MAX_REVIEW_FINDINGS,
-	MAX_SESSION_ID_LENGTH,
-	MAX_TEXT_BYTES,
-} from "../../domain/limits.js";
-import {
-	FINDING_ID_MESSAGE,
-	FINDING_ID_PATTERN,
-} from "../../domain/review-findings.js";
+	FeatureCompleteInputSchema,
+	FeatureResetInputSchema,
+	PlanApproveInputSchema,
+	PlanSaveInputSchema,
+	ReviewStartInputSchema,
+	RunStartInputSchema,
+	SessionCloseInputSchema,
+	StatusInputSchema,
+	ValidationStartInputSchema,
+	type ValidationStartRequest,
+} from "../../application/schema.js";
 import type { EvidencePlatform } from "../../domain/session.js";
-import { reviewResultSemanticIssues } from "../../domain/session.js";
-import { EVIDENCE_PLATFORMS } from "../../domain/validation.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
-import {
-	flowFeatureComplete,
-	flowFeatureCompleteReplay,
-	flowFeatureReset,
-	flowPlanApprove,
-	flowPlanSave,
-	flowReviewStart,
-	flowRunStart,
-	flowSessionClose,
-	flowStatus,
-} from "../../infrastructure/fs/workspace-flow-service.js";
+import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import type {
 	AutoContinuationSupport,
 	AutoTimingSnapshot,
 } from "./auto-drive.js";
+import { defineFlowTool } from "./schema-adapter.js";
 import { type Hooks, type ToolContext, tool } from "./sdk.js";
 import type { ValidationCaptureCoordinator } from "./validation-capture.js";
 
 const host = tool.schema;
 type FlowTools = NonNullable<Hooks["tool"]>;
-
-const encoder = new TextEncoder();
-
-function boundedHostText(
-	label: string,
-	options?: { allowEmpty?: boolean; maxBytes?: number },
-) {
-	const maxBytes = options?.maxBytes ?? MAX_TEXT_BYTES;
-	return host
-		.string()
-		.trim()
-		.refine(
-			(value) => options?.allowEmpty || value.length > 0,
-			`${label} cannot be empty.`,
-		)
-		.refine(
-			(value) => encoder.encode(value).byteLength <= maxBytes,
-			`${label} cannot exceed ${maxBytes} UTF-8 bytes.`,
-		);
-}
-
-const text = boundedHostText("Text");
-const featureId = host
-	.string()
-	.max(MAX_SESSION_ID_LENGTH)
-	.regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
-const operationId = host
-	.string()
-	.min(1)
-	.max(128)
-	.regex(/^[a-zA-Z0-9][a-zA-Z0-9._:-]*$/);
-const reviewAssignmentId = host.string().min(1).max(256);
-const revision = host.number().int().safe().nonnegative();
-const guard = { operationId, expectedRevision: revision } as const;
-const artifact = host
-	.object({
-		path: boundedHostText("Artifact path", { maxBytes: MAX_PATH_BYTES }).refine(
-			isArtifactPath,
-			ARTIFACT_PATH_MESSAGE,
-		),
-	})
-	.strict();
-const planFeature = host
-	.object({
-		id: featureId,
-		title: text,
-		summary: text,
-		targets: host.array(text).max(MAX_PLAN_FEATURES).default([]),
-		validation: host.array(text).max(MAX_PLAN_FEATURES).default([]),
-		dependsOn: host.array(featureId).max(MAX_PLAN_FEATURES).default([]),
-		kind: host.enum(["change", "inspect"]).optional(),
-	})
-	.strict();
-const plan = host
-	.object({
-		summary: text,
-		overview: text,
-		requirements: host.array(text).max(MAX_PLAN_FEATURES).default([]),
-		decisions: host.array(text).max(MAX_PLAN_FEATURES).default([]),
-		features: host.array(planFeature).min(1).max(MAX_PLAN_FEATURES),
-		evidence: host
-			.array(
-				host
-					.object({
-						requirement: text,
-						environment: text,
-						command: text,
-						scope: host.enum(["gate", "extra"]),
-						platform: host.enum(EVIDENCE_PLATFORMS).optional(),
-						assertions: host
-							.array(text)
-							.max(MAX_DECLARED_ASSERTIONS)
-							.optional(),
-					})
-					.strict(),
-			)
-			.max(MAX_PLAN_FEATURES)
-			.optional(),
-	})
-	.strict()
-	.superRefine((value, context) => {
-		if (encoder.encode(JSON.stringify(value)).byteLength > MAX_PLAN_BYTES) {
-			context.addIssue({
-				code: "custom",
-				message: `Plan cannot exceed ${MAX_PLAN_BYTES} UTF-8 bytes.`,
-			});
-		}
-	});
-const reviewFinding = host
-	.object({
-		severity: host.enum(["blocking", "advisory"]),
-		summary: text,
-		evidence: text.optional(),
-		/** True when the repair needs work outside the approved plan. */
-		scopeBlocker: host.boolean().optional(),
-		/** Prior id for a recurrence; omitted for a new issue the runtime numbers. */
-		findingId: host
-			.string()
-			.max(MAX_SESSION_ID_LENGTH)
-			.regex(FINDING_ID_PATTERN, FINDING_ID_MESSAGE)
-			.optional(),
-	})
-	.strict();
-const reviewResult = host
-	.object({
-		verdict: host.enum(["passed", "failed"]),
-		findings: host.array(reviewFinding).max(MAX_REVIEW_FINDINGS).default([]),
-		terminalDisposition: host.enum(["submitted", "observed_unsubmitted"]),
-	})
-	.strict()
-	.superRefine((result, context) => {
-		for (const issue of reviewResultSemanticIssues(result)) {
-			context.addIssue({ code: "custom", ...issue });
-		}
-	});
-
-const StatusArgs = {
-	request: host.discriminatedUnion("view", [
-		host.object({ view: host.literal("compact") }).strict(),
-		host.object({ view: host.literal("detail") }).strict(),
-		host.object({ view: host.literal("execution") }).strict(),
-		host
-			.object({
-				view: host.literal("reviewer"),
-				assignmentId: reviewAssignmentId,
-			})
-			.strict(),
-	]),
-};
-const PlanSaveArgs = {
-	request: host.object({ ...guard, goal: text, plan }).strict(),
-};
-const PlanApproveArgs = { request: host.object(guard).strict() };
-const RunStartArgs = {
-	request: host.object({ ...guard, featureId: featureId.optional() }).strict(),
-};
-const ValidationStartArgs = {
-	request: host
-		.object({
-			expectedRevision: revision,
-			featureId,
-			command: boundedHostText("Validation command"),
-			scope: host.enum(["focused", "broad"]),
-			resultsPath: boundedHostText("Validation results path", {
-				maxBytes: MAX_PATH_BYTES,
-			}).optional(),
-		})
-		.strict(),
-};
-const ReviewStartArgs = {
-	request: host
-		.object({
-			...guard,
-			featureId,
-			artifactsChanged: host.array(artifact).max(MAX_ARTIFACTS),
-			packet: host
-				.object({
-					summary: text,
-					riskLenses: host.array(text).max(16).default([]),
-				})
-				.strict(),
-		})
-		.strict(),
-};
-const FeatureCompleteArgs = {
-	request: host
-		.object({
-			...guard,
-			featureId,
-			assignmentId: reviewAssignmentId,
-			summary: text,
-			result: reviewResult,
-		})
-		.strict(),
-};
-const FeatureResetArgs = {
-	request: host
-		.object({ ...guard, featureId, nextFeatureId: featureId.optional() })
-		.strict(),
-};
-const SessionCloseArgs = {
-	request: host
-		.object({
-			...guard,
-			sessionId: host.string().min(1).max(MAX_SESSION_ID_LENGTH),
-			kind: host.enum(["completed", "deferred", "abandoned"]),
-			summary: boundedHostText("Closure summary", { allowEmpty: true }).default(
-				"",
-			),
-		})
-		.strict(),
-};
+type WorkspaceFlowService = ReturnType<typeof createWorkspaceFlowService>;
 
 type ToolOptions = Readonly<{
 	validation: ValidationCaptureCoordinator;
@@ -273,12 +64,7 @@ function toolError(error: unknown): string {
 	return json(errorResponse(error));
 }
 
-/**
- * Adds the process-local `/flow-auto` context to a status response: how long the
- * latest lease has been active, and whether this host can carry a continuation at
- * all. Both are observations about the process, never Session v5 state, and a
- * failure to collect either leaves the response untouched.
- */
+/** Adds best-effort process-only timing and continuation observations. */
 function withAutoContext(
 	response: FlowToolResponse,
 	options: ToolOptions,
@@ -290,9 +76,7 @@ function withAutoContext(
 			const timing = options.autoTimingSnapshot?.();
 			if (timing) workflowData = { ...workflowData, autoTiming: timing };
 		}
-	} catch {
-		// Timing is diagnostic; losing it must not fail a status read.
-	}
+	} catch {}
 	try {
 		const support = options.autoContinuationSupport?.();
 		// `unknown` is withheld deliberately: before any assistant message exists it
@@ -313,9 +97,7 @@ function withAutoContext(
 				},
 			};
 		}
-	} catch {
-		// Same: a capability probe never blocks a read.
-	}
+	} catch {}
 	return workflowData === response.workflowData
 		? response
 		: { ...response, workflowData };
@@ -323,10 +105,12 @@ function withAutoContext(
 
 async function execute<T extends FlowToolResponse>(
 	context: ToolContext,
-	handler: (workspace: string) => Promise<T>,
+	handler: (flow: WorkspaceFlowService) => Promise<T>,
 ): Promise<string> {
 	try {
-		return json(await handler(resolveWorkspaceRoot(context)));
+		return json(
+			await handler(createWorkspaceFlowService(resolveWorkspaceRoot(context))),
+		);
 	} catch (error) {
 		return toolError(error);
 	}
@@ -335,7 +119,7 @@ async function execute<T extends FlowToolResponse>(
 function executeMutation<T extends FlowToolResponse>(
 	context: ToolContext,
 	validation: ValidationCaptureCoordinator,
-	handler: (workspace: string) => Promise<T>,
+	handler: (flow: WorkspaceFlowService) => Promise<T>,
 ): Promise<string> {
 	validation.cancel(context.sessionID);
 	return execute(context, handler);
@@ -343,8 +127,8 @@ function executeMutation<T extends FlowToolResponse>(
 
 function executeReviewerMutation<T extends FlowToolResponse>(
 	context: ToolContext,
-	handler: (workspace: string) => Promise<T>,
-	replayHandler: (workspace: string) => Promise<T>,
+	handler: (flow: WorkspaceFlowService) => Promise<T>,
+	replayHandler: (flow: WorkspaceFlowService) => Promise<T>,
 ): Promise<string> {
 	if (context.agent !== "flow-reviewer") {
 		return execute(context, replayHandler);
@@ -359,46 +143,46 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			args: { id: host.enum(FLOW_GUIDANCE_IDS) },
 			execute: async ({ id }) => getFlowGuidance(id).content,
 		}),
-		flow_status: tool({
+		flow_status: defineFlowTool({
 			description: "Read compact, execution, detail, or reviewer Flow state.",
-			args: StatusArgs,
+			schema: StatusInputSchema,
 			execute: (args, context) =>
 				execute(context, async (workspace) =>
 					withAutoContext(
-						await flowStatus(workspace, args),
+						await workspace.status(args),
 						options,
 						args.request.view,
 					),
 				),
 		}),
-		flow_plan_save: tool({
+		flow_plan_save: defineFlowTool({
 			description: "Create or replace the active draft plan.",
-			args: PlanSaveArgs,
+			schema: PlanSaveInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					flowPlanSave(workspace, args),
+					workspace.planSave(args),
 				),
 		}),
-		flow_plan_approve: tool({
+		flow_plan_approve: defineFlowTool({
 			description: "Approve the current draft plan.",
-			args: PlanApproveArgs,
+			schema: PlanApproveInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					flowPlanApprove(workspace, args),
+					workspace.planApprove(args),
 				),
 		}),
-		flow_run_start: tool({
+		flow_run_start: defineFlowTool({
 			description: "Start one runnable approved feature.",
-			args: RunStartArgs,
+			schema: RunStartInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					flowRunStart(workspace, args),
+					workspace.runStart(args),
 				),
 		}),
-		flow_validation_start: tool({
+		flow_validation_start: defineFlowTool({
 			description:
 				"Arm host observation for the exact next Bash command; its result is recorded directly in Session v5.",
-			args: ValidationStartArgs,
+			schema: ValidationStartInputSchema,
 			execute: async (args, context) => {
 				try {
 					const workspace = resolveWorkspaceRoot(context);
@@ -424,41 +208,41 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 				}
 			},
 		}),
-		flow_review_start: tool({
+		flow_review_start: defineFlowTool({
 			description:
 				"Create one independent review assignment using current applicable validation.",
-			args: ReviewStartArgs,
+			schema: ReviewStartInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					flowReviewStart(workspace, args),
+					workspace.reviewStart(args),
 				),
 		}),
-		flow_feature_complete: tool({
+		flow_feature_complete: defineFlowTool({
 			description:
 				"Submit a pending review result; only the reviewer may create a new completion, while exact accepted requests remain replayable for an active Session v5 workflow.",
-			args: FeatureCompleteArgs,
+			schema: FeatureCompleteInputSchema,
 			execute: (args, context) =>
 				executeReviewerMutation(
 					context,
-					(workspace) => flowFeatureComplete(workspace, args),
-					(workspace) => flowFeatureCompleteReplay(workspace, args),
+					(workspace) => workspace.featureComplete(args),
+					(workspace) => workspace.featureCompleteReplay(args),
 				),
 		}),
-		flow_feature_reset: tool({
+		flow_feature_reset: defineFlowTool({
 			description:
 				"Reset dependents and optionally start one exact next run atomically.",
-			args: FeatureResetArgs,
+			schema: FeatureResetInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					flowFeatureReset(workspace, args),
+					workspace.featureReset(args),
 				),
 		}),
-		flow_session_close: tool({
+		flow_session_close: defineFlowTool({
 			description: "Close and archive a session in one convergent operation.",
-			args: SessionCloseArgs,
+			schema: SessionCloseInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					flowSessionClose(workspace, args),
+					workspace.sessionClose(args),
 				),
 		}),
 	};

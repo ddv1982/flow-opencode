@@ -1,6 +1,6 @@
 import { dataNote } from "../../application/flow-response.js";
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
-import { flowStatus } from "../../infrastructure/fs/workspace-flow-service.js";
+import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
@@ -260,7 +260,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 	const workspace = ctx.worktree ?? ctx.directory;
 	const autoDrive = new AutoDriveCoordinator({
 		readProjection: async () => {
-			const response = await flowStatus(workspace, {
+			const response = await createWorkspaceFlowService(workspace).status({
 				request: { view: "compact" },
 			});
 			if (response.status !== "ok") throw new Error(response.summary);
