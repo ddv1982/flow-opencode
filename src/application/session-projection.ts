@@ -29,7 +29,7 @@ import {
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
-	unsatisfiedExtraEvidence,
+	unsatisfiedEvidence,
 } from "../domain/validation.js";
 import { type FindingsDigest, findingsDigest } from "./findings-digest.js";
 import type { StatusRequest } from "./schema.js";
@@ -230,7 +230,7 @@ function nextAction(
 	}
 	if (
 		finalRun &&
-		unsatisfiedExtraEvidence(session, passingValidation.sourceDigest).length > 0
+		unsatisfiedEvidence(session, passingValidation.sourceDigest).length > 0
 	)
 		return "await-user-direction";
 	return "flow_review_start";

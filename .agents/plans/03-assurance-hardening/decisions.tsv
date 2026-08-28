@@ -1,0 +1,6 @@
+ts	phase	decision	why	evidence	result
+2026-08-28T00:23:55Z	frame	froze releases until assurance phases one through nine pass	a confirmed false completion and non-rederivable release gate make another tag unsafe	.agents/plans/03-assurance-hardening/overview.md	open
+2026-08-28T00:25:54Z	phase-1	captured the gate-assertion regression before changing production code	the canary contradiction needed an executable red state	tests/domain-transitions.test.ts, targeted run returned 2 failures	red as expected
+2026-08-28T00:31:14Z	phase-1	made all plan evidence authoritative at final review, projection, and completed closure	ADR 0014 defines one satisfaction rule and the old extra-only helper caused the false completion	bun run check; bun run replay	563 pass, 1 intentional skip, 13 of 13 replays
+2026-08-28T00:31:14Z	phase-1	pinned the release-test canary clock	the fixed fixture expired on the wall clock and made the suite date-dependent	tests/release-metadata.test.ts	tests stable after expiry
+2026-08-28T00:34:10Z	phase-1	updated the normative evidence and legacy-review contract	two independent reviewers found prose that still described the extra-only rule	docs/validation-and-review.md; docs/adr/0005-flow-v6-session-v5-simplicity-first.md	review findings fixed, documentation gate green

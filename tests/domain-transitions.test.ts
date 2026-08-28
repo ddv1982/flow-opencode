@@ -107,6 +107,16 @@ function oneFeaturePlan(validation: string[], gate = "bun test"): Plan {
 	};
 }
 
+function planWithGateAssertions(assertions: string[]): Plan {
+	const base = oneFeaturePlan([PROSE_VALIDATION]);
+	const gate = repositoryEvidence("bun test")[0];
+	if (!gate) throw new Error("Expected repository evidence.");
+	return {
+		...base,
+		evidence: [{ ...gate, platform: "linux", assertions }],
+	};
+}
+
 const plannedGatePlan = oneFeaturePlan(
 	[PROSE_VALIDATION, PLANNED_GATE, PLANNED_GATE],
 	PLANNED_GATE,
@@ -1564,6 +1574,82 @@ describe("Session v5 domain state machine", () => {
 		).toBe("completed");
 	});
 
+	test("requires gate assertions before final review and projected review", () => {
+		const environment = deterministicEnvironment();
+		const acceptance = "repository acceptance passes";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: planWithGateAssertions([acceptance]),
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-skipped-acceptance",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			hostPlatform: "linux",
+			observedAssertions: [{ name: acceptance, status: "skipped" }],
+		});
+
+		expect(compactProjection(session).nextAction).toBe("await-user-direction");
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-after-gate-skip"),
+		).toThrow(`${JSON.stringify(acceptance)} skipped`);
+	});
+
+	test("requires gate assertions again at completed closure", () => {
+		const environment = deterministicEnvironment();
+		const acceptance = "repository acceptance passes";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: planWithGateAssertions([acceptance]),
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-passed-acceptance",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			hostPlatform: "linux",
+			observedAssertions: [{ name: acceptance, status: "passed" }],
+		});
+		const accepted = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"review-after-gate-pass",
+		);
+		const completed = pass(accepted.session, DELIVERY, accepted.assignment);
+		const unsupported: Session = {
+			...completed,
+			runs: completed.runs.map((run) => ({
+				...run,
+				validations: run.validations.map((validation) => ({
+					...validation,
+					observedAssertions: [{ name: acceptance, status: "absent" }],
+				})),
+			})),
+		};
+
+		expect(() =>
+			closeSession(unsupported, {
+				operationId: "close-with-absent-gate-assertion",
+				expectedRevision: unsupported.revision,
+				sessionId: unsupported.id,
+				kind: "completed",
+				summary: "Claimed complete.",
+			}),
+		).toThrow(`${JSON.stringify(acceptance)} absent`);
+	});
+
 	test("requires a new plan to declare assertions for every external entry", () => {
 		const environment = deterministicEnvironment();
 		expect(() =>
@@ -1807,7 +1893,7 @@ describe("Session v5 domain state machine", () => {
 		SessionSchema.parse(structuredClone(review.session));
 	});
 
-	test("grandfathers review assignments admitted before exact-gate policy", () => {
+	test("grandfathers review submission but rechecks evidence at completed closure", () => {
 		const environment = deterministicEnvironment();
 		// Focused, so only the plan listing vetoes it: the legacy admission below
 		// swaps in a prose-only plan to reconstruct state accepted before that veto
@@ -1838,8 +1924,11 @@ describe("Session v5 domain state machine", () => {
 			requestReview(prospective, DELIVERY, environment, "new-admission"),
 		).toThrow(PLANNED_GATE);
 
+		const legacyPlan = oneFeaturePlan([PROSE_VALIDATION]);
+		const { evidence: legacyEvidence, ...planWithoutEvidence } = legacyPlan;
+		if (!legacyEvidence) throw new Error("Expected repository evidence.");
 		const accepted = requestReview(
-			{ ...prospective, plan: oneFeaturePlan([PROSE_VALIDATION]) },
+			{ ...prospective, plan: planWithoutEvidence },
 			DELIVERY,
 			environment,
 			"legacy-admission",
@@ -1861,13 +1950,14 @@ describe("Session v5 domain state machine", () => {
 		).toBe(true);
 		const completed = pass(grandfathered, DELIVERY, accepted.assignment);
 		expect(sessionStatus(completed)).toBe("completed");
-		const closed = closeSession(completed, {
-			operationId: "close-grandfathered",
-			expectedRevision: completed.revision,
-			sessionId: completed.id,
-			kind: "completed",
-			summary: "Previously accepted review completed.",
-		}).session;
-		expect(sessionStatus(closed)).toBe("closed");
+		expect(() =>
+			closeSession(completed, {
+				operationId: "close-grandfathered",
+				expectedRevision: completed.revision,
+				sessionId: completed.id,
+				kind: "completed",
+				summary: "Previously accepted review completed.",
+			}),
+		).toThrow(PLANNED_GATE);
 	});
 });
