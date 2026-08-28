@@ -1,11 +1,22 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { canonicalSha256 } from "../evals/canonical-json.js";
-import { inspectArtifact, samePackedArtifact } from "../evals/provenance.js";
+import {
+	evaluatorIdentity,
+	inspectArtifact,
+	samePackedArtifact,
+} from "../evals/provenance.js";
+import {
+	RELEASE_POLICY_SHA256,
+	releaseCatalog,
+	releaseGraderBundle,
+	releaseScenarioCatalog,
+} from "../evals/release-policy.js";
 import {
 	type ArtifactIdentity,
 	ArtifactIdentitySchema,
 } from "../evals/report.js";
+import { SCENARIOS } from "../evals/scenarios.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
@@ -211,28 +222,51 @@ export function qualificationRecordIssue(
 	) {
 		return `the qualification artifact digest for ${version} is invalid`;
 	}
+	const expectedCatalogSha256 = canonicalSha256(
+		"flow-decision-catalog-v1",
+		releaseCatalog(),
+	);
+	if (entry.catalogSha256 !== expectedCatalogSha256) {
+		return `the qualification catalog digest for ${version} is not current repository policy`;
+	}
+	if (entry.policySha256 !== RELEASE_POLICY_SHA256) {
+		return `the qualification policy digest for ${version} is not current repository policy`;
+	}
+	const expectedEvaluator = evaluatorIdentity({
+		sourceCommit: parsedArtifact.data.sourceCommit,
+		caseCatalog: releaseScenarioCatalog(SCENARIOS),
+		policyCatalog: releaseCatalog(),
+		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
+	});
+	if (
+		entry.evaluatorSha256 !==
+		canonicalSha256("flow-decision-evaluator-v1", expectedEvaluator)
+	) {
+		return `the qualification evaluator digest for ${version} is not current repository authority`;
+	}
 	if (
 		expectedArtifact &&
 		!samePackedArtifact(parsedArtifact.data, expectedArtifact)
 	) {
 		return `the qualification artifact does not match the rebuilt artifact for ${version}`;
 	}
+	const expectedDecisionInput = canonicalSha256("flow-decision-input-v1", {
+		reportSha256: entry.reportSha256,
+		artifactSha256: entry.artifactSha256,
+		evaluatorSha256: entry.evaluatorSha256,
+		catalogSha256: entry.catalogSha256,
+		policySha256: entry.policySha256,
+		actorSha256: entry.actorSha256,
+		analyzerSha256: entry.analyzerSha256,
+		expectedProvenanceSha256: entry.expectedProvenanceSha256,
+		canarySha256: entry.canarySha256 ?? null,
+	});
+	if (entry.decisionInputSha256 !== expectedDecisionInput) {
+		return `the qualification decision input digest for ${version} is invalid`;
+	}
 	if (expectedCanarySha256 !== undefined) {
 		if (entry.canarySha256 !== expectedCanarySha256)
 			return `the qualification record for ${version} is not bound to the exact canary`;
-		const expectedDecisionInput = canonicalSha256("flow-decision-input-v1", {
-			reportSha256: entry.reportSha256,
-			artifactSha256: entry.artifactSha256,
-			evaluatorSha256: entry.evaluatorSha256,
-			catalogSha256: entry.catalogSha256,
-			policySha256: entry.policySha256,
-			actorSha256: entry.actorSha256,
-			analyzerSha256: entry.analyzerSha256,
-			expectedProvenanceSha256: entry.expectedProvenanceSha256,
-			canarySha256: entry.canarySha256,
-		});
-		if (entry.decisionInputSha256 !== expectedDecisionInput)
-			return `the qualification decision input does not bind the exact canary for ${version}`;
 	}
 	return null;
 }

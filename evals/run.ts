@@ -73,8 +73,19 @@ import {
 	tarballSha256,
 } from "./provenance.js";
 import {
-	RELEASE_CASE_SAMPLING,
-	RELEASE_MIN_PROVIDERS,
+	assertReleaseHost,
+	assertReleaseScenarioOrder,
+	RELEASE_ANALYSIS_SHA256,
+	RELEASE_HOST_POLICY,
+	releaseAttemptsFor,
+	releaseCatalog,
+	releaseCellsFor,
+	releaseGraderBundle,
+	releaseHostConfigSha256,
+	releaseMinimumProviders,
+	releaseRandomizationSeed,
+	releaseScenarioCatalog,
+	selectReleaseScenarios,
 } from "./release-policy.js";
 import type {
 	ActorIdentity,
@@ -211,37 +222,31 @@ function legacyRequestedModel(modelId: string): ModelIdentity {
 	});
 }
 
-const V2_ANALYSIS_DIGEST = canonicalSha256("flow-v2-analysis-v1", {
-	kind: "rate",
-	primaryOutcome: "conformance-pass",
-});
+const ORDINARY_ANALYSIS_SHA256 = canonicalSha256(
+	"flow-v2-ordinary-analysis-v1",
+	{ kind: "rate", primaryOutcome: "conformance-pass" },
+);
 
 export function caseCatalogFor(
 	scenarios: readonly (typeof SCENARIOS)[number][],
+	sampling: EvalSampling,
 ): ValidatedCaseCatalog {
+	if (sampling.kind === "release") {
+		assertReleaseScenarioOrder(scenarios);
+		return releaseCatalog();
+	}
 	const parsed = parseCaseCatalog(
-		scenarios.map((scenario) => {
-			const releaseSampling =
-				RELEASE_CASE_SAMPLING[
-					scenario.id as keyof typeof RELEASE_CASE_SAMPLING
-				];
-			const minPassRate = releaseSampling?.minPassRate ?? null;
-			return {
-				caseId: scenario.id,
-				caseVersion: 1,
-				evidenceClass: "conformance" as const,
-				oracle: "durable-state" as const,
-				release:
-					minPassRate === null
-						? ("report-only" as const)
-						: ("required" as const),
-				minProviders: minPassRate === null ? 1 : RELEASE_MIN_PROVIDERS,
-				minScoredAttempts:
-					minPassRate === null ? 1 : releaseSampling.attemptsPerModel,
-				minPassRate,
-				reviewerPromotionRecordSha256: null,
-			};
-		}),
+		scenarios.map((scenario) => ({
+			caseId: scenario.id,
+			caseVersion: 1,
+			evidenceClass: "conformance" as const,
+			oracle: "durable-state" as const,
+			release: "report-only" as const,
+			minProviders: 1,
+			minScoredAttempts: 1,
+			minPassRate: null,
+			reviewerPromotionRecordSha256: null,
+		})),
 	);
 	if (!parsed.ok) {
 		throw new Error(
@@ -262,14 +267,11 @@ export function attemptsForScenario(
 	sampling: EvalSampling,
 ): number {
 	if (sampling.kind === "ordinary") return sampling.repeat;
-	const policy =
-		RELEASE_CASE_SAMPLING[scenarioId as keyof typeof RELEASE_CASE_SAMPLING];
-	if (!policy) throw new Error(`No release sampling policy for ${scenarioId}.`);
-	return policy.attemptsPerModel;
+	return releaseAttemptsFor(scenarioId);
 }
 
 export function releaseScenarios(): readonly (typeof SCENARIOS)[number][] {
-	return SCENARIOS.filter((scenario) => scenario.id in RELEASE_CASE_SAMPLING);
+	return selectReleaseScenarios(SCENARIOS);
 }
 
 export function campaignPlanFor(input: {
@@ -278,44 +280,52 @@ export function campaignPlanFor(input: {
 	readonly sampling: EvalSampling;
 	readonly opencodeVersion: string;
 }): CampaignPlan {
+	if (input.sampling.kind === "release") {
+		assertReleaseScenarioOrder(input.scenarios);
+	}
 	let slot = 0;
-	const cells = input.models.flatMap((model) =>
-		input.scenarios.flatMap((scenario) => {
-			const attempts = attemptsForScenario(scenario.id, input.sampling);
-			return Array.from({ length: attempts }, (_, repetition) => {
-				const block = slot;
-				slot += 1;
-				const identity = canonicalSha256("flow-v2-cell-v1", {
-					model,
-					scenario: scenario.id,
-					repetition,
-				});
-				return {
-					cellId: `cell-${identity.slice("sha256:".length)}`,
-					blockId: `block-${block}`,
-					caseId: scenario.id,
-					caseVersion: 1,
-					armToken: null,
-					repetition,
-					managerModel: legacyRequestedModel(model),
-					reviewerModel: null,
-					schedule: "primary" as const,
-				};
-			});
-		}),
-	);
+	const ordinaryRepeat =
+		input.sampling.kind === "ordinary" ? input.sampling.repeat : null;
+	const cells =
+		ordinaryRepeat === null
+			? releaseCellsFor(input.models.map(legacyRequestedModel))
+			: input.models.flatMap((model) =>
+					input.scenarios.flatMap((scenario) =>
+						Array.from({ length: ordinaryRepeat }, (_, repetition) => {
+							const block = slot;
+							slot += 1;
+							const identity = canonicalSha256("flow-v2-cell-v1", {
+								model,
+								scenario: scenario.id,
+								repetition,
+							});
+							return {
+								cellId: `cell-${identity.slice("sha256:".length)}`,
+								blockId: `block-${block}`,
+								caseId: scenario.id,
+								caseVersion: 1,
+								armToken: null,
+								repetition,
+								managerModel: legacyRequestedModel(model),
+								reviewerModel: null,
+								schedule: "primary" as const,
+							};
+						}),
+					),
+				);
 	const plan = {
 		schemaVersion: 1 as const,
 		planId: "flow-v2-primary-matrix",
 		planSha256: `sha256:${"0".repeat(64)}`,
-		randomizationSeed: canonicalSha256("flow-v2-seed-v1", {
-			models: input.models,
-			scenarios: input.scenarios.map((scenario) => scenario.id),
-			...(input.sampling.kind === "ordinary"
-				? { repeat: input.sampling.repeat }
-				: { releaseSampling: RELEASE_CASE_SAMPLING }),
-			opencodeVersion: input.opencodeVersion,
-		}),
+		randomizationSeed:
+			input.sampling.kind === "release"
+				? releaseRandomizationSeed(input.models.map(legacyRequestedModel))
+				: canonicalSha256("flow-v2-seed-v1", {
+						models: input.models,
+						scenarios: input.scenarios.map((scenario) => scenario.id),
+						repeat: input.sampling.repeat,
+						opencodeVersion: input.opencodeVersion,
+					}),
 		cells,
 		abortPolicy: { retry: "never" as const, maxReplacementBlocks: 0 },
 		stoppingRule: {
@@ -325,7 +335,10 @@ export function campaignPlanFor(input: {
 		analysis: {
 			kind: "rate" as const,
 			primaryOutcome: "conformance-pass",
-			versionSha256: V2_ANALYSIS_DIGEST,
+			versionSha256:
+				input.sampling.kind === "release"
+					? RELEASE_ANALYSIS_SHA256
+					: ORDINARY_ANALYSIS_SHA256,
 		},
 		budget: {
 			maxUsd: null,
@@ -508,9 +521,13 @@ function parseArgs(argv: string[]) {
 				process.exit(2);
 			}
 		}
-		if (providers.size < RELEASE_MIN_PROVIDERS) {
+		const minimumProviders = releaseMinimumProviders();
+		if (
+			models.length !== minimumProviders ||
+			providers.size !== minimumProviders
+		) {
 			console.error(
-				`--release requires at least ${RELEASE_MIN_PROVIDERS} distinct route providers.`,
+				`--release requires exactly ${minimumProviders} models on distinct route providers.`,
 			);
 			process.exit(2);
 		}
@@ -705,9 +722,19 @@ async function main(): Promise<void> {
 	}
 
 	const repositoryRoot = join(import.meta.dir, "..");
+	if (sampling.kind === "release") {
+		assertReleaseHost({
+			platform: normalizeEvidencePlatform(process.platform),
+			opencodeOverride: process.env.FLOW_OPENCODE_SMOKE_VERSION,
+			reviewerModelOverride: process.env.OPENCODE_FLOW_REVIEWER_MODEL,
+			reviewerStepsOverride: process.env.OPENCODE_FLOW_REVIEWER_STEPS,
+		});
+	}
 	const opencodeVersion =
-		process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim() ||
-		packageJson.devDependencies["@opencode-ai/plugin"];
+		sampling.kind === "release"
+			? RELEASE_HOST_POLICY.opencodeVersion
+			: process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim() ||
+				packageJson.devDependencies["@opencode-ai/plugin"];
 	const footprint = promptFootprint();
 
 	console.log(`Flow ${packageJson.version} on OpenCode ${opencodeVersion}`);
@@ -728,7 +755,7 @@ async function main(): Promise<void> {
 	);
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 	const v2Directory = join(reportDir, `${stamp}.v2`);
-	const v2Catalog = caseCatalogFor(selected);
+	const v2Catalog = caseCatalogFor(selected, sampling);
 	const v2Plan = campaignPlanFor({
 		models,
 		scenarios: selected,
@@ -760,17 +787,23 @@ async function main(): Promise<void> {
 		);
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
-			caseCatalog: selected.map((scenario) => ({
-				id: scenario.id,
-				files: Object.keys(scenario.files).sort(),
-				steps: scenario.steps.map((step) => ({
-					command: step.command,
-					arguments: step.arguments,
-					freshSession: step.freshSession === true,
-				})),
-			})),
+			caseCatalog:
+				sampling.kind === "release"
+					? releaseScenarioCatalog(selected)
+					: selected.map((scenario) => ({
+							id: scenario.id,
+							files: Object.keys(scenario.files).sort(),
+							steps: scenario.steps.map((step) => ({
+								command: step.command,
+								arguments: step.arguments,
+								freshSession: step.freshSession === true,
+							})),
+						})),
 			policyCatalog: v2Catalog,
-			graderBundle: { sourceTreeSha256: artifact.sourceTreeSha256 },
+			graderBundle:
+				sampling.kind === "release"
+					? releaseGraderBundle(repositoryRoot)
+					: { sourceTreeSha256: artifact.sourceTreeSha256 },
 		});
 		const packageCache = await preparePackageCache(tarball, packDir, toolchain);
 		if ((await tarballSha256(tarball)) !== artifact.tarballSha256) {
@@ -856,6 +889,20 @@ async function main(): Promise<void> {
 				Number(reviewerStepsText) <= 1000
 					? Number(reviewerStepsText)
 					: null;
+			const measuredHostConfigSha256 =
+				sampling.kind === "release"
+					? releaseHostConfigSha256({
+							packageVersion: packageJson.version,
+							model: legacyRequestedModel(model),
+						})
+					: hostConfigSha256({
+							opencodeVersion,
+							plugin: `opencode-plugin-flow@${packageJson.version}`,
+							model,
+							reviewerModel: requestedReviewerModel,
+							reviewerSteps: requestedReviewerSteps,
+							platform: hostPlatform,
+						});
 			const label = `${scenario.id} @ ${model} (${attempt}/${scheduledAttempts})`;
 			let cassette: Cassette | null = null;
 			const started = Date.now();
@@ -1012,14 +1059,7 @@ async function main(): Promise<void> {
 							provenance: {
 								artifact,
 								evaluator,
-								hostConfigSha256: hostConfigSha256({
-									opencodeVersion,
-									plugin: `opencode-plugin-flow@${packageJson.version}`,
-									model,
-									reviewerModel: requestedReviewerModel,
-									reviewerSteps: requestedReviewerSteps,
-									platform: hostPlatform,
-								}),
+								hostConfigSha256: measuredHostConfigSha256,
 								actors,
 								instructions,
 								transcript,
@@ -1129,14 +1169,7 @@ async function main(): Promise<void> {
 							provenance: {
 								artifact,
 								evaluator,
-								hostConfigSha256: hostConfigSha256({
-									opencodeVersion,
-									plugin: `opencode-plugin-flow@${packageJson.version}`,
-									model,
-									reviewerModel: requestedReviewerModel,
-									reviewerSteps: requestedReviewerSteps,
-									platform: hostPlatform,
-								}),
+								hostConfigSha256: measuredHostConfigSha256,
 								actors: [],
 								instructions: [],
 								transcript,

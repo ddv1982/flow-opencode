@@ -4,6 +4,14 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalSha256 } from "../evals/canonical-json.js";
+import { evaluatorIdentity } from "../evals/provenance.js";
+import {
+	RELEASE_POLICY_SHA256,
+	releaseCatalog,
+	releaseGraderBundle,
+	releaseScenarioCatalog,
+} from "../evals/release-policy.js";
+import { SCENARIOS } from "../evals/scenarios.js";
 import type { CanaryRecord } from "../scripts/eval-canary.js";
 import {
 	artifactIdentitySha256,
@@ -49,25 +57,50 @@ const artifact = (packageVersion: string) => ({
 	tarballSha256: digest("b"),
 	unpackedManifestSha256: digest("c"),
 });
-const decisionRecord = (packageVersion: string, verdict = "VERIFIED") => ({
-	schemaVersion: 1,
-	reportId: "report",
-	verdict,
-	artifact: artifact(packageVersion),
-	reportSha256: digest("d"),
-	artifactSha256: canonicalSha256(
-		"flow-decision-artifact-v1",
-		artifact(packageVersion),
-	),
-	evaluatorSha256: digest("f"),
-	catalogSha256: digest("9"),
-	policySha256: digest("0"),
-	actorSha256: digest("1"),
-	analyzerSha256: digest("2"),
-	expectedProvenanceSha256: digest("3"),
-	decisionInputSha256: digest("4"),
-	canarySha256: null,
-});
+const decisionRecord = (packageVersion: string, verdict = "VERIFIED") => {
+	const measuredArtifact = artifact(packageVersion);
+	const evaluator = evaluatorIdentity({
+		sourceCommit: measuredArtifact.sourceCommit,
+		caseCatalog: releaseScenarioCatalog(SCENARIOS),
+		policyCatalog: releaseCatalog(),
+		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
+	});
+	const base = {
+		schemaVersion: 1,
+		reportId: "report",
+		verdict,
+		artifact: measuredArtifact,
+		reportSha256: digest("d"),
+		artifactSha256: canonicalSha256(
+			"flow-decision-artifact-v1",
+			measuredArtifact,
+		),
+		evaluatorSha256: canonicalSha256("flow-decision-evaluator-v1", evaluator),
+		catalogSha256: canonicalSha256(
+			"flow-decision-catalog-v1",
+			releaseCatalog(),
+		),
+		policySha256: RELEASE_POLICY_SHA256,
+		actorSha256: digest("1"),
+		analyzerSha256: digest("2"),
+		expectedProvenanceSha256: digest("3"),
+		canarySha256: null,
+	};
+	return {
+		...base,
+		decisionInputSha256: canonicalSha256("flow-decision-input-v1", {
+			reportSha256: base.reportSha256,
+			artifactSha256: base.artifactSha256,
+			evaluatorSha256: base.evaluatorSha256,
+			catalogSha256: base.catalogSha256,
+			policySha256: base.policySha256,
+			actorSha256: base.actorSha256,
+			analyzerSha256: base.analyzerSha256,
+			expectedProvenanceSha256: base.expectedProvenanceSha256,
+			canarySha256: null,
+		}),
+	};
+};
 function canaryBoundDecision(packageVersion: string, canarySha256: string) {
 	const base = decisionRecord(packageVersion);
 	return {
@@ -248,6 +281,24 @@ describe("release metadata", () => {
 				artifactSha256: digest("e"),
 			}),
 		).toMatch(/artifact digest/);
+		for (const field of [
+			"catalogSha256",
+			"policySha256",
+			"evaluatorSha256",
+		] as const) {
+			expect(
+				qualificationRecordIssue("8.0.0", {
+					...decisionRecord("8.0.0"),
+					[field]: digest("e"),
+				}),
+			).toMatch(/not current repository/);
+		}
+		expect(
+			qualificationRecordIssue("8.0.0", {
+				...decisionRecord("8.0.0"),
+				decisionInputSha256: digest("e"),
+			}),
+		).toMatch(/decision input digest/);
 		expect(
 			qualificationRecordIssue("8.0.0", decisionRecord("8.0.0"), {
 				...artifact("8.0.0"),
