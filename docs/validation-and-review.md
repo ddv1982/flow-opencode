@@ -52,16 +52,15 @@ broad claim on any other command. Nothing decides whether the declared command i
 a test; [ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
 caller declaration made at planning time.
 
-`savePlan` requires `evidence`: the gate entry plus every extra observation this
-host may be unable to produce. Each extra entry names the command, `platform`,
-and `assertions`. An entry is satisfied only by an eligible observation of that
-exact command on the platform it declared, with every declared case `passed`.
-Case outcomes come from a JUnit report named by `resultsPath` after arming
-([ADR 0012](adr/0012-named-results-over-exit-codes.md)). `startReview` refuses a
-final review while any extra entry is unsatisfied, and `closeSession` refuses a
-`completed` closure while any extra entry has never passed. The gate still uses
-the broad-observation and veto rules. Feature reviews are not vetoed, so a goal
-can be split into the half this host can prove and the half it cannot.
+`savePlan` requires `evidence`: one gate plus optional extra observations. Every
+entry names its command, `platform`, and `assertions`. One satisfaction rule
+applies to all entries: an eligible exact-command observation on the declared
+platform with every declared case `passed`. Case outcomes come from a JUnit
+report named by `resultsPath` after arming
+([ADR 0012](adr/0012-named-results-over-exit-codes.md)). Final review and
+`completed` closure refuse any unsatisfied entry. The gate also requires broad
+scope and remains subject to command vetoes. Feature reviews are not vetoed, so a
+goal can split into the half this host can prove and the half it cannot.
 [ADR 0014](adr/0014-one-evidence-record.md) records the collapse of `gate` and
 `externalEvidence` into this one field.
 
@@ -76,8 +75,8 @@ sets are vetoed this way: any command whose stored bytes equal an entry in the
 active feature's validation list, since Flow does not parse validation prose
 into commands; the plan's gate command; and any command an observation recorded
 at `broad` scope.
-Accepted same-schema Session v5 pending or completed reviews are grandfathered;
-Flow neither reopens them nor adds a retroactive veto during completion or close.
+Accepted same-schema Session v5 reviews remain valid for submission and feature
+completion. Completed closure still rechecks immutable plan evidence.
 [ADR 0009](adr/0009-scope-keyed-validation-veto.md) records why the label binds.
 
 An armed capture waits at most 15 minutes for its exact Bash command to begin.

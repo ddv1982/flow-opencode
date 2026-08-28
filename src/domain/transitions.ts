@@ -34,7 +34,7 @@ import {
 	isValidationEligible,
 	isValidationFresh,
 	unresolvedVetoedCommands,
-	unsatisfiedExtraEvidence,
+	unsatisfiedEvidence,
 } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
@@ -480,18 +480,6 @@ export function startReview(
 		);
 	}
 	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
-	if (kind === "final") {
-		const unsatisfied = unsatisfiedExtraEvidence(session, input.sourceDigest);
-		if (unsatisfied.length > 0) {
-			fail(
-				`Final review requires the plan's declared evidence to pass for the current workspace content: ${unsatisfied
-					.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
-					.join(
-						", ",
-					)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
-			);
-		}
-	}
 	const applicable = run.validations.filter(
 		(validation) =>
 			isValidationEligible(validation, input.sourceDigest) &&
@@ -507,6 +495,18 @@ export function startReview(
 				? "Final review requires passing broad validation for the current workspace content."
 				: "Review requires passing validation for the current workspace content.",
 		);
+	}
+	if (kind === "final") {
+		const unsatisfied = unsatisfiedEvidence(session, input.sourceDigest);
+		if (unsatisfied.length > 0) {
+			fail(
+				`Final review requires the plan's declared evidence to pass for the current workspace content: ${unsatisfied
+					.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
+					.join(
+						", ",
+					)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
+			);
+		}
 	}
 	const assignmentId = environment.newId("review");
 	let created: ReviewAssignment | null = null;
@@ -769,7 +769,7 @@ export function closeSession(
 		fail("A completed close requires every planned feature to be complete.");
 	}
 	if (input.kind === "completed") {
-		const unsatisfied = unsatisfiedExtraEvidence(session);
+		const unsatisfied = unsatisfiedEvidence(session);
 		if (unsatisfied.length > 0) {
 			fail(
 				`A completed close requires the plan's declared evidence to have passed: ${unsatisfied
