@@ -526,6 +526,41 @@ describe("canary record boundary", () => {
 		expect(derived.status).toBe("failed");
 	});
 
+	test("rejects lifecycle evidence spliced across manager sessions", () => {
+		const value = prepared();
+		const transcript = canaryTranscript();
+		const manager = transcript.messages.at(0);
+		if (!manager) throw new Error("Canary manager fixture is missing.");
+		const statusIndex = manager.parts.findIndex(
+			({ tool }) => tool === "flow_status",
+		);
+		const status = manager.parts.splice(statusIndex, 1).at(0);
+		if (!status) throw new Error("Canary status fixture is missing.");
+		transcript.messages.push({
+			info: {
+				role: "assistant",
+				agent: "build",
+				providerID: "provider",
+				modelID: "model",
+				sessionID: "ses_other_manager",
+			},
+			parts: [status],
+		});
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: canarySession(),
+			transcript,
+		});
+		expect(derived.checks["installs-packed-artifact"]).toBe(false);
+		expect(derived.checks["loads-flow-tools"]).toBe(false);
+		expect(derived.status).toBe("failed");
+	});
+
 	test("accepts strict passed, failed, and incomplete records", () => {
 		expect(parseCanaryRecord(record()).ok).toBe(true);
 		expect(
