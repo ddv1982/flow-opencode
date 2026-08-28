@@ -264,4 +264,46 @@ describe("eval provenance", () => {
 		expect(transcript.text).not.toContain("abc");
 		expect(transcript.text).toContain('"safe":"ok"');
 	});
+
+	test("preserves token-count metrics while redacting credential tokens", () => {
+		const transcript = redactTranscript({
+			projectPath: "/tmp/project",
+			value: {
+				counts: {
+					outputTokens: 321,
+					input_tokens: 123,
+					reasoning_tokens: 45,
+					cacheReadTokens: 67,
+					cache_read_tokens: 89,
+					"cache-write-tokens": 10,
+				},
+				unsafeCounts: {
+					outputTokens: "output-secret",
+					cache_read_tokens: "cache-secret",
+				},
+				inputToken: "singular-secret",
+				output_tokens_count: "suffixed-secret",
+				token: "credential-secret",
+				accessToken: "access-secret",
+			},
+		});
+		expect(JSON.parse(transcript.text)).toEqual({
+			accessToken: "[redacted]",
+			counts: {
+				"cache-write-tokens": 10,
+				cacheReadTokens: 67,
+				cache_read_tokens: 89,
+				input_tokens: 123,
+				outputTokens: 321,
+				reasoning_tokens: 45,
+			},
+			unsafeCounts: {
+				cache_read_tokens: "[redacted]",
+				outputTokens: "[redacted]",
+			},
+			inputToken: "[redacted]",
+			output_tokens_count: "[redacted]",
+			token: "[redacted]",
+		});
+	});
 });

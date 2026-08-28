@@ -327,6 +327,21 @@ export function instructionDelivery(
 
 const SENSITIVE_FIELD =
 	/(?:authorization|credential|password|passwd|secret|token|api[_-]?key|client[_-]?secret)/i;
+const TOKEN_COUNT_FIELD =
+	/^(?:input|output|reasoning|cache[_-]?(?:read|write))[_-]?tokens$/i;
+
+function isTokenCountField(key: string, value: unknown): boolean {
+	return (
+		TOKEN_COUNT_FIELD.test(key) &&
+		typeof value === "number" &&
+		Number.isSafeInteger(value) &&
+		value >= 0
+	);
+}
+
+function isSensitiveField(key: string, value: unknown): boolean {
+	return SENSITIVE_FIELD.test(key) && !isTokenCountField(key, value);
+}
 
 function redactSensitiveFields(value: unknown): unknown {
 	if (Array.isArray(value)) return value.map(redactSensitiveFields);
@@ -334,7 +349,7 @@ function redactSensitiveFields(value: unknown): unknown {
 		return Object.fromEntries(
 			Object.entries(value).map(([key, item]) => [
 				key,
-				SENSITIVE_FIELD.test(key) ? REDACTED : redactSensitiveFields(item),
+				isSensitiveField(key, item) ? REDACTED : redactSensitiveFields(item),
 			]),
 		);
 	}
