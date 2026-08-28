@@ -92,11 +92,11 @@ Flow records the host observation; copy no host-observed fields.
 
 `scope: "broad"` runs the plan's gate evidence command and nothing else.
 
-A failed, incomplete, or source-drifted observation of a plan-listed command or
-of the declared gate command blocks review until that same command passes for
-current source.
+A failed or stale planned command blocks review until that exact command passes
+for current source.
 
-A gate that cannot pass must leave this exact handoff before returning:
+A gate that cannot pass must first name the failing case or output that blocks
+it, then leave this exact handoff before returning:
 `Environment: <declared environment>`, `Command: <exact planned command>`, and
 `Next step: Run this command there and resume Flow, or choose defer/abandon.`
 

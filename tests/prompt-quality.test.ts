@@ -268,7 +268,7 @@ describe("Flow prompt structure", () => {
 			"command byte-for-byte and environment, defer, or abandon",
 		);
 		expect(getFlowGuidance("flow-run").content).toContain(
-			"A gate that cannot pass must leave this exact handoff",
+			"A gate that cannot pass must first name",
 		);
 	});
 
@@ -285,6 +285,7 @@ describe("Flow prompt structure", () => {
 		expect(run).toContain("plan-bound JUnit");
 		expect(run).toContain("repeat that value exactly");
 		expect(run).toContain("Environment: <declared environment>");
+		expect(run).toContain("name the failing case or output");
 	});
 
 	test("continues a reviewer matrix only when the packet asked for one", () => {
