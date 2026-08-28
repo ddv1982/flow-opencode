@@ -33,6 +33,7 @@ import {
 	preservePrimaryFailure,
 	providerFailure,
 } from "./failure-origin.js";
+import type { ScenarioGradeInput } from "./grader-input.js";
 import {
 	extractObservedActor,
 	guidanceLoad,
@@ -292,7 +293,7 @@ export type Scenario = {
 	 */
 	readonly mayEscalate?: boolean;
 	/** Returns a list of failures. Empty means the scenario passed. */
-	readonly check: (outcome: Outcome) => readonly string[];
+	readonly check: (outcome: ScenarioGradeInput) => readonly string[];
 };
 
 /**
@@ -810,7 +811,7 @@ export async function runQueues<Job, Result>(
  * both for a human judging whether asking was right and for a check that reads
  * whether the blocker was named at all.
  */
-export function askedQuestions(outcome: Outcome): string[] {
+export function askedQuestions(outcome: Pick<Outcome, "allCalls">): string[] {
 	return outcome.allCalls
 		.filter((call) => call.tool === "question")
 		.map((call) => JSON.stringify(call.input));

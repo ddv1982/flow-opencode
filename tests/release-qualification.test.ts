@@ -12,9 +12,14 @@ import {
 	releaseScenarioCatalog,
 } from "../evals/release-policy.js";
 import { campaignPlanSha256 } from "../evals/report.js";
+import {
+	reportStoreAttemptFileName,
+	reportStoreCellFileName,
+} from "../evals/report-store.js";
 import { campaignPlanFor, releaseScenarios } from "../evals/run.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import {
+	assertCampaignEvidenceLayout,
 	decisionRecordFor,
 	qualifyV2,
 	writeDecisionRecord,
@@ -135,6 +140,51 @@ function releaseReport(stopped = false) {
 }
 
 describe("repository-owned v2 qualification", () => {
+	test("requires one canonical attempt and transcript path per cell", () => {
+		const attempts = ["a", "b", "c"].map((id) => ({
+			attemptId: `attempt-${id}`,
+			cellId: `cell-${id}`,
+			transcript: {
+				artifact: `transcripts/${reportStoreAttemptFileName(`attempt-${id}`)}`,
+			},
+		}));
+		const attemptFiles = attempts.map((attempt) => ({
+			name: reportStoreCellFileName(attempt.cellId),
+			attemptId: attempt.attemptId,
+		}));
+		const transcriptFiles = attempts.map((attempt) =>
+			reportStoreAttemptFileName(attempt.attemptId),
+		);
+		const firstAttempt = attempts.at(0);
+		const firstFile = attemptFiles.at(0);
+		if (!firstAttempt || !firstFile)
+			throw new Error("Campaign layout fixture is missing.");
+		expect(() =>
+			assertCampaignEvidenceLayout({
+				attempts,
+				attemptFiles,
+				transcriptFiles,
+			}),
+		).not.toThrow();
+		expect(() =>
+			assertCampaignEvidenceLayout({
+				attempts,
+				attemptFiles: [...attemptFiles, firstFile],
+				transcriptFiles,
+			}),
+		).toThrow(/duplicated/);
+		expect(() =>
+			assertCampaignEvidenceLayout({
+				attempts: attempts.map((attempt, index) =>
+					index === 2
+						? { ...attempt, transcript: firstAttempt.transcript }
+						: attempt,
+				),
+				attemptFiles,
+				transcriptFiles,
+			}),
+		).toThrow(/noncanonical evidence path/);
+	});
 	test("derives all verdicts from the canonical 76-cell policy", () => {
 		const verified = qualifyV2({
 			reportInput: releaseReport(),
@@ -267,6 +317,25 @@ describe("repository-owned v2 qualification", () => {
 			const after = releaseGraderBundle(root);
 			expect(after).not.toEqual(before);
 			expect(after.files.map((file) => file.path)).toContain("evals/grade.ts");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	test("rejects non-literal imports from the grader closure", async () => {
+		const root = await mkdtemp(join(tmpdir(), "flow-grader-bundle-"));
+		try {
+			await mkdir(join(root, "evals"), { recursive: true });
+			await mkdir(join(root, "scripts"), { recursive: true });
+			await writeFile(
+				join(root, "evals", "run.ts"),
+				"const path = './grade.js'; await import(path);\n",
+			);
+			await writeFile(
+				join(root, "scripts", "qualify-release.ts"),
+				"export {};\n",
+			);
+			expect(() => releaseGraderBundle(root)).toThrow(/non-literal import/);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

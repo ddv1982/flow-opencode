@@ -61,10 +61,10 @@ direction. The cadence follows from that:
 - **Freeze on the public surface** while the guarantees are being measured: tools,
   commands, guides, agents, and the Session v5 shape. Additive optional fields are
   allowed; removals and renames are not.
-- **No release** without a committed exact V2 decision and fresh canary.
-  `bun run qualify` writes the decision under `evals/decisions`; release metadata
-  refuses a tag without its matching `evals/canary` evidence. A `CHANGELOG` entry
-  states the schema impact explicitly.
+- **No release** without a sealed V2 qualification bundle and fresh canary.
+  The bundle retains every attempt, transcript, grader source, and exact artifact
+  needed to reproduce its decision. A `CHANGELOG` entry states the schema impact
+  explicitly.
 - **Patch releases** for defects and host-compatibility fixes, which is what the
   weekly OpenCode compatibility smoke exists to catch early.
 - **Deprecate before removing.** A surface that is going away is announced in one
@@ -78,9 +78,7 @@ bun run eval -- --release --model <anthropic-id> --model <openai-id>
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.
 bun run eval:canary -- record <record-options>
-bun run qualify -- --report <campaign-dir>/report.json \
-  --catalog <campaign-dir>/catalog.json \
-  --artifact <campaign-dir>/artifact.tgz \
+bun run qualify -- --campaign-dir <campaign-dir> \
   --canary evals/canary/<version>.json
 ```
 
@@ -93,7 +91,7 @@ described with their prices in
 `bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
 ordinary OpenCode on hidden-graded tasks. It is not a qualification input.
 
-The scheduled workflow (`.github/workflows/evals.yml`) does the same weekly and
-publishes the report as an artifact. It skips itself when no model matrix or
-provider credentials are configured, because an unconfigured fork is a
-configuration state and not a failure.
+The scheduled workflow runs the paid campaign weekly and publishes its complete
+campaign directory. Sealing waits for the exact-artifact canary, so the workflow
+reports qualification as inconclusive rather than manufacturing a partial bundle.
+It skips itself when no model matrix or provider credentials are configured.

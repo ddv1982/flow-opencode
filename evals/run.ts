@@ -27,6 +27,11 @@ import {
 } from "./cassette.js";
 import { parseCaseCatalog, type ValidatedCaseCatalog } from "./catalog.js";
 import {
+	deriveConformanceOutcome,
+	retainedInstructions,
+	retainedReportActors,
+} from "./conformance-evidence.js";
+import {
 	type AttemptFailure,
 	type DurableFailureOrigin,
 	EvaluationPersistenceError,
@@ -39,6 +44,12 @@ import {
 	preservePrimaryFailure,
 	strongestFailureOrigin,
 } from "./failure-origin.js";
+import {
+	actorsWithSessions,
+	pseudonymizeEvalIds,
+	RetainedScenarioEvidenceSchema,
+	scenarioGradeInput,
+} from "./grader-input.js";
 import {
 	askedQuestions,
 	askedScoring,
@@ -88,7 +99,6 @@ import {
 	selectReleaseScenarios,
 } from "./release-policy.js";
 import type {
-	ActorIdentity,
 	ArtifactIdentity,
 	AttemptRecordV2,
 	CampaignCompletion,
@@ -352,26 +362,11 @@ export function campaignPlanFor(input: {
 	return plan;
 }
 
-function reportActor(
-	actor: RunResult["provenance"]["actors"][number],
-): ActorIdentity | null {
-	if (actor.sessionIds.length === 0) return null;
-	const actualModel =
-		actor.actualModel.kind === "observed"
-			? {
-					kind: "unobserved" as const,
-					reason: `Host observed providerID=${actor.actualModel.value.providerID} modelID=${actor.actualModel.value.modelID}; full family, gateway, and revision identity is unavailable.`,
-				}
-			: actor.actualModel;
-	return {
-		role: actor.role,
-		requestedModel: actor.requestedModel,
-		actualModel,
-		sessionIds: [...actor.sessionIds],
-	};
-}
-
-function attemptOutcome(result: RunResult): AttemptRecordV2["outcome"] {
+function attemptOutcome(
+	result: RunResult,
+	scenario: (typeof SCENARIOS)[number],
+	evidence: ReturnType<typeof RetainedScenarioEvidenceSchema.parse>,
+): AttemptRecordV2["outcome"] {
 	if (result.failure) {
 		return failureOutcome(result.failure);
 	}
@@ -382,28 +377,13 @@ function attemptOutcome(result: RunResult): AttemptRecordV2["outcome"] {
 				result.questions[0] ?? "The model escalated without a scored outcome.",
 		};
 	}
-	return {
-		kind: "product",
-		passed: result.passed,
-		endedBy: result.escalated ? "user-escalation" : "quiet",
-		issues: result.passed
-			? []
-			: result.issues.length > 0
-				? [...result.issues]
-				: ["The scenario did not satisfy its durable-state checks."],
-		evidence: {
-			kind: "conformance",
-			falseCompletion: result.honesty.falseCompletion,
-			unsubmittedReviews: result.reviewer.unsubmitted,
-			facts: {
-				scenario: result.scenario,
-				model: result.model,
-				attempt: result.attempt,
-				flowCalls: result.flowCalls.length,
-				guidanceLoads: result.provenance.instructions.length,
-			},
-		},
-	};
+	return deriveConformanceOutcome({
+		evidence,
+		check: scenario.check,
+		scenarioId: result.scenario,
+		model: result.model,
+		attempt: result.attempt,
+	});
 }
 
 /** One attempt to run, and the slot its result belongs in. */
@@ -833,16 +813,17 @@ async function main(): Promise<void> {
 					text: `/${step.command} ${step.arguments}`.trim(),
 				}),
 			);
-			const guidanceInstructions = result.provenance.instructions.map(
+			const retainedEvidence = RetainedScenarioEvidenceSchema.parse(
+				JSON.parse(result.provenance.transcript.text),
+			);
+			const guidanceInstructions = retainedInstructions(retainedEvidence).map(
 				(instruction, sequence) => ({
 					...instruction,
 					sequence: commandInstructions.length + sequence,
 				}),
 			);
 			const instructions = [...commandInstructions, ...guidanceInstructions];
-			const actors = result.provenance.actors
-				.map(reportActor)
-				.filter((actor): actor is ActorIdentity => actor !== null);
+			const actors = retainedReportActors(retainedEvidence);
 			const attemptRecord: AttemptRecordV2 = {
 				schemaVersion: 2,
 				attemptId,
@@ -861,11 +842,11 @@ async function main(): Promise<void> {
 					sha256: storedTranscript.sha256,
 					artifact: storedTranscript.artifact,
 				},
-				outcome: attemptOutcome(result),
+				outcome: attemptOutcome(result, scenario, retainedEvidence),
 				usage: {
-					durationMs: result.durationMs,
-					outputTokens: result.tokens.output,
-					costUsd: result.costUsd,
+					durationMs: retainedEvidence.usage.durationMs,
+					outputTokens: retainedEvidence.usage.outputTokens,
+					costUsd: retainedEvidence.usage.costUsd,
 				},
 			};
 			await reportStore.writeAttempt(attemptRecord);
@@ -979,6 +960,9 @@ async function main(): Promise<void> {
 							false,
 							() => activeHost.outcome(sessionIds, Date.now() - started),
 						);
+						const cell = campaignCells[job.slot];
+						if (!cell?.managerModel)
+							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
 						const observedFailure = outcome.providerError;
 						// Asking the user is the designed end of some scenarios, but only at the
 						// wall. `askedScoring` holds the rule and its reasoning.
@@ -987,13 +971,16 @@ async function main(): Promise<void> {
 							scenario.steps.length,
 							scenario.mayEscalate === true,
 						);
+						const retainedGradeInput = pseudonymizeEvalIds(
+							scenarioGradeInput(outcome),
+						);
 						// An aborted or unscored step leaves the workflow mid-flight, so `check`
 						// would report expected-but-meaningless gaps. The stop is the finding;
 						// the collected evidence explains it.
 						const evaluation =
 							stepFailure || observedFailure || unscored
 								? null
-								: evaluateScenario(scenario.check, outcome);
+								: evaluateScenario(scenario.check, retainedGradeInput);
 						const failure =
 							stepFailure ??
 							observedFailure ??
@@ -1004,14 +991,16 @@ async function main(): Promise<void> {
 							...(outcome.session ? [outcome.session] : []),
 							...outcome.archives,
 						] as MetricSession[];
-						const actors = (outcome.actors ?? []).map((actor) => ({
-							...actor,
-							requestedModelId:
-								actor.role === "manager" ? model : requestedReviewerModel,
-							requestedModel: legacyRequestedModel(
-								actor.role === "manager" ? model : requestedReviewerModel,
-							),
-						}));
+						const actors = actorsWithSessions(outcome.actors ?? []).map(
+							(actor) => ({
+								...actor,
+								requestedModelId:
+									actor.role === "manager" ? model : requestedReviewerModel,
+								requestedModel: legacyRequestedModel(
+									actor.role === "manager" ? model : requestedReviewerModel,
+								),
+							}),
+						);
 						const instructions = (outcome.guidanceLoads ?? []).map((load) =>
 							instructionDelivery({
 								source: "guidance",
@@ -1023,10 +1012,22 @@ async function main(): Promise<void> {
 						const transcript = redactTranscript({
 							projectPath: host.project,
 							value: {
+								schemaVersion: 1,
+								attempt: {
+									attemptId: `attempt-${cell.cellId}`,
+									cellId: cell.cellId,
+									caseId: cell.caseId,
+									repetition: cell.repetition,
+									model: cell.managerModel,
+								},
 								actors,
 								guidanceLoads: outcome.guidanceLoads ?? [],
-								calls: outcome.allCalls,
-								finalText: outcome.finalText,
+								gradeInput: retainedGradeInput,
+								usage: {
+									durationMs: outcome.durationMs,
+									outputTokens: outcome.tokens.output,
+									costUsd: outcome.costUsd,
+								},
 							},
 						});
 						const common: RunResultCommon = {
@@ -1115,9 +1116,6 @@ async function main(): Promise<void> {
 												: scoreLabel
 							}`,
 						);
-						const cell = campaignCells[job.slot];
-						if (!cell)
-							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
 						await persistEvaluation("attempt", () =>
 							persistV2Attempt(result, cell, scenario),
 						);

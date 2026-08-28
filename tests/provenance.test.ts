@@ -228,6 +228,7 @@ describe("eval provenance", () => {
 		const transcript = redactTranscript({
 			projectPath: "/private/eval/project",
 			value: {
+				sessions: ["ses_parentSecret123", "session:review-child-123"],
 				output:
 					"/private/eval/project/src/index.ts api_key=super-secret-value sk-proj-abcdefghijklmnopqr",
 			},
@@ -236,6 +237,9 @@ describe("eval provenance", () => {
 		expect(transcript.text).toContain("[redacted]");
 		expect(transcript.text).not.toContain("super-secret-value");
 		expect(transcript.text).not.toContain("sk-proj-abcdefghijklmnopqr");
+		expect(transcript.text).not.toContain("ses_parentSecret123");
+		expect(transcript.text).not.toContain("session:review-child-123");
+		expect(transcript.text).toMatch(/id_[a-f0-9]{16}/);
 		expect(transcript.sha256).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 

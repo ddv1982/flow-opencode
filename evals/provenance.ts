@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { createFileSourceIdentityProvider } from "../src/infrastructure/fs/source-identity.js";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { normalizeRecorded, REDACTED } from "./cassette.js";
+import { pseudonymizeEvalIds } from "./grader-input.js";
 import type {
 	ArtifactIdentity,
 	EvaluatorIdentity,
@@ -345,7 +346,9 @@ export function redactTranscript(input: {
 	readonly projectPath: string;
 }): RedactedTranscript {
 	const text = canonicalJson(
-		redactSensitiveFields(normalizeRecorded(input.value, input.projectPath)),
+		pseudonymizeEvalIds(
+			redactSensitiveFields(normalizeRecorded(input.value, input.projectPath)),
+		),
 	);
 	return { text, sha256: sha256(new TextEncoder().encode(text)) };
 }

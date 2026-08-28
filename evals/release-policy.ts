@@ -281,7 +281,7 @@ export function releaseCaseCatalogSha256(
 	);
 }
 
-export function releaseGraderBundle(repositoryRoot: string) {
+export function releaseGraderSourceBundle(repositoryRoot: string) {
 	const root = resolve(repositoryRoot);
 	const pending = ["evals/run.ts", "scripts/qualify-release.ts"];
 	const files = new Map<string, string>();
@@ -300,6 +300,10 @@ export function releaseGraderBundle(repositoryRoot: string) {
 		const scanSource = source.startsWith("#!")
 			? source.slice(source.indexOf("\n") + 1)
 			: source;
+		for (const match of scanSource.matchAll(/\bimport\s*\(([^)]*)\)/g)) {
+			if (!/^\s*["'][^"']+["']\s*$/.test(match[1] ?? ""))
+				throw new Error(`Release grader has a non-literal import: ${path}`);
+		}
 		const specifiers = transpiler
 			.scanImports(scanSource)
 			.map((item) => item.path)
@@ -321,9 +325,17 @@ export function releaseGraderBundle(repositoryRoot: string) {
 	return {
 		files: [...files]
 			.sort(([left], [right]) => left.localeCompare(right))
-			.map(([path, source]) => ({
+			.map(([path, source]) => ({ path, source })),
+	};
+}
+
+export function releaseGraderBundle(repositoryRoot: string) {
+	return {
+		files: releaseGraderSourceBundle(repositoryRoot).files.map(
+			({ path, source }) => ({
 				path,
 				sha256: canonicalSha256("flow-release-grader-file-v1", source),
-			})),
+			}),
+		),
 	};
 }
