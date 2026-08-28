@@ -21,6 +21,7 @@ import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
+	CANARY_DERIVATION_VERSION,
 	type CanaryRecord,
 	canaryRecordSha256,
 	parseCanaryRecord,
@@ -39,6 +40,8 @@ export function canaryRecordIssue(
 	const entry = record as Partial<CanaryRecord>;
 	if (entry.schemaVersion !== 1 || entry.status !== "passed")
 		return `the canary for ${version} is not a passed v1 record`;
+	if (entry.derivationVersion !== CANARY_DERIVATION_VERSION)
+		return `the canary record for ${version} is not evidence-derived`;
 	if (entry.releaseTag !== expectedTag)
 		return `the canary tag ${String(entry.releaseTag)} does not match ${expectedTag}`;
 	const parsed = parseCanaryRecord(record);
