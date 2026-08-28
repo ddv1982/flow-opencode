@@ -31,6 +31,7 @@ import {
 	retainedInstructions,
 	retainedReportActors,
 } from "./conformance-evidence.js";
+import { deriveEnvironmentReserveState } from "./environment-reserves.js";
 import {
 	type AttemptFailure,
 	type DurableFailureOrigin,
@@ -46,9 +47,11 @@ import {
 } from "./failure-origin.js";
 import {
 	actorsWithSessions,
+	deriveRetainedFailure,
 	pseudonymizeEvalIds,
 	RetainedScenarioEvidenceSchema,
 	retainedFailureEvidence,
+	retainedFailureObservation,
 	scenarioGradeInput,
 } from "./grader-input.js";
 import {
@@ -324,6 +327,10 @@ export function campaignPlanFor(input: {
 						}),
 					),
 				);
+	const primaryCellCount = cells.filter(
+		(cell) => cell.schedule === "primary",
+	).length;
+	const reserveCellCount = cells.length - primaryCellCount;
 	const plan = {
 		schemaVersion: 1 as const,
 		planId: "flow-v2-primary-matrix",
@@ -338,10 +345,16 @@ export function campaignPlanFor(input: {
 						opencodeVersion: input.opencodeVersion,
 					}),
 		cells,
-		abortPolicy: { retry: "never" as const, maxReplacementBlocks: 0 },
+		abortPolicy:
+			input.sampling.kind === "release"
+				? {
+						retry: "environment-only" as const,
+						maxReplacementBlocks: reserveCellCount,
+					}
+				: { retry: "never" as const, maxReplacementBlocks: 0 },
 		stoppingRule: {
 			kind: "fixed-attempts" as const,
-			count: cells.length,
+			count: primaryCellCount,
 		},
 		analysis: {
 			kind: "rate" as const,
@@ -422,6 +435,31 @@ export function jobsFor(
 			}));
 		}),
 	);
+}
+
+export function reserveJobsFor(
+	plan: CampaignPlan,
+	cellIds: readonly string[],
+	scenarios: readonly (typeof SCENARIOS)[number][],
+): Job[][] {
+	const selected = new Set(cellIds);
+	const byModel = new Map<string, Job[]>();
+	for (const [slot, cell] of plan.cells.entries()) {
+		if (!selected.has(cell.cellId) || !cell.managerModel) continue;
+		const scenario = scenarios.find(({ id }) => id === cell.caseId);
+		if (!scenario) throw new Error(`Missing reserve scenario ${cell.caseId}.`);
+		const model = `${cell.managerModel.routeProvider}/${cell.managerModel.model}`;
+		const jobs = byModel.get(model) ?? [];
+		jobs.push({
+			model,
+			scenario,
+			attempt: cell.repetition + 1,
+			scheduledAttempts: cell.repetition + 1,
+			slot,
+		});
+		byModel.set(model, jobs);
+	}
+	return [...byModel.values()];
 }
 
 /** What one attempt produced: always a result, a cassette only if it reached a model. */
@@ -731,7 +769,7 @@ async function main(): Promise<void> {
 		`Prompt footprint: ${footprint.total} bytes across ${SURFACES.length} surfaces`,
 	);
 	console.log(
-		`Running ${sampling.kind === "release" ? "release sample: " : ""}${selected.length} scenario(s) x ${models.length} model(s), ${models.length * selected.reduce((total, scenario) => total + attemptsForScenario(scenario.id, sampling), 0)} scheduled attempt(s)` +
+		`Running ${sampling.kind === "release" ? "release sample: " : ""}${selected.length} scenario(s) x ${models.length} model(s), ${models.length * selected.reduce((total, scenario) => total + attemptsForScenario(scenario.id, sampling), 0)} scheduled primary attempt(s)` +
 			(concurrency > 1
 				? `, ${concurrency} models at a time — lines land as attempts finish, not in order\n`
 				: "\n"),
@@ -1020,9 +1058,8 @@ async function main(): Promise<void> {
 								text: load.rawOutput,
 							}),
 						);
-						const transcript = redactTranscript({
-							projectPath: host.project,
-							value: {
+						const retainedEvidence = pseudonymizeEvalIds(
+							RetainedScenarioEvidenceSchema.parse({
 								schemaVersion: 1,
 								attempt: {
 									attemptId: `attempt-${cell.cellId}`,
@@ -1039,7 +1076,42 @@ async function main(): Promise<void> {
 									outputTokens: outcome.tokens.output,
 									costUsd: outcome.costUsd,
 								},
-							},
+								failure: failure
+									? {
+											origin: failure.origin,
+											code: failure.code,
+											retryable: failure.retryable,
+										}
+									: null,
+								failureObservation: failure
+									? retainedFailureObservation({
+											...failure,
+											gradeInput: retainedGradeInput,
+											...(outcome.providerErrorObservation
+												? {
+														providerErrorObservation:
+															outcome.providerErrorObservation,
+													}
+												: {}),
+										})
+									: null,
+							}),
+						);
+						const rederivedFailure = deriveRetainedFailure(retainedEvidence);
+						const durableFailure =
+							failure?.retryable &&
+							(!rederivedFailure ||
+								rederivedFailure.origin !== failure.origin ||
+								rederivedFailure.code !== failure.code ||
+								rederivedFailure.retryable !== failure.retryable)
+								? { ...failure, retryable: false }
+								: failure;
+						if (durableFailure && retainedEvidence.failure) {
+							retainedEvidence.failure.retryable = durableFailure.retryable;
+						}
+						const transcript = redactTranscript({
+							projectPath: host.project,
+							value: retainedEvidence,
 						});
 						const common: RunResultCommon = {
 							scenario: scenario.id,
@@ -1077,8 +1149,13 @@ async function main(): Promise<void> {
 								transcript,
 							},
 						};
-						const result: RunResult = failure
-							? { ...common, passed: false, issues: [], failure }
+						const result: RunResult = durableFailure
+							? {
+									...common,
+									passed: false,
+									issues: [],
+									failure: durableFailure,
+								}
 							: {
 									...common,
 									passed: !unscored && issues.length === 0,
@@ -1153,6 +1230,15 @@ async function main(): Promise<void> {
 								retainedGradeInput = undefined;
 							}
 						}
+						const failureGradeInput = retainedGradeInput ?? {
+							schemaVersion: 1 as const,
+							flowCalls: [],
+							allCalls: [],
+							session: null,
+							archives: [],
+							finalText: "",
+							providerErrors: [],
+						};
 						let observedActors: RunResultCommon["provenance"]["actors"] = [];
 						if (outcome) {
 							try {
@@ -1171,30 +1257,59 @@ async function main(): Promise<void> {
 								observedActors = [];
 							}
 						}
-						const retainedEvidence = retainedFailureEvidence({
-							attempt: {
-								attemptId: `attempt-${cell.cellId}`,
-								cellId: cell.cellId,
-								caseId: cell.caseId,
-								repetition: cell.repetition,
-								model: cell.managerModel,
-							},
-							durationMs,
-							...(outcome
+						const failureObservation = retainedFailureObservation({
+							...failure,
+							gradeInput: failureGradeInput,
+							...(outcome?.providerErrorObservation
 								? {
-										outputTokens: outcome.tokens.output,
-										costUsd: outcome.costUsd,
-										actors: observedActors.map((actor) => ({
-											...actor,
-											sessionIds: [...actor.sessionIds],
-										})),
-										guidanceLoads: (outcome.guidanceLoads ?? []).map(
-											(load) => ({ ...load }),
-										),
+										providerErrorObservation: outcome.providerErrorObservation,
 									}
 								: {}),
-							...(retainedGradeInput ? { gradeInput: retainedGradeInput } : {}),
 						});
+						const retainedEvidence = pseudonymizeEvalIds(
+							retainedFailureEvidence({
+								attempt: {
+									attemptId: `attempt-${cell.cellId}`,
+									cellId: cell.cellId,
+									caseId: cell.caseId,
+									repetition: cell.repetition,
+									model: cell.managerModel,
+								},
+								durationMs,
+								...(outcome
+									? {
+											outputTokens: outcome.tokens.output,
+											costUsd: outcome.costUsd,
+											actors: observedActors.map((actor) => ({
+												...actor,
+												sessionIds: [...actor.sessionIds],
+											})),
+											guidanceLoads: (outcome.guidanceLoads ?? []).map(
+												(load) => ({ ...load }),
+											),
+										}
+									: {}),
+								gradeInput: failureGradeInput,
+								failure: {
+									origin: failure.origin,
+									code: failure.code,
+									retryable: failure.retryable,
+								},
+								...(failureObservation ? { failureObservation } : {}),
+							}),
+						);
+						const rederivedFailure = deriveRetainedFailure(retainedEvidence);
+						const durableFailure =
+							failure.retryable &&
+							(!rederivedFailure ||
+								rederivedFailure.origin !== failure.origin ||
+								rederivedFailure.code !== failure.code ||
+								rederivedFailure.retryable !== failure.retryable)
+								? { ...failure, retryable: false }
+								: failure;
+						if (retainedEvidence.failure) {
+							retainedEvidence.failure.retryable = durableFailure.retryable;
+						}
 						const transcript = redactTranscript({
 							projectPath: host?.project ?? "",
 							value: retainedEvidence,
@@ -1224,7 +1339,7 @@ async function main(): Promise<void> {
 							attempt,
 							passed: false,
 							issues: [],
-							failure,
+							failure: durableFailure,
 							tokens: outcome?.tokens ?? {
 								input: 0,
 								output: 0,
@@ -1313,13 +1428,55 @@ async function main(): Promise<void> {
 			results.push(entry.result);
 			if (entry.cassette) cassettes.push(entry.cassette);
 		}
+		if (sampling.kind === "release") {
+			const primaryCount = v2Plan.cells.filter(
+				(cell) => cell.schedule === "primary",
+			).length;
+			const primaryAttemptCount = v2Attempts.filter((attempt) =>
+				v2Plan.cells.some(
+					(cell) =>
+						cell.cellId === attempt.cellId && cell.schedule === "primary",
+				),
+			).length;
+			const reserveState = deriveEnvironmentReserveState(v2Plan, v2Attempts);
+			if (
+				primaryAttemptCount === primaryCount &&
+				!reserveState.fatal &&
+				reserveState.exhaustedStrata.length === 0 &&
+				reserveState.nextReserveCellIds.length > 0
+			) {
+				const reserveRecorded = await runQueues(
+					reserveJobsFor(v2Plan, reserveState.nextReserveCellIds, selected),
+					concurrency,
+					runAttempt,
+					() => {
+						const current = deriveEnvironmentReserveState(v2Plan, v2Attempts);
+						return current.fatal || current.exhaustedStrata.length > 0;
+					},
+				);
+				for (const entry of reserveRecorded.sort(
+					(left, right) => left.slot - right.slot,
+				)) {
+					results.push(entry.result);
+					if (entry.cassette) cassettes.push(entry.cassette);
+				}
+			}
+		}
 	} finally {
 		await rm(packDir, { recursive: true, force: true });
 	}
+	const reserveState = deriveEnvironmentReserveState(v2Plan, v2Attempts);
+	const primaryCells = v2Plan.cells.filter(
+		(cell) => cell.schedule === "primary",
+	);
+	const attemptedCellIds = new Set(v2Attempts.map((attempt) => attempt.cellId));
 	const v2Complete =
-		results.length === v2Plan.cells.length &&
-		v2Attempts.length === v2Plan.cells.length &&
-		v2Attempts.every((attempt) => attempt.outcome.kind === "product");
+		primaryCells.every((cell) => attemptedCellIds.has(cell.cellId)) &&
+		reserveState.activatedReserveCellIds.every((cellId) =>
+			attemptedCellIds.has(cellId),
+		) &&
+		reserveState.targetsSatisfied &&
+		!reserveState.fatal;
 	const v2CostUsd = v2Attempts.some((attempt) => attempt.usage.costUsd === null)
 		? null
 		: v2Attempts.reduce(
@@ -1341,7 +1498,7 @@ async function main(): Promise<void> {
 					: "evaluator",
 		startedAt: campaignStartedAt,
 		finishedAt: v2FinishedAt,
-		activatedReserveCellIds: [],
+		activatedReserveCellIds: [...reserveState.activatedReserveCellIds],
 		observed: {
 			attempts: v2Attempts.length,
 			outputTokens: v2Attempts.reduce(

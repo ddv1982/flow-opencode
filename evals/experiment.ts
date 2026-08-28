@@ -117,7 +117,10 @@ export type PairedDecision = {
 	readonly ties: number;
 	readonly power: PowerMetadata;
 };
-type ExperimentCell = ValidatedReport["plan"]["cells"][number];
+type PlanCell = ValidatedReport["plan"]["cells"][number];
+type ExperimentCell = Omit<PlanCell, "schedule"> & {
+	readonly schedule: "primary" | "replacement-reserve";
+};
 export type ExperimentBlock = {
 	readonly blockId: string;
 	readonly caseId: string;
@@ -495,16 +498,22 @@ export function createPairedPlan(input: {
 }
 
 export function pairedBlocks(plan: {
-	readonly cells: readonly ExperimentCell[];
+	readonly cells: readonly PlanCell[];
 }): readonly ExperimentBlock[] {
-	const grouped = new Map<string, ExperimentCell[]>();
+	const grouped = new Map<string, PlanCell[]>();
 	for (const cell of plan.cells) {
 		grouped.set(cell.blockId, [...(grouped.get(cell.blockId) ?? []), cell]);
 	}
 	return [...grouped.entries()].map(([currentBlockId, cells]) => {
 		const first = cells[0];
 		const second = cells[1];
-		if (!first || !second || cells.length !== 2) {
+		if (
+			!first ||
+			!second ||
+			cells.length !== 2 ||
+			first.schedule === "environment-reserve" ||
+			second.schedule === "environment-reserve"
+		) {
 			throw new Error(`Invalid experiment block ${currentBlockId}.`);
 		}
 		return {
@@ -513,7 +522,7 @@ export function pairedBlocks(plan: {
 			caseVersion: first.caseVersion,
 			repetition: first.repetition,
 			schedule: first.schedule,
-			cells: [first, second],
+			cells: [first, second] as [ExperimentCell, ExperimentCell],
 		};
 	});
 }

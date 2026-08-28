@@ -14,7 +14,10 @@ import {
 	retainedInstructions,
 	retainedReportActors,
 } from "./conformance-evidence.js";
-import { RetainedScenarioEvidenceSchema } from "./grader-input.js";
+import {
+	deriveRetainedFailure,
+	RetainedScenarioEvidenceSchema,
+} from "./grader-input.js";
 import {
 	inspectArtifact,
 	instructionDelivery,
@@ -157,8 +160,11 @@ function regradeAttempts(
 			);
 		const evidence = RetainedScenarioEvidenceSchema.parse(json(transcript));
 		const scenario = SCENARIOS.find(({ id }) => id === attempt.caseId);
+		const cell = report.plan.cells.find(
+			({ cellId }) => cellId === attempt.cellId,
+		);
 		const manager = attempt.actors.find(({ role }) => role === "manager");
-		if (!scenario || !manager || attempt.outcome.kind !== "product")
+		if (!scenario || !cell?.managerModel)
 			throw new Error(
 				`Bundled attempt ${attempt.attemptId} is not regradable.`,
 			);
@@ -169,27 +175,13 @@ function regradeAttempts(
 					cellId: attempt.cellId,
 					caseId: attempt.caseId,
 					repetition: attempt.repetition,
-					model: manager.requestedModel,
+					model: cell.managerModel,
 				}) ||
 			canonicalJson(evidence.usage) !== canonicalJson(attempt.usage)
 		)
 			throw new Error(`Bundled attempt ${attempt.attemptId} binding differs.`);
 		const actors = retainedReportActors(evidence);
 		const retainedManager = actors.find(({ role }) => role === "manager");
-		if (!retainedManager)
-			throw new Error("Bundled attempt has no manager evidence.");
-		for (const id of retainedManager.sessionIds) {
-			if (sessions.has(id))
-				throw new Error("Bundled attempts reuse manager evidence.");
-			sessions.add(id);
-		}
-		const outcome = deriveConformanceOutcome({
-			evidence,
-			check: scenario.check,
-			scenarioId: attempt.caseId,
-			model: `${evidence.attempt.model.routeProvider}/${evidence.attempt.model.model}`,
-			attempt: attempt.repetition + 1,
-		});
 		const commands = scenario.steps.map((step, sequence) =>
 			instructionDelivery({
 				source: "command",
@@ -204,6 +196,57 @@ function regradeAttempts(
 				sequence: commands.length + sequence,
 			}),
 		);
+		if (attempt.outcome.kind === "failure") {
+			const derivedFailure = deriveRetainedFailure(evidence);
+			const expectedFailure = {
+				origin: attempt.outcome.origin,
+				code: attempt.outcome.code,
+				retryable: attempt.outcome.retryable,
+			};
+			if (
+				(attempt.outcome.origin !== "host" &&
+					attempt.outcome.origin !== "provider") ||
+				!attempt.outcome.retryable ||
+				canonicalJson(derivedFailure) !== canonicalJson(expectedFailure) ||
+				canonicalJson(evidence.failure) !== canonicalJson(derivedFailure) ||
+				canonicalJson(actors) !== canonicalJson(attempt.actors) ||
+				canonicalJson([...commands, ...guidance]) !==
+					canonicalJson(attempt.instructions)
+			)
+				throw new Error(
+					`Bundled failure attempt ${attempt.attemptId} does not reproduce.`,
+				);
+			if (retainedManager) {
+				for (const id of retainedManager.sessionIds) {
+					if (sessions.has(id))
+						throw new Error("Bundled attempts reuse manager evidence.");
+					sessions.add(id);
+				}
+			}
+			continue;
+		}
+		if (!manager || !retainedManager || attempt.outcome.kind !== "product")
+			throw new Error(
+				`Bundled attempt ${attempt.attemptId} is not a product measurement.`,
+			);
+		if (
+			(evidence.failure !== null && evidence.failure !== undefined) ||
+			(evidence.failureObservation !== null &&
+				evidence.failureObservation !== undefined)
+		)
+			throw new Error("Bundled product attempt carries a failure claim.");
+		for (const id of retainedManager.sessionIds) {
+			if (sessions.has(id))
+				throw new Error("Bundled attempts reuse manager evidence.");
+			sessions.add(id);
+		}
+		const outcome = deriveConformanceOutcome({
+			evidence,
+			check: scenario.check,
+			scenarioId: attempt.caseId,
+			model: `${evidence.attempt.model.routeProvider}/${evidence.attempt.model.model}`,
+			attempt: attempt.repetition + 1,
+		});
 		if (
 			canonicalJson(outcome) !== canonicalJson(attempt.outcome) ||
 			canonicalJson(actors) !== canonicalJson(attempt.actors) ||

@@ -56,17 +56,35 @@ export function validatePairing(
 				"Non-paired campaigns cannot declare arm tokens.",
 			);
 		}
-		if (
-			report.plan.abortPolicy.retry !== "never" ||
-			report.plan.cells.some((cell) => cell.schedule === "replacement-reserve")
-		) {
+		const replacementReserves = report.plan.cells.some(
+			(cell) => cell.schedule === "replacement-reserve",
+		);
+		const environmentReserves = report.plan.cells.some(
+			(cell) => cell.schedule === "environment-reserve",
+		);
+		const invalidRetry =
+			report.plan.abortPolicy.retry === "environment-only"
+				? replacementReserves || !environmentReserves
+				: report.plan.abortPolicy.retry !== "never" ||
+					replacementReserves ||
+					environmentReserves;
+		if (invalidRetry) {
 			add(
 				"$.plan.abortPolicy",
 				"pair",
-				"Non-paired campaigns cannot declare replacement retries.",
+				"Non-paired campaigns require either no reserves or environment-only reserves.",
 			);
 		}
 		return { issues, scoredOutcomes: productCells.size };
+	}
+	if (
+		report.plan.cells.some((cell) => cell.schedule === "environment-reserve")
+	) {
+		add(
+			"$.plan.cells",
+			"pair",
+			"Paired campaigns cannot declare environment reserves.",
+		);
 	}
 
 	let scoredOutcomes = 0;

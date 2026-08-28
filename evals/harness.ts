@@ -208,6 +208,12 @@ export function askedScoring(
 }
 
 /** Everything a scenario is allowed to assert against. */
+type ProviderErrorObservation = Readonly<{
+	sessionId: string;
+	name: string;
+	message: string;
+}>;
+
 export type Outcome = {
 	/** Ordered `flow_*` calls only — the workflow's observable spine. */
 	readonly flowCalls: readonly ObservedToolCall[];
@@ -244,6 +250,7 @@ export type Outcome = {
 	readonly assistantMessages: number;
 	readonly durationMs: number;
 	readonly providerError: AttemptFailure<"provider"> | null;
+	readonly providerErrorObservation?: ProviderErrorObservation | null;
 };
 
 /**
@@ -1006,6 +1013,32 @@ function summarizeError(failure: unknown): string {
 	return JSON.stringify(failure);
 }
 
+function providerErrorObservation(
+	failure: unknown,
+	sessionId: string,
+): ProviderErrorObservation | null {
+	if (typeof failure === "string" && failure.trim()) {
+		return { sessionId, name: "provider-error", message: failure };
+	}
+	if (!failure || typeof failure !== "object") return null;
+	const record = failure as Record<string, unknown>;
+	const data =
+		record.data && typeof record.data === "object"
+			? (record.data as Record<string, unknown>)
+			: undefined;
+	const name = data?.name ?? record.name;
+	const message = data?.message ?? record.message;
+	if (typeof name !== "string" || !name.trim()) return null;
+	return {
+		sessionId,
+		name,
+		message:
+			typeof message === "string" && message.trim()
+				? message
+				: summarizeError(failure),
+	};
+}
+
 /** Packs the working tree once and reuses the tarball across every run. */
 export async function packPlugin(
 	repositoryRoot: string,
@@ -1667,6 +1700,9 @@ export class EvalHost {
 		let costReported = false;
 		let assistantMessages = 0;
 		let providerError: AttemptFailure<"provider"> | null = null;
+		let observedProviderError: NonNullable<
+			Outcome["providerErrorObservation"]
+		> | null = null;
 		let finalText = "";
 		const guidanceLoads: ObservedGuidanceLoad[] = [];
 		let guidanceSequence = 0;
@@ -1698,8 +1734,13 @@ export class EvalHost {
 						this.lastSelfAbortAt > 0 &&
 							(created === undefined || created <= this.lastSelfAbortAt),
 					)
-				)
+				) {
 					providerError = providerFailure(entry.info.error);
+					observedProviderError = providerErrorObservation(
+						entry.info.error,
+						ordered[sessionIndex] ?? "unobserved-session",
+					);
+				}
 			}
 			for (const part of entry.parts) {
 				if (
@@ -1789,6 +1830,7 @@ export class EvalHost {
 			assistantMessages,
 			durationMs,
 			providerError,
+			providerErrorObservation: observedProviderError,
 		};
 	}
 

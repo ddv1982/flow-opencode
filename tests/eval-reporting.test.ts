@@ -66,40 +66,32 @@ describe("eval run classification", () => {
 	});
 
 	test("gives a detached child time to finish SIGTERM cleanup", async () => {
-		if (process.platform === "win32") return;
+		if (process.platform !== "linux") return;
 		const root = await mkdtemp(join(tmpdir(), "flow-process-tree-"));
 		const marker = join(root, "cleaned");
 		const ready = join(root, "ready");
-		const childScript = join(root, "child.ts");
-		const wrapperScript = join(root, "wrapper.ts");
+		const childScript = join(root, "child.sh");
+		const wrapperScript = join(root, "wrapper.sh");
 		await writeFile(
 			childScript,
-			`import { writeFileSync } from "node:fs";
-writeFileSync(process.argv[3], "ready");
-process.on("SIGTERM", () => setTimeout(() => {
-  writeFileSync(process.argv[2], "done");
-  process.exit(0);
-}, 200));
-setInterval(() => {}, 1_000);
+			`trap 'sleep 0.2; printf done > "$1"; exit 0' TERM
+printf ready > "$2"
+while :; do sleep 1; done
 `,
 		);
 		await writeFile(
 			wrapperScript,
-			`import { existsSync } from "node:fs";
-const child = Bun.spawn([process.execPath, process.argv[2], process.argv[3], process.argv[4]]);
-while (!existsSync(process.argv[4])) await Bun.sleep(10);
-console.log(child.pid);
-await child.exited;
+			`sh "$1" "$2" "$3" &
+child=$!
+while [ ! -f "$3" ]; do sleep 0.01; done
+printf '%s\n' "$child"
+wait "$child"
 `,
 		);
-		const wrapper = spawn(
-			process.execPath,
-			[wrapperScript, childScript, marker, ready],
-			{
-				detached: true,
-				stdio: ["ignore", "pipe", "ignore"],
-			},
-		);
+		const wrapper = spawn("sh", [wrapperScript, childScript, marker, ready], {
+			detached: true,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
 		await new Promise<void>((resolve, reject) => {
 			wrapper.once("error", reject);
 			wrapper.stdout?.once("data", () => resolve());

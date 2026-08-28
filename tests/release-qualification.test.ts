@@ -2,6 +2,10 @@ import { describe, expect, test } from "bun:test";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+	deriveEnvironmentReserveState,
+	environmentStratumKey,
+} from "../evals/environment-reserves.js";
 import { evaluatorIdentity } from "../evals/provenance.js";
 import {
 	RELEASE_POLICY_CATALOG_SHA256,
@@ -48,74 +52,77 @@ function releaseReport(stopped = false) {
 		policyCatalog: releaseCatalog(),
 		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
 	});
-	const attempts = plan.cells.map((cell, index) => {
-		const failed = stopped && index === 0;
-		const model = cell.managerModel;
-		if (!model) throw new Error("Release fixture requires a manager model.");
-		return {
-			schemaVersion: 2 as const,
-			attemptId: `attempt-${cell.cellId}`,
-			cellId: cell.cellId,
-			blockId: cell.blockId,
-			caseId: cell.caseId,
-			caseVersion: cell.caseVersion,
-			armToken: null,
-			repetition: cell.repetition,
-			artifact: ARTIFACT,
-			evaluator,
-			hostConfigSha256: releaseHostConfigSha256({
-				packageVersion: ARTIFACT.packageVersion,
-				model,
-			}),
-			actors: failed
-				? []
-				: [
-						{
-							role: "manager" as const,
-							requestedModel: model,
-							actualModel: { kind: "observed" as const, value: model },
-							sessionIds: [`session-${index}`],
+	const attempts = plan.cells
+		.filter((cell) => cell.schedule === "primary")
+		.map((cell, index) => {
+			const failed = stopped && index === 0;
+			const model = cell.managerModel;
+			if (!model) throw new Error("Release fixture requires a manager model.");
+			return {
+				schemaVersion: 2 as const,
+				attemptId: `attempt-${cell.cellId}`,
+				cellId: cell.cellId,
+				blockId: cell.blockId,
+				caseId: cell.caseId,
+				caseVersion: cell.caseVersion,
+				armToken: null,
+				repetition: cell.repetition,
+				artifact: ARTIFACT,
+				evaluator,
+				hostConfigSha256: releaseHostConfigSha256({
+					packageVersion: ARTIFACT.packageVersion,
+					model,
+				}),
+				actors: failed
+					? []
+					: [
+							{
+								role: "manager" as const,
+								requestedModel: model,
+								actualModel: { kind: "observed" as const, value: model },
+								sessionIds: [`session-${index}`],
+							},
+						],
+				instructions: failed
+					? []
+					: [
+							{
+								source: "command" as const,
+								name: "flow-auto",
+								sequence: 0,
+								sha256: digest("e"),
+								bytes: 1,
+							},
+						],
+				transcript: failed
+					? null
+					: {
+							sha256: digest("f"),
+							artifact: `transcripts/${index}.json`,
 						},
-					],
-			instructions: failed
-				? []
-				: [
-						{
-							source: "command" as const,
-							name: "flow-auto",
-							sequence: 0,
-							sha256: digest("e"),
-							bytes: 1,
+				outcome: failed
+					? {
+							kind: "failure" as const,
+							origin: "host" as const,
+							code: "host-start-failed",
+							retryable: true,
+						}
+					: {
+							kind: "product" as const,
+							passed: true,
+							endedBy: "quiet" as const,
+							issues: [],
+							evidence: {
+								kind: "conformance" as const,
+								falseCompletion: false,
+								unsubmittedReviews: 0,
+								facts: { fixture: true },
+							},
 						},
-					],
-			transcript: failed
-				? null
-				: {
-						sha256: digest("f"),
-						artifact: `transcripts/${index}.json`,
-					},
-			outcome: failed
-				? {
-						kind: "failure" as const,
-						origin: "host" as const,
-						code: "host-down",
-						retryable: true,
-					}
-				: {
-						kind: "product" as const,
-						passed: true,
-						endedBy: "quiet" as const,
-						issues: [],
-						evidence: {
-							kind: "conformance" as const,
-							falseCompletion: false,
-							unsubmittedReviews: 0,
-							facts: { fixture: true },
-						},
-					},
-			usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
-		};
-	});
+				usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
+			};
+		});
+	const reserveState = deriveEnvironmentReserveState(plan, attempts);
 	return {
 		schemaVersion: 2 as const,
 		reportId: stopped ? "release-stopped" : "release-verified",
@@ -126,7 +133,7 @@ function releaseReport(stopped = false) {
 			cause: stopped ? ("host" as const) : ("fixed-target" as const),
 			startedAt: "2026-08-28T00:00:00.000Z",
 			finishedAt: "2026-08-28T00:01:00.000Z",
-			activatedReserveCellIds: [],
+			activatedReserveCellIds: [...reserveState.activatedReserveCellIds],
 			observed: {
 				attempts: attempts.length,
 				outputTokens: attempts.length,
@@ -191,7 +198,7 @@ describe("repository-owned v2 qualification", () => {
 			artifact: ARTIFACT,
 		});
 		expect(verified.decision.verdict).toBe("VERIFIED");
-		expect(verified.report.plan.cells).toHaveLength(76);
+		expect(verified.report.plan.cells).toHaveLength(92);
 		expect(decisionRecordFor(verified)).toEqual(decisionRecordFor(verified));
 
 		const notVerified = qualifyV2({
@@ -207,6 +214,56 @@ describe("repository-owned v2 qualification", () => {
 			artifact: ARTIFACT,
 		});
 		expect(inconclusive.decision.verdict).toBe("INCONCLUSIVE");
+	});
+
+	test("qualifies with a retained host failure and its canonical passing reserve", () => {
+		const report = releaseReport(true);
+		const failed = report.attempts[0];
+		if (!failed) throw new Error("Fixture requires a failed primary attempt.");
+		const failedCell = report.plan.cells.find(
+			({ cellId }) => cellId === failed.cellId,
+		);
+		const reserve = report.plan.cells.find(
+			(cell) =>
+				cell.schedule === "environment-reserve" &&
+				failedCell &&
+				environmentStratumKey(cell) === environmentStratumKey(failedCell),
+		);
+		const source = report.attempts.find(
+			(attempt) =>
+				attempt.caseId === failed.caseId && attempt.outcome.kind === "product",
+		);
+		if (!reserve?.managerModel || !source)
+			throw new Error("Fixture requires a reserve and product source.");
+		report.attempts.push({
+			...source,
+			attemptId: `attempt-${reserve.cellId}`,
+			cellId: reserve.cellId,
+			blockId: reserve.blockId,
+			repetition: reserve.repetition,
+			actors: source.actors.map((actor) => ({
+				...actor,
+				sessionIds: actor.sessionIds.map((id) => `${id}-reserve`),
+			})),
+			transcript: source.transcript
+				? {
+						...source.transcript,
+						artifact: "transcripts/reserve.json",
+					}
+				: null,
+		});
+		report.completion.status = "complete";
+		report.completion.cause = "fixed-target";
+		report.completion.observed.attempts = report.attempts.length;
+		report.completion.observed.outputTokens = report.attempts.length;
+		report.completion.activatedReserveCellIds = [reserve.cellId];
+		const result = qualifyV2({
+			reportInput: report,
+			catalogInput: releaseCatalog(),
+			artifact: ARTIFACT,
+		});
+		expect(result.decision.verdict).toBe("VERIFIED");
+		expect(result.report.attempts).toHaveLength(77);
 	});
 
 	test("rejects every caller attempt to weaken or reorder policy", () => {
@@ -367,7 +424,7 @@ describe("repository-owned v2 qualification", () => {
 				catalogInput: releaseCatalog(),
 				artifact: ARTIFACT,
 			}),
-		).toThrow("canonical 76-cell grid");
+		).toThrow("Invalid v2 report");
 	});
 
 	test("rejects self-consistent release-control drift", () => {

@@ -32,13 +32,17 @@ once, by one person, from one model's output.
 A new scenario needs an explicit release-policy decision. Any required canonical
 case missing from the report fails qualification.
 
-A non-product attempt never shrinks the required sample. Provider or host failure,
-or an unallowed ask, leaves an evidence gap. Evaluator failure is `NOT VERIFIED`;
-persistence failure stops without a finalized report. Re-run only external gaps.
+A non-product attempt never shrinks the required sample. The frozen plan retains
+one environment reserve per provider and case. A retryable provider or host
+failure activates that exact reserve; the failed attempt remains evidence. A
+second external failure or an unallowed ask leaves a gap. Product and evaluator
+failures never activate reserves. Evaluator failure is `NOT VERIFIED`;
+persistence failure stops without a finalized report.
 
 Repository code owns the ordered release catalog. Persisted `catalog.json` is only a
-witness and must match it exactly. The two-provider grid contains 76 cells; ordinary,
-narrowed, or merged summary reports cannot qualify.
+witness and must match it exactly. The two-provider grid has 76 primary cells and
+16 predeclared environment reserves; ordinary, narrowed, dynamically extended, or
+merged summary reports cannot qualify.
 
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
 messages, duration, tokens, and cost.

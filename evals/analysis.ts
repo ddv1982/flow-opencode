@@ -449,9 +449,7 @@ function decisionReason(
 function activeCells(report: ValidatedReport) {
 	const activated = new Set(report.completion.activatedReserveCellIds);
 	return report.plan.cells.filter(
-		(cell) =>
-			cell.schedule === "primary" ||
-			(cell.schedule === "replacement-reserve" && activated.has(cell.cellId)),
+		(cell) => cell.schedule === "primary" || activated.has(cell.cellId),
 	);
 }
 
@@ -648,6 +646,14 @@ export function deriveReleaseDecision(input: {
 					continue;
 				}
 				if (attempt.outcome.kind !== "product") {
+					if (
+						attempt.outcome.kind === "failure" &&
+						(attempt.outcome.origin === "host" ||
+							attempt.outcome.origin === "provider") &&
+						attempt.outcome.retryable
+					) {
+						continue;
+					}
 					decisionReason(
 						reasons,
 						"gap",

@@ -9,6 +9,13 @@ const TextSchema = z
 	.max(4 * 1024 * 1024)
 	.regex(/\S/);
 const JsonRecordSchema = z.record(z.string(), z.unknown());
+const ProviderErrorEnvelopeSchema = z
+	.object({
+		sessionId: TextSchema,
+		name: TextSchema,
+		message: TextSchema,
+	})
+	.strict();
 const ToolCallSchema: z.ZodType<ObservedToolCall> = z
 	.object({
 		tool: TextSchema,
@@ -30,6 +37,7 @@ export const ScenarioGradeInputSchema = z
 		session: JsonRecordSchema.nullable(),
 		archives: z.array(JsonRecordSchema).max(512),
 		finalText: z.string().max(4 * 1024 * 1024),
+		providerErrors: z.array(ProviderErrorEnvelopeSchema).max(64).default([]),
 	})
 	.strict();
 
@@ -70,6 +78,32 @@ const GuidanceLoadSchema = z
 		utf8Bytes: z.number().int().safe().nonnegative(),
 	})
 	.strict();
+const RetainedFailureSchema = z
+	.object({
+		origin: z.enum(["host", "provider", "evaluator"]),
+		code: TextSchema,
+		retryable: z.boolean(),
+	})
+	.strict();
+const FailureObservationSchema = z.discriminatedUnion("kind", [
+	z
+		.object({
+			kind: z.literal("host-phase"),
+			code: z.enum([
+				"host-start-failed",
+				"session-create-failed",
+				"command-aborted",
+			]),
+			pendingTools: z.array(TextSchema).max(4096),
+		})
+		.strict(),
+	z
+		.object({
+			kind: z.literal("provider-error"),
+			...ProviderErrorEnvelopeSchema.shape,
+		})
+		.strict(),
+]);
 
 export const RetainedScenarioEvidenceSchema = z
 	.object({
@@ -93,6 +127,8 @@ export const RetainedScenarioEvidenceSchema = z
 				costUsd: z.number().finite().nonnegative().nullable(),
 			})
 			.strict(),
+		failure: RetainedFailureSchema.nullable().optional(),
+		failureObservation: FailureObservationSchema.nullable().optional(),
 	})
 	.strict();
 
@@ -115,6 +151,10 @@ export function retainedFailureEvidence(input: {
 	readonly actors?: RetainedScenarioEvidence["actors"];
 	readonly guidanceLoads?: RetainedScenarioEvidence["guidanceLoads"];
 	readonly gradeInput?: RetainedScenarioEvidence["gradeInput"];
+	readonly failure?: NonNullable<RetainedScenarioEvidence["failure"]>;
+	readonly failureObservation?: NonNullable<
+		RetainedScenarioEvidence["failureObservation"]
+	>;
 }): RetainedScenarioEvidence {
 	const emptyGradeInput: RetainedScenarioEvidence["gradeInput"] = {
 		schemaVersion: 1,
@@ -123,6 +163,7 @@ export function retainedFailureEvidence(input: {
 		session: null,
 		archives: [],
 		finalText: "",
+		providerErrors: [],
 	};
 	const usage = {
 		durationMs:
@@ -146,6 +187,8 @@ export function retainedFailureEvidence(input: {
 		schemaVersion: 1,
 		attempt: input.attempt,
 		usage,
+		failure: input.failure ?? null,
+		failureObservation: input.failureObservation ?? null,
 	};
 	const retained = RetainedScenarioEvidenceSchema.safeParse({
 		...common,
@@ -160,6 +203,118 @@ export function retainedFailureEvidence(input: {
 		guidanceLoads: [],
 		gradeInput: emptyGradeInput,
 	});
+}
+
+export function retainedPendingTools(
+	gradeInput: RetainedScenarioGradeInput,
+): string[] {
+	return gradeInput.allCalls
+		.filter((call) => call.status === "pending" || call.status === "running")
+		.map((call) => call.tool)
+		.sort();
+}
+
+export function isRetainableEnvironmentFailure(failure: {
+	readonly origin: "host" | "provider" | "evaluator";
+	readonly code: string;
+	readonly retryable: boolean;
+}): boolean {
+	if (!failure.retryable) return false;
+	if (failure.origin === "provider")
+		return failure.code === "provider-rejected-turn";
+	return (
+		failure.origin === "host" &&
+		(failure.code === "host-start-failed" ||
+			failure.code === "session-create-failed" ||
+			failure.code === "command-aborted")
+	);
+}
+
+export function retainedFailureObservation(input: {
+	readonly origin: "host" | "provider" | "evaluator";
+	readonly code: string;
+	readonly retryable: boolean;
+	readonly detail: string;
+	readonly gradeInput: RetainedScenarioGradeInput;
+	readonly providerErrorObservation?: {
+		readonly sessionId: string;
+		readonly name: string;
+		readonly message: string;
+	} | null;
+}): RetainedScenarioEvidence["failureObservation"] {
+	if (!isRetainableEnvironmentFailure(input)) return null;
+	if (input.origin === "provider") {
+		return input.providerErrorObservation
+			? { kind: "provider-error", ...input.providerErrorObservation }
+			: null;
+	}
+	if (
+		input.origin !== "host" ||
+		(input.code !== "host-start-failed" &&
+			input.code !== "session-create-failed" &&
+			input.code !== "command-aborted")
+	)
+		return null;
+	return {
+		kind: "host-phase",
+		code: input.code,
+		pendingTools: retainedPendingTools(input.gradeInput),
+	};
+}
+
+export function deriveRetainedFailure(
+	evidence: RetainedScenarioEvidence,
+): RetainedScenarioEvidence["failure"] {
+	const observation = evidence.failureObservation;
+	if (!observation) return null;
+	if (observation.kind === "provider-error") {
+		if (
+			!evidence.gradeInput.providerErrors.some(
+				(error) =>
+					canonicalSha256("flow-provider-error-v1", error) ===
+					canonicalSha256("flow-provider-error-v1", {
+						sessionId: observation.sessionId,
+						name: observation.name,
+						message: observation.message,
+					}),
+			) ||
+			!evidence.actors.some((actor) =>
+				actor.sessionIds.includes(observation.sessionId),
+			)
+		)
+			return null;
+		return {
+			origin: "provider",
+			code: "provider-rejected-turn",
+			retryable: true,
+		};
+	}
+	const pendingTools = retainedPendingTools(evidence.gradeInput);
+	if (observation.code === "command-aborted") {
+		if (
+			evidence.gradeInput.providerErrors.length !== 0 ||
+			pendingTools.length === 0 ||
+			canonicalSha256("flow-pending-tools-v1", pendingTools) !==
+				canonicalSha256("flow-pending-tools-v1", observation.pendingTools)
+		)
+			return null;
+	} else if (
+		evidence.gradeInput.flowCalls.length !== 0 ||
+		evidence.gradeInput.allCalls.length !== 0 ||
+		evidence.gradeInput.session !== null ||
+		evidence.gradeInput.archives.length !== 0 ||
+		evidence.gradeInput.providerErrors.length !== 0 ||
+		evidence.actors.length !== 0 ||
+		evidence.guidanceLoads.length !== 0 ||
+		evidence.gradeInput.finalText !== ""
+	) {
+		return null;
+	}
+	return {
+		origin: "host",
+		code: observation.code,
+		retryable: true,
+	};
 }
 
 export function pseudonymousEvalId(id: string): string {
@@ -191,5 +346,8 @@ export function scenarioGradeInput(
 		session: outcome.session,
 		archives: outcome.archives,
 		finalText: outcome.finalText,
+		providerErrors: outcome.providerErrorObservation
+			? [outcome.providerErrorObservation]
+			: [],
 	});
 }

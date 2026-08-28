@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import type { CasePolicy, ValidatedCaseCatalog } from "./catalog.js";
+import {
+	deriveEnvironmentReserveState,
+	environmentStratumKey,
+} from "./environment-reserves.js";
 import { validatePairing } from "./report-pairing.js";
 import { type DeepReadonly, freezeTree } from "./validated.js";
 
@@ -174,7 +178,7 @@ const ScheduledCellSchema = z
 		repetition: CountSchema,
 		managerModel: ModelIdentitySchema.nullable(),
 		reviewerModel: ModelIdentitySchema.nullable(),
-		schedule: z.enum(["primary", "replacement-reserve"]),
+		schedule: z.enum(["primary", "replacement-reserve", "environment-reserve"]),
 	})
 	.strict();
 
@@ -219,7 +223,7 @@ export const CampaignPlanSchema = z
 		cells: z.array(ScheduledCellSchema).min(1),
 		abortPolicy: z
 			.object({
-				retry: z.enum(["whole-pair", "never"]),
+				retry: z.enum(["whole-pair", "environment-only", "never"]),
 				maxReplacementBlocks: CountSchema,
 			})
 			.strict(),
@@ -478,7 +482,7 @@ function semanticIssues(
 			continue;
 		}
 		if (
-			cell.schedule === "replacement-reserve" &&
+			cell.schedule !== "primary" &&
 			!activatedReserveCells.has(cell.cellId)
 		) {
 			issue(
@@ -647,12 +651,12 @@ function semanticIssues(
 		cellId,
 	] of report.completion.activatedReserveCellIds.entries()) {
 		const cell = cells.get(cellId);
-		if (cell?.schedule !== "replacement-reserve") {
+		if (!cell || cell.schedule === "primary") {
 			issue(
 				issues,
 				`$.completion.activatedReserveCellIds.${index}`,
 				"policy",
-				"Activated reserve ids must reference replacement reserve cells.",
+				"Activated reserve ids must reference reserve cells.",
 			);
 		}
 	}
@@ -804,7 +808,7 @@ function semanticIssues(
 	}
 	const reserveBlocks = new Set(
 		report.plan.cells
-			.filter((cell) => cell.schedule === "replacement-reserve")
+			.filter((cell) => cell.schedule !== "primary")
 			.map((cell) => cell.blockId),
 	);
 	if (reserveBlocks.size !== report.plan.abortPolicy.maxReplacementBlocks) {
@@ -824,6 +828,56 @@ function semanticIssues(
 			"$.plan.abortPolicy",
 			"policy",
 			"Never-retry campaigns cannot preallocate replacement blocks.",
+		);
+	}
+	const environmentReserves = report.plan.cells.filter(
+		(cell) => cell.schedule === "environment-reserve",
+	);
+	if (report.plan.abortPolicy.retry === "environment-only") {
+		const reserveStrata = new Set<string>();
+		for (const reserve of environmentReserves) {
+			const key = environmentStratumKey(reserve);
+			if (reserveStrata.has(key)) {
+				issue(
+					issues,
+					"$.plan.cells",
+					"policy",
+					"Environment reserve strata must be unique.",
+				);
+			}
+			reserveStrata.add(key);
+			if (
+				!primaryCells.some((primary) => environmentStratumKey(primary) === key)
+			) {
+				issue(
+					issues,
+					"$.plan.cells",
+					"policy",
+					"Environment reserve has no primary stratum.",
+				);
+			}
+		}
+		const reserveState = deriveEnvironmentReserveState(
+			report.plan,
+			report.attempts,
+		);
+		if (
+			canonicalJson(reserveState.activatedReserveCellIds) !==
+			canonicalJson(report.completion.activatedReserveCellIds)
+		) {
+			issue(
+				issues,
+				"$.completion.activatedReserveCellIds",
+				"policy",
+				"Environment reserve activation does not match retained attempts.",
+			);
+		}
+	} else if (environmentReserves.length > 0) {
+		issue(
+			issues,
+			"$.plan.cells",
+			"policy",
+			"Environment reserves require environment-only retry policy.",
 		);
 	}
 	if (report.plan.budget.maxAttempts < primaryCells.length) {

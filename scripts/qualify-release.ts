@@ -16,7 +16,10 @@ import {
 	retainedInstructions,
 	retainedReportActors,
 } from "../evals/conformance-evidence.js";
-import { RetainedScenarioEvidenceSchema } from "../evals/grader-input.js";
+import {
+	deriveRetainedFailure,
+	RetainedScenarioEvidenceSchema,
+} from "../evals/grader-input.js";
 import {
 	evaluatorIdentity,
 	inspectArtifact,
@@ -147,19 +150,23 @@ function assertFrozenReleasePlan(report: ValidatedReport): void {
 		);
 	}
 	const expected = releaseCellsFor(models);
+	const primaryCount = expected.filter(
+		(cell) => cell.schedule === "primary",
+	).length;
+	const reserveCount = expected.length - primaryCount;
 	if (!sameJson(report.plan.cells, expected)) {
 		throw new Error(
-			"Release plan does not contain the canonical 76-cell grid.",
+			"Release plan does not contain the canonical primary and environment-reserve grid.",
 		);
 	}
 	const expectedSeed = releaseRandomizationSeed(models);
 	if (
 		report.plan.planId !== "flow-v2-primary-matrix" ||
 		report.plan.randomizationSeed !== expectedSeed ||
-		report.plan.abortPolicy.retry !== "never" ||
-		report.plan.abortPolicy.maxReplacementBlocks !== 0 ||
+		report.plan.abortPolicy.retry !== "environment-only" ||
+		report.plan.abortPolicy.maxReplacementBlocks !== reserveCount ||
 		report.plan.stoppingRule.kind !== "fixed-attempts" ||
-		report.plan.stoppingRule.count !== expected.length ||
+		report.plan.stoppingRule.count !== primaryCount ||
 		report.plan.budget.maxAttempts !== expected.length ||
 		report.plan.budget.maxUsd !== null ||
 		report.plan.budget.unknownCostPolicy !== "token-wall-clock-bounds" ||
@@ -514,14 +521,12 @@ async function main(): Promise<void> {
 			JSON.parse(transcriptBytes.toString("utf8")),
 		);
 		const scenario = SCENARIOS.find(({ id }) => id === attempt.caseId);
-		if (!scenario) throw new Error(`Scenario ${attempt.caseId} is missing.`);
-		if (attempt.outcome.kind !== "product")
-			throw new Error(
-				`Attempt ${attempt.attemptId} is not regradable product evidence.`,
-			);
+		const cell = result.report.plan.cells.find(
+			({ cellId }) => cellId === attempt.cellId,
+		);
+		if (!scenario || !cell?.managerModel)
+			throw new Error(`Scenario ${attempt.caseId} or its cell is missing.`);
 		const manager = attempt.actors.find(({ role }) => role === "manager");
-		if (!manager)
-			throw new Error(`Attempt ${attempt.attemptId} has no manager actor.`);
 		if (
 			canonicalJson(evidence.attempt) !==
 				canonicalJson({
@@ -529,7 +534,7 @@ async function main(): Promise<void> {
 					cellId: attempt.cellId,
 					caseId: attempt.caseId,
 					repetition: attempt.repetition,
-					model: manager.requestedModel,
+					model: cell.managerModel,
 				}) ||
 			canonicalJson(evidence.usage) !== canonicalJson(attempt.usage)
 		) {
@@ -539,22 +544,6 @@ async function main(): Promise<void> {
 		const retainedManager = retainedActors.find(
 			({ role }) => role === "manager",
 		);
-		if (!retainedManager || retainedManager.sessionIds.length === 0)
-			throw new Error(
-				`Attempt ${attempt.attemptId} has no retained manager session.`,
-			);
-		for (const sessionId of retainedManager.sessionIds) {
-			if (managerSessions.has(sessionId))
-				throw new Error("Campaign attempts reuse a manager session identity.");
-			managerSessions.add(sessionId);
-		}
-		const outcome = deriveConformanceOutcome({
-			evidence,
-			check: scenario.check,
-			scenarioId: attempt.caseId,
-			model: `${manager.requestedModel.routeProvider}/${manager.requestedModel.model}`,
-			attempt: attempt.repetition + 1,
-		});
 		const commandInstructions = scenario.steps.map((step, sequence) =>
 			instructionDelivery({
 				source: "command",
@@ -569,15 +558,64 @@ async function main(): Promise<void> {
 				sequence: commandInstructions.length + sequence,
 			}),
 		);
-		if (
-			canonicalJson(outcome) !== canonicalJson(attempt.outcome) ||
-			canonicalJson(retainedActors) !== canonicalJson(attempt.actors) ||
-			canonicalJson([...commandInstructions, ...guidanceInstructions]) !==
-				canonicalJson(attempt.instructions)
-		) {
-			throw new Error(
-				`Attempt ${attempt.attemptId} does not reproduce its grade.`,
-			);
+		if (retainedManager) {
+			for (const sessionId of retainedManager.sessionIds) {
+				if (managerSessions.has(sessionId))
+					throw new Error(
+						"Campaign attempts reuse a manager session identity.",
+					);
+				managerSessions.add(sessionId);
+			}
+		}
+		if (attempt.outcome.kind === "failure") {
+			const derivedFailure = deriveRetainedFailure(evidence);
+			const expectedFailure = {
+				origin: attempt.outcome.origin,
+				code: attempt.outcome.code,
+				retryable: attempt.outcome.retryable,
+			};
+			if (
+				(attempt.outcome.origin !== "host" &&
+					attempt.outcome.origin !== "provider") ||
+				!attempt.outcome.retryable ||
+				canonicalJson(derivedFailure) !== canonicalJson(expectedFailure) ||
+				canonicalJson(evidence.failure) !== canonicalJson(derivedFailure) ||
+				canonicalJson(retainedActors) !== canonicalJson(attempt.actors) ||
+				canonicalJson([...commandInstructions, ...guidanceInstructions]) !==
+					canonicalJson(attempt.instructions)
+			) {
+				throw new Error(
+					`Attempt ${attempt.attemptId} failure does not reproduce.`,
+				);
+			}
+		} else {
+			if (!manager || !retainedManager || attempt.outcome.kind !== "product")
+				throw new Error(
+					`Attempt ${attempt.attemptId} is not regradable product evidence.`,
+				);
+			if (
+				(evidence.failure !== null && evidence.failure !== undefined) ||
+				(evidence.failureObservation !== null &&
+					evidence.failureObservation !== undefined)
+			)
+				throw new Error("Product attempt carries a retained failure claim.");
+			const outcome = deriveConformanceOutcome({
+				evidence,
+				check: scenario.check,
+				scenarioId: attempt.caseId,
+				model: `${manager.requestedModel.routeProvider}/${manager.requestedModel.model}`,
+				attempt: attempt.repetition + 1,
+			});
+			if (
+				canonicalJson(outcome) !== canonicalJson(attempt.outcome) ||
+				canonicalJson(retainedActors) !== canonicalJson(attempt.actors) ||
+				canonicalJson([...commandInstructions, ...guidanceInstructions]) !==
+					canonicalJson(attempt.instructions)
+			) {
+				throw new Error(
+					`Attempt ${attempt.attemptId} does not reproduce its grade.`,
+				);
+			}
 		}
 		files.push(
 			{

@@ -104,6 +104,7 @@ export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {
 	primaryOutcome: "conformance-pass",
 });
 export const RELEASE_MAX_CAMPAIGN_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
+export const RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM = 1;
 
 export const RELEASE_HOST_POLICY = {
 	opencodeVersion: "1.18.6",
@@ -115,6 +116,7 @@ export const RELEASE_POLICY_SHA256 = canonicalSha256("flow-release-policy-v1", {
 	catalog: RELEASE_CATALOG,
 	host: RELEASE_HOST_POLICY,
 	analysisSha256: RELEASE_ANALYSIS_SHA256,
+	environmentReservesPerStratum: RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM,
 });
 
 export const RELEASE_POLICY_CATALOG_SHA256 = canonicalSha256(
@@ -140,7 +142,7 @@ export function releaseMinimumProviders(): number {
 	return Math.max(...RELEASE_CATALOG.map((policy) => policy.minProviders));
 }
 
-export function releaseCellsFor(
+export function releasePrimaryCellsFor(
 	models: readonly ModelIdentity[],
 ): ScheduledCell[] {
 	let slot = 0;
@@ -168,6 +170,35 @@ export function releaseCellsFor(
 			}),
 		),
 	);
+}
+
+export function releaseCellsFor(
+	models: readonly ModelIdentity[],
+): ScheduledCell[] {
+	const primary = releasePrimaryCellsFor(models);
+	const reserves = models.flatMap((model) =>
+		RELEASE_CATALOG.map((policy) => {
+			const identity = canonicalSha256("flow-v2-environment-reserve-v1", {
+				model: `${model.routeProvider}/${model.model}`,
+				scenario: policy.caseId,
+				caseVersion: policy.caseVersion,
+				repetition: policy.minScoredAttempts,
+			});
+			const suffix = identity.slice("sha256:".length);
+			return {
+				cellId: `cell-${suffix}`,
+				blockId: `environment-${suffix}`,
+				caseId: policy.caseId,
+				caseVersion: policy.caseVersion,
+				armToken: null,
+				repetition: policy.minScoredAttempts,
+				managerModel: model,
+				reviewerModel: null,
+				schedule: "environment-reserve" as const,
+			};
+		}),
+	);
+	return [...primary, ...reserves];
 }
 
 export function releaseRandomizationSeed(
