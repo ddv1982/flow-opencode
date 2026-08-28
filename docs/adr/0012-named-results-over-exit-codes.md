@@ -45,14 +45,13 @@ for comes from the approved plan. This is the same split
 fields the build platform populates, which need no verification because the platform
 is trusted.
 
-**Require the report to postdate the arming.** A path is caller-supplied, so a report
-left from an earlier run — or committed by hand — would otherwise discharge an entry
-no command produced anything for. A file not modified after arming is read as no
-report at all.
+**Require a change during the command window.** Before the exact command, Flow
+snapshots any report's digest and mtime. Afterward, it accepts only a changed report
+modified after arming and no later than command observation.
 
-**Fail closed, identically, on every absence.** No `resultsPath`, an unreadable file,
-a path escaping the workspace, an oversized file, unparseable XML: each records every
-declared name as `absent`, because they all mean nothing observed those cases.
+**Fail closed, identically, on every absence.** No `resultsPath`, unsafe, unreadable,
+unstable, or oversized bytes, malformed UTF-8, or unparseable XML: each records every
+declared name as `absent`, because nothing observed those cases.
 
 **Count it in the metric too.** `completionHonesty` compares declared names against
 recorded outcomes, so the release number does not depend on the veto it measures.

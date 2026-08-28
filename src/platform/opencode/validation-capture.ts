@@ -21,20 +21,16 @@ type PendingCapture = PreparedValidation &
 		sessionID: string;
 		workspace: string;
 		armedAt: number;
-	}> & { callID: string | null };
+	}> & {
+		callID: string | null;
+		priorReport: { digest: string; modifiedMs: number } | null;
+	};
 
 type ValidationCaptureOptions = Readonly<{
 	persistObservation: (
 		workspace: string,
 		observation: ObservedValidation,
 	) => Promise<ValidationObservation>;
-	/**
-	 * Reads a report the command wrote, with when it was written.
-	 *
-	 * The modification time is the load-bearing part: the path comes from the caller,
-	 * so a report left from an earlier run — or committed by hand — would otherwise
-	 * discharge an entry no command produced anything for.
-	 */
 	readReport?:
 		| ((
 				workspace: string,
@@ -112,6 +108,7 @@ export class ValidationCaptureCoordinator {
 	 */
 	async #observeAssertions(
 		capture: PendingCapture,
+		observedAt: number,
 	): Promise<ObservedAssertion[]> {
 		if (capture.assertions.length === 0) return [];
 		const absent = capture.assertions.map((name) => ({
@@ -119,18 +116,35 @@ export class ValidationCaptureCoordinator {
 			status: "absent" as const,
 		}));
 		if (!capture.resultsPath || !this.#readReport) return absent;
-		let report: { text: string; modifiedMs: number } | null;
-		try {
-			report = await this.#readReport(capture.workspace, capture.resultsPath);
-		} catch {
-			return absent;
-		}
+		const report = await this.#report(capture.workspace, capture.resultsPath);
 		// `<=`, not `<`: the contract is that this command wrote the report, so a report
 		// whose mtime only *equals* the arming instant has not been shown to postdate it.
 		// Not a one-millisecond window either — mtime granularity is a whole second on
 		// some filesystems, which is wide enough for a stale report to share it.
-		if (!report || report.modifiedMs <= capture.armedAt) return absent;
+		if (
+			!report ||
+			report.modifiedMs <= capture.armedAt ||
+			report.modifiedMs > observedAt ||
+			(capture.priorReport?.modifiedMs === report.modifiedMs &&
+				capture.priorReport.digest === digest(report.text))
+		)
+			return absent;
 		return observeAssertions(capture.assertions, report.text);
+	}
+
+	async #report(workspace: string, path: string) {
+		if (!this.#readReport) return null;
+		try {
+			return await this.#readReport(workspace, path);
+		} catch (error) {
+			if (
+				error instanceof Error &&
+				"code" in error &&
+				typeof error.code === "string"
+			)
+				return null;
+			throw error;
+		}
 	}
 
 	#prune(): void {
@@ -166,6 +180,7 @@ export class ValidationCaptureCoordinator {
 			workspace,
 			armedAt: this.#now(),
 			callID: null,
+			priorReport: null,
 		});
 		return { captureId, expiresInMs: CAPTURE_TTL_MS };
 	}
@@ -174,7 +189,10 @@ export class ValidationCaptureCoordinator {
 		return this.#pending.delete(sessionID);
 	}
 
-	observeToolBefore(input: BeforeInput, output: BeforeOutput): void {
+	async observeToolBefore(
+		input: BeforeInput,
+		output: BeforeOutput,
+	): Promise<void> {
 		this.#prune();
 		if (!isBash(input.tool)) return;
 		const capture = this.#pending.get(input.sessionID);
@@ -186,6 +204,12 @@ export class ValidationCaptureCoordinator {
 			);
 		}
 		capture.callID = input.callID;
+		if (capture.resultsPath && capture.assertions.length > 0) {
+			const report = await this.#report(capture.workspace, capture.resultsPath);
+			capture.priorReport = report
+				? { digest: digest(report.text), modifiedMs: report.modifiedMs }
+				: null;
+		}
 	}
 
 	async observeToolAfter(
@@ -213,7 +237,10 @@ export class ValidationCaptureCoordinator {
 				: observedComplete === null
 					? "output-completeness-unknown"
 					: null;
-		const observedAssertions = await this.#observeAssertions(capture);
+		const observedAssertions = await this.#observeAssertions(
+			capture,
+			this.#now(),
+		);
 		const observation = await this.#persist(capture.workspace, {
 			featureId: capture.featureId,
 			runId: capture.runId,
