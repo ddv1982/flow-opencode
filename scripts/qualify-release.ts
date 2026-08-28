@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import {
@@ -21,6 +21,7 @@ import {
 	evaluatorIdentity,
 	inspectArtifact,
 	instructionDelivery,
+	samePackedArtifact,
 } from "../evals/provenance.js";
 import {
 	listStableQualificationDirectory,
@@ -58,7 +59,6 @@ import {
 	parseCanaryRecord,
 	canaryRecordIssue as verifyCanaryRecord,
 } from "./eval-canary.js";
-import { canaryRecordIssue } from "./release-metadata.js";
 
 export type DecisionRecord = {
 	readonly schemaVersion: 1;
@@ -275,12 +275,12 @@ export function qualifyV2(input: {
 		}
 	}
 	if (input.canary) {
-		const issue = canaryRecordIssue(
-			input.artifact.packageVersion,
-			input.canary,
-			input.artifact,
-		);
-		if (issue) throw new Error(issue);
+		if (
+			input.canary.status !== "passed" ||
+			input.canary.artifact.packageVersion !== input.artifact.packageVersion ||
+			!samePackedArtifact(input.canary.artifact, input.artifact)
+		)
+			throw new Error("Canary does not match the exact qualifying artifact.");
 	}
 	return {
 		report: parsed.value,
@@ -360,27 +360,6 @@ export function decisionRecordFor(input: {
 		artifact: input.expected.artifact,
 		reasons: input.decision.reasons.map((reason) => reason.message),
 	};
-}
-
-export async function writeDecisionRecord(input: {
-	readonly record: DecisionRecord;
-	readonly directory: string;
-}): Promise<string> {
-	await mkdir(input.directory, { recursive: true });
-	const suffix = input.record.canarySha256
-		? `-canary-${input.record.canarySha256.slice("sha256:".length, "sha256:".length + 12)}`
-		: "";
-	const path = join(input.directory, `${input.record.reportId}${suffix}.json`);
-	const bytes = canonicalJson(input.record);
-	try {
-		await writeFile(path, bytes, { encoding: "utf8", flag: "wx" });
-	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-		if ((await readFile(path, "utf8")) !== bytes) {
-			throw new Error(`Immutable decision record conflicts: ${path}`);
-		}
-	}
-	return path;
 }
 
 const USAGE =

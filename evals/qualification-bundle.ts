@@ -701,6 +701,9 @@ export async function readQualificationBundle(path: string): Promise<{
 			bytes: new Uint8Array(),
 		})),
 	);
+	const totalBytes = manifest.files.reduce((sum, file) => sum + file.bytes, 0);
+	if (totalBytes > MAX_BUNDLE_BYTES)
+		throw new Error("Qualification bundle exceeds its total byte limit.");
 	const objectNames = (await readdir(join(path, "objects"))).sort();
 	const expectedNames = [
 		...new Set(
@@ -725,6 +728,9 @@ export async function readQualificationBundle(path: string): Promise<{
 			return { ref, bytes };
 		}),
 	);
+	const artifact = files.find(({ ref }) => ref.role === "artifact");
+	if (!artifact) throw new Error("Qualification bundle artifact is missing.");
+	await assertSafeArtifact(artifact.bytes);
 	if (
 		!(await sameDirectoryIdentity(bundleIdentity)) ||
 		!(await sameDirectoryIdentity(objectsIdentity))

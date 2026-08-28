@@ -22,7 +22,6 @@ import {
 	assertCampaignEvidenceLayout,
 	decisionRecordFor,
 	qualifyV2,
-	writeDecisionRecord,
 } from "../scripts/qualify-release.js";
 
 const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
@@ -306,6 +305,10 @@ describe("repository-owned v2 qualification", () => {
 				"export {};\n",
 			);
 			await writeFile(
+				join(root, "evals", "qualification-regrade.ts"),
+				"export {};\n",
+			);
+			await writeFile(
 				join(root, "evals", "grade.ts"),
 				"export const grade = () => 1;\n",
 			);
@@ -333,6 +336,10 @@ describe("repository-owned v2 qualification", () => {
 			);
 			await writeFile(
 				join(root, "scripts", "qualify-release.ts"),
+				"export {};\n",
+			);
+			await writeFile(
+				join(root, "evals", "qualification-regrade.ts"),
 				"export {};\n",
 			);
 			expect(() => releaseGraderBundle(root)).toThrow(/non-literal import/);
@@ -414,23 +421,6 @@ describe("repository-owned v2 qualification", () => {
 				artifact: ARTIFACT,
 			}),
 		).toThrow("Invalid v2 report");
-	});
-
-	test("writes decision records immutably", async () => {
-		const directory = await mkdtemp(join(tmpdir(), "flow-decision-"));
-		try {
-			const result = qualifyV2({
-				reportInput: releaseReport(),
-				catalogInput: releaseCatalog(),
-				artifact: ARTIFACT,
-			});
-			const record = decisionRecordFor(result);
-			const first = await writeDecisionRecord({ record, directory });
-			const replay = await writeDecisionRecord({ record, directory });
-			expect(replay).toBe(first);
-		} finally {
-			await rm(directory, { recursive: true, force: true });
-		}
 	});
 
 	test("requires explicit report, catalog, and artifact paths in the CLI", async () => {

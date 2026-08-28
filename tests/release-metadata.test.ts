@@ -23,7 +23,7 @@ import {
 	deriveCanaryResult,
 } from "../scripts/eval-canary.js";
 import {
-	assertQualificationRecord,
+	assertQualificationBundle,
 	assertStrictReleaseEvidence,
 	canaryRecordIssue,
 	isMajorRelease,
@@ -404,20 +404,20 @@ describe("release metadata", () => {
 		const directory = await recordDirectory();
 		for (const version of ["7.0.0", "7.1.0", "7.0.1"]) {
 			await expect(
-				assertQualificationRecord(version, directory),
-			).rejects.toThrow(/no exact VERIFIED v2 decision record exists/);
+				assertQualificationBundle({ version, directory }),
+			).rejects.toThrow(/no sealed qualification bundle/);
 		}
 	});
 
-	test("accepts only an exact VERIFIED v2 record and refuses mismatches", async () => {
+	test("refuses a digest-only decision as release authority", async () => {
 		const directory = await recordDirectory();
 		await writeFile(
 			join(directory, "report.json"),
 			JSON.stringify(decisionRecord("7.0.0")),
 		);
 		await expect(
-			assertQualificationRecord("7.0.0", directory),
-		).resolves.toBeUndefined();
+			assertQualificationBundle({ version: "7.0.0", directory }),
+		).rejects.toThrow(/no sealed qualification bundle/);
 
 		expect(qualificationRecordIssue("8.0.0", null)).toMatch(
 			/no qualification record exists for 8\.0\.0/,
@@ -475,7 +475,7 @@ describe("release metadata", () => {
 		).toMatch(/missing v2 decision digests/);
 	});
 
-	test("requires a fresh passed exact-artifact canary for non-major strict evidence", async () => {
+	test("requires a regradable bundle beyond a fresh exact-artifact canary", async () => {
 		const decisions = await recordDirectory();
 		const canaries = await recordDirectory();
 		const version = "8.1.1";
@@ -499,12 +499,12 @@ describe("release metadata", () => {
 		await expect(
 			assertStrictReleaseEvidence({
 				version,
-				decisionsDirectory: decisions,
+				bundlesDirectory: decisions,
 				canaryPath: join(canaries, `${version}.json`),
 				expectedArtifact: expected,
 				now: CANARY_NOW,
 			}),
-		).resolves.toBeUndefined();
+		).rejects.toThrow(/no sealed qualification bundle/);
 	});
 
 	test("rejects stale, failed, incomplete, and artifact-mismatched canaries", () => {
@@ -558,11 +558,11 @@ describe("release metadata", () => {
 		await expect(
 			assertStrictReleaseEvidence({
 				version,
-				decisionsDirectory: decisions,
+				bundlesDirectory: decisions,
 				canaryPath: join(canaries, `${version}.json`),
 				expectedArtifact: expected,
 				now: CANARY_NOW,
 			}),
-		).rejects.toThrow(/canary-bound/);
+		).rejects.toThrow(/no sealed qualification bundle/);
 	});
 });

@@ -103,6 +103,7 @@ export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {
 	kind: "rate",
 	primaryOutcome: "conformance-pass",
 });
+export const RELEASE_MAX_CAMPAIGN_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export const RELEASE_HOST_POLICY = {
 	opencodeVersion: "1.18.6",
@@ -283,7 +284,11 @@ export function releaseCaseCatalogSha256(
 
 export function releaseGraderSourceBundle(repositoryRoot: string) {
 	const root = resolve(repositoryRoot);
-	const pending = ["evals/run.ts", "scripts/qualify-release.ts"];
+	const pending = [
+		"evals/run.ts",
+		"scripts/qualify-release.ts",
+		"evals/qualification-regrade.ts",
+	];
 	const files = new Map<string, string>();
 	const transpiler = new Bun.Transpiler({ loader: "ts" });
 	while (pending.length > 0) {

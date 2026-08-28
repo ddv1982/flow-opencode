@@ -121,7 +121,7 @@ jobs:
           set -euo pipefail
           bun pm pack --destination .
 
-      - name: Verify exact VERIFIED V2 artifact decision and fresh canary
+      - name: Verify independently regraded qualification bundle and fresh canary
         shell: bash
         run: |
           set -euo pipefail
