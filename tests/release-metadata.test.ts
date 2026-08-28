@@ -38,6 +38,7 @@ async function recordDirectory(): Promise<string> {
 }
 
 const VERSION = "6.0.0";
+const CANARY_NOW = new Date("2026-08-26T00:00:00.000Z");
 const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 const bytesDigest = (value: string) =>
 	`sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -293,6 +294,7 @@ describe("release metadata", () => {
 				decisionsDirectory: decisions,
 				canaryPath: join(canaries, `${version}.json`),
 				expectedArtifact: expected,
+				now: CANARY_NOW,
 			}),
 		).resolves.toBeUndefined();
 	});
@@ -343,6 +345,7 @@ describe("release metadata", () => {
 				decisionsDirectory: decisions,
 				canaryPath: join(canaries, `${version}.json`),
 				expectedArtifact: expected,
+				now: CANARY_NOW,
 			}),
 		).rejects.toThrow(/canary-bound/);
 	});
