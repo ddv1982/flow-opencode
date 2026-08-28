@@ -44,6 +44,9 @@ type ToolOptions = Readonly<{
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
 	autoContinuationSupport?: (() => AutoContinuationSupport) | undefined;
+	runtimeIdentity?:
+		| Readonly<{ packageVersion: string; pluginEntrySha256: string }>
+		| undefined;
 }>;
 
 function json(value: unknown): string {
@@ -78,6 +81,11 @@ function withAutoContext(
 	view?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
+	if (options.runtimeIdentity)
+		workflowData = {
+			...workflowData,
+			runtimeIdentity: options.runtimeIdentity,
+		};
 	const timing =
 		view === "detail"
 			? bestEffort(() => options.autoTimingSnapshot?.())

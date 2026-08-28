@@ -1,21 +1,36 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
+	CANARY_DERIVATION_VERSION,
 	CANARY_MAX_AGE_MS,
 	type CanaryRecord,
 	canaryRecordIssue,
 	canaryRecordSha256,
+	deriveCanaryResult,
 	type PreparedCanary,
 	parseCanaryRecord,
 	prepareCanary,
 	preparedCanarySha256,
 	recordCanary,
 } from "../scripts/eval-canary.js";
+import { assuranceProjection } from "../src/application/delivery.js";
+import { SessionSchema } from "../src/application/schema.js";
+import { MAX_TEST_REPORT_BYTES } from "../src/domain/limits.js";
+import { operationInputDigest } from "../src/domain/operation.js";
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -27,6 +42,8 @@ afterEach(async () => {
 });
 
 const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
+const sha256 = (value: string) =>
+	`sha256:${createHash("sha256").update(value).digest("hex")}`;
 const artifact = {
 	packageVersion: "1.2.3",
 	sourceCommit: "commit",
@@ -58,6 +75,148 @@ const actor = {
 	sessionIds: ["ses_secret"],
 };
 
+function canarySession() {
+	const session = JSON.parse(
+		readFileSync(
+			join(import.meta.dir, "../evals/canary/artifacts/8.1.2-session.json"),
+			"utf8",
+		),
+	) as {
+		id: string;
+		closure: {
+			kind: "completed";
+			summary: string;
+			operationId: string;
+			recordedRevision: number;
+		};
+		operations: Array<{ id: string; inputDigest: string }>;
+		runs: Array<{
+			validations: Array<{
+				observedAssertions?: Array<{ status: string }>;
+			}>;
+		}>;
+	};
+	for (const run of session.runs) {
+		for (const validation of run.validations) {
+			for (const assertion of validation.observedAssertions ?? []) {
+				assertion.status = "passed";
+			}
+		}
+	}
+	const closureOperation = session.operations.find(
+		(operation) => operation.id === session.closure.operationId,
+	);
+	if (!closureOperation)
+		throw new Error("Canary closure operation is missing.");
+	closureOperation.inputDigest = operationInputDigest({
+		operationId: session.closure.operationId,
+		expectedRevision: session.closure.recordedRevision - 1,
+		sessionId: session.id,
+		kind: session.closure.kind,
+		summary: session.closure.summary,
+	});
+	return SessionSchema.parse(session);
+}
+
+function canaryTranscript(
+	conclusion = "completion-supported",
+	directory = "<flow-eval-workspace>",
+	packageVersion = "1.2.3",
+	pluginEntrySha256 = digest("d"),
+) {
+	const calls = [
+		"flow_status",
+		"flow_plan_save",
+		"flow_validation_start",
+		"flow_review_start",
+	].map((tool) => ({
+		type: "tool",
+		tool,
+		state: {
+			status: "completed",
+			input: {},
+			output:
+				tool === "flow_status"
+					? {
+							workflowData: {
+								runtimeIdentity: { packageVersion, pluginEntrySha256 },
+							},
+						}
+					: {},
+		},
+	}));
+	return {
+		info: { directory, version: "1.18.6" },
+		messages: [
+			{
+				info: {
+					role: "assistant",
+					agent: "build",
+					providerID: "provider",
+					modelID: "model",
+					sessionID: "ses_manager",
+				},
+				parts: [
+					...calls,
+					{
+						type: "tool",
+						tool: "task",
+						state: {
+							status: "completed",
+							input: { subagent_type: "flow-reviewer" },
+							output: {},
+							metadata: {
+								model: { providerID: "provider", modelID: "model" },
+								parentSessionId: "ses_manager",
+								sessionId: "ses_reviewer",
+							},
+						},
+					},
+					{
+						type: "tool",
+						tool: "flow_session_close",
+						state: {
+							status: "completed",
+							input: {},
+							output: {
+								workflowData: {
+									delivery: {
+										assurance: {
+											conclusion,
+											checks: assuranceProjection(canarySession()).checks,
+										},
+									},
+								},
+							},
+						},
+					},
+				],
+			},
+			{
+				info: {
+					role: "assistant",
+					agent: "flow-reviewer",
+					providerID: "provider",
+					modelID: "model",
+					sessionID: "ses_reviewer",
+				},
+				parts: [],
+			},
+		],
+	};
+}
+
+function installation(value: PreparedCanary) {
+	return {
+		schemaVersion: 1,
+		preparedSha256: value.sha256,
+		artifactSha256: value.artifactSha256,
+		tarballSha256: value.artifact.tarballSha256,
+		pluginEntrySha256: value.pluginEntrySha256,
+		installedPluginSha256: value.pluginEntrySha256,
+	};
+}
+
 function prepared(): PreparedCanary {
 	const base: Omit<PreparedCanary, "sha256"> = {
 		schemaVersion: 1 as const,
@@ -73,6 +232,44 @@ function prepared(): PreparedCanary {
 	return { ...base, sha256: preparedCanarySha256(base) };
 }
 
+async function writePreparedFixture(root: string): Promise<{
+	readonly directory: string;
+	readonly prepared: PreparedCanary;
+}> {
+	const directory = join(root, "prepared");
+	await mkdir(join(directory, "fixture/.opencode/plugins"), {
+		recursive: true,
+	});
+	const artifactBytes = "packed artifact";
+	const pluginBytes = "export const FlowPlugin = true;";
+	const initial = prepared();
+	const artifactValue = {
+		...initial.artifact,
+		tarballSha256: sha256(artifactBytes),
+	};
+	const { sha256: _initialSha256, ...initialBase } = initial;
+	const base: Omit<PreparedCanary, "sha256"> = {
+		...initialBase,
+		artifact: artifactValue,
+		artifactSha256: artifactIdentitySha256(artifactValue),
+		pluginEntrySha256: sha256(pluginBytes),
+	};
+	const preparedValue = {
+		...base,
+		sha256: preparedCanarySha256(base),
+	};
+	await writeFile(
+		join(directory, "prepared.json"),
+		JSON.stringify(preparedValue),
+	);
+	await writeFile(join(directory, "artifact.tgz"), artifactBytes);
+	await writeFile(
+		join(directory, "fixture/.opencode/plugins/flow.js"),
+		pluginBytes,
+	);
+	return { directory, prepared: preparedValue };
+}
+
 function record(
 	input: {
 		readonly status?: "passed" | "failed" | "incomplete";
@@ -86,6 +283,9 @@ function record(
 	const artifactValue = input.artifactValue ?? artifact;
 	const base: Omit<CanaryRecord, "recordSha256"> = {
 		schemaVersion: 1 as const,
+		derivationVersion: CANARY_DERIVATION_VERSION,
+		preparedSha256: prepared().sha256,
+		pluginEntrySha256: prepared().pluginEntrySha256,
 		status: input.status ?? ("passed" as const),
 		artifact: artifactValue,
 		artifactSha256: artifactIdentitySha256(artifactValue),
@@ -99,8 +299,16 @@ function record(
 		checklistSha256: CANARY_CHECKLIST_SHA256,
 		checks: input.checks ?? checks,
 		hostConfigSha256: digest("e"),
-		actors: [{ ...actor, sessionIds: ["<redacted-id>"] }],
+		actors: [
+			{ ...actor, sessionIds: ["<redacted-id>"] },
+			{ ...actor, role: "reviewer", sessionIds: ["<redacted-id>"] },
+		],
 		artifacts: {
+			installation: {
+				path: "artifacts/1.2.3-installation.json",
+				sha256: digest("8"),
+				bytes: 1,
+			},
 			session: {
 				path: "artifacts/1.2.3-session.json",
 				sha256: digest("f"),
@@ -117,6 +325,207 @@ function record(
 }
 
 describe("canary record boundary", () => {
+	test("derives the committed unsupported completion as failed", async () => {
+		const repositoryRoot = join(import.meta.dir, "..");
+		const session = JSON.parse(
+			await readFile(
+				join(repositoryRoot, "evals/canary/artifacts/8.1.2-session.json"),
+				"utf8",
+			),
+		);
+		const transcript = JSON.parse(
+			await readFile(
+				join(repositoryRoot, "evals/canary/artifacts/8.1.2-transcript.json"),
+				"utf8",
+			),
+		);
+		const derived = deriveCanaryResult({
+			packageVersion: prepared().artifact.packageVersion,
+			artifactSha256: digest("a"),
+			tarballSha256: prepared().artifact.tarballSha256,
+			preparedSha256: prepared().sha256,
+			pluginEntrySha256: prepared().pluginEntrySha256,
+			installation: installation(prepared()),
+			session,
+			transcript,
+		});
+		expect(derived.status).toBe("failed");
+		expect(derived.checks["closes-with-delivery"]).toBe(false);
+		expect(derived.actors.map(({ role }) => role).sort()).toEqual([
+			"manager",
+			"reviewer",
+		]);
+	});
+
+	test("derives every passed claim from complete structural evidence", () => {
+		const value = prepared();
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: canarySession(),
+			transcript: canaryTranscript(),
+		});
+		expect(derived.status).toBe("passed");
+		expect(Object.values(derived.checks).every(Boolean)).toBe(true);
+		expect(derived.actors.map(({ role }) => role).sort()).toEqual([
+			"manager",
+			"reviewer",
+		]);
+	});
+
+	test("refuses empty validation and delivery assertion sets", () => {
+		const value = prepared();
+		const session = structuredClone(canarySession()) as unknown as {
+			runs: Array<{
+				validations: Array<{
+					scope: string;
+					observedAssertions?: Array<unknown>;
+				}>;
+			}>;
+		};
+		const validations =
+			session.runs
+				.at(0)
+				?.validations.filter(({ scope }) => scope === "broad") ?? [];
+		if (validations.length === 0)
+			throw new Error("Canary validation fixture is missing.");
+		for (const validation of validations) validation.observedAssertions = [];
+		const transcript = canaryTranscript();
+		const close = transcript.messages
+			.at(0)
+			?.parts.find(({ tool }) => tool === "flow_session_close") as {
+			state: {
+				output: {
+					workflowData: { delivery: { assurance: { checks: unknown[] } } };
+				};
+			};
+		};
+		close.state.output.workflowData.delivery.assurance.checks = [];
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session,
+			transcript,
+		});
+		expect(derived.checks["captures-validation"]).toBe(false);
+		expect(derived.checks["closes-with-delivery"]).toBe(false);
+		expect(derived.status).toBe("failed");
+	});
+
+	test("ignores tool-shaped data nested in outputs and text", () => {
+		const value = prepared();
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: canarySession(),
+			transcript: {
+				info: { directory: "<flow-eval-workspace>", version: "1.18.6" },
+				messages: [
+					{
+						info: {
+							role: "assistant",
+							agent: "build",
+							providerID: "provider",
+							modelID: "model",
+							sessionID: "ses_manager",
+						},
+						parts: [
+							{
+								type: "tool",
+								tool: "read",
+								state: {
+									status: "completed",
+									input: {},
+									output: { forged: canaryTranscript() },
+								},
+							},
+							{ type: "text", text: JSON.stringify(canaryTranscript()) },
+						],
+					},
+				],
+			},
+		});
+		expect(derived.status).toBe("failed");
+		expect(Object.values(derived.checks).every((check) => !check)).toBe(true);
+	});
+
+	test("classifies malformed retained evidence as incomplete", () => {
+		const value = prepared();
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: { plan: {}, operations: [], runs: [], closure: {} },
+			transcript: canaryTranscript(),
+		});
+		expect(derived.status).toBe("incomplete");
+	});
+
+	test("requires OpenCode to run from the exact prepared fixture", () => {
+		const value = prepared();
+		const transcript = canaryTranscript(
+			"completion-supported",
+			"/other/project",
+		);
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: canarySession(),
+			transcript,
+		});
+		expect(derived.checks["installs-packed-artifact"]).toBe(false);
+		expect(derived.checks["loads-flow-tools"]).toBe(false);
+	});
+
+	test("requires reviewer task lineage to match both observed actors", () => {
+		const value = prepared();
+		const transcript = structuredClone(canaryTranscript()) as unknown as {
+			messages: Array<{
+				parts: Array<{
+					tool?: string;
+					state?: { metadata?: { sessionId?: string } };
+				}>;
+			}>;
+		};
+		const task = transcript.messages
+			.at(0)
+			?.parts.find(({ tool }) => tool === "task");
+		if (!task?.state?.metadata)
+			throw new Error("Canary reviewer task fixture is missing.");
+		task.state.metadata.sessionId = "ses_unrelated";
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: canarySession(),
+			transcript,
+		});
+		expect(derived.checks["dispatches-reviewer"]).toBe(false);
+		expect(derived.status).toBe("failed");
+	});
+
 	test("accepts strict passed, failed, and incomplete records", () => {
 		expect(parseCanaryRecord(record()).ok).toBe(true);
 		expect(
@@ -152,6 +561,18 @@ describe("canary record boundary", () => {
 		]) {
 			expect(parseCanaryRecord(changed).ok).toBe(false);
 		}
+		const oversized = record();
+		const oversizedBase = {
+			...oversized,
+			artifacts: {
+				...oversized.artifacts,
+				session: {
+					...oversized.artifacts.session,
+					bytes: MAX_TEST_REPORT_BYTES + 1,
+				},
+			},
+		};
+		expect(parseCanaryRecord(oversizedBase).ok).toBe(false);
 	});
 });
 
@@ -159,6 +580,10 @@ async function evidenceDirectory(value: CanaryRecord): Promise<string> {
 	const directory = await mkdtemp(join(tmpdir(), "flow-canary-evidence-"));
 	temporary.push(directory);
 	await mkdir(join(directory, "artifacts"), { recursive: true });
+	await writeFile(
+		join(directory, value.artifacts.installation?.path ?? ""),
+		"z",
+	);
 	await writeFile(join(directory, value.artifacts.session?.path ?? ""), "x");
 	await writeFile(join(directory, value.artifacts.transcript?.path ?? ""), "y");
 	return directory;
@@ -219,50 +644,93 @@ describe("canary release verification", () => {
 			}),
 		).toMatch(/digest or size/);
 	});
+
+	test("rejects symlinked retained evidence", async () => {
+		const valid = record();
+		const directory = await mkdtemp(join(tmpdir(), "flow-canary-evidence-"));
+		const outside = await mkdtemp(join(tmpdir(), "flow-canary-outside-"));
+		temporary.push(directory, outside);
+		await mkdir(join(directory, "artifacts"), { recursive: true });
+		await writeFile(join(outside, "session.json"), "x");
+		await symlink(
+			join(outside, "session.json"),
+			join(directory, valid.artifacts.session?.path ?? ""),
+		);
+		expect(
+			await canaryRecordIssue({
+				version: "1.2.3",
+				record: valid,
+				expectedArtifact: artifact,
+				directory,
+				now: new Date("2026-08-25T01:00:00.000Z"),
+			}),
+		).toMatch(/unreadable or unstable/);
+	});
 });
 
 describe("canary recording", () => {
 	test("redacts evidence and allows only byte-identical replay", async () => {
 		const root = await mkdtemp(join(tmpdir(), "flow-canary-record-"));
 		temporary.push(root);
+		const fixture = await writePreparedFixture(root);
 		const input = {
 			repositoryRoot: root,
-			prepared: prepared(),
-			status: "passed" as const,
+			prepared: fixture.prepared,
+			preparedDirectory: fixture.directory,
 			operator: "maintainer",
-			hostConfig: { opencode: "1.18.6" },
-			actors: [actor],
-			checks,
-			projectPath: "/secret/project",
-			session: {
-				id: "ses_secret",
-				path: "/secret/project",
-				apiKey: "sk-proj-1234567890123456",
-			},
+			session: canarySession(),
 			transcript: {
-				session: "session:1234-abcd",
-				text: "Bearer abcdefghijklmnop",
+				...canaryTranscript(
+					"completion-supported",
+					join(fixture.directory, "fixture"),
+					fixture.prepared.artifact.packageVersion,
+					fixture.prepared.pluginEntrySha256,
+				),
+				secret: {
+					session: "session:1234-abcd",
+					path: join(fixture.directory, "fixture"),
+					text: "Bearer abcdefghijklmnop sk-proj-1234567890123456",
+				},
 			},
 			recordedAt: new Date("2026-08-25T00:00:00.000Z"),
 		};
 		const first = await recordCanary(input);
 		const second = await recordCanary(input);
 		expect(second.record).toEqual(first.record);
+		const actorIds = first.record.actors.flatMap(
+			({ sessionIds }) => sessionIds,
+		);
+		expect(actorIds.every((id) => /^id_[a-f0-9]{16}$/.test(id))).toBe(true);
+		expect(new Set(actorIds).size).toBe(2);
 		expect(
 			await canaryRecordIssue({
 				version: "1.2.3",
 				record: first.record,
-				expectedArtifact: artifact,
+				expectedArtifact: first.record.artifact,
 				directory: join(root, "evals", "canary"),
 				now: new Date("2026-08-25T01:00:00.000Z"),
 			}),
 		).toBeNull();
+		const { recordSha256: _recordSha256, ...recordBase } = first.record;
+		const tamperedBase = { ...recordBase, hostConfigSha256: digest("0") };
+		expect(
+			await canaryRecordIssue({
+				version: "1.2.3",
+				record: {
+					...tamperedBase,
+					recordSha256: canaryRecordSha256(tamperedBase),
+				},
+				expectedArtifact: first.record.artifact,
+				directory: join(root, "evals/canary"),
+				now: new Date("2026-08-25T01:00:00.000Z"),
+			}),
+		).toMatch(/derived claims/);
 		expect(
 			await canaryRecordIssue({
 				version: "1.2.3",
 				record: first.record,
 				expectedArtifact: {
-					...artifact,
+					...first.record.artifact,
 					sourceCommit: "tag-commit-after-evidence",
 					sourceTreeSha256: digest("8"),
 				},
@@ -281,33 +749,36 @@ describe("canary recording", () => {
 			),
 			await readFile(first.path, "utf8"),
 		].join("\n");
-		expect(stored).not.toContain("/secret/project");
-		expect(stored).not.toContain("ses_secret");
+		expect(stored).not.toContain(fixture.directory);
 		expect(stored).not.toContain("1234-abcd");
 		expect(stored).not.toContain("sk-proj-");
 		expect(stored).not.toContain("Bearer abcdef");
 		await expect(recordCanary({ ...input, operator: "other" })).rejects.toThrow(
 			"conflicts",
 		);
+		await writeFile(
+			join(fixture.directory, "fixture/.opencode/plugins/flow.js"),
+			"mutated plugin",
+		);
+		await expect(recordCanary(input)).rejects.toThrow(/installed plugin/i);
 	});
 
-	test("passed recording requires actors and both artifacts", async () => {
+	test("missing evidence derives an incomplete record", async () => {
 		const root = await mkdtemp(join(tmpdir(), "flow-canary-record-"));
 		temporary.push(root);
-		await expect(
-			recordCanary({
-				repositoryRoot: root,
-				prepared: prepared(),
-				status: "passed",
-				operator: "maintainer",
-				hostConfig: {},
-				actors: [],
-				checks,
-				projectPath: root,
-				session: null,
-				transcript: null,
-			}),
-		).rejects.toThrow(/require actors/);
+		const fixture = await writePreparedFixture(root);
+		const result = await recordCanary({
+			repositoryRoot: root,
+			prepared: fixture.prepared,
+			preparedDirectory: fixture.directory,
+			operator: "maintainer",
+			session: null,
+			transcript: null,
+		});
+		expect(result.record.status).toBe("incomplete");
+		expect(Object.values(result.record.checks).every((value) => !value)).toBe(
+			true,
+		);
 	});
 });
 

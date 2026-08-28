@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	unlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@opencode-ai/plugin";
@@ -238,6 +246,25 @@ describe("Flow distribution surface", () => {
 		const workspace = await createTestWorkspace("flow-surface-");
 		const hooks = await loadPlugin(workspace);
 		expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([...TOOL_NAMES]);
+		const status = JSON.parse(
+			String(
+				await hooks.tool?.flow_status?.execute(
+					{ request: { view: "compact" } },
+					{
+						agent: "build",
+						directory: workspace,
+						worktree: workspace,
+						sessionID: "runtime-identity",
+					} as ToolContext,
+				),
+			),
+		) as { workflowData: { runtimeIdentity: { pluginEntrySha256: string } } };
+		const pluginBytes = await readFile(
+			join(import.meta.dir, "../src/platform/opencode/plugin.ts"),
+		);
+		expect(status.workflowData.runtimeIdentity.pluginEntrySha256).toBe(
+			`sha256:${createHash("sha256").update(pluginBytes).digest("hex")}`,
+		);
 	});
 
 	test("isolates worker permissions while keeping manager and reviewer dispatch separate", () => {
