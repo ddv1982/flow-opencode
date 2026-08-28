@@ -81,8 +81,10 @@ combined diff before validation.
 
 ## Validate
 
-Arm each evidence Bash command with `flow_validation_start` (current revision,
-feature id, exact command, `scope`) immediately before running it byte-for-byte.
+Arm each evidence command immediately before running it byte-for-byte with
+`flow_validation_start` (current revision, feature id, exact command, `scope`).
+To satisfy nonempty planned assertions, have the command write JUnit and pass
+its repository-relative `resultsPath`; omitting it records those names absent.
 Flow records the host observation; copy no host-observed fields.
 
 `scope: "broad"` runs the plan's gate evidence command and nothing else.

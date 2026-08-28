@@ -272,6 +272,18 @@ describe("Flow prompt structure", () => {
 		);
 	});
 
+	test("binds named assertions to machine-readable test reports", () => {
+		const plan = getFlowGuidance("flow-plan").content;
+		const run = getFlowGuidance("flow-run").content;
+		expect(plan).toMatch(/never summaries such as\s+"all tests pass"/);
+		expect(plan).toContain("choose a JUnit-producing command");
+		expect(plan).toContain("Use `[]` only when");
+		expect(plan).toContain("whole-suite exit success");
+		expect(run).toContain("resultsPath");
+		expect(run).toContain("To satisfy nonempty planned assertions");
+		expect(run).toContain("records those names absent");
+	});
+
 	test("continues a reviewer matrix only when the packet asked for one", () => {
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
 		expect(reviewer).toContain("riskLenses");

@@ -52,8 +52,11 @@ Save one plan with:
 - `evidence`: one `scope: "gate"` entry for the canonical whole-repository
   command, plus `scope: "extra"` entries for observations this host may lack.
   Each entry names `requirement`, `environment`, `command`, `platform`
-  (`win32`, `darwin`, `linux`, or `other`), and `assertions` (empty when the
-  evidence is not a test result). Broad observations run the gate command
+  (`win32`, `darwin`, `linux`, or `other`), and `assertions`. When acceptance
+  depends on a particular test case, choose a JUnit-producing command and name
+  that exact case; never summaries such as "all tests pass". Use `[]` only when
+  evidence is not a per-test-case claim, including whole-suite exit success.
+  Broad observations run the gate command
   byte-for-byte. Extra entries may be omitted when the goal is fully observable
   here. Final review and completed closure stay refused until every extra
   entry is satisfied on its declared platform with named cases passing. The
@@ -63,11 +66,9 @@ Save one plan with:
   `summary`, bounded `targets`, concrete `validation`, `dependsOn` ids, and
   optional `kind`.
 
-Each feature needs one observable outcome judgeable from bounded evidence and
-focused validation. Split only independent failures or true dependencies; file
-overlap decides neither. Separate a race or state-machine invariant from
-independently acceptable UI, persistence, or accessibility outcomes; merge only
-under one indivisible invariant. Avoid step-shaped features and vague checks.
+Each feature needs one observable outcome. Split only independent failures or
+true dependencies, not file overlap. Keep one indivisible invariant together;
+avoid step-shaped features and vague checks.
 
 Preserve stable finding, issue, or requirement IDs exactly in the saved feature
 `summary` or `validation`; each stays traceable from the immutable plan to one
