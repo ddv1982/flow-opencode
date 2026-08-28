@@ -148,6 +148,20 @@ describe("environment reserve activation", () => {
 		expect(state.exhaustedStrata).toEqual([]);
 	});
 
+	test("does not spend one reserve on a stratum missing two scored outcomes", () => {
+		const state = deriveEnvironmentReserveState(plan(), [
+			attempt(primaryA, failure("host")),
+			attempt(primaryB, {
+				kind: "unscored-escalation",
+				reason: "The model asked an unsupported question.",
+			}),
+		]);
+		expect(state.activatedReserveCellIds).toEqual([]);
+		expect(state.nextReserveCellIds).toEqual([]);
+		expect(state.targetsSatisfied).toBe(false);
+		expect(state.exhaustedStrata).toEqual([environmentStratumKey(primaryA)]);
+	});
+
 	test("never replaces product, evaluator, nonretryable, or reserve failures", () => {
 		expect(
 			deriveEnvironmentReserveState(plan(), [

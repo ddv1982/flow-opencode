@@ -61,7 +61,9 @@ export function deriveEnvironmentReserveState(
 			return attempt ? isEligibleEnvironmentFailure(attempt) : false;
 		});
 		const shouldActivate =
-			primaryProductCount < primary.length && eligible && reserve !== undefined;
+			primaryProductCount + 1 === primary.length &&
+			eligible &&
+			reserve !== undefined;
 		if (shouldActivate) {
 			activatedReserveCellIds.push(reserve.cellId);
 		}

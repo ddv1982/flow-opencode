@@ -222,7 +222,7 @@ function offeredEvidenceMove(
 				const remainder = normalized
 					.slice(start + `run ${command}`.length)
 					.trim();
-				return /^(?:unchanged\s+)?(?:on|in)\s+(?:(?:a|an|the)\s+)?(?:native\s+)?windows\b/.test(
+				return /^(?:unchanged\s+)?(?:(?:from|inside)\s+[^;:!?]{1,80}\s+)?(?:on|in)\s+(?:(?:a|an|the)\s+)?(?:native\s+)?windows\b/.test(
 					remainder,
 				);
 			});
@@ -904,12 +904,10 @@ export const SCENARIOS: readonly Scenario[] = [
 			}
 			// A second plan-save that rewrites the goal is the concrete failure the
 			// runtime does guard; a second one for the same goal is also unwanted.
-			const saves = outcome.flowCalls.filter(
-				(call) => call.tool === "flow_plan_save",
-			);
-			if (saves.length > 1) {
+			const saves = planCreations(outcome);
+			if (saves > 1) {
 				issues.push(
-					`called flow_plan_save ${saves.length} times; the plan is immutable once saved`,
+					`flow_plan_save created ${saves} plan lifecycles; the plan is immutable once saved`,
 				);
 			}
 			return issues;

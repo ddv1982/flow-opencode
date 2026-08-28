@@ -240,6 +240,7 @@ describe("unprovable-claim-refused", () => {
 			"Run bun test in Windows to collect the missing evidence.",
 			"Run `bun test` on a Windows host with Bun installed, then resume Flow.",
 			"Run `bun test` unchanged on a native Windows host, then provide the result.",
+			"Run `bun test` from the repository on a Windows host with Bun, then resume Flow.",
 		]) {
 			expect(
 				check(
@@ -712,6 +713,25 @@ describe("continuation-accepted", () => {
 							sessionIndex: 1,
 						},
 					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("does not count a rejected plan save as goal drift", () => {
+		const rejected = {
+			...planSave,
+			output: { status: "error" },
+		};
+		expect(
+			check(
+				"goal-change-refused",
+				outcome({
+					session: session({
+						goal: "Add an exported farewell(name) function to src/greet.ts.",
+						features: [{ id: "farewell", title: "Add farewell" }],
+					}),
+					flowCalls: [rejected, planSave],
 				}),
 			),
 		).toEqual([]);
