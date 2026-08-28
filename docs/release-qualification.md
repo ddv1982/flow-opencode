@@ -63,8 +63,8 @@ direction. The cadence follows from that:
   allowed; removals and renames are not.
 - **No release** without a sealed V2 qualification bundle and fresh canary.
   The bundle retains every attempt, transcript, grader source, and exact artifact
-  needed to reproduce its decision. A `CHANGELOG` entry states the schema impact
-  explicitly.
+  needed to reproduce its decision. Release metadata independently regrades those
+  bytes before publication. A `CHANGELOG` entry states the schema impact explicitly.
 - **Patch releases** for defects and host-compatibility fixes, which is what the
   weekly OpenCode compatibility smoke exists to catch early.
 - **Deprecate before removing.** A surface that is going away is announced in one

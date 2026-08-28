@@ -9,5 +9,6 @@ its evidence, derived decision, and the complete grader source closure. The seal
 written last. An interrupted directory is not qualification evidence; an identical
 retry completes or replays it, while conflicting bytes are refused.
 
-Bundle creation is not release authorization. The bundle retains the inputs that
-release verification will independently regrade and rederive.
+Bundle creation is not release authorization. Release verification reopens every
+object, regrades each attempt, and rederives the canary, provenance, usage, and
+decision before accepting the bundle.

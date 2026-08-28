@@ -22,7 +22,11 @@ import {
 	inspectArtifact,
 	instructionDelivery,
 } from "../evals/provenance.js";
-import { readQualificationBundle } from "../evals/qualification-bundle.js";
+import {
+	readQualificationBundle,
+	writeQualificationBundle,
+} from "../evals/qualification-bundle.js";
+import { regradeQualificationBundle } from "../evals/qualification-regrade.js";
 import {
 	releaseCatalog,
 	releaseGraderBundle,
@@ -35,6 +39,8 @@ import { campaignPlanFor, releaseScenarios } from "../evals/run.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
 import { prepareCanary, recordCanary } from "../scripts/eval-canary.js";
+import { decisionRecordFor, qualifyV2 } from "../scripts/qualify-release.js";
+import { assertQualificationBundle } from "../scripts/release-metadata.js";
 import { assuranceProjection } from "../src/application/delivery.js";
 import { SessionSchema } from "../src/application/schema.js";
 import { operationInputDigest } from "../src/domain/operation.js";
@@ -196,6 +202,10 @@ function canaryTranscript(input: {
 
 test("qualifies and seals a complete exact-artifact campaign through the CLI", async () => {
 	const repositoryRoot = join(import.meta.dir, "..");
+	const regradeAuthority = {
+		qualify: qualifyV2,
+		decisionRecord: decisionRecordFor,
+	};
 	const temporary = await mkdtemp(join(tmpdir(), "flow-qualification-cli-"));
 	try {
 		const artifactPath = await packPlugin(
@@ -326,11 +336,14 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			});
 		}
 
+		const recordedAt = new Date();
+		const verificationNow = new Date(recordedAt.getTime() + 60 * 60 * 1_000);
+		const staleNow = new Date(recordedAt.getTime() + 8 * 24 * 60 * 60 * 1_000);
 		const completion = {
 			status: "complete" as const,
 			cause: "fixed-target" as const,
-			startedAt: "2026-08-28T00:00:00.000Z",
-			finishedAt: "2026-08-28T00:00:01.000Z",
+			startedAt: new Date(recordedAt.getTime() - 2_000).toISOString(),
+			finishedAt: new Date(recordedAt.getTime() - 1_000).toISOString(),
 			activatedReserveCellIds: [],
 			observed: {
 				attempts: plan.cells.length,
@@ -348,7 +361,6 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 
 		const preparedDirectory = join(temporary, "prepared-canary");
 		await mkdir(preparedDirectory, { recursive: true });
-		const recordedAt = new Date();
 		const prepared = await prepareCanary({
 			repositoryRoot,
 			artifactPath,
@@ -425,6 +437,143 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 				.files.map(({ path }) => path)
 				.sort(),
 		);
+		const regraded = await regradeQualificationBundle({
+			path: bundlePath,
+			repositoryRoot,
+			authority: regradeAuthority,
+			now: verificationNow,
+		});
+		expect(regraded.decision.verdict).toBe("VERIFIED");
+		await expect(
+			regradeQualificationBundle({
+				path: bundlePath,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: staleNow,
+			}),
+		).rejects.toThrow(/freshness/);
+		const releaseAuthority = await assertQualificationBundle({
+			version: artifact.packageVersion,
+			directory: bundlesDirectory,
+			expectedArtifact: artifact,
+			expectedCanarySha256: canary.record.recordSha256,
+			now: verificationNow,
+		});
+		expect(releaseAuthority.bundleSha256).toBe(bundle.manifest.bundleSha256);
+		const sealedFiles = bundle.files.map(({ ref, bytes }) => ({
+			role: ref.role,
+			...(ref.id ? { id: ref.id } : {}),
+			mediaType: ref.mediaType,
+			bytes,
+		}));
+		const forgedFiles = sealedFiles.map((file) => ({
+			...file,
+			bytes:
+				file.role === "decision"
+					? Buffer.from(
+							canonicalJson({
+								...(JSON.parse(file.bytes.toString("utf8")) as object),
+								reasons: ["forged digest-only decision"],
+							}),
+						)
+					: file.bytes,
+		}));
+		const forged = await writeQualificationBundle({
+			input: {
+				reportId: bundle.manifest.reportId,
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: forgedFiles,
+			},
+			outputRoot: bundlesDirectory,
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: forged.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/decision does not reproduce/);
+		await expect(
+			assertQualificationBundle({
+				version: artifact.packageVersion,
+				directory: bundlesDirectory,
+				expectedArtifact: artifact,
+				expectedCanarySha256: canary.record.recordSha256,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/did not regrade cleanly/);
+		const missingSource = await writeQualificationBundle({
+			input: {
+				reportId: bundle.manifest.reportId,
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: sealedFiles.filter(
+					(file, index) =>
+						file.role !== "authority-source" ||
+						index !==
+							sealedFiles.findIndex(
+								(candidate) => candidate.role === "authority-source",
+							),
+				),
+			},
+			outputRoot: join(temporary, "missing-source-bundles"),
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: missingSource.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/authority does not match/);
+		const contradictoryPlan = await writeQualificationBundle({
+			input: {
+				reportId: bundle.manifest.reportId,
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: sealedFiles.map((file) =>
+					file.role === "plan"
+						? {
+								...file,
+								bytes: Buffer.from(
+									canonicalJson({
+										...(JSON.parse(file.bytes.toString("utf8")) as object),
+										planId: "contradictory-plan",
+									}),
+								),
+							}
+						: file,
+				),
+			},
+			outputRoot: join(temporary, "contradictory-plan-bundles"),
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: contradictoryPlan.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/plan or completion differs/);
+		const contradictoryManifest = await writeQualificationBundle({
+			input: {
+				reportId: "contradictory-report-id",
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: sealedFiles,
+			},
+			outputRoot: join(temporary, "contradictory-manifest-bundles"),
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: contradictoryManifest.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/manifest or analyzer identity/);
 	} finally {
 		await rm(temporary, { recursive: true, force: true });
 	}
