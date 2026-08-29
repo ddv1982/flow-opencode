@@ -54,10 +54,11 @@ Save one plan with:
   Each entry names `requirement`, `environment`, `command`, `platform`
   (`win32`, `darwin`, `linux`, or `other`), and `assertions`. When acceptance
   depends on a particular test case, name that exact case and declare
-  the command must write JUnit to `.flow/results.xml`, for example with
-  `--reporter-outfile=.flow/results.xml`; never use another or absolute path or
-  summaries such as "all tests pass". Use `assertions: []` when evidence is not a
-  per-test-case claim, including whole-suite exit success.
+  the command must write JUnit to `.flow/results.xml`. For Bun, use the complete
+  command `bun test --reporter=junit --reporter-outfile=.flow/results.xml`;
+  `--reporter-outfile` alone does not select JUnit; never use another or absolute path
+  or summaries such as "all tests pass". Use `assertions: []` when evidence
+  is not a per-test-case claim, including whole-suite exit success.
   If a named acceptance case is skipped on the requested host, either make that
   exact case honestly runnable when the approved scope permits it, or preserve it
   as `scope: "extra"` evidence on a host where it runs. Never replace it with an

@@ -277,7 +277,9 @@ describe("Flow prompt structure", () => {
 		const run = getFlowGuidance("flow-run").content;
 		expect(plan).toContain('summaries such as "all tests pass"');
 		expect(plan).toContain("command must write JUnit to `.flow/results.xml`");
-		expect(plan).toContain("--reporter-outfile=.flow/results.xml");
+		expect(plan).toContain(
+			"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+		);
 		expect(plan).toContain("never use another or absolute path");
 		expect(plan).toContain("exact case honestly runnable");
 		expect(plan).toContain("whole-suite exit success");
