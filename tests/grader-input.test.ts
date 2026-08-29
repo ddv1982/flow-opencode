@@ -11,6 +11,7 @@ import {
 	pseudonymousEvalId,
 	RetainedScenarioEvidenceSchema,
 	retainedFailureEvidence,
+	retainedPendingTools,
 	ScenarioGradeInputSchema,
 } from "../evals/grader-input.js";
 
@@ -249,6 +250,18 @@ describe("retained scenario grader input", () => {
 			},
 		});
 		expect(deriveRetainedFailure(contradictoryAbort)).toBeNull();
+		expect(
+			retainedPendingTools({
+				...contradictoryAbort.gradeInput,
+				allCalls: [
+					{
+						...pendingCall,
+						status: "error",
+						metadata: { interrupted: true },
+					},
+				],
+			}),
+		).toEqual([pendingCall.tool]);
 		expect(
 			deriveRetainedFailure(
 				RetainedScenarioEvidenceSchema.parse({

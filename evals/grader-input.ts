@@ -209,7 +209,12 @@ export function retainedPendingTools(
 	gradeInput: RetainedScenarioGradeInput,
 ): string[] {
 	return gradeInput.allCalls
-		.filter((call) => call.status === "pending" || call.status === "running")
+		.filter(
+			(call) =>
+				call.status === "pending" ||
+				call.status === "running" ||
+				(call.status === "error" && call.metadata.interrupted === true),
+		)
 		.map((call) => call.tool)
 		.sort();
 }
