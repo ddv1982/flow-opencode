@@ -597,6 +597,54 @@ function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
 	}
 }
 
+async function processGroupMembers(groupPid: number): Promise<number[]> {
+	if (process.platform === "linux") {
+		const entries = await readdir("/proc", { withFileTypes: true });
+		const members = await Promise.all(
+			entries
+				.filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
+				.map(async (entry) => {
+					try {
+						const stat = await readFile(`/proc/${entry.name}/stat`, "utf8");
+						const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
+						return Number(fields[2]) === groupPid ? Number(entry.name) : null;
+					} catch (error) {
+						if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+						throw error;
+					}
+				}),
+		);
+		return members.filter((member): member is number => member !== null);
+	}
+	const listed = spawnSync("ps", ["-axo", "pid=,pgid="], {
+		encoding: "utf8",
+	});
+	if (listed.status !== 0 || typeof listed.stdout !== "string") return [];
+	return listed.stdout.split("\n").flatMap((line) => {
+		const [memberText, groupText] = line.trim().split(/\s+/);
+		const member = Number(memberText);
+		return Number.isInteger(member) && Number(groupText) === groupPid
+			? [member]
+			: [];
+	});
+}
+
+async function signalProcessTreeDescendants(
+	child: ChildProcess,
+	signal: NodeJS.Signals,
+): Promise<void> {
+	const pid = child.pid;
+	if (pid === undefined || process.platform === "win32") return;
+	for (const member of await processGroupMembers(pid)) {
+		if (member === pid) continue;
+		try {
+			process.kill(member, signal);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== "ESRCH") throw error;
+		}
+	}
+}
+
 function processTreeAlive(child: ChildProcess): boolean {
 	const pid = child.pid;
 	if (pid === undefined) return false;
@@ -617,6 +665,9 @@ export async function terminateChildProcessTree(
 	const exited = new Promise<void>((resolve) =>
 		child.once("exit", () => resolve()),
 	);
+	await signalProcessTreeDescendants(child, "SIGTERM");
+	await Promise.race([exited, Bun.sleep(500)]);
+	if (!processTreeAlive(child)) return;
 	signalProcessTree(child, "SIGTERM");
 	const gracefulDeadline = Date.now() + 3_000;
 	while (processTreeAlive(child) && Date.now() < gracefulDeadline) {

@@ -41,22 +41,12 @@ import {
 } from "../evals/metrics.js";
 import { bestEffortEvaluation } from "../evals/run.js";
 
-function liveProcess(pid: number): boolean {
-	if (process.platform !== "linux") {
-		try {
-			process.kill(pid, 0);
-			return true;
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
-			throw error;
-		}
-	}
+function processExists(pid: number): boolean {
 	try {
-		const stat = readFileSync(`/proc/${pid}/stat`, "utf8");
-		const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-		return fields[0] !== "Z";
+		process.kill(pid, 0);
+		return true;
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
 		throw error;
 	}
 }
@@ -81,8 +71,8 @@ describe("eval run classification", () => {
 			);
 		});
 		await terminateChildProcessTree(child);
-		expect(child.signalCode).not.toBeNull();
-		expect(liveProcess(childPid)).toBe(false);
+		expect(child.exitCode ?? child.signalCode).not.toBeNull();
+		expect(processExists(childPid)).toBe(false);
 	});
 
 	test("gives a detached child time to finish SIGTERM cleanup", async () => {
