@@ -102,6 +102,10 @@ import {
 	releaseScenarioCatalog,
 	selectReleaseScenarios,
 } from "./release-policy.js";
+import {
+	deriveReleaseRunState,
+	type ReleaseRunState,
+} from "./release-progress.js";
 import type {
 	ArtifactIdentity,
 	AttemptRecordV2,
@@ -566,11 +570,14 @@ function parseArgs(argv: string[]) {
 		console.error("--concurrency must be a positive integer.");
 		process.exit(2);
 	}
-	// One worker per model by default. Work is queued per model, so more workers than
-	// models cannot help, and `--concurrency 1` restores the sequential order that
-	// makes an interleaved failure easier to read.
+	if (release && concurrency !== 0 && concurrency !== 1) {
+		console.error("--release requires --concurrency 1.");
+		process.exit(2);
+	}
+	// Release is sequential so a durable terminal prefix stops before another cell.
+	// Ordinary runs default to one worker per model.
 	const workers = Math.min(
-		concurrency || models.length,
+		concurrency || (release ? 1 : models.length),
 		models.length,
 		MAX_CONCURRENCY,
 	);
@@ -798,6 +805,9 @@ async function main(): Promise<void> {
 	const campaignStartedAt = new Date().toISOString();
 	const campaignCells = v2Plan.cells;
 	const v2Attempts: AttemptRecordV2[] = [];
+	let releaseStopCause:
+		| Extract<ReleaseRunState, { kind: "stop" }>["cause"]
+		| null = null;
 	const results: RunResult[] = [];
 	// One decision-layer recording per attempt that reached the model, so the run's
 	// findings can be re-derived against a changed runtime without paying again.
@@ -899,11 +909,7 @@ async function main(): Promise<void> {
 			await reportStore.writeAttempt(attemptRecord);
 			v2Attempts.push(attemptRecord);
 		};
-		// One queue per model, run concurrently. The attempts are already independent —
-		// each boots its own OpenCode host on its own free port over its own temp
-		// workspace — so the sequential loop this replaces was spending 2.5h of wall
-		// clock on 2.5h of model time for no reason. Keyed by model so a queue never
-		// contends with itself for a single provider's rate limit.
+		// Model-keyed queues never contend with their own provider rate limit.
 		const queues = jobsFor(models, selected, sampling);
 		/** One attempt, start to finish, printing a single line when it lands. */
 		const runAttempt = async (job: Job): Promise<Recorded> => {
@@ -1419,8 +1425,23 @@ async function main(): Promise<void> {
 			);
 		};
 
-		const recorded = await runQueues(queues, concurrency, runAttempt, (entry) =>
-			isEvaluatorFailure(entry.result.failure?.origin),
+		const releaseShouldStop = (): boolean => {
+			const state = deriveReleaseRunState({
+				plan: v2Plan,
+				catalog: v2Catalog,
+				attempts: v2Attempts,
+			});
+			if (state.kind === "stop") releaseStopCause = state.cause;
+			return state.kind === "stop";
+		};
+		const recorded = await runQueues(
+			queues,
+			concurrency,
+			runAttempt,
+			(entry) =>
+				sampling.kind === "release"
+					? releaseShouldStop()
+					: isEvaluatorFailure(entry.result.failure?.origin),
 		);
 		for (const entry of recorded.sort(
 			(left, right) => left.slot - right.slot,
@@ -1449,10 +1470,7 @@ async function main(): Promise<void> {
 					reserveJobsFor(v2Plan, reserveState.nextReserveCellIds, selected),
 					concurrency,
 					runAttempt,
-					() => {
-						const current = deriveEnvironmentReserveState(v2Plan, v2Attempts);
-						return current.fatal || current.exhaustedStrata.length > 0;
-					},
+					releaseShouldStop,
 				);
 				for (const entry of reserveRecorded.sort(
 					(left, right) => left.slot - right.slot,
@@ -1491,11 +1509,13 @@ async function main(): Promise<void> {
 		status: v2Complete ? "complete" : "stopped",
 		cause: v2Complete
 			? "fixed-target"
-			: stoppedOrigin
-				? stoppedOrigin
-				: results.some((result) => result.unscored)
-					? "operator"
-					: "evaluator",
+			: releaseStopCause
+				? releaseStopCause
+				: stoppedOrigin
+					? stoppedOrigin
+					: results.some((result) => result.unscored)
+						? "operator"
+						: "evaluator",
 		startedAt: campaignStartedAt,
 		finishedAt: v2FinishedAt,
 		activatedReserveCellIds: [...reserveState.activatedReserveCellIds],

@@ -368,33 +368,6 @@ export function isValidationFresh(
 		);
 }
 
-/**
- * Commands whose latest evidence blocks review until that exact command passes
- * again for the current workspace content.
- *
- * Three sets qualify. A plan-listed command is matched against `feature.validation`
- * by exact string; that field is free-form text and models write prose in it,
- * matching no command, so this half often does not engage although its tests,
- * which pass bare commands, do (`PROSE_VALIDATION` in
- * `tests/domain-transitions.test.ts`). The `scope: "gate"` command is the same
- * rule on a field that is always a command, so the plan half now engages for the
- * one command that matters most, whatever scope its observation was labelled.
- *
- * A command an observation claimed at `broad` scope qualifies whatever the plan
- * says, because `scope` is the one field in a recorded observation that nothing
- * corroborates: capture byte-matches the armed command and takes the exit code
- * from the host, so a caller cannot misreport either, but it can label a narrow
- * command `broad`. Without this, a failing repository gate was discharged by
- * arming something smaller under the same label -- every field of the resulting
- * record true, and the gate never passed. Review only ever needed *a* broad pass,
- * so it accepted that one.
- *
- * Only the reviewed feature's runs are searched, and that is enough: every review
- * consults this, an approved plan is immutable, and `completed` closure needs a
- * passing run for every feature. So a red gate observed under one feature blocks
- * that feature until the same command passes -- it cannot be walked away from by
- * moving to another.
- */
 export function unresolvedVetoedCommands(
 	session: Session,
 	run: FeatureRun,

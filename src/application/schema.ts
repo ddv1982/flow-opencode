@@ -282,6 +282,17 @@ export const SessionSchema: z.ZodType<Session> = z
 		id: z.string().min(1).max(MAX_SESSION_ID_LENGTH),
 		revision: RevisionSchema,
 		goal: boundedText("Goal"),
+		requestEvidence: z
+			.object({
+				requestSha256: SourceDigestSchema,
+				hostSessionSha256: SourceDigestSchema,
+				assertions: z
+					.array(boundedText("Requested assertion"))
+					.min(1)
+					.max(MAX_DECLARED_ASSERTIONS),
+			})
+			.strict()
+			.optional(),
 		approval: z.enum(["pending", "approved"]),
 		plan: PlanSchema.nullable(),
 		runs: z.array(FeatureRunSchema).max(512),

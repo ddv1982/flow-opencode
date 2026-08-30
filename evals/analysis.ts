@@ -1,6 +1,10 @@
 import { canonicalJson } from "./canonical-json.js";
 import type { ValidatedCaseCatalog } from "./catalog.js";
 import { samePackedArtifact } from "./provenance.js";
+import {
+	deriveReleaseRunState,
+	minimumPassingCount,
+} from "./release-progress.js";
 import type {
 	ArtifactIdentity,
 	EvaluatorIdentity,
@@ -490,6 +494,34 @@ export function deriveReleaseDecision(input: {
 		);
 	}
 	if (
+		report.completion.status === "stopped" &&
+		report.completion.cause === "product"
+	) {
+		const state = deriveReleaseRunState({
+			plan: report.plan,
+			catalog,
+			attempts: report.attempts,
+		});
+		if (
+			state.kind === "stop" &&
+			state.cause === "product" &&
+			state.reason === "pass-rate-unreachable"
+		)
+			decisionReason(
+				reasons,
+				"hard",
+				"below-pass-rate",
+				"The retained attempt prefix made the release threshold unreachable.",
+			);
+		else if (!(state.kind === "stop" && state.cause === "product"))
+			decisionReason(
+				reasons,
+				"hard",
+				"campaign-integrity-failure",
+				"Product stop cause does not match the retained attempt prefix.",
+			);
+	}
+	if (
 		promotionArtifact &&
 		!samePackedArtifact(expected.artifact, promotionArtifact)
 	) {
@@ -688,8 +720,8 @@ export function deriveReleaseDecision(input: {
 				);
 			} else if (
 				policy.minPassRate !== null &&
-				passRate !== null &&
-				passRate < policy.minPassRate
+				passed <
+					minimumPassingCount(policy.minScoredAttempts, policy.minPassRate)
 			) {
 				decisionReason(
 					reasons,

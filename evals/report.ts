@@ -291,6 +291,7 @@ const CampaignCompletionSchema = z
 			"provider",
 			"host",
 			"evaluator",
+			"product",
 			"persistence",
 			"operator",
 		]),

@@ -61,8 +61,10 @@ Save one plan with:
   is not a per-test-case claim, including whole-suite exit success.
   If a named acceptance case is skipped on the requested host, either make that
   exact case honestly runnable when the approved scope permits it, or preserve it
-  as `scope: "extra"` evidence on a host where it runs. Never replace it with an
-  unnamed local check. Declare separate current-host proof with `assertions: []`.
+  as `scope: "extra"` evidence on a host where it runs. Never replace it with a
+  different local check. Declare separate current-host proof with `assertions: []`.
+  Flow binds quoted names introduced by `case named`, `test named`, or
+  `assertion named` to the approved evidence exactly.
   Broad observations run the gate command
   byte-for-byte. Extra entries may be omitted when the goal is fully observable
   here. Final review and completed closure stay refused until every extra

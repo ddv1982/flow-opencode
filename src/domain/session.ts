@@ -274,6 +274,9 @@ export type Session = Readonly<{
 	id: SessionId;
 	revision: number;
 	goal: string;
+	requestEvidence?:
+		| import("./request-evidence.js").RequestEvidenceAnchor
+		| undefined;
 	approval: "pending" | "approved";
 	plan: Plan | null;
 	runs: FeatureRun[];

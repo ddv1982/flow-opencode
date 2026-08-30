@@ -24,17 +24,10 @@ type HostPart = { type: string; messageID: string; auto?: boolean };
 type Compaction = Record<"authority" | "user", string> &
 	Partial<Record<"summary" | "successor", string>>;
 type Checkpoint = { revision: number; answered: boolean; advance?: number };
-/**
- * Whether this host can support `/flow-auto` continuation across model turns.
- *
- * Continuation is anchored to the assistant message that owns the lease, so a host
- * that never reports assistant message parentage cannot continue at all — Flow
- * stops after every feature and looks broken. The signal is process-local and
- * observational, so it has three states rather than two: `unsupported` needs an
- * assistant message that arrived *without* a parent, which is a real negative, and
- * `unknown` is the honest answer before any assistant message exists.
- */
-export type AutoContinuationSupport = "supported" | "unsupported" | "unknown";
+export type ProcessLocalAutoContinuationSupport =
+	| "supported"
+	| "unsupported"
+	| "unknown";
 export interface AutoTimingSnapshot {
 	readonly scope: "latest-flow-auto-in-current-plugin-process";
 	readonly authoritative: false;
@@ -166,11 +159,6 @@ export class AutoDriveCoordinator {
 		if (warning) this.#warn(warning);
 	}
 	#rejectOrigin(lease: Lease, kind: "compaction" | "mutation"): void {
-		// Continuation is anchored to the assistant message that owns the lease, so
-		// a host that never reports message parentage can never satisfy this check.
-		// That is a capability limit rather than a stale or foreign turn, and the
-		// two are indistinguishable from the rejection alone: naming it keeps
-		// `/flow-auto` stopping after every feature from reading as a Flow defect.
 		this.#stop(
 			lease,
 			this.#hostParentage
@@ -402,7 +390,7 @@ export class AutoDriveCoordinator {
 	 * lifecycle, one `/flow-run` at a time. The point is that the user hears it from
 	 * Flow instead of inferring it from a workflow that stops after every feature.
 	 */
-	continuationSupport(): AutoContinuationSupport {
+	continuationSupport(): ProcessLocalAutoContinuationSupport {
 		if (this.#hostParentage) return "supported";
 		return this.#hostMissingParentage ? "unsupported" : "unknown";
 	}
@@ -425,10 +413,6 @@ export class AutoDriveCoordinator {
 	async onIdle(hostSessionId: string): Promise<void> {
 		const lease = this.#lease;
 		if (!lease || lease.hostSessionId !== hostSessionId) return;
-		// Another read or prompt owns the lease; remember to re-run once it lands.
-		// The exception is a reply-status read still waiting for the mutation it
-		// expects: that read resolves this idle event itself, so a queued re-run
-		// would only repeat the same decision against the same revision.
 		if (lease.inFlight) {
 			if (
 				lease.inFlight !== "reply-status" ||
@@ -479,10 +463,6 @@ export class AutoDriveCoordinator {
 				advance !== undefined &&
 				projection.revision === advance &&
 				isMechanical(projection);
-			// A reply to a checkpoint question. A boundary at a later revision is a
-			// fresh question, so park there instead of answering the old one. Anything
-			// that neither sits at a boundary nor advanced the revision mechanically
-			// means the reply went somewhere Flow does not model, so hand control back.
 			if (lease.pendingReply) {
 				lease.pendingReply = false;
 				if (
@@ -519,9 +499,6 @@ export class AutoDriveCoordinator {
 				}
 				return void this.deactivate(hostSessionId);
 			}
-			// Past an answered checkpoint. Leaving it requires the exact mutation the
-			// answer authorized; a revision at or behind the checkpoint, or one reached
-			// any other way, is not that mutation.
 			if (checkpoint) {
 				if (projection.revision <= checkpoint.revision || !mutationAdvanced)
 					return void this.deactivate(hostSessionId);
@@ -533,11 +510,6 @@ export class AutoDriveCoordinator {
 					`Flow auto-drive paused after revision ${projection.revision} made no lifecycle progress.`,
 				);
 			}
-			// Proof that this lifecycle actually moved since the lease was taken. With a
-			// baseline session, the revision must have grown, and an unanchored lease
-			// must have started from a pending review — otherwise the growth belongs to
-			// work this authorization never covered. With no baseline session, a session
-			// must at least exist by now.
 			if (
 				baseline.sessionId
 					? projection.revision <= baseline.revision ||

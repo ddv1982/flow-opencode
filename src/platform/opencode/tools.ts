@@ -11,13 +11,14 @@ import {
 	ValidationStartInputSchema,
 	type ValidationStartRequest,
 } from "../../application/schema.js";
+import { requestAuthority } from "../../domain/request-evidence.js";
 import type { EvidencePlatform } from "../../domain/session.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import type {
-	AutoContinuationSupport,
 	AutoTimingSnapshot,
+	ProcessLocalAutoContinuationSupport,
 } from "./auto-drive.js";
 import { defineFlowTool } from "./schema-adapter.js";
 import { type Hooks, type ToolContext, tool } from "./sdk.js";
@@ -43,7 +44,9 @@ type ToolOptions = Readonly<{
 		resultsPath: string | undefined;
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
-	autoContinuationSupport?: (() => AutoContinuationSupport) | undefined;
+	autoContinuationSupport?:
+		| (() => ProcessLocalAutoContinuationSupport)
+		| undefined;
 	runtimeIdentity?:
 		| Readonly<{ packageVersion: string; pluginEntrySha256: string }>
 		| undefined;
@@ -172,7 +175,7 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			schema: PlanSaveInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					workspace.planSave(args),
+					workspace.planSave(args, requestAuthority(context.sessionID)),
 				),
 		}),
 		flow_plan_approve: defineFlowTool({
@@ -180,7 +183,7 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			schema: PlanApproveInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
-					workspace.planApprove(args),
+					workspace.planApprove(args, requestAuthority(context.sessionID)),
 				),
 		}),
 		flow_run_start: defineFlowTool({

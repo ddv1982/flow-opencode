@@ -2,18 +2,12 @@ import { artifactIssues } from "./artifact.js";
 import { MAX_REVIEW_FINDINGS, MAX_VALIDATIONS_PER_RUN } from "./limits.js";
 import { closureOperationIssue } from "./operation.js";
 import { planIssue } from "./plan.js";
+import { missingRequestAssertions } from "./request-evidence.js";
 import type { Session } from "./session.js";
 import { featureKind, reviewResultSemanticIssues } from "./session.js";
 import { isFeatureComplete } from "./transitions.js";
 import { isValidationEligible } from "./validation.js";
 
-/**
- * Whether the feature was already settled before the given revision.
- *
- * Used only to re-derive a review's `kind`. A review is `final` when it is the
- * last feature still outstanding. Change features settle on a passing review.
- * Inspect features settle on any recorded result, including a failed survey.
- */
 function featureSettledBefore(
 	session: Session,
 	featureId: string,
@@ -34,39 +28,12 @@ function featureSettledBefore(
 	);
 }
 
-/**
- * Whether a durable session document is internally consistent.
- *
- * Flow's second defence, answering a different question from the first. The
- * transitions in `transitions.js` guard the step being taken: they see the current
- * session and the requested change, and refuse the ones that do not follow. This
- * sees a finished document with no idea how it got there, and asks whether any
- * legal sequence of steps could have produced it.
- *
- * That is needed because `.flow/session.json` is a file on disk: it survives
- * crashes mid-write, hand edits, git merges, and older builds of this plugin. So
- * `src/application/schema.ts` runs this on load and refuses a document that fails
- * rather than repairing it -- guessing what a broken document meant is how one
- * inconsistency becomes several.
- *
- * Every issue is returned rather than the first thrown, because a corrupt document
- * usually violates several invariants and the first is rarely the informative one.
- * No rule here may consult anything outside the document; at load time there is
- * nothing else to consult. The cost of the duality is that most rules restate a
- * transition guard from the other side, and the two must not drift: a new
- * transition rule a hand-edited document could violate belongs in both places.
- */
 export function sessionInvariantIssues(session: Session): string[] {
 	const issues: string[] = [];
-	// First, because every rule below assumes the v5 shape; a v4 document is not a
-	// broken v5 one.
 	if (session.version !== 5) issues.push("Session version must be 5.");
 	if (!Number.isSafeInteger(session.revision) || session.revision < 0) {
 		issues.push("Session revision must be a nonnegative safe integer.");
 	}
-	// Operation ledger. Ids are the idempotency keys every mutation replays against,
-	// so a duplicate would make two different operations indistinguishable, and a
-	// revision beyond the session's own means the ledger outran the state it records.
 	const operationIds = new Set<string>();
 	for (const operation of session.operations) {
 		if (operationIds.has(operation.id)) {
@@ -87,23 +54,22 @@ export function sessionInvariantIssues(session: Session): string[] {
 			issues.push("A completed closure requires a plan.");
 		}
 	}
-	// Without a plan there is nothing further to check, and the two rules that still
-	// apply are the ones a plan would have anchored: approval and runs are both
-	// approval of, and work on, specific features.
 	if (!session.plan) {
 		if (session.approval === "approved")
 			issues.push("Approval requires a plan.");
 		if (session.runs.length > 0) issues.push("Runs require a plan.");
 		return issues;
 	}
-	// The plan's own rules are shared with `savePlan`, which throws the first issue
-	// while this collects them, so both read the same primitive rather than one
-	// catching what the other threw.
 	const planProblem = planIssue(session.plan);
 	if (planProblem) issues.push(planProblem);
-	// An approved plan is immutable, so it is the fixed frame the rest of the
-	// document has to fit. Ids are unique across the whole session rather than per
-	// run, so a document cannot reuse one and rely on nesting to disambiguate.
+	const missing = missingRequestAssertions(
+		session.plan,
+		session.requestEvidence?.assertions ?? [],
+	);
+	if (session.approval === "approved" && missing.length > 0)
+		issues.push(
+			`Approved plan omits requested assertion(s): ${missing.join(", ")}.`,
+		);
 	const featureIds = new Set(
 		session.plan.features.map((feature) => feature.id),
 	);

@@ -1,6 +1,11 @@
 import { canonicalJson } from "./canonical-json.js";
 import { isRetainableEnvironmentFailure } from "./grader-input.js";
-import type { AttemptRecordV2, CampaignPlan, ScheduledCell } from "./report.js";
+import type {
+	AttemptRecordV2,
+	CampaignPlan,
+	ScheduledCell,
+	ValidatedReport,
+} from "./report.js";
 
 export type EnvironmentReserveState = Readonly<{
 	activatedReserveCellIds: readonly string[];
@@ -19,7 +24,7 @@ export function environmentStratumKey(cell: ScheduledCell): string {
 }
 
 export function isEligibleEnvironmentFailure(
-	attempt: AttemptRecordV2,
+	attempt: Pick<ValidatedReport["attempts"][number], "outcome">,
 ): boolean {
 	return (
 		attempt.outcome.kind === "failure" &&

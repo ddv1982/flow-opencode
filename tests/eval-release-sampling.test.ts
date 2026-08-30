@@ -224,6 +224,30 @@ describe("release eval sampling", () => {
 		}
 	});
 
+	test("requires sequential release execution", async () => {
+		const child = Bun.spawn(
+			[
+				"bun",
+				"run",
+				"evals/run.ts",
+				"--model",
+				"xai/a",
+				"--model",
+				"openai/b",
+				"--release",
+				"--concurrency",
+				"2",
+			],
+			{ cwd: new URL("..", import.meta.url).pathname, stderr: "pipe" },
+		);
+		const [exitCode, stderr] = await Promise.all([
+			child.exited,
+			new Response(child.stderr).text(),
+		]);
+		expect(exitCode).toBe(2);
+		expect(stderr).toContain("--release requires --concurrency 1");
+	});
+
 	test("does not consume a flag as a model value", async () => {
 		const child = Bun.spawn(
 			["bun", "run", "evals/run.ts", "--model", "--release"],

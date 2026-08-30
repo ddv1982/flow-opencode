@@ -436,6 +436,100 @@ describe("command preflight", () => {
 });
 
 describe("flow-auto host continuation", () => {
+	test("binds an explicitly named acceptance case to its originating host", async () => {
+		const workspace = await createTestWorkspace("flow-request-anchor-");
+		const hooks = await loadPlugin(workspace);
+		const before = hooks["command.execute.before"];
+		const planSave = hooks.tool?.flow_plan_save;
+		const planApprove = hooks.tool?.flow_plan_approve;
+		if (!before || !planSave || !planApprove)
+			throw new Error("Missing request-anchor hooks.");
+		const output = {
+			parts: [{ type: "text", text: "stale" }],
+		} as unknown as Parameters<typeof before>[1];
+		await before(
+			{
+				command: "flow-auto",
+				sessionID: "anchor-owner",
+				arguments:
+					"Implement this; acceptance has a case named `linux-skipped observation`.",
+			},
+			output,
+		);
+		const save = (
+			operationId: string,
+			expectedRevision: number,
+			nextPlan = plan,
+		) =>
+			planSave.execute(
+				{
+					request: {
+						operationId,
+						expectedRevision,
+						goal: "Implement the named case.",
+						plan: nextPlan,
+					},
+				},
+				toolContext(workspace, "anchor-owner"),
+			);
+		const saved = JSON.parse(String(await save("anchor-save-1", 0)));
+		expect(saved.status).toBe("ok");
+		const approval = {
+			request: { operationId: "anchor-approve-1", expectedRevision: 1 },
+		};
+		expect(
+			JSON.parse(
+				String(
+					await planApprove.execute(
+						approval,
+						toolContext(workspace, "other-host"),
+					),
+				),
+			).summary,
+		).toContain("originating OpenCode session");
+		expect(
+			JSON.parse(
+				String(
+					await planApprove.execute(
+						approval,
+						toolContext(workspace, "anchor-owner"),
+					),
+				),
+			).summary,
+		).toContain("linux-skipped observation");
+		const repairedPlan = {
+			...plan,
+			evidence: (plan.evidence ?? []).map((entry, index) =>
+				index === 0
+					? {
+							...entry,
+							command:
+								"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+							assertions: ["linux-skipped observation"],
+						}
+					: entry,
+			),
+		};
+		const repaired = JSON.parse(
+			String(await save("anchor-save-2", 1, repairedPlan)),
+		);
+		expect(repaired.status).toBe("ok");
+		const approved = JSON.parse(
+			String(
+				await planApprove.execute(
+					{
+						request: {
+							operationId: "anchor-approve-2",
+							expectedRevision: 2,
+						},
+					},
+					toolContext(workspace, "anchor-owner"),
+				),
+			),
+		);
+		expect(approved.status).toBe("ok");
+	});
+
 	test("keeps malformed mutation output out of validation-capture errors", async () => {
 		const workspace = await createTestWorkspace("flow-auto-output-");
 		const hooks = await loadPlugin(workspace);

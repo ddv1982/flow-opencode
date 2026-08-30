@@ -6,6 +6,11 @@ import {
 import { MAX_REVIEW_FINDINGS, MAX_SESSION_ID_LENGTH } from "./limits.js";
 import { operationInputDigest } from "./operation.js";
 import { planIssue } from "./plan.js";
+import type {
+	RequestAuthority,
+	RequestEvidenceAnchor,
+} from "./request-evidence.js";
+import { missingRequestAssertions } from "./request-evidence.js";
 import {
 	assignFindingIds,
 	droppedFindingIds,
@@ -158,6 +163,17 @@ function assertMutable(session: Session): void {
 	if (session.closure) fail("This Flow session is closed and archive-only.");
 }
 
+function assertRequestAuthority(
+	session: Session,
+	authority: RequestAuthority | undefined,
+): void {
+	if (
+		session.requestEvidence &&
+		authority?.hostSessionSha256 !== session.requestEvidence.hostSessionSha256
+	)
+		fail("This pending request belongs to its originating OpenCode session.");
+}
+
 function assertPlan(plan: Plan): void {
 	const issue = planIssue(plan);
 	if (issue) fail(issue);
@@ -245,6 +261,7 @@ export function savePlan(
 	session: Session | null,
 	input: PlanSaveInput,
 	environment: TransitionEnvironment,
+	authority?: RequestAuthority,
 ): MutationResult<null> {
 	assertPlan(input.plan);
 	if (!session) {
@@ -281,6 +298,7 @@ export function savePlan(
 			replayed: false,
 		};
 	}
+	assertRequestAuthority(session, authority);
 	const replay = existingOperation(
 		session,
 		"plan-save",
@@ -292,7 +310,10 @@ export function savePlan(
 	assertRevision(session, input.expectedRevision);
 	assertMutable(session);
 	if (session.approval === "approved") fail("An approved plan is immutable.");
-	if (session.goal !== input.goal) {
+	if (
+		session.goal !== input.goal &&
+		!(session.requestEvidence && session.plan === null)
+	) {
 		fail("Close the active session before starting a different goal.");
 	}
 	return {
@@ -303,6 +324,7 @@ export function savePlan(
 			input,
 			(draft) => ({
 				...draft,
+				goal: draft.plan ? draft.goal : input.goal,
 				plan: copy(input.plan),
 			}),
 		),
@@ -314,7 +336,9 @@ export function savePlan(
 export function approvePlan(
 	session: Session,
 	input: Readonly<{ operationId: string; expectedRevision: number }>,
+	authority?: RequestAuthority,
 ): MutationResult<null> {
+	assertRequestAuthority(session, authority);
 	const replay = existingOperation(
 		session,
 		"plan-approve",
@@ -326,6 +350,14 @@ export function approvePlan(
 	assertMutable(session);
 	if (!session.plan) fail("Save a plan before approving it.");
 	assertDeclaredEvidence(session.plan);
+	const missing = missingRequestAssertions(
+		session.plan,
+		session.requestEvidence?.assertions ?? [],
+	);
+	if (missing.length > 0)
+		fail(
+			`Plan approval requires evidence for the original request assertion(s): ${missing.map((name) => JSON.stringify(name)).join(", ")}.`,
+		);
 	if (session.approval === "approved") fail("The plan is already approved.");
 	return {
 		session: commit(
@@ -340,6 +372,37 @@ export function approvePlan(
 		),
 		value: null,
 		replayed: false,
+	};
+}
+
+export function anchorRequest(
+	session: Session | null,
+	input: Readonly<{ goal: string; evidence: RequestEvidenceAnchor }>,
+	environment: TransitionEnvironment,
+): Session {
+	if (session) {
+		if (
+			session.requestEvidence?.requestSha256 === input.evidence.requestSha256 &&
+			session.requestEvidence.hostSessionSha256 ===
+				input.evidence.hostSessionSha256
+		)
+			return session;
+		fail("An active Flow session already owns this workspace.");
+	}
+	const id = environment.newId("session");
+	if (id.length > MAX_SESSION_ID_LENGTH)
+		fail("Generated session id is too long.");
+	return {
+		version: 5,
+		id,
+		revision: 0,
+		goal: input.goal,
+		requestEvidence: copy(input.evidence),
+		approval: "pending",
+		plan: null,
+		runs: [],
+		operations: [],
+		closure: null,
 	};
 }
 
