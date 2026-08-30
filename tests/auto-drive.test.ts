@@ -1035,6 +1035,29 @@ describe("Flow auto-drive coordinator", () => {
 		await state.driver.onIdle("host-1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.driver.compactionContext("host-1")).toBeNull();
+
+		const afterLifecycle = harness({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await afterLifecycle.activate();
+		afterLifecycle.setProjection({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 2,
+			nextAction: "flow_run_start",
+		});
+		mutate(afterLifecycle.driver, "host-1", 2, "flow-1");
+		await afterLifecycle.driver.onIdle("host-1");
+		expect(afterLifecycle.prompts).toHaveLength(1);
+		afterLifecycle.setProjection({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await afterLifecycle.driver.onIdle("host-1");
+		expect(afterLifecycle.prompts).toHaveLength(1);
 	});
 
 	test("prompts one findings handback when a reviewer is waiting to dispatch", async () => {

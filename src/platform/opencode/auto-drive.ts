@@ -79,7 +79,7 @@ type AutoDriveOptions = Readonly<{
 }>;
 const STOP = /^(?:(?:stop|cancel) \/flow-auto|\/flow-auto (?:stop|cancel))$/i;
 const INITIAL_ROUTE =
-	"/flow-auto inspection ended. Read compact status, load flow-plan, and call flow_plan_save now.";
+	"Read compact status, load flow-plan, then call flow_plan_save.";
 const CONTINUATION_ROUTE = [
 	"Load flow-run guidance before any feature or closure route;",
 	"for a fresh close use compact session id/revision plus a fresh operation id,",
@@ -449,6 +449,7 @@ export class AutoDriveCoordinator {
 			if (projection.status === "idle") {
 				if (
 					baseline.status !== "idle" ||
+					baseline.sessionId ||
 					lease.lastPromptedRevision === 0 ||
 					!lease.delivery
 				)
