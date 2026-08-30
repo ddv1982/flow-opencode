@@ -62,9 +62,9 @@ Save one plan with:
   If a named acceptance case is skipped on the requested host, either make that
   exact case honestly runnable when the approved scope permits it, or preserve it
   as `scope: "extra"` evidence on a host where it runs. Never replace it with a
-  different local check. Declare separate current-host proof with `assertions: []`.
-  Flow binds quoted names introduced by `case named`, `test named`, or
-  `assertion named` to the approved evidence exactly.
+  another local check. Declare current-host proof with `assertions: []`.
+  `assertions` contains only the quoted name after `case named`, `test named`, or
+  `assertion named`; never include the introducer words.
   Broad observations run the gate command
   byte-for-byte. Extra entries may be omitted when the goal is fully observable
   here. Final review and completed closure stay refused until every extra

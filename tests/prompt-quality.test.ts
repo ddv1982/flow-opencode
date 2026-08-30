@@ -282,6 +282,7 @@ describe("Flow prompt structure", () => {
 		);
 		expect(plan).toContain("never use another or absolute path");
 		expect(plan).toContain("exact case honestly runnable");
+		expect(plan).toContain("never include the introducer words");
 		expect(plan).toContain("whole-suite exit success");
 		expect(run).toContain("resultsPath");
 		expect(run).toContain("plan-bound JUnit");
