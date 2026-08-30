@@ -62,7 +62,7 @@ Save one plan with:
   If a named acceptance case is skipped on the requested host, either make that
   exact case honestly runnable when the approved scope permits it, or preserve it
   as `scope: "extra"` evidence on a host where it runs. Never replace it with a
-  another local check. Declare current-host proof with `assertions: []`.
+  local substitute. Declare current-host proof with `assertions: []`.
   `assertions` contains only the quoted name after `case named`, `test named`, or
   `assertion named`; never include the introducer words.
   Broad observations run the gate command
@@ -93,7 +93,7 @@ are existing paths, and whose `decisions` state that no source edit is
 authorized. The gate may be the repo's existing check. Ask before turning an
 inspect request into repairs.
 
-Before saving, confirm:
+Confirm:
 
 - every requirement maps to a feature or an explicit non-goal;
 - targets name real files, modules, routes, commands, or artifacts;
@@ -112,5 +112,6 @@ implementation authority. Approval locks the plan. Ask conversational
 same process-local interaction only after approval advances the same Flow
 session.
 
-Do not begin implementation during a plan-only request. Do not create a plan
-document in the repository unless the user explicitly requests one.
+`Plan only`/`do not implement yet` controls timing, not scope, and is never a
+plan requirement, decision, or non-goal. Do not implement or create a plan
+document unless requested.

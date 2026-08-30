@@ -291,6 +291,12 @@ describe("Flow prompt structure", () => {
 		expect(run).toContain("name the failing case or output");
 	});
 
+	test("keeps plan-only timing out of the immutable outcome", () => {
+		expect(getFlowGuidance("flow-plan").content).toContain(
+			"controls timing, not scope",
+		);
+	});
+
 	test("continues a reviewer matrix only when the packet asked for one", () => {
 		const reviewer = compileFlowPromptSurface("flow-reviewer");
 		expect(reviewer).toContain("riskLenses");
