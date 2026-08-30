@@ -295,24 +295,28 @@ export function deriveRetainedFailure(
 		};
 	}
 	const pendingTools = retainedPendingTools(evidence.gradeInput);
+	const noInteractionEvidence =
+		evidence.gradeInput.flowCalls.length === 0 &&
+		evidence.gradeInput.allCalls.length === 0 &&
+		evidence.gradeInput.session === null &&
+		evidence.gradeInput.archives.length === 0 &&
+		evidence.gradeInput.providerErrors.length === 0 &&
+		evidence.guidanceLoads.length === 0 &&
+		evidence.gradeInput.finalText === "";
+	const noModelEvidence = noInteractionEvidence && evidence.actors.length === 0;
 	if (observation.code === "command-aborted") {
 		if (
 			evidence.gradeInput.providerErrors.length !== 0 ||
-			pendingTools.length === 0 ||
-			canonicalSha256("flow-pending-tools-v1", pendingTools) !==
-				canonicalSha256("flow-pending-tools-v1", observation.pendingTools)
+			(pendingTools.length > 0
+				? canonicalSha256("flow-pending-tools-v1", pendingTools) !==
+					canonicalSha256("flow-pending-tools-v1", observation.pendingTools)
+				: observation.pendingTools.length !== 0 ||
+					!noInteractionEvidence ||
+					evidence.actors.some((actor) => actor.role !== "manager") ||
+					evidence.usage.outputTokens !== 0)
 		)
 			return null;
-	} else if (
-		evidence.gradeInput.flowCalls.length !== 0 ||
-		evidence.gradeInput.allCalls.length !== 0 ||
-		evidence.gradeInput.session !== null ||
-		evidence.gradeInput.archives.length !== 0 ||
-		evidence.gradeInput.providerErrors.length !== 0 ||
-		evidence.actors.length !== 0 ||
-		evidence.guidanceLoads.length !== 0 ||
-		evidence.gradeInput.finalText !== ""
-	) {
+	} else if (!noModelEvidence) {
 		return null;
 	}
 	return {

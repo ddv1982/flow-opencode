@@ -126,6 +126,32 @@ describe("retained scenario grader input", () => {
 			},
 		});
 		expect(deriveRetainedFailure(evidence)).toBeNull();
+		const emptyCommandAbort = retainedFailureEvidence({
+			attempt: evidence.attempt,
+			durationMs: 20 * 60_000,
+			failure: {
+				origin: "host",
+				code: "command-aborted",
+				retryable: true,
+			},
+			failureObservation: {
+				kind: "host-phase",
+				code: "command-aborted",
+				pendingTools: [],
+			},
+		});
+		expect(deriveRetainedFailure(emptyCommandAbort)).toEqual(
+			emptyCommandAbort.failure,
+		);
+		expect(
+			deriveRetainedFailure({
+				...emptyCommandAbort,
+				gradeInput: {
+					...emptyCommandAbort.gradeInput,
+					finalText: "model-visible output",
+				},
+			}),
+		).toBeNull();
 		for (const code of [
 			"host-start-failed" as const,
 			"session-create-failed" as const,
