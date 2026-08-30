@@ -78,6 +78,8 @@ type AutoDriveOptions = Readonly<{
 	now?: (() => number) | undefined;
 }>;
 const STOP = /^(?:(?:stop|cancel) \/flow-auto|\/flow-auto (?:stop|cancel))$/i;
+const INITIAL_ROUTE =
+	"/flow-auto inspection ended. Read compact status, load flow-plan, and call flow_plan_save now.";
 const CONTINUATION_ROUTE = [
 	"Load flow-run guidance before any feature or closure route;",
 	"for a fresh close use compact session id/revision plus a fresh operation id,",
@@ -419,16 +421,7 @@ export class AutoDriveCoordinator {
 			pausedTimeExcluded: true,
 		};
 	}
-	/**
-	 * The single continuation decision point, run on every host idle event. Its
-	 * phases are: admit the event, read compact state, resolve a pending reply,
-	 * park at a boundary, prompt one findings handback on blocked/reset/reviewer
-	 * idle, require a mechanical action that advanced the revision, then prompt.
-	 * Each phase that does not continue stops or parks the lease, so the default
-	 * is to stop: a wrong continuation spends the user's authorization on work
-	 * they never approved. The handback prompt is conversational, not a new
-	 * mechanical route.
-	 */
+	/** Routes one idle event; every unproven continuation stops or parks. */
 	async onIdle(hostSessionId: string): Promise<void> {
 		const lease = this.#lease;
 		if (!lease || lease.hostSessionId !== hostSessionId) return;
@@ -453,7 +446,28 @@ export class AutoDriveCoordinator {
 			const baseline = lease.baseline;
 			if (!baseline) return this.#stop(lease);
 			const anchored = lease.checkpoint !== null;
-			if (projection.status === "idle" || projection.nextAction === null)
+			if (projection.status === "idle") {
+				if (
+					baseline.status !== "idle" ||
+					lease.lastPromptedRevision === 0 ||
+					!lease.delivery
+				)
+					return void this.deactivate(hostSessionId);
+				lease.lastPromptedRevision = 0;
+				lease.inFlight = "prompt";
+				await this.#options
+					.prompt(
+						hostSessionId,
+						`${INITIAL_ROUTE}\n\n${FLOW_MANAGER_KERNEL}`,
+						lease.delivery,
+						{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+					)
+					.catch((error) =>
+						this.#stop(lease, `Flow auto prompt failed: ${String(error)}`),
+					);
+				return;
+			}
+			if (projection.nextAction === null)
 				return void this.deactivate(hostSessionId);
 			if (projection.sessionId !== baseline.sessionId)
 				return this.#stop(lease, "Flow auto-drive stopped: unowned session.");
