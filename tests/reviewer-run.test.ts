@@ -10,10 +10,7 @@ import {
 import { REVIEWER_CASES } from "../evals/reviewer-cases.js";
 import { reviewerOutcome } from "../evals/reviewer-run.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
-import {
-	flowFeatureComplete,
-	flowSessionClose,
-} from "../src/infrastructure/fs/workspace-flow-service.js";
+import { createWorkspaceFlowService } from "../src/infrastructure/fs/workspace-flow-service.js";
 
 async function gitFixture(
 	files: Readonly<Record<string, string>>,
@@ -96,6 +93,7 @@ describe("reviewer pilot adapters", () => {
 		const fixture = REVIEWER_CASES[1];
 		if (!fixture) throw new Error("Expected clean reviewer case.");
 		const workspace = await gitFixture(fixture.files);
+		const flow = createWorkspaceFlowService(workspace);
 		try {
 			const seed = await seedReviewerAssignment({ workspace, fixture });
 			const before = await createFileSessionRepository(workspace).read();
@@ -103,7 +101,7 @@ describe("reviewer pilot adapters", () => {
 				kind: "unsubmitted",
 			});
 			if (!before) throw new Error("Expected seeded Flow state.");
-			const response = await flowFeatureComplete(workspace, {
+			const response = await flow.featureComplete({
 				request: {
 					operationId: "review-submit-test",
 					expectedRevision: before.revision,
@@ -120,7 +118,7 @@ describe("reviewer pilot adapters", () => {
 			expect(response.status).toBe("ok");
 			const completed = await createFileSessionRepository(workspace).read();
 			if (!completed) throw new Error("Expected completed Flow state.");
-			const closed = await flowSessionClose(workspace, {
+			const closed = await flow.sessionClose({
 				request: {
 					operationId: "review-close-test",
 					expectedRevision: completed.revision,

@@ -228,6 +228,7 @@ describe("eval provenance", () => {
 		const transcript = redactTranscript({
 			projectPath: "/private/eval/project",
 			value: {
+				sessions: ["ses_parentSecret123", "session:review-child-123"],
 				output:
 					"/private/eval/project/src/index.ts api_key=super-secret-value sk-proj-abcdefghijklmnopqr",
 			},
@@ -236,6 +237,9 @@ describe("eval provenance", () => {
 		expect(transcript.text).toContain("[redacted]");
 		expect(transcript.text).not.toContain("super-secret-value");
 		expect(transcript.text).not.toContain("sk-proj-abcdefghijklmnopqr");
+		expect(transcript.text).not.toContain("ses_parentSecret123");
+		expect(transcript.text).not.toContain("session:review-child-123");
+		expect(transcript.text).toMatch(/id_[a-f0-9]{16}/);
 		expect(transcript.sha256).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 
@@ -259,5 +263,47 @@ describe("eval provenance", () => {
 		expect(transcript.text).not.toContain("short");
 		expect(transcript.text).not.toContain("abc");
 		expect(transcript.text).toContain('"safe":"ok"');
+	});
+
+	test("preserves token-count metrics while redacting credential tokens", () => {
+		const transcript = redactTranscript({
+			projectPath: "/tmp/project",
+			value: {
+				counts: {
+					outputTokens: 321,
+					input_tokens: 123,
+					reasoning_tokens: 45,
+					cacheReadTokens: 67,
+					cache_read_tokens: 89,
+					"cache-write-tokens": 10,
+				},
+				unsafeCounts: {
+					outputTokens: "output-secret",
+					cache_read_tokens: "cache-secret",
+				},
+				inputToken: "singular-secret",
+				output_tokens_count: "suffixed-secret",
+				token: "credential-secret",
+				accessToken: "access-secret",
+			},
+		});
+		expect(JSON.parse(transcript.text)).toEqual({
+			accessToken: "[redacted]",
+			counts: {
+				"cache-write-tokens": 10,
+				cacheReadTokens: 67,
+				cache_read_tokens: 89,
+				input_tokens: 123,
+				outputTokens: 321,
+				reasoning_tokens: 45,
+			},
+			unsafeCounts: {
+				cache_read_tokens: "[redacted]",
+				outputTokens: "[redacted]",
+			},
+			inputToken: "[redacted]",
+			output_tokens_count: "[redacted]",
+			token: "[redacted]",
+		});
 	});
 });

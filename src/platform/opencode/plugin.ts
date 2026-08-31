@@ -1,6 +1,10 @@
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { dataNote } from "../../application/flow-response.js";
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
-import { flowStatus } from "../../infrastructure/fs/workspace-flow-service.js";
+import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
+import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
@@ -124,6 +128,7 @@ function rewriteCommand(
 function createCommandHook(
 	assertOperational: (action: string) => void,
 	autoDrive: AutoDriveCoordinator,
+	workspace: string,
 ): CommandHook {
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
@@ -142,6 +147,14 @@ function createCommandHook(
 			return;
 		}
 		assertOperational(`execute /${command}`);
+		if (command === "flow-auto" || command === "flow-plan") {
+			const evidence = requestEvidenceAnchor(input.arguments, input.sessionID);
+			if (evidence) {
+				const flow = createWorkspaceFlowService(workspace);
+				await flow.status({ request: { view: "compact" } });
+				await flow.requestAnchor({ goal: input.arguments, evidence });
+			}
+		}
 		rewriteCommand(command, input.arguments, output);
 		if (command !== "flow-auto")
 			return void autoDrive.deactivate(input.sessionID);
@@ -245,6 +258,9 @@ function guardTools(
 const FlowPlugin: Plugin = async (ctx) => {
 	const log = createFlowLog(ctx);
 	const version = resolveFlowPluginVersion();
+	const pluginEntrySha256 = `sha256:${createHash("sha256")
+		.update(await readFile(fileURLToPath(import.meta.url)))
+		.digest("hex")}`;
 	const runtimeGuard = registerFlowPluginInstance(
 		ctx.worktree ?? ctx.directory,
 		{
@@ -260,7 +276,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 	const workspace = ctx.worktree ?? ctx.directory;
 	const autoDrive = new AutoDriveCoordinator({
 		readProjection: async () => {
-			const response = await flowStatus(workspace, {
+			const response = await createWorkspaceFlowService(workspace).status({
 				request: { view: "compact" },
 			});
 			if (response.status !== "ok") throw new Error(response.summary);
@@ -297,6 +313,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
 		autoContinuationSupport: () => autoDrive.continuationSupport(),
+		runtimeIdentity: { packageVersion: version, pluginEntrySha256 },
 	});
 	return {
 		config: createConfigHook(ctx, {
@@ -306,6 +323,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 		"command.execute.before": createCommandHook(
 			(action) => runtimeGuard.assertOperational(action),
 			autoDrive,
+			workspace,
 		),
 		"chat.message": async (input, output) => {
 			const observed = await autoDrive.observeMessage(

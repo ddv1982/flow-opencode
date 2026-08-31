@@ -937,7 +937,7 @@ describe("Flow auto-drive coordinator", () => {
 		});
 	});
 
-	test("routes only mechanical start and close states", async () => {
+	test("routes mechanical states plus one initial planning retry", async () => {
 		const cases: Array<[AutoDriveProjection, boolean]> = [
 			[
 				{
@@ -993,7 +993,7 @@ describe("Flow auto-drive coordinator", () => {
 				},
 				false,
 			],
-			[{ status: "idle", revision: 0, nextAction: "flow_plan_save" }, false],
+			[{ status: "idle", revision: 0, nextAction: "flow_plan_save" }, true],
 		];
 
 		for (const [projection, shouldPrompt] of cases) {
@@ -1006,7 +1006,8 @@ describe("Flow auto-drive coordinator", () => {
 			const state = harness(baseline);
 			await state.activate();
 			state.setProjection(projection);
-			if (shouldPrompt) mutate(state.driver, "host-1", projection.revision);
+			if (shouldPrompt && projection.status !== "idle")
+				mutate(state.driver, "host-1", projection.revision);
 			await state.driver.onIdle("host-1");
 			const handback =
 				projection.status === "blocked" ||
@@ -1034,6 +1035,29 @@ describe("Flow auto-drive coordinator", () => {
 		await state.driver.onIdle("host-1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.driver.compactionContext("host-1")).toBeNull();
+
+		const afterLifecycle = harness({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await afterLifecycle.activate();
+		afterLifecycle.setProjection({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 2,
+			nextAction: "flow_run_start",
+		});
+		mutate(afterLifecycle.driver, "host-1", 2, "flow-1");
+		await afterLifecycle.driver.onIdle("host-1");
+		expect(afterLifecycle.prompts).toHaveLength(1);
+		afterLifecycle.setProjection({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await afterLifecycle.driver.onIdle("host-1");
+		expect(afterLifecycle.prompts).toHaveLength(1);
 	});
 
 	test("prompts one findings handback when a reviewer is waiting to dispatch", async () => {
@@ -1050,6 +1074,23 @@ describe("Flow auto-drive coordinator", () => {
 		expect(state.prompts[0]?.text).toContain("findingsDigest");
 		await state.driver.onIdle("host-1");
 		expect(state.prompts).toHaveLength(1);
+	});
+
+	test("prompts once when initial inspection stops before planning", async () => {
+		const state = harness({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await state.activate();
+
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		expect(state.prompts[0]?.text).toContain("flow_plan_save");
+
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		expect(state.driver.compactionContext("host-1")).toBeNull();
 	});
 
 	test("requires initiating progress and rejects a replacement Flow session", async () => {

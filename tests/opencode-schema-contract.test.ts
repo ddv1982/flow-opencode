@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { type ToolContext, tool } from "@opencode-ai/plugin";
 import { z } from "zod";
 import {
@@ -162,7 +165,7 @@ const validInputs: Record<
 	},
 };
 
-const applicationSchemas: Record<LifecycleToolName, SafeSchema> = {
+const applicationSchemas = {
 	flow_status: StatusInputSchema,
 	flow_plan_save: PlanSaveInputSchema,
 	flow_plan_approve: PlanApproveInputSchema,
@@ -172,7 +175,7 @@ const applicationSchemas: Record<LifecycleToolName, SafeSchema> = {
 	flow_feature_complete: FeatureCompleteInputSchema,
 	flow_feature_reset: FeatureResetInputSchema,
 	flow_session_close: SessionCloseInputSchema,
-};
+} satisfies Record<LifecycleToolName, SafeSchema>;
 
 function expectParity(
 	name: LifecycleToolName,
@@ -193,6 +196,18 @@ function expectParity(
 }
 
 describe("Flow OpenCode host schemas", () => {
+	test("registers the authoritative application request schemas", () => {
+		for (const name of LIFECYCLE_TOOL_NAMES) {
+			expect(
+				Object.is(
+					registeredTools[name]?.args.request,
+					applicationSchemas[name].shape.request,
+				),
+				name,
+			).toBe(true);
+		}
+	});
+
 	test("uses one strict request envelope for all nine lifecycle tools", () => {
 		for (const name of LIFECYCLE_TOOL_NAMES) {
 			const definition = registeredTools[name];
@@ -462,6 +477,7 @@ describe("Flow OpenCode host schemas", () => {
 	});
 
 	test("keeps completion authorization separate from validation cancellation", async () => {
+		const workspace = await mkdtemp(join(tmpdir(), "flow-schema-contract-"));
 		const cancelled: string[] = [];
 		const tools = createTools(
 			{},
@@ -480,8 +496,8 @@ describe("Flow OpenCode host schemas", () => {
 		const context = {
 			sessionID: "schema-contract-session",
 			agent: "build",
-			directory: process.cwd(),
-			worktree: process.cwd(),
+			directory: workspace,
+			worktree: workspace,
 		} as ToolContext;
 		const managerMutations = [
 			"flow_plan_save",
@@ -491,26 +507,33 @@ describe("Flow OpenCode host schemas", () => {
 			"flow_feature_reset",
 			"flow_session_close",
 		] as const;
-		for (const name of managerMutations) {
-			await tools[name]?.execute({ request: {} } as never, context);
+		try {
+			for (const name of managerMutations) {
+				await tools[name]?.execute(validInputs[name], context);
+			}
+			expect(cancelled).toEqual(
+				managerMutations.map(() => "schema-contract-session"),
+			);
+
+			await tools.flow_feature_complete?.execute(
+				validInputs.flow_feature_complete,
+				context,
+			);
+			expect(cancelled).toHaveLength(managerMutations.length);
+
+			await tools.flow_feature_complete?.execute(
+				validInputs.flow_feature_complete,
+				{
+					...context,
+					agent: "flow-reviewer",
+				},
+			);
+			expect(cancelled).toEqual(
+				managerMutations.map(() => "schema-contract-session"),
+			);
+		} finally {
+			await rm(workspace, { recursive: true, force: true });
 		}
-		expect(cancelled).toEqual(
-			managerMutations.map(() => "schema-contract-session"),
-		);
-
-		await tools.flow_feature_complete?.execute(
-			{ request: {} } as never,
-			context,
-		);
-		expect(cancelled).toHaveLength(managerMutations.length);
-
-		await tools.flow_feature_complete?.execute({ request: {} } as never, {
-			...context,
-			agent: "flow-reviewer",
-		});
-		expect(cancelled).toEqual(
-			managerMutations.map(() => "schema-contract-session"),
-		);
 	});
 
 	test("keeps guidance as the sole non-request tool", () => {

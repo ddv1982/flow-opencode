@@ -13,9 +13,9 @@ labelled so there.
 The public surface — tools, commands, guides, agents, and the Session v5 shape —
 stays frozen while those guarantees are measured; additive optional fields are
 allowed, and a removal or rename waits for a major announced one release ahead.
-A new required-at-save plan declaration is a major. Today's declaration is
-`evidence`, with `scope`, `platform`, and `assertions` on each entry. Do not
-add another evidence field to close a measured cheat.
+A new required-at-save plan declaration is a major. `evidence` entries own
+`scope`, `platform`, and `assertions`; named commands bind `.flow/results.xml`.
+Do not add another evidence field to close a measured cheat.
 [Release qualification](release-qualification.md) owns the thresholds and cadence.
 
 Flow is a serial durable workflow plugin, not a general orchestration framework.
@@ -338,9 +338,8 @@ Model evals are the one exception, admitted by
 [ADR 0010](adr/0010-declared-canonical-gate.md) against the prompt prose the
 declared gate replaced. They run weekly and on demand in one workflow, never in a
 gate a contributor waits on, and skip themselves without a configured matrix or
-credentials. `bun run qualify` applies the published thresholds to a report; a
-scenario with no published threshold, or a gated scenario the report never ran,
-fails qualification.
+credentials. `bun run qualify` seals a complete campaign and exact canary. A
+scenario without a threshold, or a required scenario the report omitted, fails.
 
 Bounded-wave coverage should test the real agent permissions, manager guidance, and
 host-visible configuration without adding a scheduler or tests-of-tests.

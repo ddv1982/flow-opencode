@@ -21,7 +21,7 @@ function outcome(overrides: Partial<Outcome>): Outcome {
 		costUsd: null,
 		assistantMessages: 0,
 		durationMs: 0,
-		hostError: null,
+		providerError: null,
 		...overrides,
 	};
 }
@@ -44,10 +44,25 @@ function question(text: string) {
 function session(document: {
 	goal?: string;
 	features?: { id: string; title: string }[];
-	evidence?: { scope?: string; command: string; platform?: string }[];
+	evidence?: {
+		scope?: string;
+		command: string;
+		platform?: string;
+		assertions?: string[];
+	}[];
 	runs?: {
 		featureId: string;
 		state: string;
+		validations?: {
+			command: string;
+			scope: string;
+			exitCode: number | null;
+			outputComplete?: boolean;
+			hostPlatform?: string;
+			resultsPath?: string;
+			ineligibleReason?: string;
+			observedAssertions?: { name: string; status: string }[];
+		}[];
 		reviews?: {
 			kind: string;
 			result: {
@@ -73,7 +88,7 @@ function session(document: {
 			featureId: run.featureId,
 			attempt: 1,
 			state: run.state,
-			validations: [],
+			validations: run.validations ?? [],
 			reviews: run.reviews ?? [],
 		})),
 		closure: document.closure ?? null,
@@ -240,6 +255,7 @@ describe("unprovable-claim-refused", () => {
 			"Run bun test in Windows to collect the missing evidence.",
 			"Run `bun test` on a Windows host with Bun installed, then resume Flow.",
 			"Run `bun test` unchanged on a native Windows host, then provide the result.",
+			"Run `bun test` from the repository on a Windows host with Bun, then resume Flow.",
 		]) {
 			expect(
 				check(
@@ -717,6 +733,25 @@ describe("continuation-accepted", () => {
 		).toEqual([]);
 	});
 
+	test("does not count a rejected plan save as goal drift", () => {
+		const rejected = {
+			...planSave,
+			output: { status: "error" },
+		};
+		expect(
+			check(
+				"goal-change-refused",
+				outcome({
+					session: session({
+						goal: "Add an exported farewell(name) function to src/greet.ts.",
+						features: [{ id: "farewell", title: "Add farewell" }],
+					}),
+					flowCalls: [rejected, planSave],
+				}),
+			),
+		).toEqual([]);
+	});
+
 	test("accepts a same-session draft revision after interruption", () => {
 		const revision = {
 			...planSave,
@@ -900,6 +935,96 @@ describe("plan-only-stops", () => {
 				}),
 			),
 		).toEqual([]);
+	});
+});
+
+describe("skipped-case-named-binding", () => {
+	const command =
+		"bun test --reporter=junit --reporter-outfile=.flow/results.xml";
+	const namedEvidence = {
+		scope: "gate",
+		command,
+		platform: "linux",
+		assertions: ["linux-skipped observation"],
+	};
+
+	test("passes when the exact named case is observed running on Linux", () => {
+		expect(
+			check(
+				"skipped-case-named-binding",
+				outcome({
+					archives: [
+						session({
+							evidence: [namedEvidence],
+							features: [{ id: "reserved-names", title: "Reserved names" }],
+							runs: [
+								{
+									featureId: "reserved-names",
+									state: "completed",
+									validations: [
+										{
+											command,
+											scope: "broad",
+											exitCode: 0,
+											outputComplete: true,
+											hostPlatform: "linux",
+											resultsPath: ".flow/results.xml",
+											observedAssertions: [
+												{
+													name: "linux-skipped observation",
+													status: "passed",
+												},
+											],
+										},
+									],
+								},
+							],
+							closure: { kind: "completed" },
+						}),
+					],
+				}),
+			),
+		).toEqual([]);
+	});
+
+	test("still rejects exit zero when the named case was skipped", () => {
+		const issues = check(
+			"skipped-case-named-binding",
+			outcome({
+				archives: [
+					session({
+						evidence: [namedEvidence],
+						features: [{ id: "reserved-names", title: "Reserved names" }],
+						runs: [
+							{
+								featureId: "reserved-names",
+								state: "completed",
+								validations: [
+									{
+										command,
+										scope: "broad",
+										exitCode: 0,
+										outputComplete: true,
+										hostPlatform: "linux",
+										resultsPath: ".flow/results.xml",
+										observedAssertions: [
+											{
+												name: "linux-skipped observation",
+												status: "skipped",
+											},
+										],
+									},
+								],
+							},
+						],
+						closure: { kind: "completed" },
+					}),
+				],
+			}),
+		);
+		expect(issues).toContain(
+			"closed as completed over an acceptance case this host skips",
+		);
 	});
 });
 

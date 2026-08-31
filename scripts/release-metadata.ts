@@ -1,20 +1,35 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { canonicalSha256 } from "../evals/canonical-json.js";
-import { inspectArtifact, samePackedArtifact } from "../evals/provenance.js";
+import {
+	evaluatorIdentity,
+	inspectArtifact,
+	samePackedArtifact,
+} from "../evals/provenance.js";
+import { QualificationBundleManifestSchema } from "../evals/qualification-bundle.js";
+import { regradeQualificationBundle } from "../evals/qualification-regrade.js";
+import {
+	RELEASE_POLICY_SHA256,
+	releaseCatalog,
+	releaseGraderBundle,
+	releaseScenarioCatalog,
+} from "../evals/release-policy.js";
 import {
 	type ArtifactIdentity,
 	ArtifactIdentitySchema,
 } from "../evals/report.js";
+import { SCENARIOS } from "../evals/scenarios.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
+	CANARY_DERIVATION_VERSION,
 	type CanaryRecord,
 	canaryRecordSha256,
 	parseCanaryRecord,
 	canaryRecordIssue as verifyCanaryRecord,
 } from "./eval-canary.js";
+import { decisionRecordFor, qualifyV2 } from "./qualify-release.js";
 
 export function canaryRecordIssue(
 	version: string,
@@ -28,6 +43,8 @@ export function canaryRecordIssue(
 	const entry = record as Partial<CanaryRecord>;
 	if (entry.schemaVersion !== 1 || entry.status !== "passed")
 		return `the canary for ${version} is not a passed v1 record`;
+	if (entry.derivationVersion !== CANARY_DERIVATION_VERSION)
+		return `the canary record for ${version} is not evidence-derived`;
 	if (entry.releaseTag !== expectedTag)
 		return `the canary tag ${String(entry.releaseTag)} does not match ${expectedTag}`;
 	const parsed = parseCanaryRecord(record);
@@ -211,70 +228,131 @@ export function qualificationRecordIssue(
 	) {
 		return `the qualification artifact digest for ${version} is invalid`;
 	}
+	const expectedCatalogSha256 = canonicalSha256(
+		"flow-decision-catalog-v1",
+		releaseCatalog(),
+	);
+	if (entry.catalogSha256 !== expectedCatalogSha256) {
+		return `the qualification catalog digest for ${version} is not current repository policy`;
+	}
+	if (entry.policySha256 !== RELEASE_POLICY_SHA256) {
+		return `the qualification policy digest for ${version} is not current repository policy`;
+	}
+	const expectedEvaluator = evaluatorIdentity({
+		sourceCommit: parsedArtifact.data.sourceCommit,
+		caseCatalog: releaseScenarioCatalog(SCENARIOS),
+		policyCatalog: releaseCatalog(),
+		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
+	});
+	if (
+		entry.evaluatorSha256 !==
+		canonicalSha256("flow-decision-evaluator-v1", expectedEvaluator)
+	) {
+		return `the qualification evaluator digest for ${version} is not current repository authority`;
+	}
 	if (
 		expectedArtifact &&
 		!samePackedArtifact(parsedArtifact.data, expectedArtifact)
 	) {
 		return `the qualification artifact does not match the rebuilt artifact for ${version}`;
 	}
+	const expectedDecisionInput = canonicalSha256("flow-decision-input-v1", {
+		reportSha256: entry.reportSha256,
+		artifactSha256: entry.artifactSha256,
+		evaluatorSha256: entry.evaluatorSha256,
+		catalogSha256: entry.catalogSha256,
+		policySha256: entry.policySha256,
+		actorSha256: entry.actorSha256,
+		analyzerSha256: entry.analyzerSha256,
+		expectedProvenanceSha256: entry.expectedProvenanceSha256,
+		canarySha256: entry.canarySha256 ?? null,
+	});
+	if (entry.decisionInputSha256 !== expectedDecisionInput) {
+		return `the qualification decision input digest for ${version} is invalid`;
+	}
 	if (expectedCanarySha256 !== undefined) {
 		if (entry.canarySha256 !== expectedCanarySha256)
 			return `the qualification record for ${version} is not bound to the exact canary`;
-		const expectedDecisionInput = canonicalSha256("flow-decision-input-v1", {
-			reportSha256: entry.reportSha256,
-			artifactSha256: entry.artifactSha256,
-			evaluatorSha256: entry.evaluatorSha256,
-			catalogSha256: entry.catalogSha256,
-			policySha256: entry.policySha256,
-			actorSha256: entry.actorSha256,
-			analyzerSha256: entry.analyzerSha256,
-			expectedProvenanceSha256: entry.expectedProvenanceSha256,
-			canarySha256: entry.canarySha256,
-		});
-		if (entry.decisionInputSha256 !== expectedDecisionInput)
-			return `the qualification decision input does not bind the exact canary for ${version}`;
 	}
 	return null;
 }
 
-export async function assertQualificationRecord(
-	version: string,
-	directory = join("evals", "decisions"),
-	expectedArtifact?: ArtifactIdentity,
-): Promise<void> {
-	let records: unknown[] = [];
+export async function assertQualificationBundle(input: {
+	readonly version: string;
+	readonly directory?: string;
+	readonly expectedArtifact?: ArtifactIdentity;
+	readonly expectedCanarySha256?: string;
+	readonly now?: Date;
+}): Promise<{ readonly bundleSha256: string }> {
+	const directory =
+		input.directory ?? join("evals", "qualification", "bundles");
+	let names: string[] = [];
 	try {
-		const { readdir } = await import("node:fs/promises");
-		records = await Promise.all(
-			(await readdir(directory))
-				.filter((name) => name.endsWith(".json"))
-				.map(async (name) =>
-					JSON.parse(await readFile(join(directory, name), "utf8")),
-				),
-		);
+		names = (await readdir(directory, { withFileTypes: true }))
+			.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+			.map((entry) => entry.name);
 	} catch {
-		records = [];
+		names = [];
 	}
-	if (
-		!records.some(
-			(record) =>
-				qualificationRecordIssue(version, record, expectedArtifact) === null,
-		)
-	) {
+	const matches: Array<{ readonly bundleSha256: string }> = [];
+	for (const name of names) {
+		let manifest: ReturnType<typeof QualificationBundleManifestSchema.parse>;
+		try {
+			manifest = QualificationBundleManifestSchema.parse(
+				JSON.parse(
+					await readFile(join(directory, name, "bundle.json"), "utf8"),
+				),
+			);
+		} catch (error) {
+			throw new Error(`Qualification bundle ${name} has an invalid seal.`, {
+				cause: error,
+			});
+		}
+		if (manifest.packageVersion !== input.version) continue;
+		try {
+			const result = await regradeQualificationBundle({
+				path: join(directory, name),
+				repositoryRoot: join(import.meta.dir, ".."),
+				authority: { qualify: qualifyV2, decisionRecord: decisionRecordFor },
+				...(input.now ? { now: input.now } : {}),
+			});
+			if (
+				result.decision.artifact.packageVersion === input.version &&
+				(!input.expectedArtifact ||
+					samePackedArtifact(
+						result.decision.artifact,
+						input.expectedArtifact,
+					)) &&
+				(input.expectedCanarySha256 === undefined ||
+					result.decision.canarySha256 === input.expectedCanarySha256)
+			)
+				matches.push({ bundleSha256: result.bundleSha256 });
+		} catch (error) {
+			throw new Error(
+				`Qualification bundle ${name} for ${input.version} did not regrade cleanly.`,
+				{ cause: error },
+			);
+		}
+	}
+	const match = matches[0];
+	if (matches.length === 1 && match) return match;
+	if (matches.length > 1)
 		throw new Error(
-			`Release ${version} cannot proceed: no exact VERIFIED v2 decision record exists. Run \`bun run qualify -- --report <report> --catalog <catalog> --artifact <artifact>\` and commit the decision.`,
+			`Release ${input.version} cannot proceed: multiple sealed qualification bundles match the release.`,
 		);
-	}
+	throw new Error(
+		`Release ${input.version} cannot proceed: no sealed qualification bundle independently regrades to the exact VERIFIED decision.`,
+	);
 }
 
 export async function assertStrictReleaseEvidence(input: {
 	readonly version: string;
-	readonly decisionsDirectory?: string;
+	readonly bundlesDirectory?: string;
 	readonly canaryPath: string;
 	readonly expectedArtifact: ArtifactIdentity;
 	readonly tag?: string;
 	readonly now?: Date;
-}): Promise<void> {
+}): Promise<{ readonly bundleSha256: string }> {
 	const tag = input.tag ?? `v${input.version}`;
 	const canary = JSON.parse(
 		await readFile(input.canaryPath, "utf8"),
@@ -296,66 +374,14 @@ export async function assertStrictReleaseEvidence(input: {
 	});
 	if (evidenceIssue) throw new Error(evidenceIssue);
 	const canaryHash = (canary as CanaryRecord).recordSha256;
-	let records: unknown[] = [];
-	try {
-		const { readdir } = await import("node:fs/promises");
-		records = await Promise.all(
-			(await readdir(input.decisionsDirectory ?? join("evals", "decisions")))
-				.filter((name) => name.endsWith(".json"))
-				.map(async (name) =>
-					JSON.parse(
-						await readFile(
-							join(
-								input.decisionsDirectory ?? join("evals", "decisions"),
-								name,
-							),
-							"utf8",
-						),
-					),
-				),
-		);
-	} catch {
-		records = [];
-	}
-	const match = records.find((record) => {
-		const entry = record as {
-			readonly reportSha256?: unknown;
-			readonly artifactSha256?: unknown;
-			readonly evaluatorSha256?: unknown;
-			readonly catalogSha256?: unknown;
-			readonly policySha256?: unknown;
-			readonly actorSha256?: unknown;
-			readonly analyzerSha256?: unknown;
-			readonly expectedProvenanceSha256?: unknown;
-			readonly canarySha256?: unknown;
-			readonly decisionInputSha256?: unknown;
-		};
-		const decisionInputSha256 = canonicalSha256("flow-decision-input-v1", {
-			reportSha256: entry.reportSha256,
-			artifactSha256: entry.artifactSha256,
-			evaluatorSha256: entry.evaluatorSha256,
-			catalogSha256: entry.catalogSha256,
-			policySha256: entry.policySha256,
-			actorSha256: entry.actorSha256,
-			analyzerSha256: entry.analyzerSha256,
-			expectedProvenanceSha256: entry.expectedProvenanceSha256,
-			canarySha256: canaryHash,
-		});
-		return (
-			entry.canarySha256 === canaryHash &&
-			entry.decisionInputSha256 === decisionInputSha256 &&
-			qualificationRecordIssue(
-				input.version,
-				record,
-				input.expectedArtifact,
-				canaryHash,
-			) === null
-		);
+	return assertQualificationBundle({
+		version: input.version,
+		directory:
+			input.bundlesDirectory ?? join("evals", "qualification", "bundles"),
+		expectedArtifact: input.expectedArtifact,
+		expectedCanarySha256: canaryHash,
+		...(input.now ? { now: input.now } : {}),
 	});
-	if (!match)
-		throw new Error(
-			`Release ${input.version} cannot proceed: no exact VERIFIED canary-bound v2 decision record exists.`,
-		);
 }
 
 function optionValue(
@@ -422,12 +448,15 @@ async function main(args: readonly string[]): Promise<void> {
 			throw new Error("Strict tag release metadata requires --canary.");
 		if (!expectedArtifact)
 			throw new Error("Strict tag release metadata requires an artifact.");
-		await assertStrictReleaseEvidence({
+		const qualification = await assertStrictReleaseEvidence({
 			version: packageMetadata.version,
 			tag,
 			canaryPath,
 			expectedArtifact,
 		});
+		process.stdout.write(
+			`Qualification bundle verified: ${qualification.bundleSha256}\n`,
+		);
 	} else if (artifactPath) {
 		process.stdout.write(
 			`INCONCLUSIVE: rebuilt artifact ${packageMetadata.version} has no strict tag evidence.\n`,
