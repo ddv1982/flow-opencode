@@ -496,6 +496,8 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			now: verificationNow,
 		});
 		expect(regraded.decision.verdict).toBe("VERIFIED");
+		expect(regraded.releaseDecision.verdict).toBe("VERIFIED");
+		expect(regraded.reportId).toBe(bundle.manifest.reportId);
 		await expect(
 			regradeQualificationBundle({
 				path: bundlePath,
@@ -512,6 +514,48 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			now: verificationNow,
 		});
 		expect(releaseAuthority.bundleSha256).toBe(bundle.manifest.bundleSha256);
+		expect(releaseAuthority.summary).toMatchObject({
+			schemaVersion: 1,
+			packageVersion: artifact.packageVersion,
+			reportId: bundle.manifest.reportId,
+			verdict: "VERIFIED",
+			bundleSha256: bundle.manifest.bundleSha256,
+			canarySha256: canary.record.recordSha256,
+			artifact,
+		});
+		expect(releaseAuthority.summary.providers).toHaveLength(2);
+		const notesPath = join(temporary, "release-notes.md");
+		const metadata = Bun.spawn(
+			[
+				"bun",
+				"run",
+				"scripts/release-metadata.ts",
+				"--tag",
+				`v${artifact.packageVersion}`,
+				"--notes-file",
+				notesPath,
+				"--artifact",
+				artifactPath,
+				"--canary",
+				canary.path,
+				"--bundles-dir",
+				bundlesDirectory,
+			],
+			{ cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
+		);
+		const [metadataStdout, metadataStderr, metadataExit] = await Promise.all([
+			new Response(metadata.stdout).text(),
+			new Response(metadata.stderr).text(),
+			metadata.exited,
+		]);
+		expect(metadataExit, metadataStderr).toBe(0);
+		expect(metadataStdout).toContain("Release evidence:");
+		const notes = await readFile(notesPath, "utf8");
+		expect(notes).toContain("## Qualification evidence");
+		expect(notes).toContain(bundle.manifest.bundleSha256);
+		for (const provider of releaseAuthority.summary.providers) {
+			expect(notes).toContain(`| ${provider.provider} |`);
+		}
 		const sealedFiles = bundle.files.map(({ ref, bytes }) => ({
 			role: ref.role,
 			...(ref.id ? { id: ref.id } : {}),

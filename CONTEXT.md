@@ -49,6 +49,14 @@ revision. It neither grants new user permission nor revokes authority already
 given. Environment-sensitive transition guards remain authoritative when that
 direction is attempted.
 
+**Status report**: Deterministic human text derived from the typed status
+projection. It repeats the exact next action and recovery direction without
+adding persisted state or authority.
+
+**Reviewer configuration**: A process-local model and step selection resolved
+once when the plugin loads. Native tuple options override environment fallbacks.
+Status reports the requested selection but cannot prove model availability.
+
 **Bounded wave**: An optional ephemeral cohort of two or three `flow-worker`
 instances contributing exact, non-overlapping slices inside one active run. One
 targeted follow-up cohort may close a concrete gap, retry, or verification need.
@@ -114,6 +122,10 @@ another state model. Its artifact paths are declarations supplied to Flow, not a
 exact Git delta. It also carries `report`: the same fields already formatted, so
 the handoff shape is a runtime guarantee rather than formatting instructions
 restated on every surface that can report a close.
+
+**Delivery handoff**: The versioned marker inside a delivery projection.
+`externalActionAuthority: "not-granted"` means the handoff never authorizes Git,
+PR, merge, publication, or release work.
 
 **Archive publication**: No-overwrite publication of closed state into
 `.flow/history/`, followed by active-state cleanup. Repeating the exact close

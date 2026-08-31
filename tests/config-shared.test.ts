@@ -3,6 +3,7 @@ import {
 	applyFlowConfig,
 	createFlowCoreConfigEntries,
 	FLOW_CORE_AGENTS,
+	resolveFlowReviewerConfiguration,
 } from "../src/config-shared.js";
 import { createConfigHook } from "../src/platform/opencode/config.js";
 
@@ -72,6 +73,100 @@ describe("Flow configuration", () => {
 			expect(warnings).toEqual([...example.expectedWarnings]);
 		});
 	}
+
+	test("prefers native plugin reviewer options over environment fallback", () => {
+		const entries = createFlowCoreConfigEntries({
+			env: {
+				OPENCODE_FLOW_REVIEWER_MODEL: "env/reviewer",
+				OPENCODE_FLOW_REVIEWER_STEPS: "20",
+			},
+			pluginOptions: {
+				reviewer: { model: " plugin/reviewer ", steps: 80 },
+			},
+		});
+
+		expect(entries.agent["flow-reviewer"]).toMatchObject({
+			model: "plugin/reviewer",
+			steps: 80,
+		});
+		expect(
+			resolveFlowReviewerConfiguration({
+				env: {},
+				pluginOptions: {
+					reviewer: { model: "plugin/reviewer", steps: 80 },
+				},
+			}),
+		).toEqual({
+			model: {
+				kind: "explicit",
+				source: "plugin-option",
+				value: "plugin/reviewer",
+			},
+			steps: { kind: "explicit", source: "plugin-option", value: 80 },
+		});
+	});
+
+	test("falls back to environment reviewer settings when plugin options omit them", () => {
+		expect(
+			resolveFlowReviewerConfiguration({
+				env: {
+					OPENCODE_FLOW_REVIEWER_MODEL: "env/reviewer",
+					OPENCODE_FLOW_REVIEWER_STEPS: "21",
+				},
+				pluginOptions: { reviewer: {} },
+			}),
+		).toEqual({
+			model: {
+				kind: "explicit",
+				source: "environment",
+				value: "env/reviewer",
+			},
+			steps: { kind: "explicit", source: "environment", value: 21 },
+		});
+	});
+
+	test("warns and ignores invalid native reviewer options", () => {
+		const warnings: string[] = [];
+
+		const reviewer = resolveFlowReviewerConfiguration({
+			env: {},
+			pluginOptions: { reviewer: { model: "", steps: 1001 } },
+			onWarning: (warning) => warnings.push(warning),
+		});
+
+		expect(reviewer).toEqual({
+			model: { kind: "shared-with-manager" },
+			steps: { kind: "host-default" },
+		});
+		expect(warnings).toEqual([
+			"Flow plugin option reviewer.model must be a non-empty string; ignoring it.",
+			"Flow plugin option reviewer.steps must be an integer from 1 through 1000; ignoring it.",
+		]);
+	});
+
+	test("does not parse overridden environment reviewer settings", () => {
+		const warnings: string[] = [];
+		const reviewer = resolveFlowReviewerConfiguration({
+			env: {
+				OPENCODE_FLOW_REVIEWER_MODEL: "environment/reviewer",
+				OPENCODE_FLOW_REVIEWER_STEPS: "invalid",
+			},
+			pluginOptions: {
+				reviewer: { model: "plugin/reviewer", steps: 64 },
+			},
+			onWarning: (warning) => warnings.push(warning),
+		});
+
+		expect(reviewer).toEqual({
+			model: {
+				kind: "explicit",
+				source: "plugin-option",
+				value: "plugin/reviewer",
+			},
+			steps: { kind: "explicit", source: "plugin-option", value: 64 },
+		});
+		expect(warnings).toEqual([]);
+	});
 
 	test("denies edit, bash, skill, and delegation for both hidden agents", () => {
 		const entries = createFlowCoreConfigEntries({ env: {} });

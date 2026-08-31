@@ -1,12 +1,16 @@
 import {
 	applyFlowConfig,
+	type FlowReviewerConfiguration,
 	type MutableFlowConfig,
 } from "../../config-shared.js";
 import { createFlowLog } from "./logging.js";
 
 export function createConfigHook(
 	ctx: unknown,
-	options?: { assertOperational?: (action: string) => void },
+	options?: {
+		assertOperational?: (action: string) => void;
+		reviewerConfiguration?: FlowReviewerConfiguration | undefined;
+	},
 ) {
 	const log = createFlowLog(ctx);
 	return async (config: MutableFlowConfig) => {
@@ -17,6 +21,9 @@ export function createConfigHook(
 			return;
 		}
 		applyFlowConfig(config, {
+			...(options?.reviewerConfiguration
+				? { reviewerConfiguration: options.reviewerConfiguration }
+				: {}),
 			onWarning: (warning) => log("warn", warning),
 			onNotice: (notice) => log("info", notice),
 			onCollision: (kind, name) =>

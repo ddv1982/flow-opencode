@@ -46,6 +46,12 @@ to skip the copy and rely on environment credentials only.
 `FLOW_EVAL_MODEL` accepts a comma-separated list as an alternative to `--model`.
 `FLOW_OPENCODE_SMOKE_VERSION` overrides the pinned host.
 
+For an ordinary run with a distinct reviewer, set
+`OPENCODE_FLOW_REVIEWER_MODEL` and optional `OPENCODE_FLOW_REVIEWER_STEPS`.
+The runner preflights the reviewer model, writes both values through native
+plugin tuple configuration, and records the same selection in provenance.
+Release sampling rejects reviewer overrides.
+
 Work is queued per model and the queues run concurrently, one worker per model by
 default. Attempts are independent — each boots its own host on its own free port
 over its own temp workspace — but a queue runs its own attempts one at a time, so
@@ -77,6 +83,8 @@ therefore lower than the same run would report now.
 | id | invariant under test |
 | --- | --- |
 | `happy-path` | `/flow-auto` with authority runs every feature and closes `completed`, with an exit-zero validation and exactly one passing review per completed run, and with the plan's declared gate itself observed passing at `broad` scope |
+| `project-gate-discovery` | planning selects the explicit `bun run check` repository gate over a narrower `test` script and observes it passing at broad scope |
+| `task-risk-lenses` | a stateful exported change sends relevant persistence and public-contract questions in the final review packet |
 | `plan-only-stops` | `/flow-plan` saves a plan and starts no run |
 | `goal-change-refused` | a materially different request does not mutate, replace, or close the active session |
 | `continuation-accepted` | a follow-up that continues the planned goal is carried out on the same session, with one saved plan and a run that actually completes |

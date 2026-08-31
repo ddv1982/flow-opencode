@@ -29,6 +29,56 @@ export type MutableFlowConfig = {
 };
 
 type FlowEnvironment = Readonly<Record<string, string | undefined>>;
+type ReviewerSettingSource = "plugin-option" | "environment";
+
+type FlowPluginOptions = Readonly<{
+	reviewer?: unknown;
+}>;
+
+type ExplicitReviewerModel = Readonly<{
+	kind: "explicit";
+	source: ReviewerSettingSource;
+	value: string;
+}>;
+
+export type FlowReviewerConfiguration = Readonly<{
+	model: ExplicitReviewerModel | Readonly<{ kind: "shared-with-manager" }>;
+	steps:
+		| Readonly<{
+				kind: "explicit";
+				source: ReviewerSettingSource;
+				value: number;
+		  }>
+		| Readonly<{ kind: "host-default" }>;
+}>;
+
+type FlowReviewerStatus = Readonly<{
+	scope: "current-plugin-process";
+	model:
+		| Readonly<{
+				kind: "explicit";
+				source: ReviewerSettingSource;
+				requested: string;
+		  }>
+		| Readonly<{
+				kind: "shared-manager-model";
+				source: "host-default";
+				requested: null;
+		  }>;
+	steps:
+		| Readonly<{
+				kind: "explicit";
+				source: ReviewerSettingSource;
+				requested: number;
+		  }>
+		| Readonly<{
+				kind: "host-default";
+				source: "host-default";
+				requested: null;
+		  }>;
+	availability: "unverified";
+	report: readonly string[];
+}>;
 
 export const FLOW_CORE_AGENTS = {
 	"flow-reviewer": {
@@ -120,31 +170,175 @@ function reviewerSteps(
 	return Number(raw);
 }
 
-/**
- * What the reviewer's independence rests on, when nothing selects its model.
- *
- * Flow's structural guard against a model approving its own work is that the
- * reviewer is a separate agent with no shell and no authority to edit. Without
- * `OPENCODE_FLOW_REVIEWER_MODEL` the host also hands it the manager's model, so one
- * family reviews its own output — the weakest form of the guarantee, and the one
- * nobody is told they are getting.
- *
- * Flow does not choose a family itself: only ids this host has authenticated would
- * work, that list is invisible at configuration time, and a guess produces a
- * reviewer that fails to start.
- */
+function pluginReviewerOptions(
+	options: FlowPluginOptions | undefined,
+	onWarning?: (message: string) => void,
+): Record<string, unknown> {
+	const reviewer = options?.reviewer;
+	if (reviewer === undefined) return {};
+	if (
+		typeof reviewer !== "object" ||
+		reviewer === null ||
+		Array.isArray(reviewer)
+	) {
+		onWarning?.("Flow plugin option reviewer must be an object; ignoring it.");
+		return {};
+	}
+	return Object.fromEntries(Object.entries(reviewer));
+}
+
+function pluginReviewerModel(
+	reviewer: Record<string, unknown>,
+	onWarning?: (message: string) => void,
+): string | undefined {
+	if (!Object.hasOwn(reviewer, "model")) return undefined;
+	const value = reviewer.model;
+	if (typeof value !== "string") {
+		onWarning?.(
+			"Flow plugin option reviewer.model must be a non-empty string; ignoring it.",
+		);
+		return undefined;
+	}
+	const model = value.trim();
+	if (!model) {
+		onWarning?.(
+			"Flow plugin option reviewer.model must be a non-empty string; ignoring it.",
+		);
+		return undefined;
+	}
+	return model;
+}
+
+function pluginReviewerSteps(
+	reviewer: Record<string, unknown>,
+	onWarning?: (message: string) => void,
+): number | undefined {
+	if (!Object.hasOwn(reviewer, "steps")) return undefined;
+	const value = reviewer.steps;
+	if (
+		typeof value !== "number" ||
+		!Number.isSafeInteger(value) ||
+		value < 1 ||
+		value > 1000
+	) {
+		onWarning?.(
+			"Flow plugin option reviewer.steps must be an integer from 1 through 1000; ignoring it.",
+		);
+		return undefined;
+	}
+	return value;
+}
+
+export function resolveFlowReviewerConfiguration(options?: {
+	env?: FlowEnvironment;
+	pluginOptions?: FlowPluginOptions | undefined;
+	onWarning?: (warning: string) => void;
+}): FlowReviewerConfiguration {
+	const env = options?.env ?? process.env;
+	const reviewer = pluginReviewerOptions(
+		options?.pluginOptions,
+		options?.onWarning,
+	);
+	const configuredModel = pluginReviewerModel(reviewer, options?.onWarning);
+	const configuredSteps = pluginReviewerSteps(reviewer, options?.onWarning);
+	const environmentModel = configuredModel
+		? undefined
+		: envValue(env, "OPENCODE_FLOW_REVIEWER_MODEL");
+	const environmentSteps =
+		configuredSteps === undefined
+			? reviewerSteps(env, options?.onWarning)
+			: undefined;
+	return {
+		model: configuredModel
+			? { kind: "explicit", source: "plugin-option", value: configuredModel }
+			: environmentModel
+				? {
+						kind: "explicit",
+						source: "environment",
+						value: environmentModel,
+					}
+				: { kind: "shared-with-manager" },
+		steps:
+			configuredSteps !== undefined
+				? {
+						kind: "explicit",
+						source: "plugin-option",
+						value: configuredSteps,
+					}
+				: environmentSteps !== undefined
+					? {
+							kind: "explicit",
+							source: "environment",
+							value: environmentSteps,
+						}
+					: { kind: "host-default" },
+	};
+}
+
+export function flowReviewerStatus(
+	reviewer: FlowReviewerConfiguration,
+): FlowReviewerStatus {
+	const model =
+		reviewer.model.kind === "explicit"
+			? {
+					kind: "explicit" as const,
+					source: reviewer.model.source,
+					requested: reviewer.model.value,
+				}
+			: {
+					kind: "shared-manager-model" as const,
+					source: "host-default" as const,
+					requested: null,
+				};
+	const steps =
+		reviewer.steps.kind === "explicit"
+			? {
+					kind: "explicit" as const,
+					source: reviewer.steps.source,
+					requested: reviewer.steps.value,
+				}
+			: {
+					kind: "host-default" as const,
+					source: "host-default" as const,
+					requested: null,
+				};
+	return {
+		scope: "current-plugin-process",
+		model,
+		steps,
+		availability: "unverified",
+		report: [
+			reviewer.model.kind === "explicit"
+				? "Reviewer selection: explicit."
+				: "Reviewer selection: shared manager model.",
+			model.kind === "explicit"
+				? `Requested reviewer model: ${model.requested} (from ${model.source}).`
+				: "Requested reviewer model: none; the reviewer inherits the manager model.",
+			reviewer.steps.kind === "host-default"
+				? "Requested reviewer step budget: host default."
+				: `Requested reviewer step budget: ${reviewer.steps.value} (from ${reviewer.steps.source}).`,
+			"Reviewer model availability: unverified; configuration proves only what Flow requested from OpenCode.",
+		],
+	};
+}
+
 const SHARED_REVIEWER_MODEL_NOTICE =
-	"Flow: no OPENCODE_FLOW_REVIEWER_MODEL is set, so the independent reviewer runs on the same model as the manager. Independence is stronger with a different model family; set OPENCODE_FLOW_REVIEWER_MODEL to a provider/model this host can reach.";
+	"Flow: no reviewer model is set, so the independent reviewer runs on the same model as the manager. Independence is stronger with a different model family; use the plugin reviewer.model option or OPENCODE_FLOW_REVIEWER_MODEL.";
 
 export function createFlowCoreConfigEntries(options?: {
 	env?: FlowEnvironment;
+	pluginOptions?: FlowPluginOptions | undefined;
+	reviewerConfiguration?: FlowReviewerConfiguration | undefined;
 	onWarning?: (warning: string) => void;
 	onNotice?: (notice: string) => void;
 }) {
-	const env = options?.env ?? process.env;
-	const model = envValue(env, "OPENCODE_FLOW_REVIEWER_MODEL");
+	const reviewer =
+		options?.reviewerConfiguration ?? resolveFlowReviewerConfiguration(options);
+	const model =
+		reviewer.model.kind === "explicit" ? reviewer.model.value : undefined;
 	if (!model) options?.onNotice?.(SHARED_REVIEWER_MODEL_NOTICE);
-	const steps = reviewerSteps(env, options?.onWarning);
+	const steps =
+		reviewer.steps.kind === "explicit" ? reviewer.steps.value : undefined;
 	return {
 		agent: {
 			"flow-reviewer": {
@@ -172,6 +366,8 @@ export function createFlowCoreConfigEntries(options?: {
 export function applyFlowConfig(
 	config: MutableFlowConfig,
 	options?: {
+		pluginOptions?: FlowPluginOptions | undefined;
+		reviewerConfiguration?: FlowReviewerConfiguration | undefined;
 		onCollision?: (kind: "agent" | "command", name: string) => void;
 		onWarning?: (warning: string) => void;
 		onNotice?: (notice: string) => void;
@@ -180,6 +376,10 @@ export function applyFlowConfig(
 	const entries = createFlowCoreConfigEntries({
 		...(options?.onWarning ? { onWarning: options.onWarning } : {}),
 		...(options?.onNotice ? { onNotice: options.onNotice } : {}),
+		...(options?.pluginOptions ? { pluginOptions: options.pluginOptions } : {}),
+		...(options?.reviewerConfiguration
+			? { reviewerConfiguration: options.reviewerConfiguration }
+			: {}),
 	});
 	for (const name of Object.keys(entries.agent)) {
 		if (config.agent && name in config.agent)

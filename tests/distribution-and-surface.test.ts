@@ -143,9 +143,11 @@ async function loadPlugin(
 	workspace: string,
 	directory = workspace,
 	promptCalls?: unknown[],
+	pluginOptions?: Readonly<Record<string, unknown>>,
 ): Promise<PluginHooks> {
 	const hooks = await FlowPlugin(
 		pluginContext(workspace, directory, promptCalls),
+		pluginOptions,
 	);
 	activeHooks.push(hooks);
 	return hooks;
@@ -265,6 +267,70 @@ describe("Flow distribution surface", () => {
 		expect(status.workflowData.runtimeIdentity.pluginEntrySha256).toBe(
 			`sha256:${createHash("sha256").update(pluginBytes).digest("hex")}`,
 		);
+	});
+
+	test("reports process-local reviewer configuration and deterministic status text", async () => {
+		const workspace = await createTestWorkspace("flow-config-status-");
+		const pluginOptions = {
+			reviewer: { model: "provider/reviewer", steps: 80 },
+		};
+		const hooks = await loadPlugin(
+			workspace,
+			workspace,
+			undefined,
+			pluginOptions,
+		);
+		pluginOptions.reviewer.model = "changed/after-startup";
+		pluginOptions.reviewer.steps = 12;
+		const config: Parameters<NonNullable<PluginHooks["config"]>>[0] = {};
+		await hooks.config?.(config);
+		expect(config.agent?.["flow-reviewer"]).toMatchObject({
+			model: "provider/reviewer",
+			steps: 80,
+		});
+
+		const raw = String(
+			await hooks.tool?.flow_status?.execute(
+				{ request: { view: "compact" } },
+				toolContext(workspace, "configuration-status"),
+			),
+		);
+		const response = JSON.parse(raw) as {
+			workflowData: {
+				reviewerConfiguration: unknown;
+				statusReport: unknown;
+			};
+		};
+
+		expect(response.workflowData.reviewerConfiguration).toEqual({
+			scope: "current-plugin-process",
+			model: {
+				kind: "explicit",
+				source: "plugin-option",
+				requested: "provider/reviewer",
+			},
+			steps: {
+				kind: "explicit",
+				source: "plugin-option",
+				requested: 80,
+			},
+			availability: "unverified",
+			report: [
+				"Reviewer selection: explicit.",
+				"Requested reviewer model: provider/reviewer (from plugin-option).",
+				"Requested reviewer step budget: 80 (from plugin-option).",
+				"Reviewer model availability: unverified; configuration proves only what Flow requested from OpenCode.",
+			],
+		});
+		expect(response.workflowData.statusReport).toEqual([
+			"View: compact",
+			"Status: idle",
+			"Revision: 0",
+			"Next action: flow_plan_save",
+			"No active Flow session.",
+			"Action guidance: inspect the repository and save one draft plan with flow_plan_save.",
+			"Findings digest: none",
+		]);
 	});
 
 	test("isolates worker permissions while keeping manager and reviewer dispatch separate", () => {

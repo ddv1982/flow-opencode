@@ -1,5 +1,6 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { ReleaseDecision } from "../evals/analysis.js";
 import { canonicalSha256 } from "../evals/canonical-json.js";
 import {
 	evaluatorIdentity,
@@ -30,6 +31,89 @@ import {
 	canaryRecordIssue as verifyCanaryRecord,
 } from "./eval-canary.js";
 import { decisionRecordFor, qualifyV2 } from "./qualify-release.js";
+
+export type ReleaseEvidenceSummary = Readonly<{
+	schemaVersion: 1;
+	packageVersion: string;
+	reportId: string;
+	verdict: "VERIFIED";
+	bundleSha256: string;
+	artifact: ArtifactIdentity;
+	canarySha256: string | null;
+	totals: ReleaseDecision["totals"];
+	providers: ReadonlyArray<{
+		provider: string;
+		scheduled: number;
+		scored: number;
+		passed: number;
+		passRate: number | null;
+	}>;
+}>;
+
+export function releaseEvidenceSummary(input: {
+	releaseDecision: ReleaseDecision;
+	reportId: string;
+	bundleSha256: string;
+	artifact: ArtifactIdentity;
+	canarySha256: string | null;
+}): ReleaseEvidenceSummary {
+	if (input.releaseDecision.verdict !== "VERIFIED") {
+		throw new Error("Release evidence summary requires a VERIFIED decision.");
+	}
+	const providers = new Map<
+		string,
+		{ scheduled: number; scored: number; passed: number }
+	>();
+	for (const releaseCase of input.releaseDecision.cases) {
+		for (const provider of releaseCase.providers) {
+			const counts = providers.get(provider.provider) ?? {
+				scheduled: 0,
+				scored: 0,
+				passed: 0,
+			};
+			counts.scheduled += provider.scheduled;
+			counts.scored += provider.scored;
+			counts.passed += provider.passed;
+			providers.set(provider.provider, counts);
+		}
+	}
+	return {
+		schemaVersion: 1,
+		packageVersion: input.artifact.packageVersion,
+		reportId: input.reportId,
+		verdict: "VERIFIED",
+		bundleSha256: input.bundleSha256,
+		artifact: input.artifact,
+		canarySha256: input.canarySha256,
+		totals: input.releaseDecision.totals,
+		providers: [...providers.entries()]
+			.map(([provider, counts]) => ({
+				provider,
+				...counts,
+				passRate: counts.scored === 0 ? null : counts.passed / counts.scored,
+			}))
+			.sort((left, right) => left.provider.localeCompare(right.provider)),
+	};
+}
+
+function releaseEvidenceMarkdown(summary: ReleaseEvidenceSummary): string {
+	return [
+		"## Qualification evidence",
+		"",
+		`Sealed bundle: \`${summary.bundleSha256}\``,
+		`Report: \`${summary.reportId}\``,
+		`Artifact: \`${summary.artifact.tarballSha256}\``,
+		`Canary: \`${summary.canarySha256 ?? "unavailable"}\``,
+		`Verified attempts: ${summary.totals.passed}/${summary.totals.scored} scored, ${summary.totals.scheduled} scheduled.`,
+		"",
+		"| Provider | Passed | Scored | Scheduled |",
+		"| --- | ---: | ---: | ---: |",
+		...summary.providers.map(
+			(provider) =>
+				`| ${provider.provider} | ${provider.passed} | ${provider.scored} | ${provider.scheduled} |`,
+		),
+	].join("\n");
+}
 
 export function canaryRecordIssue(
 	version: string,
@@ -283,7 +367,10 @@ export async function assertQualificationBundle(input: {
 	readonly expectedArtifact?: ArtifactIdentity;
 	readonly expectedCanarySha256?: string;
 	readonly now?: Date;
-}): Promise<{ readonly bundleSha256: string }> {
+}): Promise<{
+	readonly bundleSha256: string;
+	readonly summary: ReleaseEvidenceSummary;
+}> {
 	const directory =
 		input.directory ?? join("evals", "qualification", "bundles");
 	let names: string[] = [];
@@ -294,7 +381,10 @@ export async function assertQualificationBundle(input: {
 	} catch {
 		names = [];
 	}
-	const matches: Array<{ readonly bundleSha256: string }> = [];
+	const matches: Array<{
+		readonly bundleSha256: string;
+		readonly summary: ReleaseEvidenceSummary;
+	}> = [];
 	for (const name of names) {
 		let manifest: ReturnType<typeof QualificationBundleManifestSchema.parse>;
 		try {
@@ -326,7 +416,16 @@ export async function assertQualificationBundle(input: {
 				(input.expectedCanarySha256 === undefined ||
 					result.decision.canarySha256 === input.expectedCanarySha256)
 			)
-				matches.push({ bundleSha256: result.bundleSha256 });
+				matches.push({
+					bundleSha256: result.bundleSha256,
+					summary: releaseEvidenceSummary({
+						releaseDecision: result.releaseDecision,
+						reportId: result.reportId,
+						bundleSha256: result.bundleSha256,
+						artifact: result.decision.artifact,
+						canarySha256: result.decision.canarySha256,
+					}),
+				});
 		} catch (error) {
 			throw new Error(
 				`Qualification bundle ${name} for ${input.version} did not regrade cleanly.`,
@@ -352,7 +451,10 @@ export async function assertStrictReleaseEvidence(input: {
 	readonly expectedArtifact: ArtifactIdentity;
 	readonly tag?: string;
 	readonly now?: Date;
-}): Promise<{ readonly bundleSha256: string }> {
+}): Promise<{
+	readonly bundleSha256: string;
+	readonly summary: ReleaseEvidenceSummary;
+}> {
 	const tag = input.tag ?? `v${input.version}`;
 	const canary = JSON.parse(
 		await readFile(input.canaryPath, "utf8"),
@@ -401,6 +503,8 @@ async function main(args: readonly string[]): Promise<void> {
 	let notesFile: string | undefined;
 	let artifactPath: string | undefined;
 	let canaryPath: string | undefined;
+	let bundlesDirectory: string | undefined;
+	let qualificationSummary: ReleaseEvidenceSummary | undefined;
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
 		switch (argument) {
@@ -418,6 +522,10 @@ async function main(args: readonly string[]): Promise<void> {
 				break;
 			case "--canary":
 				canaryPath = optionValue(args, index, argument);
+				index += 1;
+				break;
+			case "--bundles-dir":
+				bundlesDirectory = optionValue(args, index, argument);
 				index += 1;
 				break;
 			default:
@@ -453,9 +561,14 @@ async function main(args: readonly string[]): Promise<void> {
 			tag,
 			canaryPath,
 			expectedArtifact,
+			...(bundlesDirectory ? { bundlesDirectory } : {}),
 		});
 		process.stdout.write(
 			`Qualification bundle verified: ${qualification.bundleSha256}\n`,
+		);
+		qualificationSummary = qualification.summary;
+		process.stdout.write(
+			`Release evidence: ${JSON.stringify(qualification.summary)}\n`,
 		);
 	} else if (artifactPath) {
 		process.stdout.write(
@@ -464,7 +577,14 @@ async function main(args: readonly string[]): Promise<void> {
 		if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
 		return;
 	}
-	if (notesFile) await writeFile(notesFile, result.releaseNotes, "utf8");
+	if (notesFile)
+		await writeFile(
+			notesFile,
+			qualificationSummary
+				? `${result.releaseNotes}\n\n${releaseEvidenceMarkdown(qualificationSummary)}\n`
+				: result.releaseNotes,
+			"utf8",
+		);
 	process.stdout.write(
 		`Release metadata matches ${packageMetadata.version}.\n`,
 	);

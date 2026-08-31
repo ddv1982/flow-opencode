@@ -285,6 +285,8 @@ export async function regradeQualificationBundle(input: {
 	readonly now?: Date;
 }): Promise<{
 	readonly decision: RegradedDecision;
+	readonly releaseDecision: ReleaseDecision;
+	readonly reportId: string;
 	readonly bundleSha256: string;
 }> {
 	const bundle = await readQualificationBundle(input.path);
@@ -379,7 +381,12 @@ export async function regradeQualificationBundle(input: {
 			throw new Error(
 				"Bundled manifest or analyzer identity does not reproduce.",
 			);
-		return { decision, bundleSha256: bundle.manifest.bundleSha256 };
+		return {
+			decision,
+			releaseDecision: result.decision,
+			reportId: result.report.reportId,
+			bundleSha256: bundle.manifest.bundleSha256,
+		};
 	} finally {
 		await rm(temporary, { recursive: true, force: true });
 	}

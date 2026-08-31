@@ -16,6 +16,11 @@ cleanup/invariant, and evidence. Race-heavy lifecycle invariants are planned
 separately from independently acceptable UI, persistence, or accessibility
 outcomes.
 
+Canonical-gate discovery follows one order: repository instructions, maintained
+docs, CI workflow, build/test manifests, then task fit. When the right gate is
+still ambiguous after that pass, the manager records the chosen source and
+rationale in plan `decisions`.
+
 The manager reuses one conversational baseline inventory across a run and
 refreshes changed facts. A feature review receives only baseline facts it
 changes or depends on; final review receives the full inventory. Its bounded
@@ -23,7 +28,6 @@ packet maps IDs to current-source evidence, carries the feature risk checklist
 represented as a transition matrix when applicable, and preserves prior finding
 dispositions. Empty optional sections are omitted rather than repeated as a text
 manifest.
-
 When resuming attempt 2 or later without prior findings in conversation, the
 manager reads detail once and recovers their IDs from superseded runs before
 preflight.

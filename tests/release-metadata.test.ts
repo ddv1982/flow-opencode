@@ -28,6 +28,7 @@ import {
 	canaryRecordIssue,
 	isMajorRelease,
 	qualificationRecordIssue,
+	releaseEvidenceSummary,
 	releaseNotesForVersion,
 	validateReleaseMetadata,
 } from "../scripts/release-metadata.js";
@@ -185,6 +186,78 @@ const artifact = (packageVersion: string) => ({
 	sourceTreeSha256: digest("a"),
 	tarballSha256: digest("b"),
 	unpackedManifestSha256: digest("c"),
+});
+
+test("derives a compact provider summary from verified release counts", () => {
+	const summary = releaseEvidenceSummary({
+		reportId: "report-summary",
+		bundleSha256: digest("f"),
+		artifact: artifact("8.2.0"),
+		canarySha256: digest("e"),
+		releaseDecision: {
+			verdict: "VERIFIED",
+			reasons: [],
+			totals: { scheduled: 6, scored: 6, passed: 5 },
+			cases: [
+				{
+					caseId: "case-one",
+					caseVersion: 1,
+					scheduled: 6,
+					scored: 6,
+					passed: 5,
+					representedProviders: 2,
+					providers: [
+						{
+							provider: "provider-b",
+							scheduled: 3,
+							scored: 3,
+							passed: 2,
+							passRate: 2 / 3,
+						},
+						{
+							provider: "provider-a",
+							scheduled: 3,
+							scored: 3,
+							passed: 3,
+							passRate: 1,
+						},
+					],
+				},
+			],
+		},
+	});
+
+	expect(summary.verdict).toBe("VERIFIED");
+	expect(summary.providers).toEqual([
+		{
+			provider: "provider-a",
+			scheduled: 3,
+			scored: 3,
+			passed: 3,
+			passRate: 1,
+		},
+		{
+			provider: "provider-b",
+			scheduled: 3,
+			scored: 3,
+			passed: 2,
+			passRate: 2 / 3,
+		},
+	]);
+	expect(() =>
+		releaseEvidenceSummary({
+			reportId: "report-summary",
+			bundleSha256: digest("f"),
+			artifact: artifact("8.2.0"),
+			canarySha256: digest("e"),
+			releaseDecision: {
+				verdict: "NOT VERIFIED",
+				reasons: [],
+				totals: { scheduled: 0, scored: 0, passed: 0 },
+				cases: [],
+			},
+		}),
+	).toThrow("requires a VERIFIED decision");
 });
 const decisionRecord = (packageVersion: string, verdict = "VERIFIED") => {
 	const measuredArtifact = artifact(packageVersion);

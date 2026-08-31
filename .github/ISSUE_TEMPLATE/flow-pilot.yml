@@ -1,0 +1,99 @@
+name: Flow pilot report
+description: Report one privacy-safe external Flow session.
+title: "[Flow pilot] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach `.flow/session.json`, credentials, private source, raw command output, customer data, or unredacted transcripts.
+  - type: input
+    id: opencode_version
+    attributes:
+      label: OpenCode version
+      placeholder: 1.18.6
+    validations:
+      required: true
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Repository toolchain
+      placeholder: Bun and TypeScript
+    validations:
+      required: true
+  - type: dropdown
+    id: reviewer_selection
+    attributes:
+      label: Reviewer model request
+      options:
+        - Shared manager model
+        - Explicit reviewer model
+    validations:
+      required: true
+  - type: dropdown
+    id: reviewer_dispatch
+    attributes:
+      label: Reviewer dispatch outcome
+      options:
+        - Completed
+        - Failed to start
+        - Not reached
+    validations:
+      required: true
+  - type: input
+    id: intended_gate
+    attributes:
+      label: Intended canonical gate
+      placeholder: bun run check
+    validations:
+      required: true
+  - type: input
+    id: planned_gate
+    attributes:
+      label: Gate saved in the Flow plan
+      placeholder: bun run check
+    validations:
+      required: true
+  - type: dropdown
+    id: terminal_status
+    attributes:
+      label: Terminal status
+      options:
+        - Completed
+        - Awaiting user direction
+        - Deferred
+        - Abandoned
+        - Operational failure
+    validations:
+      required: true
+  - type: textarea
+    id: recovery
+    attributes:
+      label: Interruption or recovery outcome
+      description: State what happened and whether the projected next action worked.
+    validations:
+      required: true
+  - type: input
+    id: elapsed_time
+    attributes:
+      label: Approximate elapsed time
+      placeholder: 35 minutes
+    validations:
+      required: true
+  - type: textarea
+    id: unclear_step
+    attributes:
+      label: Most confusing step
+      description: Describe one concrete point of confusion. Do not paste private data.
+    validations:
+      required: true

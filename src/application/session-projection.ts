@@ -31,7 +31,11 @@ import {
 	unresolvedVetoedCommands,
 	unsatisfiedEvidence,
 } from "../domain/validation.js";
-import { type FindingsDigest, findingsDigest } from "./findings-digest.js";
+import {
+	digestReportLines,
+	type FindingsDigest,
+	findingsDigest,
+} from "./findings-digest.js";
 import type { StatusRequest } from "./schema.js";
 
 type FlowNextAction =
@@ -145,6 +149,149 @@ export type ActiveSessionProjection =
 	| ReviewerProjection;
 
 export type StatusProjection = ActiveSessionProjection | IdleProjection;
+
+type RoutedStatusProjection = Exclude<StatusProjection, ReviewerProjection>;
+
+function actionGuidance(projection: RoutedStatusProjection): string {
+	const action = projection.nextAction;
+	switch (action) {
+		case "flow_plan_save":
+			return "Action guidance: inspect the repository and save one draft plan with flow_plan_save.";
+		case "flow_plan_approve":
+			return "Action guidance: review the draft and approve it only with explicit or prior implementation authority.";
+		case "flow_run_start":
+			return projection.status === "ready"
+				? "Action guidance: start one exact dependency-ready feature with flow_run_start."
+				: "Action guidance: refresh status before starting another feature.";
+		case "flow_feature_reset":
+			return projection.status === "blocked"
+				? "Action guidance: reset the failed feature and select the exact authorized retry or independent feature with flow_feature_reset."
+				: "Action guidance: reset the source-stale active feature; do not redispatch its reviewer.";
+		case "await-user-direction":
+			if (projection.status === "ready")
+				return "Action guidance: choose the exact failed feature to retry with flow_run_start; do not use default selection.";
+			if (projection.status === "blocked")
+				return "Action guidance: choose an exact retry or dependency-independent feature through flow_feature_reset with nextFeatureId.";
+			return "Action guidance: supply the missing declared evidence or explicitly choose deferred or abandoned closure.";
+		case "flow_session_close":
+			return "archiveRetry" in projection && projection.archiveRetry
+				? "Action guidance: replay the projected flow_session_close request byte-for-byte before any other recovery action."
+				: "Action guidance: close the completed session with flow_session_close.";
+		case "flow_status":
+			return "Action guidance: refresh Flow status before another lifecycle action.";
+		case "dispatch-flow-reviewer":
+			return "Action guidance: dispatch the existing pending assignment to flow-reviewer.";
+		case "flow_validation_start":
+			return "Action guidance: arm the exact next validation command with flow_validation_start.";
+		case "flow_review_start":
+			return "Action guidance: create one independent review assignment with flow_review_start.";
+		default: {
+			const exhaustive: never = action;
+			return exhaustive;
+		}
+	}
+}
+
+function compactReport(
+	projection: CompactProjection | DetailProjection | ExecutionProjection,
+): string[] {
+	return [
+		`View: ${projection.view}`,
+		`Session: ${projection.sessionId}`,
+		`Status: ${projection.status}`,
+		`Approval: ${projection.approval}`,
+		`Revision: ${projection.revision}`,
+		`Goal: ${projection.goal}`,
+		`Progress: ${projection.progress.completed} of ${projection.progress.total} features complete; ${projection.progress.remaining} remaining`,
+		`Active feature: ${projection.activeFeatureId ?? "none"}`,
+		`Active run: ${projection.activeRunId ?? "none"}`,
+		...(projection.blockedFeature
+			? [
+					`Blocked feature: ${projection.blockedFeature.featureId}`,
+					`Blocked attempt: ${projection.blockedFeature.attempt}`,
+					`Failed review count: ${projection.blockedFeature.failedReviewCount}`,
+					`Scope blocker: ${projection.blockedFeature.scopeBlocker ? "yes" : "no"}`,
+				]
+			: []),
+		`Next action: ${projection.nextAction}`,
+		`Archive retry: ${projection.archiveRetry ? "yes" : "no"}`,
+		actionGuidance(projection),
+		...digestReportLines(projection.findingsDigest),
+	];
+}
+
+function retryRequiredFeatureIds(projection: DetailProjection): string[] {
+	return (projection.plan?.features ?? []).flatMap((feature) => {
+		const run = projection.runs.findLast(
+			(candidate) => candidate.featureId === feature.id,
+		);
+		const reviewed = run?.reviews.findLast((review) => review.result !== null);
+		return reviewed?.result?.verdict === "failed" ? [feature.id] : [];
+	});
+}
+
+export function statusReport(projection: StatusProjection): readonly string[] {
+	if (!("sessionId" in projection)) {
+		return [
+			`View: ${projection.view}`,
+			"Status: idle",
+			"Revision: 0",
+			"Next action: flow_plan_save",
+			"No active Flow session.",
+			actionGuidance(projection),
+			...digestReportLines(projection.findingsDigest),
+		];
+	}
+	if (projection.view === "reviewer") {
+		return [
+			"View: reviewer",
+			`Session: ${projection.sessionId}`,
+			`Revision: ${projection.revision}`,
+			`Goal: ${projection.goal}`,
+			`Feature: ${projection.feature ? `${projection.feature.id} - ${projection.feature.title}` : "unavailable"}`,
+			`Reviewer assignment: ${projection.assignment.id}`,
+			`Assignment kind: ${projection.assignment.kind}`,
+			`Review feature: ${projection.assignment.featureId}`,
+			`Risk lenses: ${projection.assignment.packet.riskLenses.join(", ") || "none"}`,
+			`Artifacts changed: ${projection.artifactsChanged.length}`,
+			`Validations: ${projection.validations.length}`,
+			`Completed features: ${projection.completedFeatureIds.length}`,
+			`Prior findings: ${projection.priorFindings.length}`,
+			`Next finding id prefix: ${projection.nextFindingIdPrefix}`,
+		];
+	}
+	const common = compactReport(projection);
+	if (projection.view === "execution") {
+		return [
+			...common,
+			`Feature: ${projection.feature ? `${projection.feature.id} - ${projection.feature.title}` : "none"}`,
+			`Run: ${projection.run ? `${projection.run.id}; state ${projection.run.state}` : "none"}`,
+		];
+	}
+	if (projection.view === "detail") {
+		const retryRequired = retryRequiredFeatureIds(projection);
+		const validations = projection.runs.reduce(
+			(total, run) => total + run.validations.length,
+			0,
+		);
+		const artifacts = new Set(
+			projection.runs.flatMap((run) =>
+				run.artifactsChanged.map((artifact) => artifact.path),
+			),
+		);
+		return [
+			...common,
+			`Plan features: ${projection.plan?.features.length ?? 0}`,
+			`Runs: ${projection.runs.length}`,
+			`Retry-required features: ${retryRequired.join(", ") || "none"}`,
+			`Validation observations: ${validations}`,
+			`Flow-reported artifacts: ${[...artifacts].sort().join(", ") || "none"}`,
+			`Closure: ${projection.closure ? `${projection.closure.kind} - ${projection.closure.summary || "none"}` : "none"}`,
+			`Operations recorded: ${projection.operations.length}`,
+		];
+	}
+	return common;
+}
 
 function featureProgress(session: Session): FeatureProgress {
 	const total = session.plan?.features.length ?? 0;

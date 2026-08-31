@@ -113,8 +113,15 @@ last relevant edit.
 
 After successful applicable validation, call `flow_review_start` with a fresh
 operation id, current revision, feature id, `artifactsChanged`, and a bounded
-packet. Dispatch only reserved `flow-reviewer`. Never review or submit its
-verdict in manager context.
+packet. For persistence, schema, migration, replay, or recovery work, add only
+the relevant full questions to `riskLenses`: can interruption leave partial
+state; are retry and replay idempotent; can older state or readers fail visibly;
+does rollback preserve data? For public API, config, command, package, or
+documented-contract work, ask whether existing callers keep their defaults,
+invalid inputs fail at the boundary, and the packed artifact exposes the
+approved contract. Leave `riskLenses` empty for ordinary low-risk changes.
+Dispatch only reserved `flow-reviewer`. Never review or submit its verdict in
+manager context.
 
 After dispatch, read compact status. On top-level error, report exact
 summary/recovery and stop without further mutation. If status remains running,

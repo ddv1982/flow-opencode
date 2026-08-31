@@ -130,7 +130,10 @@ const packageVersion = packageJson.version;
  * The 466 left is under a third of the section it bought, so the next growth
  * deletes prose first.
  */
-const MAX_MAINTAINED_DOC_BYTES = 91_000;
+const PRIOR_MAINTAINED_DOC_BYTES = 91_000;
+const FIRST_USE_AND_PILOT_DOC_BYTES = 8_000;
+const MAX_MAINTAINED_DOC_BYTES =
+	PRIOR_MAINTAINED_DOC_BYTES + FIRST_USE_AND_PILOT_DOC_BYTES;
 
 /**
  * Decision records under `docs/adr/`, budgeted apart from maintained prose.
@@ -169,7 +172,10 @@ const MAX_DECISION_RECORD_BYTES = 48_000;
  * remaining document plus slack, and low enough that the next document to outgrow
  * the set is caught rather than absorbed.
  */
-const MAX_SINGLE_DOC_BYTES = 21_000;
+const PRIOR_SINGLE_DOC_BYTES = 21_000;
+const REVIEWER_AND_HANDOFF_CONTRACT_BYTES = 500;
+const MAX_SINGLE_DOC_BYTES =
+	PRIOR_SINGLE_DOC_BYTES + REVIEWER_AND_HANDOFF_CONTRACT_BYTES;
 
 function section(markdown: string, heading: string, level = 2): string {
 	const marker = `${"#".repeat(level)} ${heading}`;
@@ -242,7 +248,7 @@ describe("Flow documentation contract", () => {
 			[...install.matchAll(/opencode-plugin-flow@([^\s"\]]+)/g)].map(
 				(match) => match[1],
 			),
-		).toEqual([packageVersion, packageVersion]);
+		).toEqual([packageVersion, packageVersion, packageVersion]);
 		expect(install).toContain("https://opencode.ai/docs/plugins/");
 		expect(install).not.toMatch(/\bnpx\b|activation-check/);
 	});
@@ -386,6 +392,45 @@ describe("Flow documentation contract", () => {
 				expect.arrayContaining([...required]),
 			);
 		}
+	});
+
+	test("keeps first-use and pilot guidance privacy-safe and source-aligned", async () => {
+		const quickstart = await readFile("docs/quickstart.md", "utf8");
+		const pilot = await readFile("docs/external-pilot.md", "utf8");
+		const issue = await readFile(
+			".github/ISSUE_TEMPLATE/flow-pilot.yml",
+			"utf8",
+		);
+
+		for (const value of [
+			"reviewer",
+			"model",
+			"steps",
+			"OPENCODE_FLOW_REVIEWER_MODEL",
+			"OPENCODE_FLOW_REVIEWER_STEPS",
+			"/flow-status",
+			"/flow-auto",
+		]) {
+			expect(quickstart).toContain(value);
+		}
+		for (const field of [
+			"opencode_version",
+			"operating_system",
+			"toolchain",
+			"reviewer_selection",
+			"reviewer_dispatch",
+			"intended_gate",
+			"planned_gate",
+			"terminal_status",
+			"recovery",
+			"elapsed_time",
+			"unclear_step",
+		]) {
+			expect(issue).toContain(`id: ${field}`);
+		}
+		expect(pilot).toContain("collects no telemetry");
+		expect(issue).toContain("Do not attach `.flow/session.json`");
+		expect(issue).not.toMatch(/webhook|upload_url|endpoint:/i);
 	});
 
 	test("keeps maintained documentation and decision records within their budgets", async () => {

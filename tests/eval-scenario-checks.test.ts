@@ -65,6 +65,7 @@ function session(document: {
 		}[];
 		reviews?: {
 			kind: string;
+			packet?: { riskLenses?: string[] };
 			result: {
 				verdict: string;
 				findings?: { severity?: string }[];
@@ -410,6 +411,133 @@ describe("unprovable-claim-refused", () => {
 		);
 		expect(issues).toHaveLength(1);
 		expect(issues[0]).toContain("names the missing environment evidence");
+	});
+});
+
+describe("project-gate-discovery", () => {
+	function closedGate(
+		command: string,
+		observedCommand = command,
+		outputComplete = true,
+	) {
+		return outcome({
+			archives: [
+				session({
+					features: [{ id: "farewell", title: "Add farewell" }],
+					evidence: [{ scope: "gate", command }],
+					runs: [
+						{
+							featureId: "farewell",
+							state: "completed",
+							validations: [
+								{
+									command: observedCommand,
+									scope: "broad",
+									exitCode: 0,
+									outputComplete,
+								},
+							],
+						},
+					],
+					closure: { kind: "completed" },
+				}),
+			],
+		});
+	}
+
+	test("passes the explicit whole-repository gate", () => {
+		expect(
+			check("project-gate-discovery", closedGate("bun run check")),
+		).toEqual([]);
+	});
+
+	test("rejects the narrower test script", () => {
+		expect(check("project-gate-discovery", closedGate("bun test"))).toContain(
+			"the plan did not select bun run check as its one canonical gate",
+		);
+	});
+
+	test("rejects broad validation of another command", () => {
+		expect(
+			check("project-gate-discovery", closedGate("bun run check", "bun test")),
+		).toContain("no passing broad observation ran bun run check");
+	});
+
+	test("rejects an incomplete exit-zero gate observation", () => {
+		expect(
+			check(
+				"project-gate-discovery",
+				closedGate("bun run check", "bun run check", false),
+			),
+		).toContain("no passing broad observation ran bun run check");
+	});
+});
+
+describe("task-risk-lenses", () => {
+	function closedWithLenses(riskLenses: string[], kind = "final") {
+		return outcome({
+			archives: [
+				session({
+					features: [{ id: "settings", title: "Persist settings" }],
+					runs: [
+						{
+							featureId: "settings",
+							state: "completed",
+							reviews: [
+								{
+									kind,
+									packet: { riskLenses },
+									result: { verdict: "passed" },
+								},
+							],
+						},
+					],
+					closure: { kind: "completed" },
+				}),
+			],
+		});
+	}
+
+	const persistence =
+		"Can interruption leave partial state, and are retry and replay idempotent?";
+	const publicContract =
+		"Do existing callers keep their defaults, and do invalid inputs fail at the boundary?";
+
+	test("passes both relevant risk classes", () => {
+		expect(
+			check(
+				"task-risk-lenses",
+				closedWithLenses([persistence, publicContract]),
+			),
+		).toEqual([]);
+	});
+
+	test("rejects an empty packet", () => {
+		expect(check("task-risk-lenses", closedWithLenses([]))).toHaveLength(2);
+	});
+
+	test("rejects one omitted risk class", () => {
+		expect(
+			check("task-risk-lenses", closedWithLenses([persistence])),
+		).toContain("the final review packet omitted public-contract risk");
+	});
+
+	test("rejects keyword-only lenses", () => {
+		expect(
+			check("task-risk-lenses", closedWithLenses(["export retry"])),
+		).toEqual([
+			"the final review packet omitted persistence or migration risk",
+			"the final review packet omitted public-contract risk",
+		]);
+	});
+
+	test("rejects an absent final review", () => {
+		expect(
+			check(
+				"task-risk-lenses",
+				closedWithLenses([persistence, publicContract], "feature"),
+			),
+		).toContain("the final review did not record a passing result");
 	});
 });
 

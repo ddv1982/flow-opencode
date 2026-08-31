@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dataNote } from "../../application/flow-response.js";
-import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
+import {
+	FLOW_CORE_COMMANDS,
+	resolveFlowReviewerConfiguration,
+} from "../../config-shared.js";
 import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
@@ -255,8 +258,12 @@ function guardTools(
 	) as FlowTools;
 }
 
-const FlowPlugin: Plugin = async (ctx) => {
+const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 	const log = createFlowLog(ctx);
+	const reviewerConfiguration = resolveFlowReviewerConfiguration({
+		pluginOptions,
+		onWarning: (warning) => log("warn", warning),
+	});
 	const version = resolveFlowPluginVersion();
 	const pluginEntrySha256 = `sha256:${createHash("sha256")
 		.update(await readFile(fileURLToPath(import.meta.url)))
@@ -313,11 +320,13 @@ const FlowPlugin: Plugin = async (ctx) => {
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
 		autoContinuationSupport: () => autoDrive.continuationSupport(),
+		reviewerConfiguration,
 		runtimeIdentity: { packageVersion: version, pluginEntrySha256 },
 	});
 	return {
 		config: createConfigHook(ctx, {
 			assertOperational: (action) => runtimeGuard.assertOperational(action),
+			reviewerConfiguration,
 		}),
 		tool: guardTools(tools, runtimeGuard, autoDrive),
 		"command.execute.before": createCommandHook(

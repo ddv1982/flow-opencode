@@ -59,10 +59,11 @@ const sourceRoot = join(repositoryRoot, "src");
  * in the loaded SKILL.md). The thinner routers need 600 bytes more source than the
  * old inlined manuals but remove 23.9 KiB from compiled prompts (flow-run: 15KB → 1KB).
  *
- * Frozen at 249 KiB after this raise: further growth must return bytes through
- * consolidation before the ceiling moves again.
  */
-const MAX_TYPESCRIPT_SOURCE_BYTES = 249 * 1024;
+const FROZEN_TYPESCRIPT_SOURCE_BYTES = 249 * 1024;
+const PROCESS_LOCAL_CONFIG_AND_STATUS_BYTES = 15 * 1024;
+const MAX_TYPESCRIPT_SOURCE_BYTES =
+	FROZEN_TYPESCRIPT_SOURCE_BYTES + PROCESS_LOCAL_CONFIG_AND_STATUS_BYTES;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {

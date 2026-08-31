@@ -83,8 +83,9 @@ reason Flow asks you to read the review rather than trust the verdict.
   checklist, and failed an unprovable claim instead of passing it conditionally.
   `unprovable-claim-refused` and `defect-fails-review` put work in front of it that
   should not pass; neither can force the review path.
-- **Reviewer independence.** Without `OPENCODE_FLOW_REVIEWER_MODEL` the reviewer
-  shares the manager's model; independence rests on structure alone.
+- **Reviewer independence.** Without an explicit reviewer model from plugin tuple
+  configuration or `OPENCODE_FLOW_REVIEWER_MODEL`, the reviewer shares the
+  manager's model; independence rests on structure alone.
 - **Evidence completeness.** That an evidence entry names the observation the
   goal actually asks for, a command that would really produce it, and the
   platform it actually needs. The runtime enforces that the declared command
@@ -142,6 +143,8 @@ Every close derives `delivery.assurance` from canonical closed state. It labels 
 and limits, distinguishes supported/unsupported/unclaimed completion, marks legacy
 gaps not applicable, and is neither persisted nor a correctness probability. See
 [ADR 0013](adr/0013-derived-assurance-and-paired-value-measurement.md).
+`delivery.handoff.externalActionAuthority` is always `not-granted`; close handoff never
+authorizes PR creation, merge, publication, or release work.
 
 ## How this page is kept honest
 

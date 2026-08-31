@@ -11,6 +11,11 @@ import {
 	ValidationStartInputSchema,
 	type ValidationStartRequest,
 } from "../../application/schema.js";
+import { statusReport } from "../../application/session-projection.js";
+import {
+	type FlowReviewerConfiguration,
+	flowReviewerStatus,
+} from "../../config-shared.js";
 import { requestAuthority } from "../../domain/request-evidence.js";
 import type { EvidencePlatform } from "../../domain/session.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
@@ -47,6 +52,7 @@ type ToolOptions = Readonly<{
 	autoContinuationSupport?:
 		| (() => ProcessLocalAutoContinuationSupport)
 		| undefined;
+	reviewerConfiguration?: FlowReviewerConfiguration | undefined;
 	runtimeIdentity?:
 		| Readonly<{ packageVersion: string; pluginEntrySha256: string }>
 		| undefined;
@@ -84,6 +90,13 @@ function withAutoContext(
 	view?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
+	const reviewer = options.reviewerConfiguration;
+	if (reviewer) {
+		workflowData = {
+			...workflowData,
+			reviewerConfiguration: flowReviewerStatus(reviewer),
+		};
+	}
 	if (options.runtimeIdentity)
 		workflowData = {
 			...workflowData,
@@ -162,13 +175,24 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 			description: "Read compact, execution, detail, or reviewer Flow state.",
 			schema: StatusInputSchema,
 			execute: (args, context) =>
-				execute(context, async (workspace) =>
-					withAutoContext(
-						await workspace.status(args),
+				execute(context, async (workspace) => {
+					const response = await workspace.status(args);
+					const workflowData =
+						"projection" in response.workflowData
+							? {
+									...response.workflowData,
+									statusReport: statusReport(response.workflowData.projection),
+								}
+							: response.workflowData;
+					return withAutoContext(
+						{
+							...response,
+							workflowData,
+						},
 						options,
 						args.request.view,
-					),
-				),
+					);
+				}),
 		}),
 		flow_plan_save: defineFlowTool({
 			description: "Create or replace the active draft plan.",

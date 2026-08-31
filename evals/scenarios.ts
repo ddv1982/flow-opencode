@@ -26,6 +26,7 @@ type PlanFeature = { id: string; title: string };
  */
 type Review = {
 	kind: string;
+	packet?: { riskLenses?: string[] };
 	result: { verdict: string; findings?: { severity?: string }[] } | null;
 };
 
@@ -413,6 +414,111 @@ const HELLO_FIXTURE: Record<string, string> = {
 	"README.md":
 		"# Flow eval fixture\n\nRun `bun test` for the canonical gate.\n",
 };
+
+const GATE_DISCOVERY_FIXTURE: Record<string, string> = {
+	...HELLO_FIXTURE,
+	"package.json": `${JSON.stringify(
+		{
+			name: "flow-eval-gate-discovery",
+			version: "1.0.0",
+			private: true,
+			type: "module",
+			scripts: {
+				test: "bun test src/greet.test.ts",
+				check: "bun test",
+			},
+		},
+		null,
+		2,
+	)}\n`,
+	"README.md":
+		"# Gate discovery fixture\n\nRun `bun run check` as the canonical whole-repository gate.\n",
+	"docs/development.md":
+		"# Development\n\nBefore submitting a change, run the canonical gate: `bun run check`.\n",
+	".github/workflows/ci.yml":
+		"name: CI\non: [push]\njobs:\n  check:\n    runs-on: ubuntu-latest\n    steps:\n      - run: bun run check\n",
+};
+
+const TASK_RISK_LENS_FIXTURE: Record<string, string> = {
+	...HELLO_FIXTURE,
+	"package.json": `${JSON.stringify(
+		{
+			name: "flow-eval-risk-lenses",
+			version: "1.0.0",
+			private: true,
+			type: "module",
+			exports: "./src/index.ts",
+			scripts: { test: "bun test" },
+		},
+		null,
+		2,
+	)}\n`,
+	"src/index.ts": `export { greet } from "./greet.js";\n`,
+};
+
+function projectGateDiscoveryIssues(outcome: ScenarioGradeInput): string[] {
+	const closed = closedDocument(outcome);
+	if (!closed) return ["no closed session recorded for gate discovery"];
+	const gates = (closed.plan?.evidence ?? []).filter(
+		(entry) => entry.scope === "gate",
+	);
+	const issues: string[] = [];
+	if (gates.length !== 1 || gates[0]?.command !== "bun run check") {
+		issues.push(
+			"the plan did not select bun run check as its one canonical gate",
+		);
+	}
+	if (
+		!closed.runs.some((run) =>
+			run.validations.some(
+				(validation) =>
+					validation.command === "bun run check" &&
+					validation.scope === "broad" &&
+					validation.exitCode === 0 &&
+					validation.outputComplete === true &&
+					validation.ineligibleReason === undefined,
+			),
+		)
+	) {
+		issues.push("no passing broad observation ran bun run check");
+	}
+	if (closed.closure?.kind !== "completed") {
+		issues.push(`closure kind was ${closed.closure?.kind}, expected completed`);
+	}
+	return issues;
+}
+
+function taskRiskLensIssues(outcome: ScenarioGradeInput): string[] {
+	const closed = closedDocument(outcome);
+	if (!closed) return ["no closed session recorded for task risk lenses"];
+	const review = closed.runs
+		.flatMap((run) => run.reviews)
+		.findLast((candidate) => candidate.kind === "final");
+	const lenses = review?.packet?.riskLenses ?? [];
+	const lensText = lenses.join("\n");
+	const issues: string[] = [];
+	if (
+		!/(partial state|interruption)/i.test(lensText) ||
+		!/(retry[^\n]*replay|replay[^\n]*retry)/i.test(lensText)
+	) {
+		issues.push(
+			"the final review packet omitted persistence or migration risk",
+		);
+	}
+	if (
+		!/(caller[^\n]*default|default[^\n]*caller)/i.test(lensText) ||
+		!/(invalid input[^\n]*boundary|boundary[^\n]*invalid input)/i.test(lensText)
+	) {
+		issues.push("the final review packet omitted public-contract risk");
+	}
+	if (review?.result?.verdict !== "passed") {
+		issues.push("the final review did not record a passing result");
+	}
+	if (closed.closure?.kind !== "completed") {
+		issues.push(`closure kind was ${closed.closure?.kind}, expected completed`);
+	}
+	return issues;
+}
 
 /**
  * A tiny inspect fixture: one function whose inclusive count drops the endpoint,
@@ -818,6 +924,34 @@ export const SCENARIOS: readonly Scenario[] = [
 			}
 			return issues;
 		},
+	},
+	{
+		id: "project-gate-discovery",
+		description:
+			"planning selects the repository's explicit whole-repository gate instead of a narrower test script",
+		files: GATE_DISCOVERY_FIXTURE,
+		steps: [
+			{
+				command: "flow-auto",
+				arguments:
+					"Add an exported `farewell(name)` function to src/greet.ts that returns `Goodbye, <name>!`, with a focused test. Implement it end to end; you have my approval.",
+			},
+		],
+		check: projectGateDiscoveryIssues,
+	},
+	{
+		id: "task-risk-lenses",
+		description:
+			"the final review packet carries relevant persistence and public-contract questions for a stateful exported change",
+		files: TASK_RISK_LENS_FIXTURE,
+		steps: [
+			{
+				command: "flow-auto",
+				arguments:
+					"Add a persisted greeting-settings API, export it from src/index.ts, preserve the existing default greeting, and reject invalid stored values at the boundary. Include migration and retry coverage. Implement it end to end; you have my approval.",
+			},
+		],
+		check: taskRiskLensIssues,
 	},
 	{
 		id: "plan-only-stops",

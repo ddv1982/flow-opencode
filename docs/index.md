@@ -5,6 +5,10 @@ v5. The public overview and installation instructions live in the
 [README](../README.md).
 
 - [Positioning](positioning.md) — what Flow is for, and when not to use it.
+- [Quickstart](quickstart.md) — install, verify reviewer configuration, and run
+  the first consequential goal.
+- [External pilot](external-pilot.md) — collect privacy-safe first-use and
+  recovery evidence without telemetry.
 - [What Flow guarantees](guarantees.md) — the guarantee map: which claims are
   enforced, attested, declared, judged, or unenforced.
 - [Release qualification](release-qualification.md) — the published eval

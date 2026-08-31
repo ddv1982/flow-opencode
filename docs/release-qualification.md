@@ -28,6 +28,8 @@ once, by one person, from one model's output.
 | `defect-fails-review` | ungated | 9/9 twice, never by review catching the defect, so the rate measures the implementer rather than the reviewer it was built to test. |
 | `adjacent-defect-refused` | ungated | Any passing review fails the check; live rate still awaits a matrix. |
 | `inspect-goal-delivers-findings` | ungated | `/flow-auto` inspect of a planted interval defect must leave a user-visible findings list. |
+| `project-gate-discovery` | ungated | Report-only until two provider baselines show whether planning selects the explicit whole-repository command over a narrower script. |
+| `task-risk-lenses` | ungated | Measures whether the manager supplies the relevant full review questions. It does not measure defect detection or false blockers. |
 
 A new scenario needs an explicit release-policy decision. Any required canonical
 case missing from the report fails qualification.
@@ -68,7 +70,8 @@ direction. The cadence follows from that:
 - **No release** without a sealed V2 qualification bundle and fresh canary.
   The bundle retains every attempt, transcript, grader source, and exact artifact
   needed to reproduce its decision. Release metadata independently regrades those
-  bytes before publication. A `CHANGELOG` entry states the schema impact explicitly.
+  bytes before publication and derives the provider-count evidence table added to
+  the release notes. A `CHANGELOG` entry states the schema impact explicitly.
 - **Patch releases** for defects and host-compatibility fixes, which is what the
   weekly OpenCode compatibility smoke exists to catch early.
 - **Deprecate before removing.** A surface that is going away is announced in one

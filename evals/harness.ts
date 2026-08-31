@@ -648,12 +648,15 @@ async function signalProcessTreeDescendants(
 function processTreeAlive(child: ChildProcess): boolean {
 	const pid = child.pid;
 	if (pid === undefined) return false;
-	if (process.platform === "win32") return child.exitCode === null;
+	const childExited = child.exitCode !== null || child.signalCode !== null;
+	if (process.platform === "win32") return !childExited;
 	try {
 		process.kill(-pid, 0);
 		return true;
 	} catch (error) {
-		if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+		const code = (error as NodeJS.ErrnoException).code;
+		if (code === "ESRCH") return false;
+		if (code === "EPERM") return !childExited;
 		throw error;
 	}
 }
@@ -1199,6 +1202,11 @@ type SessionMessages = ObservedSession & {
  * once the server is listening and the fixture is committed, and a half-booted one
  * would be scored as a failed attempt.
  */
+export type EvalReviewerOptions = Readonly<{
+	model?: string;
+	steps?: number;
+}>;
+
 export class EvalHost {
 	private server: ChildProcess | null = null;
 	private serverLog = "";
@@ -1237,8 +1245,8 @@ export class EvalHost {
 		packageCache: string;
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
-		/** Pins the hidden reviewer child independently from the command model. */
-		reviewerModel?: string;
+		/** Configures the hidden reviewer through the same native tuple users set. */
+		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
 	}): Promise<EvalHost> {
@@ -1287,12 +1295,16 @@ export class EvalHost {
 				{ recursive: true },
 			);
 		}
+		const pluginEntry = `opencode-plugin-flow@${packageJson.version}`;
+		const reviewer = options.reviewer;
+		const configuredPlugin =
+			reviewer && (reviewer.model !== undefined || reviewer.steps !== undefined)
+				? [pluginEntry, { reviewer }]
+				: pluginEntry;
 		await writeFile(
 			join(project, "opencode.json"),
 			`${JSON.stringify(
-				options.withFlow === false
-					? {}
-					: { plugin: [`opencode-plugin-flow@${packageJson.version}`] },
+				options.withFlow === false ? {} : { plugin: [configuredPlugin] },
 				null,
 				2,
 			)}\n`,
@@ -1320,9 +1332,6 @@ export class EvalHost {
 					detached: process.platform !== "win32",
 					env: {
 						...options.toolchain.environment,
-						...(options.reviewerModel
-							? { OPENCODE_FLOW_REVIEWER_MODEL: options.reviewerModel }
-							: {}),
 						HOME: childHome,
 						XDG_CACHE_HOME: childCache,
 						XDG_CONFIG_HOME: join(childHome, ".config"),

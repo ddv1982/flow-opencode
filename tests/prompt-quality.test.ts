@@ -308,6 +308,27 @@ describe("Flow prompt structure", () => {
 		expect(getFlowGuidance("flow-plan").content).toContain('kind: "inspect"');
 	});
 
+	test("discovers gates in repository-authority order and sends bounded risk questions", () => {
+		const plan = getFlowGuidance("flow-plan").content.replace(/\s+/g, " ");
+		const run = getFlowGuidance("flow-run").content.replace(/\s+/g, " ");
+		const sources = [
+			"repository instructions",
+			"maintained development docs",
+			"CI workflows",
+			"build and test manifests",
+		];
+		for (let index = 1; index < sources.length; index += 1) {
+			expect(plan.indexOf(sources[index - 1] ?? "")).toBeLessThan(
+				plan.indexOf(sources[index] ?? ""),
+			);
+		}
+		expect(plan).toContain("Discovery never counts as passing evidence");
+		expect(run).toContain("partial state");
+		expect(run).toContain("retry and replay idempotent");
+		expect(run).toContain("existing callers keep their defaults");
+		expect(run).toContain("Leave `riskLenses` empty");
+	});
+
 	test("retires stale projection vocabulary", () => {
 		for (const surface of SURFACES) {
 			expect(compileFlowPromptSurface(surface)).not.toContain(

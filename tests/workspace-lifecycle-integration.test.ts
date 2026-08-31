@@ -307,6 +307,7 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 		};
 		const closed = ok(await flow.sessionClose(closeInput));
 		expect(closed.workflowData.delivery).toEqual({
+			handoff: { formatVersion: 1, externalActionAuthority: "not-granted" },
 			goal: "Ship one file-backed lifecycle",
 			closure: {
 				kind: "completed",

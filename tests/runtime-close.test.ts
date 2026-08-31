@@ -398,6 +398,10 @@ describe("Flow close recovery and delivery", () => {
 			},
 		};
 		const expectedDelivery = {
+			handoff: {
+				formatVersion: 1 as const,
+				externalActionAuthority: "not-granted" as const,
+			},
 			goal: "Ship deterministic delivery",
 			closure: {
 				kind: "completed" as const,
@@ -447,6 +451,12 @@ describe("Flow close recovery and delivery", () => {
 			throw new Error("Expected accepted close delivery data.");
 		}
 		expect(interrupted.workflowData.delivery).toEqual(expectedDelivery);
+		expect(interrupted.workflowData.delivery.report).toContain(
+			"Handoff format: 1",
+		);
+		expect(interrupted.workflowData.delivery.report).toContain(
+			"External action authority: not-granted",
+		);
 		expect(interrupted.workflowData.delivery.report).toContain(
 			"Assurance: completion supported",
 		);
@@ -532,6 +542,7 @@ describe("Flow close recovery and delivery", () => {
 
 		expectOk(abandoned);
 		expect(abandoned.workflowData.delivery).toEqual({
+			handoff: { formatVersion: 1, externalActionAuthority: "not-granted" },
 			goal: "Retire an unplanned experiment",
 			closure: {
 				kind: "abandoned",
@@ -628,6 +639,10 @@ describe("Flow close recovery and delivery", () => {
 
 			expectOk(deferred);
 			expect(deferred.workflowData.delivery).toEqual({
+				handoff: {
+					formatVersion: 1,
+					externalActionAuthority: "not-granted",
+				},
 				goal: "Ship the runtime",
 				closure: { kind: "deferred", summary },
 				progress: { completed: 0, total: 2 },

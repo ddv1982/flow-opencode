@@ -23,6 +23,20 @@ cache cleaner, or configuration-repair CLI. Follow the official
 [OpenCode plugin documentation](https://opencode.ai/docs/plugins/) for npm or
 configuration failures.
 
+## Reviewer model looks shared
+
+Run `/flow-status` and read the process-local reviewer configuration. Prefer the
+native tuple form:
+
+```json
+{
+  "plugin": [["<same Flow plugin entry>", { "reviewer": { "model": "provider/model", "steps": 80 } }]]
+}
+```
+
+Environment variables remain fallbacks. Flow shows the requested model, but
+status keeps availability `unverified`; it does not persist reviewer health.
+
 ## `/flow-auto` stops after every feature
 
 Continuation is anchored to the assistant message that owns the lease, so a host

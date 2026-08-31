@@ -75,6 +75,31 @@ describe("eval run classification", () => {
 		expect(processExists(childPid)).toBe(false);
 	});
 
+	test("treats an EPERM group probe as stopped after the child exits", async () => {
+		if (process.platform === "win32") return;
+		const child = spawn(process.execPath, ["-e", ""]);
+		await new Promise<void>((resolve, reject) => {
+			child.once("error", reject);
+			child.once("exit", () => resolve());
+		});
+		const pid = child.pid;
+		if (pid === undefined) throw new Error("Child process has no pid.");
+		const probe = spyOn(process, "kill").mockImplementation(
+			(probedPid, signal) => {
+				expect(probedPid).toBe(-pid);
+				expect(signal).toBe(0);
+				throw Object.assign(new Error("operation not permitted"), {
+					code: "EPERM",
+				});
+			},
+		);
+		try {
+			await terminateChildProcessTree(child);
+		} finally {
+			probe.mockRestore();
+		}
+	});
+
 	test("gives a detached child time to finish SIGTERM cleanup", async () => {
 		if (process.platform !== "linux") return;
 		const root = await mkdtemp(join(tmpdir(), "flow-process-tree-"));

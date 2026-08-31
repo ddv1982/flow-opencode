@@ -178,6 +178,9 @@ coordinator classifies the lease as active, not CPU time or pure coding time.
 waits are excluded. Timing resets on plugin reload, never enters Session v5 or a
 projection, and never authorizes or blocks a transition.
 
+Every successful status read also derives `statusReport` from its typed
+projection. The report owns human lifecycle and recovery text and is not stored.
+
 ## Validation and review
 
 Split into its own document as this section outgrew the rest of the contract:
@@ -231,10 +234,12 @@ manager contract.
   restore automatic retry. This behavior adds no persisted recovery state.
 - Every close path whose terminal state was durably accepted returns the same
   derived `workflowData.delivery`: initial success, archive-pending recovery,
-  exact retry, and delayed replay from history. The projection contains the
-  goal, closure, completed/total progress, every planned feature's attempt count,
-  latest outcome, terminal findings, Flow-reported artifact groups, and derived
-  tiered assurance with explicit limitations.
+  exact retry, and delayed replay from history. The projection declares a
+  `handoff` with `formatVersion: 1` and
+  `externalActionAuthority: "not-granted"`, then contains
+  the goal, closure, completed/total progress, every planned feature's attempt
+  count, latest outcome, terminal findings, Flow-reported artifact groups, and
+  derived tiered assurance with explicit limitations.
 - Delivery is recomputed from the canonical closed Session or archive. It is not
   written into Session v5 or archive JSON and is not a report artifact unless
   the user separately requests one.
@@ -314,7 +319,9 @@ mutations. `flow_session_close` additionally returns derived delivery under
 | `flow-reviewer` | Independent workspace-read-only inspection; only `flow_status` and its exact `flow_feature_complete` lifecycle submission are allowed among Flow tools. |
 
 User configuration may select the reviewer's model and step budget with
-`OPENCODE_FLOW_REVIEWER_MODEL` and `OPENCODE_FLOW_REVIEWER_STEPS`.
+`{ reviewer: { model, steps } }`; the environment variables remain fallbacks.
+`flow_status` reports this process-local visibility without persisting it to
+Session v5.
 
 Duplicate plugin instances for the same canonical project fail closed through a
 small process-global guard. Instances for different projects do not conflict.

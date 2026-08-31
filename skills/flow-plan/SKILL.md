@@ -40,6 +40,14 @@ without rediscovering the goal.
   context. Do not dispatch `flow-worker` while planning; that role is only for
   authorized implementation slices after approval. Ask only for a missing
   product choice that materially changes the outcome.
+- Discover evidence in order: repository instructions such as `AGENTS.md` and
+  `CONTRIBUTING.md`, maintained development docs, CI workflows, then build and
+  test manifests. Compare candidates with the requested behavior and current
+  platform. Prefer an explicit whole-repository command over a conveniently
+  named narrow script. Probe command fitness when it is observable without
+  mutation. Record the chosen source and rationale in `decisions` when the gate
+  is not obvious. Discovery never counts as passing evidence; only an armed
+  observation does.
 
 ## Plan contract
 

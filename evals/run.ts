@@ -58,6 +58,7 @@ import {
 	askedQuestions,
 	askedScoring,
 	EvalHost,
+	type EvalReviewerOptions,
 	formatRate,
 	type Outcome,
 	packPlugin,
@@ -238,6 +239,33 @@ function legacyRequestedModel(modelId: string): ModelIdentity {
 		family: routedModel,
 		revision: null,
 	});
+}
+
+export function evalReviewerConfiguration(
+	managerModel: string,
+	env: Readonly<Record<string, string | undefined>> = process.env,
+): Readonly<{
+	requestedModel: string;
+	requestedSteps: number | null;
+	pluginOptions: EvalReviewerOptions | null;
+}> {
+	const model = env.OPENCODE_FLOW_REVIEWER_MODEL?.trim() || undefined;
+	const stepsText = env.OPENCODE_FLOW_REVIEWER_STEPS?.trim() ?? "";
+	const steps =
+		/^[1-9][0-9]*$/.test(stepsText) && Number(stepsText) <= 1000
+			? Number(stepsText)
+			: null;
+	return {
+		requestedModel: model ?? managerModel,
+		requestedSteps: steps,
+		pluginOptions:
+			model || steps !== null
+				? {
+						...(model ? { model } : {}),
+						...(steps !== null ? { steps } : {}),
+					}
+				: null,
+	};
 }
 
 const ORDINARY_ANALYSIS_SHA256 = canonicalSha256(
@@ -846,7 +874,16 @@ async function main(): Promise<void> {
 		if ((await tarballSha256(tarball)) !== artifact.tarballSha256) {
 			throw new Error("Packed artifact changed before host installation.");
 		}
-		await preflight(packageCache, opencodeVersion, models, toolchain);
+		const reviewerModel = evalReviewerConfiguration(
+			models[0] ?? "",
+			process.env,
+		).pluginOptions?.model;
+		await preflight(
+			packageCache,
+			opencodeVersion,
+			[...new Set([...models, ...(reviewerModel ? [reviewerModel] : [])])],
+			toolchain,
+		);
 		const persistV2Attempt = async (
 			result: RunResult,
 			cell: CampaignPlan["cells"][number],
@@ -914,15 +951,7 @@ async function main(): Promise<void> {
 		/** One attempt, start to finish, printing a single line when it lands. */
 		const runAttempt = async (job: Job): Promise<Recorded> => {
 			const { model, scenario, attempt, scheduledAttempts } = job;
-			const requestedReviewerModel =
-				process.env.OPENCODE_FLOW_REVIEWER_MODEL?.trim() || model;
-			const reviewerStepsText =
-				process.env.OPENCODE_FLOW_REVIEWER_STEPS?.trim() ?? "";
-			const requestedReviewerSteps =
-				/^[1-9][0-9]*$/.test(reviewerStepsText) &&
-				Number(reviewerStepsText) <= 1000
-					? Number(reviewerStepsText)
-					: null;
+			const reviewer = evalReviewerConfiguration(model);
 			const measuredHostConfigSha256 =
 				sampling.kind === "release"
 					? releaseHostConfigSha256({
@@ -933,8 +962,8 @@ async function main(): Promise<void> {
 							opencodeVersion,
 							plugin: `opencode-plugin-flow@${packageJson.version}`,
 							model,
-							reviewerModel: requestedReviewerModel,
-							reviewerSteps: requestedReviewerSteps,
+							reviewerModel: reviewer.requestedModel,
+							reviewerSteps: reviewer.requestedSteps,
 							platform: hostPlatform,
 						});
 			const label = `${scenario.id} @ ${model} (${attempt}/${scheduledAttempts})`;
@@ -950,6 +979,9 @@ async function main(): Promise<void> {
 							packageCache,
 							opencodeVersion,
 							files: scenario.files,
+							...(reviewer.pluginOptions
+								? { reviewer: reviewer.pluginOptions }
+								: {}),
 						});
 						const activeHost = host;
 						const sessionIds = [
@@ -1050,9 +1082,9 @@ async function main(): Promise<void> {
 							(actor) => ({
 								...actor,
 								requestedModelId:
-									actor.role === "manager" ? model : requestedReviewerModel,
+									actor.role === "manager" ? model : reviewer.requestedModel,
 								requestedModel: legacyRequestedModel(
-									actor.role === "manager" ? model : requestedReviewerModel,
+									actor.role === "manager" ? model : reviewer.requestedModel,
 								),
 							}),
 						);
@@ -1253,9 +1285,13 @@ async function main(): Promise<void> {
 										...actor,
 										sessionIds: [...actor.sessionIds],
 										requestedModelId:
-											actor.role === "manager" ? model : requestedReviewerModel,
+											actor.role === "manager"
+												? model
+												: reviewer.requestedModel,
 										requestedModel: legacyRequestedModel(
-											actor.role === "manager" ? model : requestedReviewerModel,
+											actor.role === "manager"
+												? model
+												: reviewer.requestedModel,
 										),
 									}),
 								);

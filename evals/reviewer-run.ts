@@ -274,7 +274,7 @@ async function main(): Promise<void> {
 							packageCache,
 							opencodeVersion,
 							files: entry.files,
-							reviewerModel: options.model,
+							reviewer: { model: options.model },
 						});
 						const activeHost = host;
 						const catalogModels = await evaluationPhase(

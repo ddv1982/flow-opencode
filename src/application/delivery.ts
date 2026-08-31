@@ -45,6 +45,10 @@ type DeliveryFeatureProjection = Readonly<{
 }>;
 
 export type DeliveryProjection = Readonly<{
+	handoff: Readonly<{
+		formatVersion: 1;
+		externalActionAuthority: "not-granted";
+	}>;
 	goal: string;
 	closure: Readonly<{ kind: SessionClosure["kind"]; summary: string }>;
 	progress: Readonly<{ completed: number; total: number }>;
@@ -217,6 +221,8 @@ function formatReport(delivery: Omit<DeliveryProjection, "report">): string[] {
 				]),
 	]);
 	return [
+		`Handoff format: ${delivery.handoff.formatVersion}`,
+		`External action authority: ${delivery.handoff.externalActionAuthority}`,
 		`Goal: ${delivery.goal}`,
 		`Closure: ${delivery.closure.kind}${delivery.closure.summary ? ` — ${delivery.closure.summary}` : ""}`,
 		`Progress: ${delivery.progress.completed} of ${delivery.progress.total} features complete`,
@@ -256,6 +262,7 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 	);
 	const digest = findingsDigest(session);
 	const delivery = {
+		handoff: { formatVersion: 1, externalActionAuthority: "not-granted" },
 		goal: session.goal,
 		closure: { kind: session.closure.kind, summary: session.closure.summary },
 		progress: {

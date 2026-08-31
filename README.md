@@ -55,6 +55,24 @@ The equivalent manual project configuration is:
 }
 ```
 
+For an explicit reviewer model, use OpenCode's plugin tuple options:
+
+```json
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    [
+      "opencode-plugin-flow@8.1.3",
+      { "reviewer": { "model": "provider/model", "steps": 80 } }
+    ]
+  ]
+}
+```
+
+The tuple values take precedence over `OPENCODE_FLOW_REVIEWER_MODEL` and
+`OPENCODE_FLOW_REVIEWER_STEPS`. `/flow-status` reports the process-local
+selection, but only a successful reviewer run confirms model availability.
+
 Restart OpenCode after changing configuration. OpenCode owns installation and
 configuration; see its
 [plugin documentation](https://opencode.ai/docs/plugins/). Flow has no installer
@@ -67,6 +85,9 @@ cannot be trusted to read state a newer one has already written. Older archives
 remain inert history, and there is no migration or rollback layer.
 
 ## Quick start
+
+For a clean installation and reviewer-configuration check, follow the
+[quickstart](docs/quickstart.md).
 
 ```text
 /flow-auto add rate limiting to the public API
@@ -127,9 +148,10 @@ you granted.
 6. A passing review advances the plan. A failed feature is never picked up again
    implicitly — Flow reports the blocker and waits for an explicit retry or an
    independent-feature choice. The last passing feature allows closure, and every
-   accepted close returns a delivery summary derived from recorded state: each
-   feature's attempts, latest outcome, terminal findings, and tiered assurance with
-   explicit limitations.
+   accepted close returns a versioned delivery summary derived from recorded state:
+   each feature's attempts, latest outcome, terminal findings, and tiered assurance
+   with explicit limitations. Delivery grants no PR, merge, publish, or release
+   authority.
 
 Findings keep stable ids across retries, and a failed review must carry every
 still-live finding forward — the runtime rejects a submission that drops one. A
