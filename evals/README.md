@@ -49,8 +49,10 @@ to skip the copy and rely on environment credentials only.
 Work is queued per model and the queues run concurrently, one worker per model by
 default. Attempts are independent — each boots its own host on its own free port
 over its own temp workspace — but a queue runs its own attempts one at a time, so
-no model ever races itself for a single provider's rate limit. Release mode now
-schedules 76 cells across two provider queues. Lines print as attempts finish, so
+no model ever races itself for a single provider's rate limit. Release mode has
+76 primary targets and one predeclared environment reserve per provider and case,
+for a bounded maximum of 92 attempts. Only a retained retryable host or provider
+failure activates its same-stratum reserve; product failures never do. Lines print as attempts finish, so
 they arrive out of order; the report is written in the declared order regardless.
 `--concurrency 1` restores the sequential run, which is easier to read when you
 are debugging a single failure, and four workers is the ceiling however many

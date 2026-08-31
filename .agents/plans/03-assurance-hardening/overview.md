@@ -29,9 +29,13 @@ and publication cannot rederive a committed decision from retained inputs.
 8. Rederive qualification during release.
 9. Enforce main-tag provenance and publication deadlines.
 10. Run full qualification and publish the corrective release.
+11. Bind explicit named acceptance cases from the original host request to plan
+    approval.
+12. Stop release execution when durable evidence makes qualification
+    unreachable.
 
 Each numbered unit lands independently. A failed or inconclusive unit blocks the
-next. No release is allowed before units one through nine are green.
+next. No release is allowed before every applicable unit is green.
 
 ## Verification
 

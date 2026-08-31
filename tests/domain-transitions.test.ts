@@ -38,6 +38,8 @@ import { unresolvedVetoedCommands } from "../src/domain/validation.js";
 const FOUNDATION = "foundation";
 const DELIVERY = "delivery";
 const PLANNED_GATE = "bun run verify:fast";
+const NAMED_RESULTS_PATH = ".flow/results.xml";
+const NAMED_GATE = `bun test --reporter=junit --reporter-outfile=${NAMED_RESULTS_PATH}`;
 const PROSE_VALIDATION =
 	"Exercise the delivered behavior and its main failure mode.";
 const SUBSTITUTE_GATE = "bun run frontend:check && cargo test --workspace";
@@ -109,7 +111,7 @@ function oneFeaturePlan(validation: string[], gate = "bun test"): Plan {
 
 function planWithGateAssertions(assertions: string[]): Plan {
 	const base = oneFeaturePlan([PROSE_VALIDATION]);
-	const gate = repositoryEvidence("bun test")[0];
+	const gate = repositoryEvidence(NAMED_GATE)[0];
 	if (!gate) throw new Error("Expected repository evidence.");
 	return {
 		...base,
@@ -181,6 +183,7 @@ function validate(
 		exitCode?: number;
 		outputComplete?: boolean;
 		hostPlatform?: EvidencePlatform;
+		resultsPath?: string;
 		observedAssertions?: ObservedAssertion[];
 	},
 ): Session {
@@ -205,6 +208,7 @@ function validate(
 		...(options.observedAssertions
 			? { observedAssertions: options.observedAssertions }
 			: {}),
+		...(options.resultsPath ? { resultsPath: options.resultsPath } : {}),
 		hostPlatform: options.hostPlatform ?? "linux",
 	}).session;
 }
@@ -1309,7 +1313,8 @@ describe("Session v5 domain state machine", () => {
 							scope: "extra",
 							requirement: "Run a focused test on this host.",
 							environment: "Current repository host",
-							command: "bun test src/greet.test.ts",
+							command:
+								"bun test src/greet.test.ts --reporter=junit --reporter-outfile=.flow/results.xml",
 							platform: "darwin",
 							assertions: ["farewell test passes"],
 						},
@@ -1502,7 +1507,8 @@ describe("Session v5 domain state machine", () => {
 		// The half `hostPlatform` left open. The command is right, the host is right,
 		// the exit code is zero — and the case the acceptance turns on was skipped,
 		// which is also exit zero. Nothing in the record before this said so.
-		const probe = "bun test src/platform.test.ts";
+		const probeResultsPath = ".flow/results.xml";
+		const probe = `bun test src/platform.test.ts --reporter=junit --reporter-outfile=${probeResultsPath}`;
 		const acceptance = "creates the replacement on Windows";
 		let session = begin(
 			approve(
@@ -1534,6 +1540,7 @@ describe("Session v5 domain state machine", () => {
 			scope: "focused",
 			hostPlatform: "win32",
 			observedAssertions: [{ name: acceptance, status: "skipped" }],
+			resultsPath: probeResultsPath,
 		});
 		expect(() =>
 			requestReview(session, DELIVERY, environment, "review-after-skip"),
@@ -1551,6 +1558,7 @@ describe("Session v5 domain state machine", () => {
 			command: probe,
 			scope: "focused",
 			hostPlatform: "win32",
+			resultsPath: probeResultsPath,
 		});
 		expect(() =>
 			requestReview(session, DELIVERY, environment, "review-without-report"),
@@ -1562,6 +1570,7 @@ describe("Session v5 domain state machine", () => {
 			scope: "focused",
 			hostPlatform: "win32",
 			observedAssertions: [{ name: acceptance, status: "passed" }],
+			resultsPath: probeResultsPath,
 		});
 		const accepted = requestReview(
 			session,
@@ -1589,9 +1598,10 @@ describe("Session v5 domain state machine", () => {
 		session = validate(session, {
 			id: "gate-skipped-acceptance",
 			featureId: DELIVERY,
-			command: "bun test",
+			command: NAMED_GATE,
 			scope: "broad",
 			hostPlatform: "linux",
+			resultsPath: NAMED_RESULTS_PATH,
 			observedAssertions: [{ name: acceptance, status: "skipped" }],
 		});
 
@@ -1599,6 +1609,33 @@ describe("Session v5 domain state machine", () => {
 		expect(() =>
 			requestReview(session, DELIVERY, environment, "review-after-gate-skip"),
 		).toThrow(`${JSON.stringify(acceptance)} skipped`);
+	});
+
+	test("does not satisfy named evidence from another report path", () => {
+		const environment = deterministicEnvironment();
+		const acceptance = "repository acceptance passes";
+		let session = begin(
+			approve(
+				saveDraft(environment, {
+					plan: planWithGateAssertions([acceptance]),
+				}),
+			),
+			DELIVERY,
+			environment,
+		);
+		session = validate(session, {
+			id: "gate-wrong-report-path",
+			featureId: DELIVERY,
+			command: NAMED_GATE,
+			scope: "broad",
+			hostPlatform: "linux",
+			resultsPath: ".flow/other.xml",
+			observedAssertions: [{ name: acceptance, status: "passed" }],
+		});
+		expect(compactProjection(session).nextAction).toBe("await-user-direction");
+		expect(() =>
+			requestReview(session, DELIVERY, environment, "review-wrong-report-path"),
+		).toThrow(JSON.stringify(NAMED_GATE));
 	});
 
 	test("requires gate assertions again at completed closure", () => {
@@ -1616,9 +1653,10 @@ describe("Session v5 domain state machine", () => {
 		session = validate(session, {
 			id: "gate-passed-acceptance",
 			featureId: DELIVERY,
-			command: "bun test",
+			command: NAMED_GATE,
 			scope: "broad",
 			hostPlatform: "linux",
+			resultsPath: NAMED_RESULTS_PATH,
 			observedAssertions: [{ name: acceptance, status: "passed" }],
 		});
 		const accepted = requestReview(
@@ -1664,6 +1702,69 @@ describe("Session v5 domain state machine", () => {
 				]),
 			}),
 		).toThrow("must declare `assertions`");
+	});
+
+	test("requires new named evidence to own a managed JUnit path", () => {
+		const environment = deterministicEnvironment();
+		const valid = planWithGateAssertions(["repository acceptance passes"]);
+		const entry = valid.evidence?.[0];
+		if (!entry) throw new Error("Expected named gate evidence.");
+		expect(() =>
+			saveDraft(environment, {
+				plan: {
+					...valid,
+					evidence: [{ ...entry, command: "bun test --reporter=junit" }],
+				},
+			}),
+		).toThrow("must write JUnit to .flow/results.xml");
+		for (const command of [
+			"bun test --reporter=junit --reporter-outfile=/tmp/gate.xml",
+			"bun test --reporter=junit --reporter-outfile=.flow/other.xml",
+			"bun test --reporter-outfile=.flow/results.xml.bak",
+			"bun test --reporter-outfile=/tmp/.flow/results.xml",
+			"bun test && echo .flow/results.xml",
+		]) {
+			expect(() =>
+				saveDraft(environment, {
+					plan: {
+						...valid,
+						evidence: [{ ...entry, command }],
+					},
+				}),
+			).toThrow("must write JUnit to .flow/results.xml");
+		}
+		for (const command of [
+			'bun test --reporter-outfile=".flow/results.xml"',
+			"pytest --junitxml .flow/results.xml",
+		]) {
+			expect(() =>
+				saveDraft(environment, {
+					plan: { ...valid, evidence: [{ ...entry, command }] },
+				}),
+			).not.toThrow();
+		}
+		expect(saveDraft(environment, { plan: valid }).plan?.evidence?.[0]).toEqual(
+			entry,
+		);
+	});
+
+	test("rechecks a legacy pending draft before approval", () => {
+		const environment = deterministicEnvironment();
+		const session = saveDraft(environment);
+		const named = planWithGateAssertions(["repository acceptance passes"]);
+		const entry = named.evidence?.[0];
+		if (!entry) throw new Error("Expected named gate evidence.");
+		const legacyDraft: Session = {
+			...session,
+			plan: {
+				...named,
+				evidence: [{ ...entry, command: "bun test --reporter=junit" }],
+			},
+		};
+		expect(() => approve(legacyDraft)).toThrow(
+			"must write JUnit to .flow/results.xml",
+		);
+		expect(SessionSchema.parse(legacyDraft)).toEqual(legacyDraft);
 	});
 
 	test("admits a feature review while plan-level external evidence is outstanding", () => {

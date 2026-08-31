@@ -375,6 +375,21 @@ describe("OpenCode validation capture", () => {
 		expect(coordinator.pendingCount()).toBe(0);
 	});
 
+	test("allows only one armed capture per workspace", () => {
+		const coordinator = new ValidationCaptureCoordinator({
+			randomId: () => "capture-workspace",
+			persistObservation: (_workspace, input) =>
+				Promise.resolve(persistedObservation(input)),
+		});
+		coordinator.arm("opencode-session-1", "/workspace", prepared);
+		expect(() =>
+			coordinator.arm("opencode-session-2", "/workspace", prepared),
+		).toThrow("workspace already has an armed validation command");
+		expect(
+			coordinator.arm("opencode-session-2", "/other-workspace", prepared),
+		).toMatchObject({ captureId: "capture-workspace" });
+	});
+
 	test("records an ineligible observation when the host reports no exit code or no completeness", async () => {
 		// Flow must stay usable on a host that reports either fact differently.
 		// Throwing here would lose the observation entirely; recording it ineligible

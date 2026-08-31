@@ -268,7 +268,32 @@ describe("Flow prompt structure", () => {
 			"command byte-for-byte and environment, defer, or abandon",
 		);
 		expect(getFlowGuidance("flow-run").content).toContain(
-			"A gate that cannot pass must ask the user to defer or abandon",
+			"A gate that cannot pass must first name",
+		);
+	});
+
+	test("binds named assertions to machine-readable test reports", () => {
+		const plan = getFlowGuidance("flow-plan").content;
+		const run = getFlowGuidance("flow-run").content;
+		expect(plan).toContain('summaries such as "all tests pass"');
+		expect(plan).toContain("command must write JUnit to `.flow/results.xml`");
+		expect(plan).toContain(
+			"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+		);
+		expect(plan).toContain("never use another or absolute path");
+		expect(plan).toContain("exact case honestly runnable");
+		expect(plan).toContain("never include the introducer words");
+		expect(plan).toContain("whole-suite exit success");
+		expect(run).toContain("resultsPath");
+		expect(run).toContain("plan-bound JUnit");
+		expect(run).toContain("repeat that value exactly");
+		expect(run).toContain("Environment: <declared environment>");
+		expect(run).toContain("name the failing case or output");
+	});
+
+	test("keeps plan-only timing out of the immutable outcome", () => {
+		expect(getFlowGuidance("flow-plan").content).toContain(
+			"controls timing, not scope",
 		);
 	});
 

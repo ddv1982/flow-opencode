@@ -1,4 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -20,6 +21,7 @@ import {
 	sequencer,
 	sessionBoundaries,
 	syncProviderCredentialsBack,
+	terminateChildProcessTree,
 } from "../evals/harness.js";
 import {
 	extractObservedActor,
@@ -37,6 +39,17 @@ import {
 	operationalMetrics,
 	reviewerActivity,
 } from "../evals/metrics.js";
+import { bestEffortEvaluation } from "../evals/run.js";
+
+function processExists(pid: number): boolean {
+	try {
+		process.kill(pid, 0);
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+		throw error;
+	}
+}
 
 // Running the harness needs credentials and money, so the rules that decide what
 // a run *means* are proven here instead. Two were wrong in recorded runs: unpriced
@@ -45,6 +58,67 @@ import {
 // rest exist so a recovery failure, and a scenario nothing scored, can be read
 // from the report at all.
 describe("eval run classification", () => {
+	test("terminates the detached host wrapper and its child process", async () => {
+		if (process.platform === "win32") return;
+		const child = spawn("sh", ["-c", "sleep 30 & echo $!; wait"], {
+			detached: true,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		const childPid = await new Promise<number>((resolve, reject) => {
+			child.once("error", reject);
+			child.stdout?.once("data", (chunk) =>
+				resolve(Number(String(chunk).trim())),
+			);
+		});
+		await terminateChildProcessTree(child);
+		expect(child.exitCode ?? child.signalCode).not.toBeNull();
+		expect(processExists(childPid)).toBe(false);
+	});
+
+	test("gives a detached child time to finish SIGTERM cleanup", async () => {
+		if (process.platform !== "linux") return;
+		const root = await mkdtemp(join(tmpdir(), "flow-process-tree-"));
+		const marker = join(root, "cleaned");
+		const ready = join(root, "ready");
+		const childScript = join(root, "child.sh");
+		const wrapperScript = join(root, "wrapper.sh");
+		await writeFile(
+			childScript,
+			`trap 'sleep 0.2; printf done > "$1"; exit 0' TERM
+printf ready > "$2"
+while :; do sleep 1; done
+`,
+		);
+		await writeFile(
+			wrapperScript,
+			`sh "$1" "$2" "$3" &
+child=$!
+while [ ! -f "$3" ]; do sleep 0.01; done
+printf '%s\n' "$child"
+wait "$child"
+`,
+		);
+		const wrapper = spawn("sh", [wrapperScript, childScript, marker, ready], {
+			detached: true,
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+		await new Promise<void>((resolve, reject) => {
+			wrapper.once("error", reject);
+			wrapper.stdout?.once("data", () => resolve());
+		});
+		await terminateChildProcessTree(wrapper);
+		expect(await readFile(marker, "utf8")).toBe("done");
+	});
+
+	test("preserves the primary path when fallback enrichment throws again", () => {
+		const fallback: string[] = [];
+		expect(
+			bestEffortEvaluation(() => {
+				throw new Error("secondary transform repeated");
+			}, fallback),
+		).toBe(fallback);
+	});
+
 	test("ends the wait when a question is the only incomplete call", () => {
 		expect(onlyAwaitingAnswer(["question:running"])).toBe(true);
 		expect(onlyAwaitingAnswer(["question:pending", "question:running"])).toBe(

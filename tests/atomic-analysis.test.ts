@@ -415,6 +415,92 @@ describe("v2 atomic release decisions", () => {
 		);
 	});
 
+	test("rederives an early product stop as not verified", () => {
+		const raw = buildRateReport();
+		const failed = raw.attempts[0];
+		if (!failed) throw new Error("Expected a first release attempt.");
+		failed.outcome = rateOutcome({
+			provider: "provider-a",
+			outcome: { kind: "product", passed: false },
+		});
+		const catalog = mustCatalog(rateCatalog());
+		const report = mustReport(
+			{
+				...raw,
+				attempts: [failed],
+				completion: {
+					...raw.completion,
+					status: "stopped",
+					cause: "product",
+					observed: {
+						...raw.completion.observed,
+						attempts: 1,
+						outputTokens: 10,
+						costUsd: 0.1,
+					},
+				},
+			},
+			catalog,
+		);
+		const decision = deriveReleaseDecision({
+			catalog,
+			report,
+			expected: releaseExpected(report),
+		});
+		expect(decision.verdict).toBe("NOT VERIFIED");
+		expect(decision.reasons.map((reason) => reason.code)).toContain(
+			"below-pass-rate",
+		);
+	});
+
+	test("keeps hard product evidence distinct from pass-rate exhaustion", () => {
+		const rows = ["provider-a", "provider-b"].flatMap((provider) =>
+			Array.from({ length: 10 }, () => ({
+				provider,
+				outcome: { kind: "product" as const, passed: true },
+			})),
+		);
+		const raw = buildRateReport(rows);
+		const failed = raw.attempts[0];
+		if (!failed) throw new Error("Expected a first release attempt.");
+		failed.outcome = rateOutcome({
+			provider: "provider-a",
+			outcome: { kind: "product", passed: false, falseCompletion: true },
+		});
+		const catalog = mustCatalog(
+			rateCatalog({ minScoredAttempts: 10, minPassRate: 0.9 }),
+		);
+		const report = mustReport(
+			{
+				...raw,
+				attempts: [failed],
+				completion: {
+					...raw.completion,
+					status: "stopped",
+					cause: "product",
+					observed: {
+						...raw.completion.observed,
+						attempts: 1,
+						outputTokens: 10,
+						costUsd: 0.1,
+					},
+				},
+			},
+			catalog,
+		);
+		const decision = deriveReleaseDecision({
+			catalog,
+			report,
+			expected: releaseExpected(report),
+		});
+		expect(decision.reasons.map((reason) => reason.code)).toContain(
+			"false-completion",
+		);
+		expect(decision.reasons.map((reason) => reason.code)).not.toContain(
+			"below-pass-rate",
+		);
+	});
+
 	test("accepts distinct frozen host configurations for different model cells", () => {
 		const raw = buildRateReport();
 		const second = raw.attempts[1];

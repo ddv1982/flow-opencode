@@ -31,13 +31,21 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, relative as relativePath, resolve } from "node:path";
+import {
+	dirname,
+	isAbsolute,
+	join,
+	relative as relativePath,
+	resolve,
+} from "node:path";
 import {
 	persistObservedValidation,
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
 import type { ValidationStartRequest } from "../src/application/schema.js";
+import { isArtifactPath } from "../src/domain/artifact.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
+import { readWorkspaceTestReport } from "../src/infrastructure/fs/workspace-validation.js";
 import { tool } from "../src/platform/opencode/sdk.js";
 import { createTools } from "../src/platform/opencode/tools.js";
 import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
@@ -284,7 +292,9 @@ async function replayBash(
 	const callID = `replay-call-${event.sessionIndex}-${event.command.length}`;
 	const before = { tool: "bash", sessionID: context.sessionID, callID };
 	try {
-		validation.observeToolBefore(before, { args: { command: event.command } });
+		await validation.observeToolBefore(before, {
+			args: { command: event.command },
+		});
 	} catch (error) {
 		return `[flow-validation-error] ${error instanceof Error ? error.message : String(error)}`;
 	}
@@ -294,6 +304,16 @@ async function replayBash(
 		metadata: event.metadata,
 	};
 	try {
+		if (event.resultsPath && event.testReport) {
+			if (!isArtifactPath(event.resultsPath)) {
+				throw new Error("Cassette results path is unsafe.");
+			}
+			const target = join(workspace, event.resultsPath);
+			await mkdir(dirname(target), { recursive: true });
+			await Bun.sleep(2);
+			await writeFile(target, event.testReport, "utf8");
+			await Bun.sleep(2);
+		}
 		await validation.observeToolAfter(
 			{ ...before, args: { command: event.command } },
 			output,
@@ -311,6 +331,7 @@ export async function replayCassette(
 	const workspace = await seedWorkspace(cassette.files);
 	try {
 		const validation = new ValidationCaptureCoordinator({
+			readReport: readWorkspaceTestReport,
 			persistObservation: (root, observation) =>
 				persistObservedValidation(
 					createFileSessionRepository(root),

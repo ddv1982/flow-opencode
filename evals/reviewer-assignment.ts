@@ -15,7 +15,7 @@ import {
 } from "./reviewer-cases.js";
 
 const FEATURE_ID = "review-target";
-const RESULTS_PATH = ".flow/reviewer-results.xml";
+const RESULTS_PATH = ".flow/results.xml";
 const VALIDATION_COMMAND = `bun test --reporter=junit --reporter-outfile=${RESULTS_PATH}`;
 
 export type SeededReviewerAssignment = {

@@ -2,6 +2,32 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.1.3] - 2026-08-28
+
+Release claims now come from retained evidence instead of trusted summaries.
+
+- Declared gate assertions must be satisfied before final review and completed
+  closure. New named evidence writes JUnit to the plan-bound
+  `.flow/results.xml`; execution cannot substitute another path. Reports are read once
+  from a stable, bounded workspace file without following symlinks.
+- Eval failures identify the evaluator, provider, host, or persistence boundary
+  that produced them. The release matrix uses repository-owned policy with enough
+  attempts to measure its 90% and 100% thresholds.
+- Exact-artifact canary results are derived from one OpenCode session lineage.
+  Release qualification seals all attempts, transcripts, provenance, canary,
+  artifact, and grader source into an immutable bundle that CI independently
+  reopens and regrades.
+- Publication requires the tag and packed artifact to match the release evidence.
+  npm and GitHub operations are bounded and idempotent, refuse conflicting bytes,
+  and recover through an exact draft without destructive asset replacement.
+- **Session v5 schema:** unchanged. Runtime commands and tools are unchanged.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.1.3 --global --force
+```
+
 ## [8.1.2] - 2026-08-26
 
 Long Grok eval turns no longer fail at Bun's implicit five-minute fetch cutoff.

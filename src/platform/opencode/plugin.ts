@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dataNote } from "../../application/flow-response.js";
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
+import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
@@ -127,6 +128,7 @@ function rewriteCommand(
 function createCommandHook(
 	assertOperational: (action: string) => void,
 	autoDrive: AutoDriveCoordinator,
+	workspace: string,
 ): CommandHook {
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
@@ -145,6 +147,14 @@ function createCommandHook(
 			return;
 		}
 		assertOperational(`execute /${command}`);
+		if (command === "flow-auto" || command === "flow-plan") {
+			const evidence = requestEvidenceAnchor(input.arguments, input.sessionID);
+			if (evidence) {
+				const flow = createWorkspaceFlowService(workspace);
+				await flow.status({ request: { view: "compact" } });
+				await flow.requestAnchor({ goal: input.arguments, evidence });
+			}
+		}
 		rewriteCommand(command, input.arguments, output);
 		if (command !== "flow-auto")
 			return void autoDrive.deactivate(input.sessionID);
@@ -313,6 +323,7 @@ const FlowPlugin: Plugin = async (ctx) => {
 		"command.execute.before": createCommandHook(
 			(action) => runtimeGuard.assertOperational(action),
 			autoDrive,
+			workspace,
 		),
 		"chat.message": async (input, output) => {
 			const observed = await autoDrive.observeMessage(

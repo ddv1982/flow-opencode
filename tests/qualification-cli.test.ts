@@ -10,10 +10,12 @@ import {
 	retainedInstructions,
 	retainedReportActors,
 } from "../evals/conformance-evidence.js";
+import { environmentStratumKey } from "../evals/environment-reserves.js";
 import {
 	pseudonymizeEvalIds,
 	pseudonymousEvalId,
 	RetainedScenarioEvidenceSchema,
+	retainedFailureEvidence,
 	scenarioGradeInput,
 } from "../evals/grader-input.js";
 import { packPlugin } from "../evals/harness.js";
@@ -55,9 +57,9 @@ const CASSETTES = {
 		"failing-gate-blocks--opencode_claude-sonnet-5--1.json",
 	"resumes-after-interruption":
 		"resumes-after-interruption--opencode_claude-sonnet-5--3.json",
-	"unprovable-claim-refused": "unprovable-claim-refused--xai_grok-4.5--1.json",
+	"unprovable-claim-refused": "unprovable-claim-refused--xai_grok-4.6--1.json",
 	"skipped-case-named-binding":
-		"skipped-case-named-binding--fixture_hand-written--1.json",
+		"skipped-case-named-binding--xai_grok-4.6--1.json",
 } as const;
 
 const FIXED_ROLES = [
@@ -259,42 +261,81 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			replayedByScenario.set(scenario.id, replayed);
 		}
 
-		for (const cell of plan.cells) {
+		const primaryCells = plan.cells.filter(
+			(cell) => cell.schedule === "primary",
+		);
+		const failedPrimary = primaryCells[0];
+		const activatedReserve = plan.cells.find(
+			(cell) =>
+				cell.schedule === "environment-reserve" &&
+				failedPrimary &&
+				environmentStratumKey(cell) === environmentStratumKey(failedPrimary),
+		);
+		if (!failedPrimary || !activatedReserve)
+			throw new Error("Release fixture requires an environment reserve.");
+		const executionCells = [...primaryCells, activatedReserve];
+		for (const cell of executionCells) {
 			const scenario = SCENARIOS.find(({ id }) => id === cell.caseId);
 			const replayed = replayedByScenario.get(cell.caseId);
 			const model = cell.managerModel;
 			if (!scenario || !replayed || !model) {
 				throw new Error(`Incomplete fixture for ${cell.cellId}.`);
 			}
-			const evidence = RetainedScenarioEvidenceSchema.parse({
-				schemaVersion: 1,
-				attempt: {
-					attemptId: `attempt-${cell.cellId}`,
-					cellId: cell.cellId,
-					caseId: cell.caseId,
-					repetition: cell.repetition,
-					model,
-				},
-				actors: ["manager", "reviewer"].map((role, actorIndex) => ({
-					role,
-					sessionIds: [pseudonymousEvalId(`session:${cell.cellId}-${role}`)],
-					actualModel: {
-						kind: "observed",
-						value: {
-							providerID: model.routeProvider,
-							modelID: `${model.model}-${actorIndex}`,
-						},
-					},
-					requestedModelId: `${model.routeProvider}/${model.model}`,
-					requestedModel: model,
-				})),
-				guidanceLoads: [],
-				gradeInput: pseudonymizeEvalIds(
-					scenarioGradeInput(retainedReplayOutcome(replayed.outcome)),
-				),
-				usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
-			});
 			const attemptId = `attempt-${cell.cellId}`;
+			const failure = cell.cellId === failedPrimary.cellId;
+			const evidence = failure
+				? retainedFailureEvidence({
+						attempt: {
+							attemptId,
+							cellId: cell.cellId,
+							caseId: cell.caseId,
+							repetition: cell.repetition,
+							model,
+						},
+						durationMs: 1,
+						failure: {
+							origin: "host",
+							code: "session-create-failed",
+							retryable: true,
+						},
+						failureObservation: {
+							kind: "host-phase",
+							code: "session-create-failed",
+							pendingTools: [],
+						},
+					})
+				: RetainedScenarioEvidenceSchema.parse({
+						schemaVersion: 1,
+						attempt: {
+							attemptId: `attempt-${cell.cellId}`,
+							cellId: cell.cellId,
+							caseId: cell.caseId,
+							repetition: cell.repetition,
+							model,
+						},
+						actors: ["manager", "reviewer"].map((role, actorIndex) => ({
+							role,
+							sessionIds: [
+								pseudonymousEvalId(`session:${cell.cellId}-${role}`),
+							],
+							actualModel: {
+								kind: "observed",
+								value: {
+									providerID: model.routeProvider,
+									modelID: `${model.model}-${actorIndex}`,
+								},
+							},
+							requestedModelId: `${model.routeProvider}/${model.model}`,
+							requestedModel: model,
+						})),
+						guidanceLoads: [],
+						gradeInput: pseudonymizeEvalIds(
+							scenarioGradeInput(retainedReplayOutcome(replayed.outcome)),
+						),
+						usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
+						failure: null,
+						failureObservation: null,
+					});
 			const transcript = await store.writeTranscript({
 				attemptId,
 				text: canonicalJson(evidence),
@@ -325,14 +366,25 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 				actors: retainedReportActors(evidence),
 				instructions: [...commands, ...retainedInstructions(evidence)],
 				transcript,
-				outcome: deriveConformanceOutcome({
-					evidence,
-					check: scenario.check,
-					scenarioId: scenario.id,
-					model: `${model.routeProvider}/${model.model}`,
-					attempt: cell.repetition + 1,
-				}),
-				usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
+				outcome: failure
+					? {
+							kind: "failure",
+							origin: "host",
+							code: "session-create-failed",
+							retryable: true,
+						}
+					: deriveConformanceOutcome({
+							evidence,
+							check: scenario.check,
+							scenarioId: scenario.id,
+							model: `${model.routeProvider}/${model.model}`,
+							attempt: cell.repetition + 1,
+						}),
+				usage: {
+					durationMs: 1,
+					outputTokens: failure ? 0 : 1,
+					costUsd: failure ? null : 0,
+				},
 			});
 		}
 
@@ -344,11 +396,11 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			cause: "fixed-target" as const,
 			startedAt: new Date(recordedAt.getTime() - 2_000).toISOString(),
 			finishedAt: new Date(recordedAt.getTime() - 1_000).toISOString(),
-			activatedReserveCellIds: [],
+			activatedReserveCellIds: [activatedReserve.cellId],
 			observed: {
-				attempts: plan.cells.length,
-				outputTokens: plan.cells.length,
-				costUsd: 0,
+				attempts: executionCells.length,
+				outputTokens: plan.stoppingRule.count,
+				costUsd: null,
 				wallClockMs: 1_000,
 			},
 		};
@@ -357,7 +409,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			completion,
 			allocationCommitmentSha256: null,
 		});
-		expect(report.attempts).toHaveLength(76);
+		expect(report.attempts).toHaveLength(77);
 
 		const preparedDirectory = join(temporary, "prepared-canary");
 		await mkdir(preparedDirectory, { recursive: true });
@@ -423,8 +475,8 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		const transcripts = bundle.files.filter(
 			({ ref }) => ref.role === "transcript",
 		);
-		expect(attempts).toHaveLength(76);
-		expect(transcripts).toHaveLength(76);
+		expect(attempts).toHaveLength(77);
+		expect(transcripts).toHaveLength(77);
 		expect(attempts.map(({ ref }) => ref.id).sort()).toEqual(
 			transcripts.map(({ ref }) => ref.id).sort(),
 		);
@@ -466,6 +518,72 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			mediaType: ref.mediaType,
 			bytes,
 		}));
+		const failureAttempt = attempts.find(({ bytes }) => {
+			const value = JSON.parse(bytes.toString("utf8")) as {
+				outcome?: { kind?: unknown };
+			};
+			return value.outcome?.kind === "failure";
+		});
+		if (!failureAttempt?.ref.id)
+			throw new Error("Fixture requires a retained environment failure.");
+		const failureTranscript = sealedFiles.find(
+			(file) => file.role === "transcript" && file.id === failureAttempt.ref.id,
+		);
+		if (!failureTranscript)
+			throw new Error("Fixture requires a failure transcript.");
+		const graftedTranscript = JSON.parse(
+			failureTranscript.bytes.toString("utf8"),
+		) as { gradeInput: { session: unknown } };
+		graftedTranscript.gradeInput.session = { status: "completed" };
+		const graftedTranscriptBytes = Buffer.from(
+			canonicalJson(graftedTranscript),
+		);
+		const graftedTranscriptSha256 = `sha256:${new Bun.CryptoHasher("sha256")
+			.update(graftedTranscriptBytes)
+			.digest("hex")}`;
+		const graftedFailureEvidence = sealedFiles.map((file) => {
+			if (file.role === "transcript" && file.id === failureAttempt.ref.id)
+				return { ...file, bytes: graftedTranscriptBytes };
+			if (file.role === "attempt" && file.id === failureAttempt.ref.id) {
+				const value = JSON.parse(file.bytes.toString("utf8")) as {
+					transcript: { sha256: string };
+				};
+				value.transcript.sha256 = graftedTranscriptSha256;
+				return { ...file, bytes: Buffer.from(canonicalJson(value)) };
+			}
+			if (file.role === "report") {
+				const value = JSON.parse(file.bytes.toString("utf8")) as {
+					attempts: Array<{
+						attemptId: string;
+						transcript: { sha256: string };
+					}>;
+				};
+				const attempt = value.attempts.find(
+					({ attemptId }) => attemptId === failureAttempt.ref.id,
+				);
+				if (!attempt) throw new Error("Failure attempt missing from report.");
+				attempt.transcript.sha256 = graftedTranscriptSha256;
+				return { ...file, bytes: Buffer.from(canonicalJson(value)) };
+			}
+			return file;
+		});
+		const graftedFailure = await writeQualificationBundle({
+			input: {
+				reportId: bundle.manifest.reportId,
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: graftedFailureEvidence,
+			},
+			outputRoot: bundlesDirectory,
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: graftedFailure.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/failure attempt .* does not reproduce/);
 		const forgedFiles = sealedFiles.map((file) => ({
 			...file,
 			bytes:

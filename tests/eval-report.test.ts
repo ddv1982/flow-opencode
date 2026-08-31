@@ -551,8 +551,7 @@ describe("eval report boundary", () => {
 			expect.arrayContaining([
 				expect.objectContaining({ code: "provenance" }),
 				expect.objectContaining({
-					message:
-						"Activated reserve ids must reference replacement reserve cells.",
+					message: "Activated reserve ids must reference reserve cells.",
 				}),
 			]),
 		);
@@ -897,7 +896,8 @@ describe("eval report boundary", () => {
 		expect(invalidIssues(rehash(retry))).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					message: "Non-paired campaigns cannot declare replacement retries.",
+					message:
+						"Non-paired campaigns require either no reserves or environment-only reserves.",
 				}),
 			]),
 		);

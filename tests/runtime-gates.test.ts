@@ -20,6 +20,7 @@ import {
 	OUTPUT,
 	plan,
 	recordObservedValidation,
+	repositoryEvidence,
 	resetFeatureRun,
 	revision,
 	SOURCE_A,
@@ -294,6 +295,7 @@ describe("Flow application runtime gates", () => {
 
 	test("checkpoints before final review when extra evidence is unsatisfied", async () => {
 		const repository = new MemorySessionRepository();
+		const windowsResultsPath = ".flow/results.xml";
 		const extraEvidencePlan: Plan = {
 			...plan,
 			evidence: [
@@ -302,7 +304,7 @@ describe("Flow application runtime gates", () => {
 					scope: "extra",
 					requirement: "Observe native Windows behavior.",
 					environment: "Windows with Bun",
-					command: "bun test",
+					command: `bun test --reporter=junit --reporter-outfile=${windowsResultsPath}`,
 					platform: "win32",
 					assertions: ["Windows case passes"],
 				},
@@ -328,6 +330,54 @@ describe("Flow application runtime gates", () => {
 			status: "running",
 			nextAction: "await-user-direction",
 		});
+	});
+
+	test("binds named validation capture to the approved report path", async () => {
+		const repository = new MemorySessionRepository();
+		const resultsPath = ".flow/results.xml";
+		const command = `bun test --reporter=junit --reporter-outfile=${resultsPath}`;
+		const evidence = repositoryEvidence(command)[0];
+		if (!evidence) throw new Error("Expected repository evidence.");
+		const namedPlan: Plan = {
+			...plan,
+			evidence: [
+				{
+					...evidence,
+					command,
+					platform: "linux",
+					assertions: ["runtime case"],
+				},
+			],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: namedPlan,
+			suffix: "named-results-path",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "named-results-path");
+		const prepared = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command,
+				scope: "broad",
+			},
+			"linux",
+		);
+		expect(prepared.resultsPath).toBe(resultsPath);
+		await expect(
+			prepareValidation(
+				repository,
+				{
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					command,
+					scope: "broad",
+					resultsPath: ".flow/other.xml",
+				},
+				"linux",
+			),
+		).rejects.toThrow("must match the approved plan exactly");
 	});
 
 	test("checkpoints when extra evidence is stale for current source", async () => {

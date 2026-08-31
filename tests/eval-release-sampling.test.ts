@@ -12,6 +12,7 @@ import {
 	type EvalSampling,
 	jobsFor,
 	releaseScenarios,
+	reserveJobsFor,
 } from "../evals/run.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 
@@ -91,23 +92,46 @@ describe("release eval sampling", () => {
 			sampling: { kind: "release" },
 			opencodeVersion: "1.18.6",
 		});
-		expect(plan.cells).toHaveLength(76);
+		expect(plan.cells).toHaveLength(92);
+		expect(
+			plan.cells.filter((cell) => cell.schedule === "primary"),
+		).toHaveLength(76);
+		expect(
+			plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
+		).toHaveLength(16);
 		expect(plan.stoppingRule.count).toBe(76);
-		expect(plan.budget.maxAttempts).toBe(76);
+		expect(plan.budget.maxAttempts).toBe(92);
+		expect(plan.abortPolicy).toEqual({
+			retry: "environment-only",
+			maxReplacementBlocks: 16,
+		});
 		expect(caseCatalogFor(scenarios, { kind: "release" })).toEqual(
 			releaseCatalog(),
 		);
 		expect(
 			plan.cells.filter((cell) => cell.caseId === "skipped-case-named-binding"),
-		).toHaveLength(6);
+		).toHaveLength(8);
 		const jobs = jobsFor(["xai/grok-4.6", "openai/gpt-5.6-sol"], scenarios, {
 			kind: "release",
 		}).flat();
 		expect(
 			jobs.map((job) => [job.slot, job.scenario.id, job.attempt - 1]),
 		).toEqual(
-			plan.cells.map((cell, slot) => [slot, cell.caseId, cell.repetition]),
+			plan.cells
+				.filter((cell) => cell.schedule === "primary")
+				.map((cell, slot) => [slot, cell.caseId, cell.repetition]),
 		);
+		const reserve = plan.cells.find(
+			(cell) => cell.schedule === "environment-reserve",
+		);
+		if (!reserve) throw new Error("Release plan requires a reserve.");
+		expect(reserveJobsFor(plan, [reserve.cellId], scenarios).flat()).toEqual([
+			expect.objectContaining({
+				slot: plan.cells.indexOf(reserve),
+				scenario: expect.objectContaining({ id: reserve.caseId }),
+				attempt: reserve.repetition + 1,
+			}),
+		]);
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -198,6 +222,30 @@ describe("release eval sampling", () => {
 				"--release requires exactly 2 models on distinct route providers",
 			);
 		}
+	});
+
+	test("requires sequential release execution", async () => {
+		const child = Bun.spawn(
+			[
+				"bun",
+				"run",
+				"evals/run.ts",
+				"--model",
+				"xai/a",
+				"--model",
+				"openai/b",
+				"--release",
+				"--concurrency",
+				"2",
+			],
+			{ cwd: new URL("..", import.meta.url).pathname, stderr: "pipe" },
+		);
+		const [exitCode, stderr] = await Promise.all([
+			child.exited,
+			new Response(child.stderr).text(),
+		]);
+		expect(exitCode).toBe(2);
+		expect(stderr).toContain("--release requires --concurrency 1");
 	});
 
 	test("does not consume a flag as a model value", async () => {

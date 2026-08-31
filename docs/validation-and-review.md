@@ -55,8 +55,8 @@ caller declaration made at planning time.
 `savePlan` requires `evidence`: one gate plus optional extra observations. Every
 entry names its command, `platform`, and `assertions`. One satisfaction rule
 applies to all entries: an eligible exact-command observation on the declared
-platform with every declared case `passed`. Case outcomes come from a JUnit
-report named by `resultsPath` that changes during the observed command window
+platform with every declared case `passed`. Named commands write changed JUnit to
+`.flow/results.xml`; legacy plans may supply `resultsPath`
 ([ADR 0012](adr/0012-named-results-over-exit-codes.md)). Final review and
 `completed` closure refuse any unsatisfied entry. The gate also requires broad
 scope and remains subject to command vetoes. Feature reviews are not vetoed, so a

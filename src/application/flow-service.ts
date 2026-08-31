@@ -1,7 +1,12 @@
 import { operationInputDigest } from "../domain/operation.js";
+import type {
+	RequestAuthority,
+	RequestEvidenceAnchor,
+} from "../domain/request-evidence.js";
 import type { FeatureRun, Session } from "../domain/session.js";
 import {
 	activeRun,
+	anchorRequest,
 	approvePlan,
 	completeFeature,
 	resetFeature,
@@ -68,8 +73,18 @@ type CompactMutationResponse = FlowResponse<
 
 export type FlowService = Readonly<{
 	status(input: unknown): Promise<StatusResponse>;
-	planSave(input: unknown): Promise<CompactMutationResponse>;
-	planApprove(input: unknown): Promise<CompactMutationResponse>;
+	requestAnchor(input: {
+		goal: string;
+		evidence: RequestEvidenceAnchor;
+	}): Promise<void>;
+	planSave(
+		input: unknown,
+		authority?: RequestAuthority,
+	): Promise<CompactMutationResponse>;
+	planApprove(
+		input: unknown,
+		authority?: RequestAuthority,
+	): Promise<CompactMutationResponse>;
 	runStart(
 		input: unknown,
 	): Promise<FlowResponse<MutationWorkflowData<ExecutionProjection>>>;
@@ -126,6 +141,13 @@ export function createFlowService(
 	environment: TransitionEnvironment,
 ): FlowService {
 	return {
+		async requestAnchor(input) {
+			await repository.transact(async (transaction) => {
+				const current = await transaction.load();
+				const anchored = anchorRequest(current, input, environment);
+				if (anchored !== current) await transaction.save(anchored);
+			});
+		},
 		async status(input) {
 			let request: StatusRequest;
 			try {
@@ -206,7 +228,7 @@ export function createFlowService(
 			}
 		},
 
-		async planSave(input) {
+		async planSave(input, authority) {
 			try {
 				const request = PlanSaveInputSchema.parse(input).request;
 				return await repository.transact(async (transaction) => {
@@ -214,6 +236,7 @@ export function createFlowService(
 						await transaction.load(),
 						request,
 						environment,
+						authority,
 					);
 					await transaction.save(result.session);
 					return ok("Draft plan saved.", {
@@ -230,13 +253,13 @@ export function createFlowService(
 			}
 		},
 
-		async planApprove(input) {
+		async planApprove(input, authority) {
 			try {
 				const request = PlanApproveInputSchema.parse(input).request;
 				return await repository.transact(async (transaction) => {
 					const session = await transaction.load();
 					if (!session) throw new Error("No active Flow session exists.");
-					const result = approvePlan(session, request);
+					const result = approvePlan(session, request, authority);
 					await transaction.save(result.session);
 					return ok("Plan approved.", {
 						operation: operationResult(
