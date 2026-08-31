@@ -8,6 +8,20 @@ import { currentBunToolchain } from "./bun-toolchain.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import { parseCaseCatalog } from "./catalog.js";
 import {
+	type AttemptFailure,
+	attemptFailure,
+	type DurableFailureOrigin,
+	EvaluationPersistenceError,
+	EvaluationPhaseError,
+	evaluationPhase,
+	evaluatorFailure,
+	failureOutcome,
+	isEvaluatorFailure,
+	persistEvaluation,
+	preservePrimaryFailure,
+	strongestFailureOrigin,
+} from "./failure-origin.js";
+import {
 	type CommandEnd,
 	EvalHost,
 	type Outcome,
@@ -215,15 +229,17 @@ async function main(): Promise<void> {
 	const opencodeVersion = packageJson.devDependencies["@opencode-ai/plugin"];
 	const packDir = await mkdtemp(join(tmpdir(), "flow-reviewer-pack-"));
 	const reportDir = join(repositoryRoot, "evals", "results");
-	await mkdir(reportDir, { recursive: true });
+	await persistEvaluation("report-directory", () =>
+		mkdir(reportDir, { recursive: true }),
+	);
 	const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 	const campaignDirectory = join(reportDir, `reviewer-${stamp}.v2`);
 	const catalogInput = catalogFor(cases);
 	const catalog = parseCatalog(catalogInput);
 	const plan = planFor(cases, model);
 	const store = createReportStore({ directory: campaignDirectory, catalog });
-	await store.initialize(plan);
-	await store.writeCatalog(catalog);
+	await persistEvaluation("initialize", () => store.initialize(plan));
+	await persistEvaluation("catalog", () => store.writeCatalog(catalog));
 	const startedAt = new Date().toISOString();
 	try {
 		const tarball = await packPlugin(repositoryRoot, packDir, toolchain);
@@ -231,7 +247,7 @@ async function main(): Promise<void> {
 			repositoryRoot,
 			tarballPath: tarball,
 		});
-		await store.writeArtifact(tarball);
+		await persistEvaluation("artifact", () => store.writeArtifact(tarball));
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
 			caseCatalog: cases.map((entry) => ({
@@ -248,119 +264,188 @@ async function main(): Promise<void> {
 			if (!cell) throw new Error("Reviewer campaign cell is missing.");
 			const started = Date.now();
 			let host: EvalHost | null = null;
-			let attempt: AttemptRecordV2;
-			try {
-				host = await EvalHost.start({
-					toolchain,
-					packageCache,
-					opencodeVersion,
-					files: entry.files,
-					reviewerModel: options.model,
-				});
-				const catalogModels = await host.catalogModels();
-				if (!catalogModels.includes(options.model)) {
-					throw new Error(
-						`Reviewer model ${options.model} is absent from the host catalog.`,
+			let attempt: AttemptRecordV2 | null = null;
+			let runFailure: AttemptFailure<DurableFailureOrigin> | null = null;
+			await preservePrimaryFailure(
+				async () => {
+					try {
+						host = await EvalHost.start({
+							toolchain,
+							packageCache,
+							opencodeVersion,
+							files: entry.files,
+							reviewerModel: options.model,
+						});
+						const activeHost = host;
+						const catalogModels = await evaluationPhase(
+							"host",
+							"model-catalog-failed",
+							true,
+							() => activeHost.catalogModels(),
+						);
+						if (!catalogModels.includes(options.model)) {
+							runFailure = attemptFailure(
+								"provider",
+								"model-unavailable",
+								`Reviewer model ${options.model} is absent from the host catalog.`,
+								false,
+							);
+							throw new EvaluationPhaseError(runFailure, runFailure);
+						}
+						const seed = await evaluationPhase(
+							"evaluator",
+							"reviewer-seed-failed",
+							false,
+							() =>
+								seedReviewerAssignment({
+									workspace: activeHost.project,
+									fixture: entry,
+								}),
+						);
+						const sessionId = await evaluationPhase(
+							"host",
+							"session-create-failed",
+							true,
+							() => activeHost.createSession("reviewer evaluation"),
+						);
+						const commandEnd = await evaluationPhase(
+							"host",
+							"command-aborted",
+							true,
+							() =>
+								activeHost.runCommand(
+									sessionId,
+									"flow-review",
+									seed.assignmentId,
+									options.model,
+								),
+						);
+						const outcome = await evaluationPhase(
+							"evaluator",
+							"outcome-collection-threw",
+							false,
+							() => activeHost.outcome([sessionId], Date.now() - started),
+						);
+						if (outcome.providerError) {
+							runFailure = outcome.providerError;
+							throw new EvaluationPhaseError(runFailure, runFailure);
+						}
+						const submission = await evaluationPhase(
+							"evaluator",
+							"reviewer-grade-threw",
+							false,
+							() =>
+								readDurableReviewerSubmission({
+									workspace: activeHost.project,
+									seed,
+								}),
+						);
+						const transcript = redactTranscript({
+							projectPath: activeHost.project,
+							value: { calls: outcome.allCalls, finalText: outcome.finalText },
+						});
+						const storedTranscript = await persistEvaluation("transcript", () =>
+							store.writeTranscript({
+								attemptId: `attempt-${cell.cellId}`,
+								text: transcript.text,
+							}),
+						);
+						const instructions: InstructionDelivery[] = [
+							instructionDelivery({
+								source: "command",
+								name: "flow-review",
+								sequence: 0,
+								text: seed.assignmentId,
+							}),
+						];
+						const actor = reportReviewerActor(model, outcome);
+						attempt = {
+							schemaVersion: 2,
+							attemptId: `attempt-${cell.cellId}`,
+							cellId: cell.cellId,
+							blockId: cell.blockId,
+							caseId: cell.caseId,
+							caseVersion: cell.caseVersion,
+							armToken: null,
+							repetition: 0,
+							artifact,
+							evaluator,
+							hostConfigSha256: hostConfigSha256({
+								opencodeVersion,
+								reviewerModel: options.model,
+							}),
+							actors: actor ? [actor] : [],
+							instructions,
+							transcript: {
+								sha256: storedTranscript.sha256,
+								artifact: storedTranscript.artifact,
+							},
+							outcome: reviewerOutcome(entry, submission, commandEnd),
+							usage: {
+								durationMs: outcome.durationMs,
+								outputTokens: outcome.tokens.output,
+								costUsd: outcome.costUsd,
+							},
+						};
+					} catch (error) {
+						if (error instanceof EvaluationPersistenceError) throw error;
+						const classified = evaluatorFailure(error);
+						const failed =
+							classified.origin === "evaluator"
+								? classified
+								: (runFailure ?? classified);
+						attempt = {
+							schemaVersion: 2,
+							attemptId: `attempt-${cell.cellId}`,
+							cellId: cell.cellId,
+							blockId: cell.blockId,
+							caseId: cell.caseId,
+							caseVersion: cell.caseVersion,
+							armToken: null,
+							repetition: 0,
+							artifact,
+							evaluator,
+							hostConfigSha256: hostConfigSha256({
+								opencodeVersion,
+								reviewerModel: options.model,
+							}),
+							actors: [],
+							instructions: [],
+							transcript: null,
+							outcome: failureOutcome(failed),
+							usage: {
+								durationMs: Date.now() - started,
+								outputTokens: 0,
+								costUsd: null,
+							},
+						};
+					}
+					const finalizedAttempt = attempt;
+					if (!finalizedAttempt)
+						throw new Error("Reviewer attempt was not constructed.");
+					await persistEvaluation("attempt", () =>
+						store.writeAttempt(finalizedAttempt),
 					);
-				}
-				const seed = await seedReviewerAssignment({
-					workspace: host.project,
-					fixture: entry,
-				});
-				const sessionId = await host.createSession("reviewer evaluation");
-				const commandEnd = await host.runCommand(
-					sessionId,
-					"flow-review",
-					seed.assignmentId,
-					options.model,
-				);
-				const outcome = await host.outcome([sessionId], Date.now() - started);
-				const submission = await readDurableReviewerSubmission({
-					workspace: host.project,
-					seed,
-				});
-				const transcript = redactTranscript({
-					projectPath: host.project,
-					value: { calls: outcome.allCalls, finalText: outcome.finalText },
-				});
-				const storedTranscript = await store.writeTranscript({
-					attemptId: `attempt-${cell.cellId}`,
-					text: transcript.text,
-				});
-				const instructions: InstructionDelivery[] = [
-					instructionDelivery({
-						source: "command",
-						name: "flow-review",
-						sequence: 0,
-						text: seed.assignmentId,
-					}),
-				];
-				const actor = reportReviewerActor(model, outcome);
-				attempt = {
-					schemaVersion: 2,
-					attemptId: `attempt-${cell.cellId}`,
-					cellId: cell.cellId,
-					blockId: cell.blockId,
-					caseId: cell.caseId,
-					caseVersion: cell.caseVersion,
-					armToken: null,
-					repetition: 0,
-					artifact,
-					evaluator,
-					hostConfigSha256: hostConfigSha256({
-						opencodeVersion,
-						reviewerModel: options.model,
-					}),
-					actors: actor ? [actor] : [],
-					instructions,
-					transcript: {
-						sha256: storedTranscript.sha256,
-						artifact: storedTranscript.artifact,
-					},
-					outcome: reviewerOutcome(entry, submission, commandEnd),
-					usage: {
-						durationMs: outcome.durationMs,
-						outputTokens: outcome.tokens.output,
-						costUsd: outcome.costUsd,
-					},
-				};
-			} catch (error) {
-				const message = error instanceof Error ? error.message : String(error);
-				attempt = {
-					schemaVersion: 2,
-					attemptId: `attempt-${cell.cellId}`,
-					cellId: cell.cellId,
-					blockId: cell.blockId,
-					caseId: cell.caseId,
-					caseVersion: cell.caseVersion,
-					armToken: null,
-					repetition: 0,
-					artifact,
-					evaluator,
-					hostConfigSha256: hostConfigSha256({
-						opencodeVersion,
-						reviewerModel: options.model,
-					}),
-					actors: [],
-					instructions: [],
-					transcript: null,
-					outcome: {
-						kind: "failure",
-						origin: "host",
-						code: message.slice(0, 512),
-						retryable: true,
-					},
-					usage: {
-						durationMs: Date.now() - started,
-						outputTokens: 0,
-						costUsd: null,
-					},
-				};
-			} finally {
-				await host?.stop();
+					attempts.push(finalizedAttempt);
+				},
+				async () => {
+					const cleanupHost = host;
+					if (cleanupHost) {
+						await evaluationPhase("host", "host-cleanup-failed", true, () =>
+							cleanupHost.stop(),
+						);
+					}
+				},
+			);
+			const recordedAttempt = attempts.at(-1);
+			if (!recordedAttempt || recordedAttempt.cellId !== cell.cellId) {
+				throw new Error("Reviewer attempt was not persisted.");
 			}
-			await store.writeAttempt(attempt);
-			attempts.push(attempt);
+			if (
+				recordedAttempt.outcome.kind === "failure" &&
+				isEvaluatorFailure(recordedAttempt.outcome.origin)
+			)
+				break;
 		}
 		const finishedAt = new Date().toISOString();
 		const complete = attempts.every(
@@ -372,29 +457,36 @@ async function main(): Promise<void> {
 					(total, attempt) => total + (attempt.usage.costUsd ?? 0),
 					0,
 				);
-		await store.finalize({
-			reportId: `flow-reviewer-${stamp}`,
-			completion: {
-				status: complete ? "complete" : "stopped",
-				cause: complete ? "fixed-target" : "host",
-				startedAt,
-				finishedAt,
-				activatedReserveCellIds: [],
-				observed: {
-					attempts: attempts.length,
-					outputTokens: attempts.reduce(
-						(total, attempt) => total + attempt.usage.outputTokens,
-						0,
-					),
-					costUsd,
-					wallClockMs: Math.max(
-						Date.parse(finishedAt) - Date.parse(startedAt),
-						...attempts.map((attempt) => attempt.usage.durationMs),
-					),
+		const stoppedOrigin = strongestFailureOrigin(
+			attempts.map((attempt) =>
+				attempt.outcome.kind === "failure" ? attempt.outcome.origin : null,
+			),
+		);
+		await persistEvaluation("finalize", () =>
+			store.finalize({
+				reportId: `flow-reviewer-${stamp}`,
+				completion: {
+					status: complete ? "complete" : "stopped",
+					cause: complete || !stoppedOrigin ? "fixed-target" : stoppedOrigin,
+					startedAt,
+					finishedAt,
+					activatedReserveCellIds: [],
+					observed: {
+						attempts: attempts.length,
+						outputTokens: attempts.reduce(
+							(total, attempt) => total + attempt.usage.outputTokens,
+							0,
+						),
+						costUsd,
+						wallClockMs: Math.max(
+							Date.parse(finishedAt) - Date.parse(startedAt),
+							...attempts.map((attempt) => attempt.usage.durationMs),
+						),
+					},
 				},
-			},
-			allocationCommitmentSha256: null,
-		});
+				allocationCommitmentSha256: null,
+			}),
+		);
 		console.log(
 			`Reviewer V2 report: ${join(campaignDirectory, "report.json")}`,
 		);

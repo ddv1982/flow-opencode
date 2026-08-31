@@ -60,27 +60,39 @@ const REPORT = `<testsuites><testcase name="on Windows" classname="s"/></testsui
  */
 async function capture(options: {
 	prepared: PreparedValidation;
+	priorReport?: { text: string; modifiedMs: number } | null;
 	readReport?: (
 		workspace: string,
 		relativePath: string,
 	) => Promise<{ text: string; modifiedMs: number } | null>;
 	armedAt: number;
+	observedAt?: number;
 }): Promise<ObservedValidation> {
 	let persisted: ObservedValidation | null = null;
+	let now = options.armedAt;
+	let reportRead = 0;
 	const coordinator = new ValidationCaptureCoordinator({
 		randomId: () => "capture-1",
-		now: () => options.armedAt,
-		...(options.readReport ? { readReport: options.readReport } : {}),
+		now: () => now,
+		...(options.readReport || options.priorReport
+			? {
+					readReport: async (workspace, relativePath) => {
+						if (reportRead++ === 0) return options.priorReport ?? null;
+						return options.readReport?.(workspace, relativePath) ?? null;
+					},
+				}
+			: {}),
 		persistObservation: (_workspace, input) => {
 			persisted = input;
 			return Promise.resolve(persistedObservation(input));
 		},
 	});
 	coordinator.arm("session", "/workspace", options.prepared);
-	coordinator.observeToolBefore(
+	await coordinator.observeToolBefore(
 		{ tool: "bash", sessionID: "session", callID: "bash-1" },
 		{ args: { command: options.prepared.command } },
 	);
+	now = options.observedAt ?? options.armedAt + 1_000;
 	await coordinator.observeToolAfter(
 		{
 			tool: "bash",
@@ -137,6 +149,27 @@ describe("observing declared assertions from the command's own report", () => {
 		}
 	});
 
+	test("ignores an unchanged report and a timestamp after command observation", async () => {
+		const stale = { text: REPORT, modifiedMs: 1_500 };
+		for (const options of [
+			{ priorReport: stale, readReport: async () => stale },
+			{
+				priorReport: null,
+				readReport: async () => ({ text: REPORT, modifiedMs: 2_001 }),
+			},
+		]) {
+			const observed = await capture({
+				prepared: declared,
+				armedAt: 1_000,
+				observedAt: 2_000,
+				...options,
+			});
+			expect(observed.observedAssertions).toEqual([
+				{ name: "on Windows", status: "absent" },
+			]);
+		}
+	});
+
 	test("reaches the same absence when no report is named or none can be read", async () => {
 		for (const options of [
 			{ prepared: { ...declared, resultsPath: undefined }, armedAt: 1 },
@@ -144,7 +177,10 @@ describe("observing declared assertions from the command's own report", () => {
 			{
 				prepared: declared,
 				armedAt: 1,
-				readReport: () => Promise.reject(new Error("unreadable")),
+				readReport: () =>
+					Promise.reject(
+						Object.assign(new Error("unreadable"), { code: "EACCES" }),
+					),
 			},
 		]) {
 			const observed = await capture(options);
@@ -232,7 +268,7 @@ describe("OpenCode validation capture", () => {
 		expect(coordinator.pendingCount()).toBe(0);
 	});
 
-	test("cancels when the next Bash command does not exactly match", () => {
+	test("cancels when the next Bash command does not exactly match", async () => {
 		let persisted = false;
 		const coordinator = new ValidationCaptureCoordinator({
 			randomId: () => "capture-mismatch",
@@ -243,7 +279,7 @@ describe("OpenCode validation capture", () => {
 		});
 		coordinator.arm("opencode-session-1", "/workspace", prepared);
 
-		expect(() =>
+		await expect(
 			coordinator.observeToolBefore(
 				{
 					tool: "bash",
@@ -252,7 +288,7 @@ describe("OpenCode validation capture", () => {
 				},
 				{ args: { command: `${prepared.command} --watch` } },
 			),
-		).toThrow(ValidationCaptureError);
+		).rejects.toBeInstanceOf(ValidationCaptureError);
 		expect(coordinator.pendingCount()).toBe(0);
 		expect(persisted).toBe(false);
 	});
@@ -337,6 +373,21 @@ describe("OpenCode validation capture", () => {
 		).toThrow("already has an armed validation command");
 		expect(coordinator.cancel("opencode-session-1")).toBe(true);
 		expect(coordinator.pendingCount()).toBe(0);
+	});
+
+	test("allows only one armed capture per workspace", () => {
+		const coordinator = new ValidationCaptureCoordinator({
+			randomId: () => "capture-workspace",
+			persistObservation: (_workspace, input) =>
+				Promise.resolve(persistedObservation(input)),
+		});
+		coordinator.arm("opencode-session-1", "/workspace", prepared);
+		expect(() =>
+			coordinator.arm("opencode-session-2", "/workspace", prepared),
+		).toThrow("workspace already has an armed validation command");
+		expect(
+			coordinator.arm("opencode-session-2", "/other-workspace", prepared),
+		).toMatchObject({ captureId: "capture-workspace" });
 	});
 
 	test("records an ineligible observation when the host reports no exit code or no completeness", async () => {

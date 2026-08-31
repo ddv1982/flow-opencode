@@ -2,12 +2,7 @@ import type { ReviewFinding, Session } from "../src/domain/session.js";
 import { observeAssertions } from "../src/domain/test-results.js";
 import { normalizeEvidencePlatform } from "../src/domain/validation.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
-import {
-	flowPlanApprove,
-	flowPlanSave,
-	flowReviewStart,
-	flowRunStart,
-} from "../src/infrastructure/fs/workspace-flow-service.js";
+import { createWorkspaceFlowService } from "../src/infrastructure/fs/workspace-flow-service.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
@@ -20,7 +15,7 @@ import {
 } from "./reviewer-cases.js";
 
 const FEATURE_ID = "review-target";
-const RESULTS_PATH = ".flow/reviewer-results.xml";
+const RESULTS_PATH = ".flow/results.xml";
 const VALIDATION_COMMAND = `bun test --reporter=junit --reporter-outfile=${RESULTS_PATH}`;
 
 export type SeededReviewerAssignment = {
@@ -92,9 +87,10 @@ export async function seedReviewerAssignment(input: {
 	readonly fixture: ReviewerCase;
 }): Promise<SeededReviewerAssignment> {
 	assertReviewerCaseTruth(input.fixture);
+	const flow = createWorkspaceFlowService(input.workspace);
 	const operationSuffix = `${input.fixture.caseId}-v${input.fixture.caseVersion}`;
 	requireFlowSuccess(
-		await flowPlanSave(input.workspace, {
+		await flow.planSave({
 			request: {
 				operationId: `reviewer-plan-save-${operationSuffix}`,
 				expectedRevision: 0,
@@ -136,7 +132,7 @@ export async function seedReviewerAssignment(input: {
 		}),
 	);
 	requireFlowSuccess(
-		await flowPlanApprove(input.workspace, {
+		await flow.planApprove({
 			request: {
 				operationId: `reviewer-plan-approve-${operationSuffix}`,
 				expectedRevision: (await currentSession(input.workspace)).revision,
@@ -144,7 +140,7 @@ export async function seedReviewerAssignment(input: {
 		}),
 	);
 	requireFlowSuccess(
-		await flowRunStart(input.workspace, {
+		await flow.runStart({
 			request: {
 				operationId: `reviewer-run-start-${operationSuffix}`,
 				expectedRevision: (await currentSession(input.workspace)).revision,
@@ -173,7 +169,7 @@ export async function seedReviewerAssignment(input: {
 		),
 	});
 	requireFlowSuccess(
-		await flowReviewStart(input.workspace, {
+		await flow.reviewStart({
 			request: {
 				operationId: `reviewer-review-start-${operationSuffix}`,
 				expectedRevision: (await currentSession(input.workspace)).revision,

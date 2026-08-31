@@ -49,8 +49,8 @@ These refinements preserve this subtraction boundary. Managers align the active
 goal before every mutation without persisting an intent classifier; a same-goal
 approved plan-only request reports immutable state and stops. Prospectively, new
 review admission requires a byte-identical current-source pass newer than the
-latest relevant failed or source-drifted observation, while accepted same-schema
-Session v5 reviews remain grandfathered and close adds no retroactive veto. Only
+latest relevant failed or source-drifted observation. Accepted Session v5 reviews
+remain valid for submission and completion; close rechecks plan evidence. Only
 the first in-scope failed review receives an automatic fresh full retry; a
 `scopeBlocker` finding and a second failure checkpoint for user direction. A feature
 whose latest relevant reviewed outcome remains failed is not selected

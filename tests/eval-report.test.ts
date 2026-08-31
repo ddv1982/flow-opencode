@@ -314,6 +314,47 @@ function itemAt<T>(values: readonly T[], index: number): T {
 }
 
 describe("eval report boundary", () => {
+	test("keeps persistence as a campaign stop, never a fabricated attempt", () => {
+		const fixture = report();
+		const fabricatedAttempt: unknown = {
+			...fixture,
+			attempts: fixture.attempts.map((attempt, index) =>
+				index === 0
+					? {
+							...attempt,
+							actors: [],
+							instructions: [],
+							transcript: null,
+							outcome: {
+								kind: "failure",
+								origin: "persistence",
+								code: "attempt-write-failed",
+								retryable: false,
+							},
+						}
+					: attempt,
+			),
+		};
+		expect(parseReport(fabricatedAttempt, caseCatalog()).ok).toBe(false);
+
+		const persistenceStop: unknown = {
+			...fixture,
+			attempts: [],
+			completion: {
+				...fixture.completion,
+				status: "stopped",
+				cause: "persistence",
+				observed: {
+					...fixture.completion.observed,
+					attempts: 0,
+					outputTokens: 0,
+					costUsd: 0,
+				},
+			},
+		};
+		expect(parseReport(persistenceStop, caseCatalog()).ok).toBe(true);
+	});
+
 	test("accepts a complete ledger and derives a canonical plan hash", () => {
 		const value = report();
 		const parsed = result(value);
@@ -510,8 +551,7 @@ describe("eval report boundary", () => {
 			expect.arrayContaining([
 				expect.objectContaining({ code: "provenance" }),
 				expect.objectContaining({
-					message:
-						"Activated reserve ids must reference replacement reserve cells.",
+					message: "Activated reserve ids must reference reserve cells.",
 				}),
 			]),
 		);
@@ -856,7 +896,8 @@ describe("eval report boundary", () => {
 		expect(invalidIssues(rehash(retry))).toEqual(
 			expect.arrayContaining([
 				expect.objectContaining({
-					message: "Non-paired campaigns cannot declare replacement retries.",
+					message:
+						"Non-paired campaigns require either no reserves or environment-only reserves.",
 				}),
 			]),
 		);

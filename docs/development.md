@@ -144,13 +144,24 @@ deterministic hook and lifecycle gates.
 
 ## Release
 
-A release needs a V2 qualification report from at least two providers, a canary of
-the exact packed artifact, and a canary-bound decision. Pass `--report`, `--catalog`,
-`--artifact`, and `--canary` to `bun run qualify`. Commit `evals/canary` and
-`evals/decisions` before tagging. [Release qualification](release-qualification.md)
+A release needs a complete V2 campaign from at least two providers and a canary of
+the exact packed artifact. Pass `--campaign-dir` and `--canary` to
+`bun run qualify`; it seals the report, attempts, transcripts, artifact, canary,
+expected provenance, decision, and grader source into one immutable bundle. Commit
+the bundle and canary before tagging. [Release qualification](release-qualification.md)
 publishes the thresholds and commands.
 
 Release tags use `v<package-version>`. Blocking release checks include the
 normal repository gate, package smoke, packed live OpenCode smoke, package
 integrity generation, npm publication, and GitHub release assets. There is no
 cross-version active-session gate because v6 is an explicit hard cutover.
+
+Publication accepts both annotated and lightweight tags, but the freshly fetched
+tag, workflow event, checkout, and current remote `main` tip must identify the
+same commit immediately before npm publication. Network calls have explicit
+deadlines. npm publication reconciles the immutable package integrity after every
+result, including timeouts. GitHub publication first builds an exact draft under
+the same ref proof. That draft is the recovery marker if npm succeeds and `main`
+then advances. Finalization rechecks the remote tag, refuses conflicting metadata
+or assets, and publishes only after every asset digest matches. Reruns converge
+after partial success without replacing published bytes.

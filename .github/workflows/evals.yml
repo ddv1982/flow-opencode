@@ -132,30 +132,17 @@ jobs:
             eval-v2.log
           retention-days: 90
 
-      - name: Apply release-qualification thresholds
-        id: qualify
+      - name: Record sealed-bundle prerequisite
         if: always() && steps.matrix.outputs.models != '' && steps.run.outputs.report != ''
-        continue-on-error: true
         run: |
-          set +e
-          mkdir -p evals/decisions
-          bun run qualify -- --report "${{ steps.run.outputs.report }}" --catalog "${{ steps.run.outputs.catalog }}" --artifact "${{ steps.run.outputs.artifact }}" --decisions-dir evals/decisions 2>&1 | tee qualification.log
-          status=${PIPESTATUS[0]}
-          decision_path="$(sed -n -E 's/^(VERIFIED|NOT VERIFIED|INCONCLUSIVE): (.*)$/\2/p' qualification.log | tail -n 1)"
-          if [ -z "$decision_path" ] || [ ! -f "$decision_path" ]; then
-            echo "::error::Qualifier did not print an existing decision path."
-            exit 1
-          fi
-          printf 'decision=%s\n' "$decision_path" >> "$GITHUB_OUTPUT"
-          exit "$status"
+          echo "INCONCLUSIVE: sealed qualification requires the exact-artifact canary." | tee qualification.log
 
-      - name: Publish the decision artifacts
+      - name: Publish qualification inputs
         if: always() && steps.matrix.outputs.models != ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: eval-v2-decision
+          name: eval-v2-qualification-input
           path: |
             qualification.log
-            ${{ steps.qualify.outputs.decision }}
           if-no-files-found: warn
           retention-days: 90

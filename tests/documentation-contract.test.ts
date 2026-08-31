@@ -502,18 +502,27 @@ describe("Flow documentation contract", () => {
 		expect(combined).toContain("bun run check");
 		expect(combined).toContain("bun run smoke:live");
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
-		expect(combined).toContain("npm publish");
+		expect(combined).toContain("scripts/release-publish.ts npm");
 		const release = await readFile(".github/workflows/release.yml", "utf8");
 		expect(release).toMatch(/^ {2}push:\n {4}branches:/m);
 		expect(release).toContain("tags:");
 		expect(release).toMatch(/tag="v\$\{version\}"/);
-		expect(release).toMatch(/--target "\$\{GITHUB_SHA\}"/);
+		expect(release).toMatch(/--commit "\$\{GITHUB_SHA\}"/);
 		expect(release).toContain(
-			"Verify exact VERIFIED V2 artifact decision and fresh canary",
+			"Verify independently regraded qualification bundle and fresh canary",
 		);
 		expect(release).toContain("bun run eval:canary -- verify");
 		expect(release).toContain("--mode dry-run");
 		expect(release).toMatch(/evals\/canary\/\$\{version\}\.json/);
+		expect(release.match(/^ {4}timeout-minutes:/gm)).toHaveLength(3);
+		expect(release).toContain(
+			"bun run scripts/release-publish.ts github-prepare",
+		);
+		expect(release).toContain("bun run scripts/release-publish.ts npm");
+		expect(release).toContain(
+			"bun run scripts/release-publish.ts github-publish",
+		);
+		expect(release).not.toContain("--clobber");
 		expect(release).not.toContain("canary-not-enabled");
 
 		// Model-driven evals need credentials and cost real money, so they run on a
@@ -525,11 +534,8 @@ describe("Flow documentation contract", () => {
 		const evals = await readFile(".github/workflows/evals.yml", "utf8");
 		expect(evals).toContain("bun run eval");
 		expect(evals).toContain("V2 report:");
-		expect(evals).toContain("bun run qualify -- --report");
-		expect(evals).toContain("steps.run.outputs.catalog");
-		expect(evals).toContain("steps.run.outputs.artifact");
-		expect(evals).toContain("--decisions-dir");
-		expect(evals).toContain("eval-v2-decision");
+		expect(evals).toContain("sealed qualification requires");
+		expect(evals).toContain("eval-v2-qualification-input");
 		expect(evals).toContain("if: always()");
 		expect(evals).toContain("schedule:");
 		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);

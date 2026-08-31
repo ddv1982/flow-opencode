@@ -13,6 +13,7 @@ permissions:
 jobs:
   decide:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       publish: ${{ steps.resolve.outputs.publish }}
       tag: ${{ steps.resolve.outputs.tag }}
@@ -42,9 +43,12 @@ jobs:
   verify-main-and-tag:
     needs: decide
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -58,15 +62,19 @@ jobs:
           bun-version: 1.3.14
 
       - name: Install dependencies
+        timeout-minutes: 5
         run: bun install --frozen-lockfile
 
       - name: Run deterministic checks
+        timeout-minutes: 10
         run: bun run check
 
       - name: Rebuild release candidate
+        timeout-minutes: 2
         run: bun pm pack --destination .
 
       - name: Report release evidence readiness without publishing
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
@@ -78,12 +86,18 @@ jobs:
     needs: [decide, verify-main-and-tag]
     if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    concurrency:
+      group: release-publication
+      cancel-in-progress: false
     permissions:
       contents: write
       id-token: write
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -93,6 +107,7 @@ jobs:
           package-manager-cache: false
 
       - name: Set up npm trusted publishing support
+        timeout-minutes: 5
         run: |
           npm install --global npm@11.18.0
           node --version
@@ -104,24 +119,30 @@ jobs:
           bun-version: 1.3.14
 
       - name: Install dependencies
+        timeout-minutes: 5
         run: bun install --frozen-lockfile
 
       - name: Validate release tag and changelog
+        timeout-minutes: 2
         run: bun run release:metadata -- --tag "${{ needs.decide.outputs.tag }}" --notes-file release-notes.md
 
       - name: Run checks
+        timeout-minutes: 10
         run: bun run check
 
       - name: Run pinned live OpenCode smoke
+        timeout-minutes: 5
         run: bun run smoke:live
 
       - name: Prepare package
+        timeout-minutes: 2
         shell: bash
         run: |
           set -euo pipefail
           bun pm pack --destination .
 
-      - name: Verify exact VERIFIED V2 artifact decision and fresh canary
+      - name: Verify independently regraded qualification bundle and fresh canary
+        timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
@@ -134,36 +155,8 @@ jobs:
             --canary "evals/canary/${version}.json"
           shasum -a 256 "$tarball" > "${tarball}.sha256"
 
-      - name: Publish to npm
-        shell: bash
-        run: |
-          set -euo pipefail
-          package_name="$(node -p "require('./package.json').name")"
-          package_version="$(node -p "require('./package.json').version")"
-          tarball="$(ls opencode-plugin-flow-*.tgz)"
-          local_integrity="$(node --input-type=module -e '
-            import { createHash } from "node:crypto";
-            import { readFileSync } from "node:fs";
-            process.stdout.write("sha512-" + createHash("sha512").update(readFileSync(process.argv[1])).digest("base64"));
-          ' "$tarball")"
-          registry_error_file="$(mktemp)"
-
-          if published_integrity="$(npm view "${package_name}@${package_version}" dist.integrity 2>"$registry_error_file")"; then
-            if [[ "$published_integrity" != "$local_integrity" ]]; then
-              echo "::error::npm already contains ${package_name}@${package_version} with different tarball integrity."
-              exit 1
-            fi
-            echo "npm already contains the exact ${package_name}@${package_version} tarball; skipping publish."
-          else
-            registry_error="$(<"$registry_error_file")"
-            if [[ "$registry_error" != *"E404"* && "$registry_error" != *"No match found"* ]]; then
-              printf '%s\n' "$registry_error" >&2
-              exit 1
-            fi
-            npm publish "$tarball" --access public
-          fi
-
-      - name: Publish GitHub release assets
+      - name: Prepare exact GitHub release draft
+        timeout-minutes: 15
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -171,34 +164,35 @@ jobs:
           set -euo pipefail
           tag="${{ needs.decide.outputs.tag }}"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
-          release_query_error_file="$(mktemp)"
+          bun run scripts/release-publish.ts github-prepare \
+            --tag "$tag" \
+            --commit "${GITHUB_SHA}" \
+            --notes release-notes.md \
+            --asset "$tarball" \
+            --asset "${tarball}.sha256"
 
-          retry_idempotent() {
-            local attempt=1
-            local maximum_attempts=5
-            local retry_delay_seconds
+      - name: Publish to npm after a current-main proof
+        timeout-minutes: 10
+        shell: bash
+        run: |
+          set -euo pipefail
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
+          bun run scripts/release-publish.ts npm \
+            --artifact "$tarball" \
+            --tag "${{ needs.decide.outputs.tag }}"
 
-            until "$@"; do
-              if (( attempt >= maximum_attempts )); then
-                return 1
-              fi
-              retry_delay_seconds=$((attempt * 15))
-              echo "Retrying idempotent GitHub release operation in ${retry_delay_seconds}s (attempt $((attempt + 1))/${maximum_attempts})."
-              sleep "$retry_delay_seconds"
-              attempt=$((attempt + 1))
-            done
-          }
-
-          if gh release view "$tag" >/dev/null 2>"$release_query_error_file"; then
-            retry_idempotent gh release edit "$tag" --title "$tag" --notes-file release-notes.md
-          else
-            release_query_error="$(<"$release_query_error_file")"
-            if [[ "$release_query_error" != *"release not found"* && "$release_query_error" != *"HTTP 404"* ]]; then
-              printf '%s\n' "$release_query_error" >&2
-              exit 1
-            fi
-            retry_idempotent gh release create "$tag" --title "$tag" --notes-file release-notes.md --target "${GITHUB_SHA}"
-          fi
-
-          retry_idempotent gh release upload "$tag" "$tarball" --clobber
-          retry_idempotent gh release upload "$tag" "${tarball}.sha256" --clobber
+      - name: Publish the exact GitHub release draft
+        timeout-minutes: 15
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ needs.decide.outputs.tag }}"
+          tarball="$(ls opencode-plugin-flow-*.tgz)"
+          bun run scripts/release-publish.ts github-publish \
+            --tag "$tag" \
+            --commit "${GITHUB_SHA}" \
+            --notes release-notes.md \
+            --asset "$tarball" \
+            --asset "${tarball}.sha256"
