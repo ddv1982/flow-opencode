@@ -1,0 +1,79 @@
+{
+	"name": "opencode-plugin-flow",
+	"version": "8.2.0",
+	"description": "Small durable planning, validation, and review workflow for OpenCode",
+	"type": "module",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ddv1982/flow-opencode.git"
+	},
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist/index.js",
+		"dist/index.js.map",
+		"dist/index.d.ts",
+		"dist/platform/opencode/plugin.d.ts",
+		"dist/platform/opencode/sdk.d.ts",
+		"LICENSE",
+		"README.md",
+		"CHANGELOG.md"
+	],
+	"scripts": {
+		"build": "bun run clean && bun run build:plugin && bun run build:types",
+		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --sourcemap=external ./src/index.ts",
+		"build:types": "tsc -p tsconfig.types.json && bun run scripts/prune-dist-declarations.ts",
+		"clean": "bun run scripts/clean-dist.ts",
+		"eval": "bun run evals/run.ts",
+		"eval:smoke": "bun run evals/run.ts -- --repeat 1",
+		"eval:canary": "bun run scripts/eval-canary.ts",
+		"benchmark": "bun run evals/benchmark-run.ts",
+		"lint": "bunx biome check biome.json src tests scripts evals --files-ignore-unknown=true --vcs-use-ignore-file=true",
+		"release:metadata": "bun run scripts/release-metadata.ts",
+		"package:smoke": "bun test tests/package-smoke.test.ts",
+		"qualify": "bun run scripts/qualify-release.ts",
+		"replay": "bun run evals/replay-run.ts",
+		"triage": "bun run scripts/triage-report.ts",
+		"release:monitor": "node scripts/release-monitor.mjs",
+		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
+		"test": "bun test tests",
+		"typecheck": "tsc --noEmit",
+		"check": "bun run typecheck && bun run lint && bun run release:metadata && bun run build && bun run test"
+	},
+	"keywords": [
+		"opencode",
+		"plugin",
+		"workflow",
+		"planning",
+		"execution"
+	],
+	"author": "Douwe de Vries",
+	"license": "MIT",
+	"packageManager": "bun@1.3.14",
+	"engines": {
+		"node": ">=24"
+	},
+	"peerDependencies": {
+		"@opencode-ai/plugin": ">=1.18.3 <2"
+	},
+	"dependencies": {
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.10",
+		"@opencode-ai/plugin": "1.18.6",
+		"@types/bun": "1.4.0",
+		"@types/node": "26.2.0",
+		"typescript": "7.0.2"
+	},
+	"overrides": {
+		"@types/node": "26.2.0"
+	}
+}
