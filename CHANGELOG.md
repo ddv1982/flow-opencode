@@ -2,6 +2,31 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.2.0] - 2026-08-31
+
+Reviewer selection is now native plugin configuration, and Flow reports enough
+derived evidence for a bounded delivery handoff.
+
+- OpenCode plugin tuple options can select the reviewer model and step budget.
+  Flow resolves the selection once per process and reports it in `/flow-status`.
+  Environment variables remain fallback configuration.
+- Every accepted close returns a deterministic, versioned delivery summary with
+  feature attempts, outcomes, terminal findings, changed-artifact declarations,
+  and tiered assurance. The handoff grants no external action authority.
+- A new quickstart and structured external pilot cover installation, reviewer
+  selection, first-run checks, recovery, and feedback without telemetry.
+- Report-only evals now measure repository gate discovery and task-specific risk
+  questions. Eval host configuration uses the same reviewer tuple as production,
+  and release notes derive their provider evidence from retained artifacts.
+- **Session v5 schema:** unchanged. Runtime tools, commands, guides, and agents
+  keep their existing names and inputs.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.2.0 --global --force
+```
+
 ## [8.1.3] - 2026-08-28
 
 Release claims now come from retained evidence instead of trusted summaries.
