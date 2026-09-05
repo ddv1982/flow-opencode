@@ -17,7 +17,12 @@
 
 import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type {
+	AttemptFailure,
+	DurableFailureOrigin,
+} from "../evals/failure-origin.js";
 import type { CompletionHonesty, ReviewerActivity } from "../evals/metrics.js";
+import type { CampaignCompletion } from "../evals/report.js";
 
 type Run = {
 	scenario?: string;
@@ -39,6 +44,7 @@ type Run = {
 	durationMs?: number;
 	costUsd?: number | null;
 	error?: string;
+	failure?: AttemptFailure<DurableFailureOrigin>;
 };
 
 type Report = {
@@ -46,6 +52,7 @@ type Report = {
 	opencodeVersion?: string;
 	recordedAt?: string;
 	results?: readonly Run[];
+	completion?: Pick<CampaignCompletion, "status" | "cause">;
 };
 
 type PairContext = Readonly<{ attempts: number; escalations: number }>;
@@ -77,13 +84,24 @@ function reasons(
 			why: `${run.reviewer?.unsubmitted} review assignment(s) never submitted`,
 		});
 	}
-	if (run.error) {
+	if (run.failure) {
+		found.push({
+			weight: 50,
+			why: `${run.failure.origin} failure (${run.failure.code}): ${run.failure.detail.split("\n")[0]}`,
+		});
+	} else if (run.error) {
 		found.push({
 			weight: 50,
 			why: `aborted mid-flight: ${run.error.split("\n")[0]}`,
 		});
 	}
-	if (run.passed === false && !run.environment && !run.unscored && !run.error) {
+	if (
+		run.passed === false &&
+		!run.environment &&
+		!run.unscored &&
+		!run.error &&
+		!run.failure
+	) {
 		found.push({
 			weight: 40,
 			why: `wrong durable outcome: ${(run.issues ?? []).join("; ") || "no issue recorded"}`,
@@ -141,6 +159,7 @@ function label(run: Run): string {
 }
 
 function verdict(run: Run): string {
+	if (run.failure) return run.failure.origin.toUpperCase();
 	if (run.environment) return "ENV";
 	if (run.error) return "ABORT";
 	if (run.unscored) return "ASKED";
@@ -180,6 +199,14 @@ function detail(run: Run): string {
 		`  final report:`,
 		indent(run.finalText ?? ""),
 	];
+	if (run.failure)
+		lines.push(
+			"",
+			"  failure:",
+			indent(
+				`${run.failure.origin} / ${run.failure.code}: ${run.failure.detail}`,
+			),
+		);
 	const reviewer = run.reviewer;
 	if (reviewer && reviewer.assignments > 0) {
 		lines.push(
@@ -266,6 +293,10 @@ async function main(): Promise<void> {
 	console.log(
 		`${reportPath}\nFlow ${report.flowVersion ?? "?"} on OpenCode ${report.opencodeVersion ?? "?"}, recorded ${report.recordedAt ?? "?"}\n`,
 	);
+	if (report.completion)
+		console.log(
+			`Campaign: ${report.completion.status} (${report.completion.cause}).${report.completion.status === "stopped" ? " Not release qualification; counts cover retained attempts only." : ""}\n`,
+		);
 
 	if (only !== null) {
 		const matched = (report.results ?? []).filter(
@@ -282,7 +313,9 @@ async function main(): Promise<void> {
 	const { ranked, quiet } = triage(report);
 	if (ranked.length === 0) {
 		console.log(
-			`Nothing flagged across ${quiet.length} run(s). That is a finding worth one spot check: read one at random with \`--run <scenario>\`, because a suite that never flags anything and a suite that measures nothing look the same from here.`,
+			report.completion?.status === "stopped"
+				? `No per-run flags in ${quiet.length} retained run(s); the campaign itself is stopped.`
+				: `Nothing flagged across ${quiet.length} run(s). That is a finding worth one spot check: read one at random with \`--run <scenario>\`, because a suite that never flags anything and a suite that measures nothing look the same from here.`,
 		);
 		return;
 	}

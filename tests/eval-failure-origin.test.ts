@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { CampaignCancelled } from "../evals/campaign-stop.js";
 import {
 	attemptFailure,
 	EvaluationPersistenceError,
@@ -14,6 +15,28 @@ import {
 } from "../evals/failure-origin.js";
 
 describe("eval failure origins", () => {
+	test("preserves operator cancellation through phase wrappers", async () => {
+		const reason = new CampaignCancelled(143);
+		await expect(
+			evaluationPhase("host", "command-aborted", true, async () => {
+				throw reason;
+			}),
+		).rejects.toBe(reason);
+	});
+
+	test("cleanup failure takes precedence over operator cancellation", async () => {
+		const cleanup = new EvaluationPersistenceError("credentials", "disk full");
+		await expect(
+			preservePrimaryFailure(
+				async () => {
+					throw new CampaignCancelled(130);
+				},
+				async () => {
+					throw cleanup;
+				},
+			),
+		).rejects.toBe(cleanup);
+	});
 	test("turns every grader throw into a non-retryable evaluator failure", () => {
 		for (const thrown of [new Error("grader exploded"), "grader exploded"]) {
 			const evaluated = evaluateScenario(

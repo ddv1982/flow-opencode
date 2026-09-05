@@ -18,6 +18,7 @@ import {
 	type FlowPromptSurfaceName,
 } from "../src/prompt-surfaces.js";
 import { type BunToolchain, currentBunToolchain } from "./bun-toolchain.js";
+import { CampaignCancelled, withCampaignSignals } from "./campaign-stop.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import {
 	buildCassette,
@@ -116,7 +117,7 @@ import type {
 	InstructionDelivery,
 	ModelIdentity,
 } from "./report.js";
-import { campaignPlanSha256 } from "./report.js";
+import { campaignPlanSha256, requiresBudgetStop } from "./report.js";
 import { createReportStore } from "./report-store.js";
 import { SCENARIOS } from "./scenarios.js";
 
@@ -707,7 +708,9 @@ async function preflight(
 	opencodeVersion: string,
 	models: readonly string[],
 	toolchain: BunToolchain,
+	signal: AbortSignal,
 ): Promise<void> {
+	signal.throwIfAborted();
 	process.stdout.write("- preflight: resolving model ids ... ");
 	let host: EvalHost | null = null;
 	let fatal: string | null = null;
@@ -717,6 +720,7 @@ async function preflight(
 			packageCache,
 			opencodeVersion,
 			files: { "package.json": '{\n  "name": "preflight"\n}\n' },
+			signal,
 		});
 		const catalog = new Set(await host.catalogModels());
 		const missing = models.filter((model) => !catalog.has(model));
@@ -730,6 +734,7 @@ async function preflight(
 			// at a time.
 			const rejected: string[] = [];
 			for (const model of models) {
+				signal.throwIfAborted();
 				process.stdout.write(`- preflight: probing ${model} ... `);
 				const failure = await host.probeModel(model);
 				console.log(failure ? `REJECTED (${failure})` : "OK");
@@ -744,6 +749,7 @@ async function preflight(
 			}
 		}
 	} catch (error) {
+		if (error instanceof CampaignCancelled || signal.aborted) throw error;
 		// Losing the probe host is not evidence about the models, so it must not
 		// block a run that may well work. An actual rejection above is different,
 		// and is fatal.
@@ -754,15 +760,17 @@ async function preflight(
 		await host?.stop();
 	}
 	if (fatal) {
-		console.error(`\n${fatal}`);
-		process.exit(2);
+		throw new Error(fatal);
 	}
 }
 
-async function main(): Promise<void> {
-	const { models, scenarios, sampling, concurrency } = parseArgs(
-		process.argv.slice(2),
-	);
+export async function runCampaign(
+	signal: AbortSignal,
+	args = process.argv.slice(2),
+	repositoryRoot = join(import.meta.dir, ".."),
+	beginFinalization: () => void = () => {},
+): Promise<number> {
+	const { models, scenarios, sampling, concurrency } = parseArgs(args);
 	const selected =
 		sampling.kind === "release"
 			? releaseScenarios()
@@ -783,7 +791,6 @@ async function main(): Promise<void> {
 		process.exit(2);
 	}
 
-	const repositoryRoot = join(import.meta.dir, "..");
 	if (sampling.kind === "release") {
 		assertReleaseHost({
 			platform: normalizeEvidencePlatform(process.platform),
@@ -842,7 +849,9 @@ async function main(): Promise<void> {
 	const cassettes: Cassette[] = [];
 	const hostPlatform = normalizeEvidencePlatform(process.platform);
 	try {
+		signal.throwIfAborted();
 		const tarball = await packPlugin(repositoryRoot, packDir, toolchain);
+		signal.throwIfAborted();
 		const artifact = await inspectArtifact({
 			repositoryRoot,
 			tarballPath: tarball,
@@ -883,6 +892,7 @@ async function main(): Promise<void> {
 			opencodeVersion,
 			[...new Set([...models, ...(reviewerModel ? [reviewerModel] : [])])],
 			toolchain,
+			signal,
 		);
 		const persistV2Attempt = async (
 			result: RunResult,
@@ -971,14 +981,17 @@ async function main(): Promise<void> {
 			const started = Date.now();
 			let host: EvalHost | null = null;
 			let observedOutcome: Outcome | null = null;
+			let stepFailure: AttemptFailure<DurableFailureOrigin> | null = null;
 			return preservePrimaryFailure(
 				async () => {
 					try {
+						signal.throwIfAborted();
 						host = await EvalHost.start({
 							toolchain,
 							packageCache,
 							opencodeVersion,
 							files: scenario.files,
+							signal,
 							...(reviewer.pluginOptions
 								? { reviewer: reviewer.pluginOptions }
 								: {}),
@@ -993,9 +1006,9 @@ async function main(): Promise<void> {
 						// calls, and those are the only evidence of how far the model got.
 						// Throwing here would discard them and report a run of zeroes, so
 						// the failure is remembered and the outcome collected regardless.
-						let stepFailure: AttemptFailure<DurableFailureOrigin> | null = null;
 						const escalatedSteps: number[] = [];
 						for (const [index, step] of scenario.steps.entries()) {
+							signal.throwIfAborted();
 							try {
 								if (step.freshSession) {
 									sessionIds.push(
@@ -1036,6 +1049,7 @@ async function main(): Promise<void> {
 									if (index === scenario.steps.length - 1) break;
 								}
 							} catch (error) {
+								if (error instanceof CampaignCancelled) throw error;
 								stepFailure = evaluatorFailure(error, "command-aborted");
 								break;
 							}
@@ -1044,9 +1058,17 @@ async function main(): Promise<void> {
 							"evaluator",
 							"outcome-collection-threw",
 							false,
-							() => activeHost.outcome(sessionIds, Date.now() - started),
+							() =>
+								activeHost.outcome(
+									sessionIds,
+									Date.now() - started,
+									stepFailure ? AbortSignal.timeout(5_000) : signal,
+								),
 						);
 						observedOutcome = outcome;
+						// An interrupted attempt is not a measured product result. Previously
+						// committed attempts remain in the stopped campaign's report.
+						if (!stepFailure && !outcome.providerError) signal.throwIfAborted();
 						const cell = campaignCells[job.slot];
 						if (!cell?.managerModel)
 							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
@@ -1247,10 +1269,14 @@ async function main(): Promise<void> {
 						);
 						return { slot: job.slot, result, cassette };
 					} catch (error) {
+						if (error instanceof CampaignCancelled) throw error;
 						if (error instanceof EvaluationPersistenceError) throw error;
+						// start() owns partial-host cleanup. A different error escaping
+						// cancellation means cleanup is not reliable enough to finalize.
+						if (!host && signal.aborted) throw error;
 						const message =
 							error instanceof Error ? error.message : String(error);
-						const failure = evaluatorFailure(error);
+						const failure = stepFailure ?? evaluatorFailure(error);
 						const cell = campaignCells[job.slot];
 						if (!cell?.managerModel)
 							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
@@ -1478,6 +1504,7 @@ async function main(): Promise<void> {
 				sampling.kind === "release"
 					? releaseShouldStop()
 					: isEvaluatorFailure(entry.result.failure?.origin),
+			signal,
 		);
 		for (const entry of recorded.sort(
 			(left, right) => left.slot - right.slot,
@@ -1485,7 +1512,7 @@ async function main(): Promise<void> {
 			results.push(entry.result);
 			if (entry.cassette) cassettes.push(entry.cassette);
 		}
-		if (sampling.kind === "release") {
+		if (sampling.kind === "release" && !signal.aborted) {
 			const primaryCount = v2Plan.cells.filter(
 				(cell) => cell.schedule === "primary",
 			).length;
@@ -1507,6 +1534,7 @@ async function main(): Promise<void> {
 					concurrency,
 					runAttempt,
 					releaseShouldStop,
+					signal,
 				);
 				for (const entry of reserveRecorded.sort(
 					(left, right) => left.slot - right.slot,
@@ -1516,15 +1544,21 @@ async function main(): Promise<void> {
 				}
 			}
 		}
+	} catch (error) {
+		if (!(error instanceof CampaignCancelled)) throw error;
 	} finally {
 		await rm(packDir, { recursive: true, force: true });
 	}
+	// No hosts or paid work remain. Freeze the stop decision before immutable
+	// report publication; later signals let output drain, never contradict its bytes.
+	beginFinalization();
 	const reserveState = deriveEnvironmentReserveState(v2Plan, v2Attempts);
 	const primaryCells = v2Plan.cells.filter(
 		(cell) => cell.schedule === "primary",
 	);
 	const attemptedCellIds = new Set(v2Attempts.map((attempt) => attempt.cellId));
 	const v2Complete =
+		!signal.aborted &&
 		primaryCells.every((cell) => attemptedCellIds.has(cell.cellId)) &&
 		reserveState.activatedReserveCellIds.every((cellId) =>
 			attemptedCellIds.has(cellId),
@@ -1545,13 +1579,15 @@ async function main(): Promise<void> {
 		status: v2Complete ? "complete" : "stopped",
 		cause: v2Complete
 			? "fixed-target"
-			: releaseStopCause
-				? releaseStopCause
-				: stoppedOrigin
-					? stoppedOrigin
-					: results.some((result) => result.unscored)
-						? "operator"
-						: "evaluator",
+			: signal.aborted
+				? "operator"
+				: releaseStopCause
+					? releaseStopCause
+					: stoppedOrigin
+						? stoppedOrigin
+						: results.some((result) => result.unscored)
+							? "operator"
+							: "evaluator",
 		startedAt: campaignStartedAt,
 		finishedAt: v2FinishedAt,
 		activatedReserveCellIds: [...reserveState.activatedReserveCellIds],
@@ -1568,6 +1604,10 @@ async function main(): Promise<void> {
 			),
 		},
 	};
+	if (requiresBudgetStop(v2Plan.budget, v2Completion.observed)) {
+		v2Completion.status = "stopped";
+		v2Completion.cause = "budget";
+	}
 	await persistEvaluation("finalize", () =>
 		reportStore.finalize({
 			reportId: `flow-v2-${stamp}`,
@@ -1577,6 +1617,11 @@ async function main(): Promise<void> {
 	);
 	const v2ReportPath = join(v2Directory, "report.json");
 	console.log(`V2 report: ${v2ReportPath}`);
+	if (signal.aborted) {
+		console.log(
+			"OPERATOR STOP: partial campaign; interrupted attempts are not scored or included in usage totals. Release qualification is incomplete.",
+		);
+	}
 
 	console.log(`\n${formatTable(results)}\n`);
 	const scored = results.filter(
@@ -1718,6 +1763,7 @@ async function main(): Promise<void> {
 			`${JSON.stringify(
 				{
 					flowVersion: packageJson.version,
+					completion: v2Completion,
 					opencodeVersion,
 					recordedAt: new Date().toISOString(),
 					promptFootprint: footprint,
@@ -1787,7 +1833,22 @@ async function main(): Promise<void> {
 	// Status follows the scored runs, matching the pass rate above. Counting the
 	// excluded ones here is what made a run that printed "6/6 passed" exit 1 after
 	// one attempt lost the network. A pass with nothing scored is not a pass.
-	process.exit(scored.length > 0 && passed === scored.length ? 0 : 1);
+	return signal.aborted
+		? (signal.reason as CampaignCancelled).exitCode
+		: v2Completion.status === "complete" &&
+				scored.length > 0 &&
+				passed === scored.length
+			? 0
+			: 1;
 }
 
-if (import.meta.main) await main();
+if (import.meta.main) {
+	try {
+		process.exitCode = await withCampaignSignals((signal, beginFinalization) =>
+			runCampaign(signal, undefined, undefined, beginFinalization),
+		);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		process.exitCode = 2;
+	}
+}

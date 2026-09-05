@@ -1,8 +1,6 @@
 # Release qualification and cadence
 
-Two policies live here: the numbers a release has to clear, and how often releases
-happen. Both exist because the previous answer to each was a judgment call made
-once, by one person, from one model's output.
+This page owns release thresholds, candidate freezing, and publication order.
 
 ## The qualification bar
 
@@ -53,16 +51,12 @@ Silent passes stay ungated. Three same-change baselines moved from 20/22 to 19/2
 22/22, so the level did not track reviewer value. `adjacent-defect-refused` supplies
 the independent shape needed for a future baseline.
 
-Token and cost totals are provider-shaped. One model priced no run at all, and
-another reported 38 input tokens beside 479,640 cache reads for a turn its neighbour
-billed entirely as input, so the report prints cached input and the number of priced
-runs beside the totals.
+Usage is provider-shaped and may be partial after failure or cancellation, not a
+billing total. See [eval reporting limits](../evals/README.md#stopping-a-campaign).
 
 ## Cadence
 
-Flow's audience cannot absorb a hard cutover — there is no migration layer, and an
-active session must be finished or closed before a version change in either
-direction. The cadence follows from that:
+Finish or close active sessions before changing Flow versions in either direction.
 
 - **Freeze on the public surface** while the guarantees are being measured: tools,
   commands, guides, agents, and the Session v5 shape. Additive optional fields are
@@ -80,8 +74,20 @@ direction. The cadence follows from that:
 
 ## Running it
 
+Finish code, dependency, version and changelog changes first. Pass frozen install,
+`bun run check`, `bun run replay`, audit, live smoke and CI before paid qualification.
+Freeze packed contents and evaluator inputs, then run the full two-provider matrix
+on the canonical Linux host. Run a fresh canary against its exact `artifact.tgz`,
+seal/regrade the bundle, and commit only evidence without changing measured inputs.
+Recheck final main CI and exact artifact identity before tagging `v<package-version>`.
+
+For 8.2.1, strict exact-artifact qualification remains in force. A dev-only manifest
+change still changes the packed artifact; evidence reuse needs a separate policy
+decision. Stop for fixes rather than silently restarting paid runs. Operator or
+budget-stopped campaigns cannot qualify, even if retained scores meet the target.
+
 ```bash
-bun run eval -- --release --model <anthropic-id> --model <openai-id>
+bun run eval -- --release --model openai/gpt-5.6-sol --model xai/grok-4.6
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.
 bun run eval:canary -- record <record-options>
@@ -89,11 +95,8 @@ bun run qualify -- --campaign-dir <campaign-dir> \
   --canary evals/canary/<version>.json
 ```
 
-Only the full matrix qualifies a release. The cheaper tiers — a free replay of
-recorded decisions, a one-model smoke run — answer questions during work and are
-described with their prices in
-[../evals/README.md](../evals/README.md#three-tiers-three-prices).
-`bun run triage` says which runs in a report are worth reading.
+Use the [cheaper tiers](../evals/README.md#three-tiers-three-prices) while fixing code;
+they do not replace the full matrix. `bun run triage` identifies runs worth reading.
 
 `bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
 ordinary OpenCode on hidden-graded tasks. It is not a qualification input.

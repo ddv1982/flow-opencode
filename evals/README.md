@@ -52,31 +52,52 @@ The runner preflights the reviewer model, writes both values through native
 plugin tuple configuration, and records the same selection in provenance.
 Release sampling rejects reviewer overrides.
 
-Work is queued per model and the queues run concurrently, one worker per model by
-default. Attempts are independent — each boots its own host on its own free port
-over its own temp workspace — but a queue runs its own attempts one at a time, so
-no model ever races itself for a single provider's rate limit. Release mode has
-76 primary targets and one predeclared environment reserve per provider and case,
-for a bounded maximum of 92 attempts. Only a retained retryable host or provider
-failure activates its same-stratum reserve; product failures never do. Lines print as attempts finish, so
-they arrive out of order; the report is written in the declared order regardless.
-`--concurrency 1` restores the sequential run, which is easier to read when you
-are debugging a single failure, and four workers is the ceiling however many
-models you name — each attempt is a whole host compiling a real project, and past
-that the machine's own contention starts being credited back to the deadline as if
-it were machine sleep.
+Ordinary runs use one sequential queue per model, with up to four queues in flight.
+Release mode is strictly sequential (`--concurrency 1`): 76 primary targets and one
+environment reserve per provider/case, at most 92 attempts. Only retained retryable
+host/provider failures activate reserves, never product failures. Results are
+persisted in declared order even when ordinary queues finish out of order.
 
 Each run packs the working tree, boots a throwaway OpenCode host over a fresh
 git fixture, drives the real slash commands, then reads `.flow/session.json` and
 `.flow/history/`. Reports land in `evals/results/` (git-ignored).
 
-Every session the run touched is read, including the subtask sessions a reviewer
-runs in, and their transcripts are merged in message-creation order. Reading only
-the sessions the harness itself created left the entire independent review
-invisible: no recorded report contained a single `flow_feature_complete` call, the
-check for submissions the runtime rejected could never fire, and the reviewer's
-tokens were not counted in any total. Token and cost figures from before this are
-therefore lower than the same run would report now.
+Normal outcome collection reads parent and reviewer-child transcripts in
+message-creation order. Failure/cancellation can retain less, as described below.
+
+### Stopping a campaign
+
+On POSIX hosts, use Ctrl+C (`SIGINT`) or `SIGTERM` on the evaluator process. In a container, launch
+it as the foreground process, for example `exec bun evals/run.ts --release ...`,
+so signals reach it; allow shutdown grace (for example `docker stop --timeout 180
+<container>`), and wait for exit before removing the container or scratch files.
+
+An accepted signal stops new probes, steps, primary jobs and reserves. Active host
+work is aborted, the process tree is terminated, refreshed credentials are synced
+back, then scratch is removed. Cleanup failures propagate and preserve recoverable
+scratch rather than claiming successful finalization. Never share that scratch:
+it can contain credentials.
+
+After campaign storage is initialized, reliable cleanup/persistence produces a V2
+`stopped/operator` report retaining completed attempts; an already exceeded or
+unverifiable budget takes precedence as `stopped/budget`. Interrupted work is not
+invented as a product pass/failure. Known provider errors remain non-product failure
+rows. Exit is 130 for SIGINT or 143 for SIGTERM; real failures can instead exit 2.
+Legacy JSON includes the same completion, and triage displays it.
+
+Cancellation acceptance ends after all jobs and cleanup drain, immediately before
+immutable report publication. Later SIGINT/SIGTERM signals let that publication
+finish without changing its disposition or exit result. No model work occurs in
+that phase. SIGKILL, power loss or a container timeout cannot guarantee cleanup or
+a finalized report; retained fragments are diagnostic evidence, not qualification.
+
+Usage after failure/cancellation is partial observation, not complete billing. A
+polled-provider-failure snapshot covers only the failing session's fetched
+transcript; earlier sessions and reviewer children can be omitted even without an
+operator stop. Zero reported tokens/cost does not prove zero spend. Check provider
+usage independently. Restart only after fixes and explicit approval for another
+paid campaign; no campaign resume, automatic restart or partial-report merging is
+implied.
 
 ## Scenarios
 
@@ -159,8 +180,8 @@ whole result.
 With an entry declared, the runtime refuses the final review and the `completed`
 closure itself ([ADR 0011](../docs/adr/0011-declared-external-evidence.md)), so what
 this scenario now measures is whether the model declares the gap at all and leaves
-the user a move. It ships ungated in `scripts/qualify-release.ts` until it has a
-recorded baseline.
+the user a move. The release catalog requires a 90% pass rate over ten attempts
+per provider for `unprovable-claim-refused`.
 
 `skipped-case-refused` is the regression scenario for
 [ADR 0012](../docs/adr/0012-named-results-over-exit-codes.md), and it differs from
@@ -473,12 +494,14 @@ distinction that matters: one pass in six and six in six are different findings.
 
 ## Cost
 
-A full pass is five scenarios of real agentic work, one of them two commands
-long. Expect a handful of dollars
-per model on a flagship model, and use `--scenario` while iterating.
+Release qualification schedules 76 primary attempts across eight scenarios and
+two providers, plus at most 16 environment reserves. Ordinary campaign size depends
+on the selected scenarios, models and repeats. Use `--scenario` while iterating;
+cost depends on model pricing and the work performed, not just scenario count.
 
 Cost is whatever the provider reports, and a provider that prices nothing reports
 zero rather than omitting the field: every OpenAI run measured here reported
 `cost: 0` on real token use. A zero total against non-zero output tokens is
 therefore read as unknown and printed as `cost not reported by provider` — an
-unknown spend is not a free one. Token counts are always real.
+unknown spend is not a free one. Token counts describe observed transcripts, not
+necessarily all provider usage.

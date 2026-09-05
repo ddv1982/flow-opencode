@@ -335,6 +335,20 @@ export type AnalysisPolicy = z.infer<typeof AnalysisPolicySchema>;
 export type CampaignPlan = z.infer<typeof CampaignPlanSchema>;
 export type AttemptRecordV2 = z.infer<typeof AttemptRecordSchema>;
 export type CampaignCompletion = z.infer<typeof CampaignCompletionSchema>;
+
+export function requiresBudgetStop(
+	budget: CampaignPlan["budget"],
+	observed: CampaignCompletion["observed"],
+): boolean {
+	return (
+		observed.outputTokens > budget.maxOutputTokens ||
+		observed.wallClockMs > budget.maxWallClockMs ||
+		(budget.maxUsd !== null &&
+			(observed.costUsd === null
+				? budget.unknownCostPolicy === "stop"
+				: observed.costUsd > budget.maxUsd))
+	);
+}
 export type EvalReportV2 = z.infer<typeof EvalReportV2Schema>;
 export type ValidatedReport = DeepReadonly<
 	z.infer<typeof ValidatedReportSchema>
@@ -782,19 +796,10 @@ function semanticIssues(
 			}
 		}
 	}
-	const exceedsKnownBudget =
-		report.completion.observed.outputTokens >
-			report.plan.budget.maxOutputTokens ||
-		report.completion.observed.wallClockMs >
-			report.plan.budget.maxWallClockMs ||
-		(report.plan.budget.maxUsd !== null &&
-			report.completion.observed.costUsd !== null &&
-			report.completion.observed.costUsd > report.plan.budget.maxUsd);
-	const unknownCostRequiresStop =
-		report.plan.budget.maxUsd !== null &&
-		report.completion.observed.costUsd === null &&
-		report.plan.budget.unknownCostPolicy === "stop";
-	const budgetRequiresStop = exceedsKnownBudget || unknownCostRequiresStop;
+	const budgetRequiresStop = requiresBudgetStop(
+		report.plan.budget,
+		report.completion.observed,
+	);
 	if (
 		budgetRequiresStop &&
 		(report.completion.status !== "stopped" ||
@@ -940,6 +945,7 @@ function semanticIssues(
 	}
 	if (
 		report.completion.status === "stopped" &&
+		report.completion.cause !== "operator" &&
 		scoredOutcomes >= report.plan.stoppingRule.count &&
 		!(report.completion.cause === "budget" && budgetRequiresStop)
 	) {
