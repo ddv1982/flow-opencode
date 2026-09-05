@@ -29,6 +29,8 @@ afterEach(async () => {
 });
 
 const json = (value: unknown) => Buffer.from(canonicalJson(value));
+const temporaryToolOutput =
+	"/tmp/flow-eval-Vj7Io4/home/.local/share/opencode/tool-output/tool_123.txt";
 function tarball(
 	content = "safe artifact\n",
 	name = "package/readme.txt",
@@ -121,6 +123,138 @@ describe("qualification bundle", () => {
 		expect(read.files).toHaveLength(input().files.length);
 	});
 
+	test("R29-01 preserves temporary HOME transcript and artifact bytes", async () => {
+		const outputRoot = await mkdtemp(join(tmpdir(), "flow-bundle-"));
+		temporary.push(outputRoot);
+		const transcript = json({
+			gradeInput: {
+				schemaVersion: 1,
+				table: `|Path|\n|---|\n|${temporaryToolOutput}|`,
+				messages: [
+					{
+						tool: {
+							path: temporaryToolOutput,
+							error: JSON.stringify({
+								message: `Permission denied reading '${temporaryToolOutput}'`,
+								permission: { patterns: [temporaryToolOutput] },
+							}),
+							escapedError: JSON.stringify({
+								path: temporaryToolOutput,
+							}).replaceAll("/", "\\/"),
+						},
+					},
+				],
+			},
+		});
+		const artifact = tarball(`Tool output: ${temporaryToolOutput}\n`);
+		const fixture = input();
+		const written = await writeQualificationBundle({
+			input: {
+				...fixture,
+				files: fixture.files.map((file) =>
+					file.role === "transcript"
+						? { ...file, bytes: transcript }
+						: file.role === "artifact"
+							? { ...file, bytes: artifact }
+							: file,
+				),
+			},
+			outputRoot,
+		});
+		const read = await readQualificationBundle(written.path);
+		expect(
+			read.files.find(({ ref }) => ref.role === "transcript")?.bytes,
+		).toEqual(transcript);
+		expect(
+			read.files.find(({ ref }) => ref.role === "artifact")?.bytes,
+		).toEqual(artifact);
+	});
+
+	test.each([
+		["transcript", "/home/alice/private.txt"],
+		["transcript", "/Users/alice/private.txt"],
+		["transcript", "C:\\Users\\alice\\private.txt"],
+		["transcript", "/home/.alice/private.txt"],
+		["transcript", "/Users/.alice/private.txt"],
+		["transcript", "C:\\Users\\.alice\\private.txt"],
+		["transcript", "Permission denied reading '/home/alice/private.txt'"],
+		[
+			"transcript",
+			JSON.stringify({ error: { path: "C:\\Users\\alice\\private.txt" } }),
+		],
+		["transcript", "file:///home/alice/private.txt"],
+		["transcript", "file://localhost/Users/alice/private.txt"],
+		["transcript", "//home/alice/private.txt"],
+		["transcript", "Permission denied:\t/home/alice/private.txt"],
+		["transcript", "See **/home/alice/private.txt**"],
+		["transcript", "See __/Users/alice/private.txt__"],
+		["transcript", `${temporaryToolOutput}\nSee **/Users/alice/private.txt**`],
+		[
+			"transcript",
+			JSON.stringify({ path: "/home/alice/private.txt" }).replaceAll(
+				"/",
+				"\\/",
+			),
+		],
+		[
+			"transcript",
+			JSON.stringify({ path: "/Users/alice/private.txt" }).replaceAll(
+				"/",
+				"\\/",
+			),
+		],
+		[
+			"transcript",
+			`${temporaryToolOutput}\n${JSON.stringify({ path: "/home/alice/private.txt" }).replaceAll("/", "\\/")}`,
+		],
+		["artifact", "See **/home/alice/private.txt**"],
+		["transcript", "|Path|\n|---|\n|/home/alice/private.txt|"],
+		["transcript", "|Path|\n|---|\n|/Users/alice/private.txt|"],
+		["artifact", "|Path|\n|---|\n|/home/alice/private.txt|"],
+		["artifact", "|Path|\n|---|\n|/Users/alice/private.txt|"],
+		[
+			"transcript",
+			`|Path|\n|---|\n|${temporaryToolOutput}|\n|/home/alice/private.txt|`,
+		],
+		[
+			"transcript",
+			`|Path|\n|---|\n|${temporaryToolOutput}|\n|/Users/alice/private.txt|`,
+		],
+		[
+			"artifact",
+			`|Path|\n|---|\n|${temporaryToolOutput}|\n|/home/alice/private.txt|`,
+		],
+		[
+			"artifact",
+			`|Path|\n|---|\n|${temporaryToolOutput}|\n|/Users/alice/private.txt|`,
+		],
+		["transcript", `${temporaryToolOutput}\n/home/alice/private.txt`],
+		["artifact", `${temporaryToolOutput}\n/home/alice/private.txt`],
+	])("R29-01 rejects private user paths in %s: %s", async (role, evidence) => {
+		const outputRoot = await mkdtemp(join(tmpdir(), "flow-bundle-"));
+		temporary.push(outputRoot);
+		const fixture = input();
+		await expect(
+			writeQualificationBundle({
+				input: {
+					...fixture,
+					files: fixture.files.map((file) =>
+						file.role === role
+							? {
+									...file,
+									bytes:
+										role === "artifact"
+											? tarball(evidence)
+											: json({ output: evidence }),
+								}
+							: file,
+					),
+				},
+				outputRoot,
+			}),
+		).rejects.toThrow(/absolute user path/i);
+	});
+
 	test("publishes no readable seal after interruption and resumes", async () => {
 		const outputRoot = await mkdtemp(join(tmpdir(), "flow-bundle-"));
 		temporary.push(outputRoot);
@@ -162,7 +296,13 @@ describe("qualification bundle", () => {
 					...unsafe,
 					files: unsafe.files.map((file, index) =>
 						index === 0
-							? { ...file, bytes: json({ sessionId: "ses_rawSecret" }) }
+							? {
+									...file,
+									bytes: json({
+										path: temporaryToolOutput,
+										sessionId: "ses_rawSecret",
+									}),
+								}
 							: file,
 					),
 				},
@@ -195,7 +335,12 @@ describe("qualification bundle", () => {
 					...assignedSecret,
 					files: assignedSecret.files.map((file) =>
 						file.role === "artifact"
-							? { ...file, bytes: tarball("api_key=super-secret-value") }
+							? {
+									...file,
+									bytes: tarball(
+										`${temporaryToolOutput}\napi_key=super-secret-value`,
+									),
+								}
 							: file,
 					),
 				},
