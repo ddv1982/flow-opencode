@@ -248,8 +248,10 @@ manager contract.
   chain.
 - Source identity requires a readable Git worktree and rejects tracked
   submodules explicitly.
-- A timed-out project lock fails closed. Automatic stale-lock stealing is not
-  allowed because ownership cannot be reclaimed without a race.
+- Lock timeout fails closed. Reclamation requires an absent local PID, an
+  exclusive claim, and a matching owner token. Live or unreadable owners are
+  untouched; age grants no ownership. Shared-host or cross-PID-namespace
+  workspaces are unsupported.
 
 ## OpenCode surface
 

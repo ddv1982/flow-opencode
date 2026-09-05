@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import {
 	type CommandResult,
 	convergeGithubRelease,
@@ -209,6 +209,76 @@ describe("npm publication reconciliation", () => {
 });
 
 describe("GitHub release reconciliation", () => {
+	test.each(["missing", "pending", "conflicting", "wrong-size", "exact"])(
+		"preparing a published release with %s assets stays read-only",
+		async (state) => {
+			const fixture = await artifactFixture();
+			try {
+				const input = {
+					repository: "example/repo",
+					token: "test-token",
+					tag: "v1.2.3",
+					commitSha: COMMIT,
+					notes: "exact notes",
+					assets: [fixture.artifactPath],
+					mode: "prepare" as const,
+				};
+				let mutations = 0;
+				const runtime: PublicationRuntime = {
+					fetch: async (_url, init) => {
+						if ((init?.method ?? "GET") !== "GET") mutations += 1;
+						return jsonResponse(200, [
+							{
+								id: 8,
+								tag_name: input.tag,
+								name: input.tag,
+								body: input.notes,
+								target_commitish: COMMIT,
+								draft: false,
+								prerelease: false,
+								assets:
+									state === "missing"
+										? []
+										: [
+												{
+													name: basename(fixture.artifactPath),
+													size:
+														state === "wrong-size"
+															? 0
+															: Buffer.byteLength("exact package bytes"),
+													digest:
+														state === "pending"
+															? null
+															: state === "conflicting"
+																? "sha256:wrong"
+																: `sha256:${fixture.sha256}`,
+												},
+											],
+							},
+						]);
+					},
+					run: async () => {
+						throw new Error("Unexpected command");
+					},
+					sleep: async () => {},
+				};
+				const prepared = convergeGithubRelease(input, runtime);
+				if (state === "exact")
+					await expect(prepared).resolves.toEqual({
+						state: "prepared",
+						releaseId: 8,
+					});
+				else await expect(prepared).rejects.toThrow(/not exact|conflicting/);
+				expect(mutations).toBe(0);
+			} finally {
+				await rm(dirname(fixture.artifactPath), {
+					recursive: true,
+					force: true,
+				});
+			}
+		},
+	);
+
 	test("reconciles an ambiguous draft creation before publishing", async () => {
 		let release:
 			| {
@@ -537,7 +607,7 @@ describe("GitHub release reconciliation", () => {
 		expect(mutations).toBe(0);
 	});
 
-	test("recovers a published release that is missing an exact asset", async () => {
+	test("refuses incomplete preparation but permits explicit published-asset recovery", async () => {
 		const fixture = await artifactFixture();
 		let release = {
 			id: 9,
@@ -578,8 +648,8 @@ describe("GitHub release reconciliation", () => {
 			run: async () => result(0),
 			sleep: async () => {},
 		};
-		expect(
-			await convergeGithubRelease(
+		await expect(
+			convergeGithubRelease(
 				{
 					repository: "owner/repo",
 					token: "token",
@@ -594,7 +664,9 @@ describe("GitHub release reconciliation", () => {
 				},
 				runtime,
 			),
-		).toEqual({ state: "prepared", releaseId: 9 });
+		).rejects.toThrow(
+			"Published GitHub release asset package.tgz is not exact",
+		);
 		expect(mutations).toBe(0);
 		const npmRuntime: PublicationRuntime = {
 			fetch: async () =>
