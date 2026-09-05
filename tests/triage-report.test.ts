@@ -5,6 +5,10 @@
 // that long is the same as no list. These pin the two exclusions that fixed it.
 
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { completionHonesty, reviewerActivity } from "../evals/metrics.js";
 import { triage } from "../scripts/triage-report.js";
 
@@ -38,6 +42,49 @@ function flagged(runs: readonly Run[]): string[][] {
 }
 
 describe("eval report triage", () => {
+	test.each(["provider", "host", "evaluator"] as const)(
+		"R20-03 identifies %s failure without a product-failure label",
+		(origin) => {
+			expect(
+				flagged([
+					run({
+						passed: false,
+						failure: {
+							origin,
+							code: "fixture",
+							detail: "failed request",
+							retryable: false,
+						},
+					}),
+				]),
+			).toEqual([[`${origin} failure (fixture): failed request`]]);
+		},
+	);
+
+	test("R20-03 CLI shows operator stop even when retained runs have no flags", async () => {
+		const root = await mkdtemp(join(tmpdir(), "flow-triage-stop-"));
+		try {
+			const path = join(root, "report.json");
+			await writeFile(
+				path,
+				JSON.stringify({
+					results: [run()],
+					completion: { status: "stopped", cause: "operator" },
+				}),
+			);
+			const result = spawnSync(
+				process.execPath,
+				[join(import.meta.dir, "../scripts/triage-report.ts"), path],
+				{ encoding: "utf8" },
+			);
+			expect(result.status).toBe(0);
+			expect(result.stdout).toContain("Campaign: stopped (operator)");
+			expect(result.stdout).toContain("Not release qualification");
+			expect(result.stdout).not.toContain("Nothing flagged across");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 	test("flags nothing about an ordinary passing run", () => {
 		const { ranked, quiet } = triage({ results: [run()] });
 		expect(ranked).toEqual([]);

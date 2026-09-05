@@ -25,6 +25,7 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
+import { CampaignCancelled } from "./campaign-stop.js";
 import {
 	type AttemptFailure,
 	attemptFailure,
@@ -48,6 +49,32 @@ import {
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const REQUEST_TIMEOUT_MS = 120_000;
+const ABORT_TIMEOUT_MS = 3_000;
+
+function checkCancellation(signal?: AbortSignal): void {
+	signal?.throwIfAborted();
+}
+
+/** Observe even non-cooperative requests, without leaving rejected promises unhandled. */
+async function abortable<T>(
+	signal: AbortSignal | undefined,
+	operation: () => Promise<T>,
+): Promise<T> {
+	if (!signal) return operation();
+	signal.throwIfAborted();
+	let onAbort = () => {};
+	const aborted = new Promise<never>((_resolve, reject) => {
+		onAbort = () => reject(signal.reason);
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+	try {
+		const result = await Promise.race([operation(), aborted]);
+		return result;
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+	}
+}
+
 /** What OpenCode names the error it stamps on a message an abort killed. */
 const ABORT_ERROR_NAME = "MessageAbortedError";
 /**
@@ -113,7 +140,11 @@ export type CommandEnd = "quiet" | "escalated";
 type RequestDelivery =
 	| { readonly kind: "pending" }
 	| { readonly kind: "accepted" }
-	| { readonly kind: "rejected"; readonly message: string };
+	| {
+			readonly kind: "rejected";
+			readonly message: string;
+			readonly error: unknown;
+	  };
 
 type SessionRequestInit = RequestInit & { readonly timeout: false };
 type SessionFetch = (
@@ -153,9 +184,13 @@ function startSessionRequest(input: {
 				if (!cancelled) delivery = { kind: "accepted" };
 			},
 			(error) => {
-				if (error === cancellation) return;
+				if (
+					error === cancellation ||
+					(cancelled && error instanceof Error && error.name === "AbortError")
+				)
+					return;
 				const message = String(error);
-				delivery = { kind: "rejected", message };
+				delivery = { kind: "rejected", message, error };
 				input.onRejected(message);
 			},
 		);
@@ -176,10 +211,37 @@ export async function runSessionRequest(input: {
 	readonly body: unknown;
 	readonly onRejected: (message: string) => void;
 	readonly wait: (request: SessionRequest) => Promise<CommandEnd>;
+	readonly signal?: AbortSignal | undefined;
+	readonly onCancelled?: () => Promise<void>;
+	/**
+	 * Set only when wait itself observes signal. Await it through any pending
+	 * failure cleanup instead of racing it; non-cooperative waits keep the default.
+	 */
+	readonly waitOwnsCancellation?: boolean;
 }): Promise<CommandEnd> {
+	checkCancellation(input.signal);
 	const request = startSessionRequest(input);
 	try {
-		return await input.wait(request);
+		// The production progress wait already observes the signal. Racing it again
+		// would discard a known timeout/wedge while its bounded abort is draining.
+		return await (input.waitOwnsCancellation
+			? input.wait(request)
+			: abortable(input.signal, () => input.wait(request)));
+	} catch (error) {
+		if (input.signal?.aborted && error === input.signal.reason) {
+			// A rejected POST may have landed between progress polls. Cancellation
+			// ends the wait, but cannot erase that already-observed real failure.
+			const delivery = request.state();
+			const primary = delivery.kind === "rejected" ? delivery.error : error;
+			request.cancel();
+			return preservePrimaryFailure<CommandEnd>(
+				() => Promise.reject(primary),
+				async () => {
+					await input.onCancelled?.();
+				},
+			);
+		}
+		throw error;
 	} finally {
 		request.cancel();
 	}
@@ -503,25 +565,27 @@ export async function syncProviderCredentialsBack(
 		let contents: string;
 		try {
 			contents = await readFile(paths.target, "utf8");
-		} catch {
+		} catch (error) {
 			// The child never wrote a credential file (no refresh happened, or the
 			// provider authenticated purely from the env); nothing to carry back.
-			return;
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+			throw error;
 		}
 		try {
-			JSON.parse(contents);
+			if (!isRecord(JSON.parse(contents))) throw new Error("Not an object");
 		} catch {
-			console.error(
-				`eval harness: child auth.json at ${paths.target} did not parse as JSON; leaving the real credential file untouched.`,
+			// Parser diagnostics can quote credentials. Report only the retained path.
+			throw new Error(
+				`Eval host credentials are invalid; retained at ${paths.target}.`,
 			);
-			return;
 		}
 		let current = "";
 		try {
 			current = await readFile(paths.source, "utf8");
-		} catch {
+		} catch (error) {
 			// The real file is gone — the developer logged out mid-run, or there was
 			// never one to copy. The child's own entries are all there is.
+			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
 		}
 		const merged = mergeCredentials(current, contents, paths.snapshot);
 		// Nothing this host rotated, so nothing to publish. Leaving the file alone is
@@ -531,14 +595,15 @@ export async function syncProviderCredentialsBack(
 			await writeFile(tempPath, merged, { mode: 0o600 });
 			await rename(tempPath, paths.source);
 		} catch (error) {
-			// Failing to sync back must not crash the run over a host that already
-			// finished its scenario; it only means the next host risks the same stale
-			// credential this whole mechanism exists to avoid, which is no worse than
-			// before this fix existed.
+			// Preserve scratch on failure: its rotated credential may be the only
+			// usable copy left. stop() must not remove it after a failed publication.
 			console.error(
 				`eval harness: could not sync credentials back to ${paths.source}: ${error instanceof Error ? error.message : String(error)}`,
 			);
-			await rm(tempPath, { force: true });
+			await preservePrimaryFailure(
+				() => Promise.reject(error),
+				() => rm(tempPath, { force: true }),
+			);
 		}
 	});
 }
@@ -656,7 +721,11 @@ function processTreeAlive(child: ChildProcess): boolean {
 	} catch (error) {
 		const code = (error as NodeJS.ErrnoException).code;
 		if (code === "ESRCH") return false;
-		if (code === "EPERM") return !childExited;
+		if (code === "EPERM") {
+			throw new Error(
+				`Could not confirm eval host process tree ${pid} terminated: permission denied.`,
+			);
+		}
 		throw error;
 	}
 }
@@ -676,7 +745,18 @@ export async function terminateChildProcessTree(
 	while (processTreeAlive(child) && Date.now() < gracefulDeadline) {
 		await Bun.sleep(50);
 	}
-	if (processTreeAlive(child)) signalProcessTree(child, "SIGKILL");
+	if (processTreeAlive(child)) {
+		signalProcessTree(child, "SIGKILL");
+		const killedDeadline = Date.now() + 1_000;
+		while (processTreeAlive(child) && Date.now() < killedDeadline) {
+			await Bun.sleep(50);
+		}
+		if (processTreeAlive(child)) {
+			throw new Error(
+				`Could not confirm eval host process tree ${child.pid} terminated after SIGKILL.`,
+			);
+		}
+	}
 	if (child.exitCode === null) {
 		await Promise.race([exited, Bun.sleep(1_000)]);
 	}
@@ -692,14 +772,19 @@ export async function terminateChildProcessTree(
 async function fetchJson(
 	url: string,
 	timeout = REQUEST_TIMEOUT_MS,
+	signal?: AbortSignal,
 ): Promise<unknown> {
-	const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
-	if (!response.ok) {
-		throw new Error(
-			`GET ${url} failed with ${response.status}: ${await response.text()}`,
-		);
-	}
-	return response.json();
+	const deadline = AbortSignal.timeout(timeout);
+	const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+	return abortable(requestSignal, async () => {
+		const response = await fetch(url, { signal: requestSignal });
+		if (!response.ok) {
+			throw new Error(
+				`GET ${url} failed with ${response.status}: ${await response.text()}`,
+			);
+		}
+		return response.json();
+	});
 }
 
 /** `fetchJson` for the requests that drive a session, with the same error rule. */
@@ -708,13 +793,16 @@ async function postJson(
 	body: unknown,
 	options: { readonly signal?: AbortSignal } = {},
 ): Promise<unknown> {
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(body),
-		signal: options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+	const signal = options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+	return abortable(signal, async () => {
+		const response = await fetch(url, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify(body),
+			signal,
+		});
+		return postJsonResponse(url, response);
 	});
-	return postJsonResponse(url, response);
 }
 
 async function postJsonResponse(url: string, response: Response) {
@@ -871,6 +959,7 @@ export async function runQueues<Job, Result>(
 	concurrency: number,
 	run: (job: Job) => Promise<Result>,
 	shouldStop?: (result: Result) => boolean,
+	signal?: AbortSignal,
 ): Promise<Result[]> {
 	const results: Result[] = [];
 	let next = 0;
@@ -882,19 +971,20 @@ export async function runQueues<Job, Result>(
 			{ length: Math.max(1, Math.min(concurrency, queues.length)) },
 			async () => {
 				for (;;) {
-					if (stopped) return;
+					if (stopped || signal?.aborted) return;
 					// Read and advance in one synchronous step, so no two workers can claim
 					// the same queue.
 					const queue = queues[next];
 					next += 1;
 					if (!queue) return;
 					for (const job of queue) {
-						if (stopped) return;
+						if (stopped || signal?.aborted) return;
 						try {
 							const result = await run(job);
 							results.push(result);
 							if (shouldStop?.(result)) stopped = true;
 						} catch (error) {
+							if (signal?.aborted && error === signal.reason) return;
 							if (!failed) failure = error;
 							stopped = true;
 							failed = true;
@@ -1232,10 +1322,19 @@ export class EvalHost {
 	readonly project: string;
 	private readonly scratch: string;
 	private credentialPaths: CredentialSync | null = null;
+	private polledProviderFailure: {
+		sessionId: string;
+		messages: MessageEntry[];
+		failure: AttemptFailure<"provider">;
+		observation: ProviderErrorObservation | null;
+	} | null = null;
+	private stopPromise: Promise<void> | undefined;
+	private readonly signal: AbortSignal | undefined;
 
-	private constructor(project: string, scratch: string) {
+	private constructor(project: string, scratch: string, signal?: AbortSignal) {
 		this.project = project;
 		this.scratch = scratch;
+		this.signal = signal;
 	}
 
 	/** Boots a throwaway OpenCode host over a git fixture. */
@@ -1249,146 +1348,179 @@ export class EvalHost {
 		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
+		signal?: AbortSignal;
 	}): Promise<EvalHost> {
+		checkCancellation(options.signal);
 		const scratch = await mkdtemp(join(tmpdir(), "flow-eval-"));
-		await chmod(scratch, 0o700);
-		const childHome = join(scratch, "home");
-		const childCache = join(scratch, "cache");
-		const childData = join(childHome, ".local", "share");
 		const project = join(scratch, "project");
-		await mkdir(childHome, { recursive: true });
-		await mkdir(join(project, ".opencode"), { recursive: true });
-		const credentialPaths = await evaluationPhase(
-			"host",
-			"credential-copy-failed",
-			true,
-			() => carryProviderCredentials(childData),
-		);
-
-		// Flow derives source identity from git, so the fixture must be a repo.
-		for (const [relative, contents] of Object.entries(options.files)) {
-			const target = join(project, relative);
-			await mkdir(join(target, ".."), { recursive: true });
-			await writeFile(target, contents, "utf8");
-		}
-		for (const argv of [
-			["init", "--initial-branch=main"],
-			["config", "user.email", "eval@example.com"],
-			["config", "user.name", "Flow Eval"],
-			["add", "-A"],
-			["commit", "-m", "fixture"],
-		]) {
-			const git = spawnSync("git", argv, { cwd: project, encoding: "utf8" });
-			if (git.status !== 0)
-				throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
-		}
-
-		// Populate OpenCode's exact-version cache from the prepared install so Flow
-		// runs exercise the bytes a user would install, without touching the network.
-		// The ordinary OpenCode benchmark arm deliberately receives no plugin config.
-		if (options.withFlow !== false) {
-			const packages = join(childCache, "opencode", "packages");
-			await mkdir(packages, { recursive: true });
-			await cp(
-				options.packageCache,
-				join(packages, `opencode-plugin-flow@${packageJson.version}`),
-				{ recursive: true },
+		const host = new EvalHost(project, scratch, options.signal);
+		try {
+			checkCancellation(options.signal);
+			await chmod(scratch, 0o700);
+			const childHome = join(scratch, "home");
+			const childCache = join(scratch, "cache");
+			const childData = join(childHome, ".local", "share");
+			await mkdir(childHome, { recursive: true });
+			await mkdir(join(project, ".opencode"), { recursive: true });
+			host.credentialPaths = await evaluationPhase(
+				"host",
+				"credential-copy-failed",
+				true,
+				() => carryProviderCredentials(childData),
 			);
-		}
-		const pluginEntry = `opencode-plugin-flow@${packageJson.version}`;
-		const reviewer = options.reviewer;
-		const configuredPlugin =
-			reviewer && (reviewer.model !== undefined || reviewer.steps !== undefined)
-				? [pluginEntry, { reviewer }]
-				: pluginEntry;
-		await writeFile(
-			join(project, "opencode.json"),
-			`${JSON.stringify(
-				options.withFlow === false ? {} : { plugin: [configuredPlugin] },
-				null,
-				2,
-			)}\n`,
-			"utf8",
-		);
 
-		const host = new EvalHost(project, scratch);
-		host.credentialPaths = credentialPaths;
-		return evaluationPhase("host", "host-start-failed", true, async () => {
-			const port = await availablePort();
-			host.baseUrl = `http://127.0.0.1:${port}`;
-			host.server = spawn(
-				options.toolchain.executable,
-				[
-					"x",
-					`opencode-ai@${options.opencodeVersion}`,
-					"serve",
-					"--port",
-					String(port),
-					"--hostname",
-					"127.0.0.1",
-				],
-				{
-					cwd: project,
-					detached: process.platform !== "win32",
-					env: {
-						...options.toolchain.environment,
-						HOME: childHome,
-						XDG_CACHE_HOME: childCache,
-						XDG_CONFIG_HOME: join(childHome, ".config"),
-						XDG_DATA_HOME: childData,
-						XDG_STATE_HOME: join(childHome, ".local", "state"),
-					},
-					stdio: ["ignore", "pipe", "pipe"],
-				},
-			);
-			const record = (chunk: unknown) => {
-				host.serverLog += String(chunk);
-			};
-			host.server.stdout?.on("data", record);
-			host.server.stderr?.on("data", record);
+			// Flow derives source identity from git, so the fixture must be a repo.
+			for (const [relative, contents] of Object.entries(options.files)) {
+				checkCancellation(options.signal);
+				const target = join(project, relative);
+				await mkdir(join(target, ".."), { recursive: true });
+				await writeFile(target, contents, "utf8");
+			}
+			for (const argv of [
+				["init", "--initial-branch=main"],
+				["config", "user.email", "eval@example.com"],
+				["config", "user.name", "Flow Eval"],
+				["add", "-A"],
+				["commit", "-m", "fixture"],
+			]) {
+				checkCancellation(options.signal);
+				const git = spawnSync("git", argv, { cwd: project, encoding: "utf8" });
+				if (git.status !== 0)
+					throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
+			}
 
-			try {
-				const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-				for (;;) {
-					try {
-						const health = (await fetchJson(
-							`${host.baseUrl}/global/health`,
-							3_000,
-						)) as {
-							healthy?: boolean;
-						};
-						if (health.healthy) break;
-					} catch {
-						// still starting
-					}
-					if (Date.now() > deadline) {
-						throw new Error(
-							`OpenCode did not become healthy.\n${host.serverLog}`,
-						);
-					}
-					await Bun.sleep(500);
-				}
-				const ready = (await postJson(
-					`${host.baseUrl}/session`,
-					{ title: "flow-eval readiness" },
+			// Copy rather than race filesystem writes against cancellation: cleanup
+			// must wait until no copy can recreate scratch after its removal.
+			if (options.withFlow !== false) {
+				const packages = join(childCache, "opencode", "packages");
+				await mkdir(packages, { recursive: true });
+				await cp(
+					options.packageCache,
+					join(packages, `opencode-plugin-flow@${packageJson.version}`),
 					{
-						signal: AbortSignal.timeout(Math.max(1, deadline - Date.now())),
+						recursive: true,
+						filter: () => {
+							checkCancellation(options.signal);
+							return true;
+						},
 					},
-				)) as { id?: unknown };
-				if (typeof ready.id !== "string" || !ready.id) {
-					throw new Error("OpenCode readiness session had no id.");
-				}
-				await fetch(`${host.baseUrl}/session/${ready.id}`, {
-					method: "DELETE",
-					signal: AbortSignal.timeout(10_000),
-				}).catch(() => {});
-				return host;
-			} catch (error) {
-				return preservePrimaryFailure<EvalHost>(
-					() => Promise.reject(error),
-					() => host.stop(),
 				);
 			}
+			checkCancellation(options.signal);
+			const pluginEntry = `opencode-plugin-flow@${packageJson.version}`;
+			const reviewer = options.reviewer;
+			const configuredPlugin =
+				reviewer &&
+				(reviewer.model !== undefined || reviewer.steps !== undefined)
+					? [pluginEntry, { reviewer }]
+					: pluginEntry;
+			await writeFile(
+				join(project, "opencode.json"),
+				`${JSON.stringify(
+					options.withFlow === false ? {} : { plugin: [configuredPlugin] },
+					null,
+					2,
+				)}\n`,
+				"utf8",
+			);
+
+			return await evaluationPhase(
+				"host",
+				"host-start-failed",
+				true,
+				async () => {
+					const port = await availablePort();
+					checkCancellation(options.signal);
+					host.baseUrl = `http://127.0.0.1:${port}`;
+					host.server = spawn(
+						options.toolchain.executable,
+						[
+							"x",
+							`opencode-ai@${options.opencodeVersion}`,
+							"serve",
+							"--port",
+							String(port),
+							"--hostname",
+							"127.0.0.1",
+						],
+						{
+							cwd: project,
+							detached: process.platform !== "win32",
+							env: {
+								...options.toolchain.environment,
+								HOME: childHome,
+								XDG_CACHE_HOME: childCache,
+								XDG_CONFIG_HOME: join(childHome, ".config"),
+								XDG_DATA_HOME: childData,
+								XDG_STATE_HOME: join(childHome, ".local", "state"),
+							},
+							stdio: ["ignore", "pipe", "pipe"],
+						},
+					);
+					const record = (chunk: unknown) => {
+						host.serverLog += String(chunk);
+					};
+					host.server.stdout?.on("data", record);
+					host.server.stderr?.on("data", record);
+					let spawnError: Error | undefined;
+					host.server.once("error", (error) => {
+						spawnError = error;
+					});
+
+					const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+					for (;;) {
+						checkCancellation(options.signal);
+						if (spawnError) throw spawnError;
+						try {
+							const health = (await fetchJson(
+								`${host.baseUrl}/global/health`,
+								3_000,
+								options.signal,
+							)) as {
+								healthy?: boolean;
+							};
+							if (health.healthy) break;
+						} catch (error) {
+							if (error instanceof CampaignCancelled) throw error;
+							// still starting
+						}
+						if (Date.now() > deadline) {
+							throw new Error(
+								`OpenCode did not become healthy.\n${host.serverLog}`,
+							);
+						}
+						await abortable(options.signal, () => Bun.sleep(500));
+					}
+					const ready = (await host.post(
+						`${host.baseUrl}/session`,
+						{ title: "flow-eval readiness" },
+						Math.max(1, deadline - Date.now()),
+					)) as { id?: unknown };
+					if (typeof ready.id !== "string" || !ready.id) {
+						throw new Error("OpenCode readiness session had no id.");
+					}
+					await host.deleteSession(ready.id);
+					checkCancellation(options.signal);
+					return host;
+				},
+			);
+		} catch (error) {
+			return preservePrimaryFailure<EvalHost>(
+				() => Promise.reject(error),
+				() => host.stop(),
+			);
+		}
+	}
+
+	private post(
+		url: string,
+		body: unknown,
+		timeout = REQUEST_TIMEOUT_MS,
+	): Promise<unknown> {
+		return postJson(url, body, {
+			signal: this.signal
+				? AbortSignal.any([this.signal, AbortSignal.timeout(timeout)])
+				: AbortSignal.timeout(timeout),
 		});
 	}
 
@@ -1410,7 +1542,11 @@ export class EvalHost {
 	 * `probeModel` to establish that.
 	 */
 	async catalogModels(): Promise<string[]> {
-		const listed = (await fetchJson(`${this.baseUrl}/config/providers`)) as {
+		const listed = (await fetchJson(
+			`${this.baseUrl}/config/providers`,
+			REQUEST_TIMEOUT_MS,
+			this.signal,
+		)) as {
 			providers?: { id: string; models?: Record<string, unknown> }[];
 		};
 		return (listed.providers ?? []).flatMap((provider) =>
@@ -1432,7 +1568,7 @@ export class EvalHost {
 	async probeModel(model: string): Promise<string | null> {
 		const sessionId = await this.createSession(`flow-eval probe ${model}`);
 		try {
-			const reply = (await postJson(
+			const reply = (await this.post(
 				`${this.baseUrl}/session/${sessionId}/message`,
 				{
 					// `/session/:id/message` takes a split model, unlike `/command`,
@@ -1445,16 +1581,28 @@ export class EvalHost {
 			const failure = reply.info?.error;
 			return failure ? summarizeError(failure) : null;
 		} catch (error) {
+			if (error instanceof CampaignCancelled) {
+				await this.abortSession(sessionId);
+				throw error;
+			}
 			return error instanceof Error ? error.message : String(error);
 		} finally {
-			await fetch(`${this.baseUrl}/session/${sessionId}`, {
-				method: "DELETE",
-			}).catch(() => {});
+			await this.deleteSession(sessionId);
 		}
 	}
 
+	private async deleteSession(sessionId: string): Promise<void> {
+		const signal = AbortSignal.timeout(ABORT_TIMEOUT_MS);
+		await abortable(signal, () =>
+			fetch(`${this.baseUrl}/session/${sessionId}`, {
+				method: "DELETE",
+				signal,
+			}),
+		).catch(() => {});
+	}
+
 	async createSession(title: string): Promise<string> {
-		const session = (await postJson(`${this.baseUrl}/session`, { title })) as {
+		const session = (await this.post(`${this.baseUrl}/session`, { title })) as {
 			id: string;
 		};
 		return session.id;
@@ -1473,6 +1621,9 @@ export class EvalHost {
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
 		return runSessionRequest({
+			signal: this.signal,
+			waitOwnsCancellation: true,
+			onCancelled: () => this.abortSession(sessionId),
 			post: postSessionJson,
 			url: `${this.baseUrl}/session/${sessionId}/command`,
 			body: { command, arguments: args, model },
@@ -1495,6 +1646,9 @@ export class EvalHost {
 		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
 	): Promise<CommandEnd> {
 		return runSessionRequest({
+			signal: this.signal,
+			waitOwnsCancellation: true,
+			onCancelled: () => this.abortSession(sessionId),
 			post: postSessionJson,
 			url: `${this.baseUrl}/session/${sessionId}/message`,
 			body: {
@@ -1549,12 +1703,39 @@ export class EvalHost {
 		};
 		for (;;) {
 			const before = Date.now();
-			await Bun.sleep(poll);
+			await abortable(this.signal, () => Bun.sleep(poll));
 			const delivery = options.request.state();
 			if (delivery?.kind === "rejected") {
-				throw new Error(`Host request was rejected: ${delivery.message}`);
+				throw delivery.error;
 			}
-			const messages = (await this.messages(sessionId)) as MessageEntry[];
+			const messages = (await this.messages(
+				sessionId,
+				this.signal,
+			)) as MessageEntry[];
+			const failed = messages.find(
+				(entry) =>
+					entry.info.role === "assistant" &&
+					entry.info.error &&
+					!isSelfAbortError(
+						entry.info.error,
+						this.lastSelfAbortAt > 0 &&
+							(entry.info.time?.created === undefined ||
+								entry.info.time.created <= this.lastSelfAbortAt),
+					),
+			);
+			if (failed) {
+				const failure = providerFailure(failed.info.error);
+				// Preserve the evidence before aborting the host. Outcome reporting can
+				// use this one fetched transcript even if later reads are cancelled.
+				this.polledProviderFailure = {
+					sessionId,
+					messages,
+					failure,
+					observation: providerErrorObservation(failed.info.error, sessionId),
+				};
+				await abortWait();
+				throw new EvaluationPhaseError(failure, failed.info.error);
+			}
 			const unobserved = Date.now() - before;
 			if (unobserved >= suspendFloor) {
 				// Capped at one full timeout, because unbounded credit turns the ceiling
@@ -1641,13 +1822,24 @@ export class EvalHost {
 	 */
 	private async abortSession(sessionId: string): Promise<void> {
 		this.lastSelfAbortAt = Date.now();
-		await postJson(`${this.baseUrl}/session/${sessionId}/abort`, {}).catch(
-			() => {},
-		);
+		await postJson(
+			`${this.baseUrl}/session/${sessionId}/abort`,
+			{},
+			{
+				signal: AbortSignal.timeout(ABORT_TIMEOUT_MS),
+			},
+		).catch(() => {});
 	}
 
-	private async messages(sessionId: string): Promise<unknown> {
-		return fetchJson(`${this.baseUrl}/session/${sessionId}/message`);
+	private async messages(
+		sessionId: string,
+		signal?: AbortSignal,
+	): Promise<unknown> {
+		return fetchJson(
+			`${this.baseUrl}/session/${sessionId}/message`,
+			REQUEST_TIMEOUT_MS,
+			signal,
+		);
 	}
 
 	/**
@@ -1662,7 +1854,10 @@ export class EvalHost {
 	 * A host that does not expose children yields nothing rather than failing —
 	 * losing the subtask transcript is a smaller loss than losing the run.
 	 */
-	private async descendantSessions(sessionIds: readonly string[]): Promise<{
+	private async descendantSessions(
+		sessionIds: readonly string[],
+		signal?: AbortSignal,
+	): Promise<{
 		readonly sessions: readonly ObservedSession[];
 		readonly endpointFailed: boolean;
 	}> {
@@ -1673,12 +1868,16 @@ export class EvalHost {
 		while (frontier.length > 0) {
 			const next: string[] = [];
 			for (const parent of frontier) {
+				checkCancellation(signal);
 				let children: unknown;
 				try {
 					children = await fetchJson(
 						`${this.baseUrl}/session/${parent}/children`,
+						REQUEST_TIMEOUT_MS,
+						signal,
 					);
-				} catch {
+				} catch (error) {
+					if (signal?.aborted && error === signal.reason) throw error;
 					endpointFailed = true;
 					continue;
 				}
@@ -1717,8 +1916,20 @@ export class EvalHost {
 	async outcome(
 		sessionIds: readonly string[],
 		durationMs: number,
+		// Deliberately explicit, not this.signal: evidence after a real failure
+		// must remain readable even when the campaign has been stopped.
+		signal?: AbortSignal,
 	): Promise<Outcome> {
-		const descendantResult = await this.descendantSessions(sessionIds);
+		const polled =
+			this.polledProviderFailure &&
+			sessionIds.includes(this.polledProviderFailure.sessionId)
+				? this.polledProviderFailure
+				: null;
+		if (!polled) checkCancellation(signal);
+		const descendantResult = polled
+			? { sessions: [], endpointFailed: false }
+			: await this.descendantSessions(sessionIds, signal);
+		if (!polled) checkCancellation(signal);
 		const descendants = descendantResult.sessions;
 		const sessionRecords: readonly ObservedSession[] = [
 			...sessionIds.map((id) => ({ id, agent: null, parentID: null })),
@@ -1728,10 +1939,16 @@ export class EvalHost {
 		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
 		const sessionMessages: SessionMessages[] = [];
 		for (const [sessionIndex, sessionId] of ordered.entries()) {
+			if (polled && sessionId !== polled.sessionId) continue;
 			let entries: MessageEntry[] | null;
 			try {
-				entries = (await this.messages(sessionId)) as MessageEntry[];
+				entries = polled
+					? polled.messages
+					: ((await this.messages(sessionId, signal)) as MessageEntry[]);
 			} catch (error) {
+				// Reduce transcripts already fetched before deciding whether cancellation
+				// can discard this attempt. An earlier provider error still counts.
+				if (signal?.aborted && error === signal.reason) break;
 				throw new EvaluationPhaseError(
 					attemptFailure("host", "session-messages-read-failed", error, true),
 					error,
@@ -1759,10 +1976,11 @@ export class EvalHost {
 		let costUsd = 0;
 		let costReported = false;
 		let assistantMessages = 0;
-		let providerError: AttemptFailure<"provider"> | null = null;
+		let providerError: AttemptFailure<"provider"> | null =
+			polled?.failure ?? null;
 		let observedProviderError: NonNullable<
 			Outcome["providerErrorObservation"]
-		> | null = null;
+		> | null = polled?.observation ?? null;
 		let finalText = "";
 		const guidanceLoads: ObservedGuidanceLoad[] = [];
 		let guidanceSequence = 0;
@@ -1877,13 +2095,32 @@ export class EvalHost {
 			reviewerActor,
 		];
 
+		let session: Record<string, unknown> | null = null;
+		let archives: Record<string, unknown>[] = [];
+		try {
+			if (!polled) {
+				checkCancellation(signal);
+				session = await this.readJson(
+					join(this.project, ".flow", "session.json"),
+					signal,
+				);
+				checkCancellation(signal);
+				archives = await this.readArchives(signal);
+				checkCancellation(signal);
+			}
+		} catch (error) {
+			// Cancelled workspace enrichment must not erase a provider failure
+			// already observed in the transcript.
+			if (!providerError || !signal?.aborted || error !== signal.reason)
+				throw error;
+		}
 		return {
 			allCalls,
 			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
 			actors,
 			guidanceLoads,
-			session: await this.readJson(join(this.project, ".flow", "session.json")),
-			archives: await this.readArchives(),
+			session,
+			archives,
 			finalText,
 			tokens,
 			costUsd: reportedCost(costReported ? costUsd : null, tokens.output),
@@ -1896,13 +2133,21 @@ export class EvalHost {
 
 	private async readJson(
 		path: string,
+		signal?: AbortSignal,
 	): Promise<Record<string, unknown> | null> {
 		try {
-			return JSON.parse(await readFile(path, "utf8")) as Record<
-				string,
-				unknown
-			>;
+			return JSON.parse(
+				await abortable(signal, () =>
+					readFile(path, { encoding: "utf8", ...(signal ? { signal } : {}) }),
+				),
+			) as Record<string, unknown>;
 		} catch (error) {
+			if (
+				signal?.aborted &&
+				(error === signal.reason ||
+					(error instanceof Error && error.name === "AbortError"))
+			)
+				throw signal.reason;
 			if (
 				error instanceof SyntaxError ||
 				(error instanceof Error && "code" in error && error.code === "ENOENT")
@@ -1915,12 +2160,15 @@ export class EvalHost {
 		}
 	}
 
-	private async readArchives(): Promise<Record<string, unknown>[]> {
+	private async readArchives(
+		signal?: AbortSignal,
+	): Promise<Record<string, unknown>[]> {
 		const history = join(this.project, ".flow", "history");
 		let names: string[];
 		try {
-			names = await readdir(history);
+			names = await abortable(signal, () => readdir(history));
 		} catch (error) {
+			if (signal?.aborted && error === signal.reason) throw error;
 			if (error instanceof Error && "code" in error && error.code === "ENOENT")
 				return [];
 			throw new EvaluationPhaseError(
@@ -1932,13 +2180,20 @@ export class EvalHost {
 		for (const name of names
 			.filter((entry) => entry.endsWith(".json"))
 			.sort()) {
-			const document = await this.readJson(join(history, name));
+			checkCancellation(signal);
+			const document = await this.readJson(join(history, name), signal);
+			checkCancellation(signal);
 			if (document) documents.push(document);
 		}
 		return documents;
 	}
 
-	async stop(): Promise<void> {
+	stop(): Promise<void> {
+		this.stopPromise ??= this.stopOnce();
+		return this.stopPromise;
+	}
+
+	private async stopOnce(): Promise<void> {
 		if (this.server) await terminateChildProcessTree(this.server);
 		// Must happen before the scratch directory is removed: a refresh the child
 		// performed lives only in its copy of `auth.json`, and losing it here is

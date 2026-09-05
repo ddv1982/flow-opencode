@@ -1,11 +1,20 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { spawn } from "node:child_process";
+import { ChildProcess, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CampaignCancelled } from "../evals/campaign-stop.js";
 import {
 	askedScoring,
+	EvalHost,
 	formatRate,
 	isSelfAbortError,
 	isWedged,
@@ -51,6 +60,16 @@ function processExists(pid: number): boolean {
 	}
 }
 
+function mockFetch(
+	implementation: (
+		...args: Parameters<typeof fetch>
+	) => ReturnType<typeof fetch>,
+) {
+	return spyOn(globalThis, "fetch").mockImplementation(
+		Object.assign(implementation, { preconnect: fetch.preconnect }),
+	);
+}
+
 // Running the harness needs credentials and money, so the rules that decide what
 // a run *means* are proven here instead. Two were wrong in recorded runs: unpriced
 // spend printed as `$0.0000`, and a session blocked on an unanswerable question
@@ -75,7 +94,7 @@ describe("eval run classification", () => {
 		expect(processExists(childPid)).toBe(false);
 	});
 
-	test("treats an EPERM group probe as stopped after the child exits", async () => {
+	test("refuses an unconfirmed EPERM group even after the wrapper exits", async () => {
 		if (process.platform === "win32") return;
 		const child = spawn(process.execPath, ["-e", ""]);
 		await new Promise<void>((resolve, reject) => {
@@ -94,7 +113,9 @@ describe("eval run classification", () => {
 			},
 		);
 		try {
-			await terminateChildProcessTree(child);
+			await expect(terminateChildProcessTree(child)).rejects.toThrow(
+				"permission denied",
+			);
 		} finally {
 			probe.mockRestore();
 		}
@@ -386,6 +407,7 @@ wait "$child"
 				expect(request.state()).toEqual({
 					kind: "rejected",
 					message: "Error: provider disconnected",
+					error: external,
 				});
 				return "quiet";
 			},
@@ -435,6 +457,802 @@ wait "$child"
 			unscored: false,
 		});
 	});
+});
+
+describe("eval campaign cancellation", () => {
+	for (const phase of ["session", "archives"] as const) {
+		for (const failed of [false, true]) {
+			test(`R20-01/R10-06 cancellation during ${phase} reads preserves observed provider failure: ${failed}`, async () => {
+				const scratch = await mkdtemp(join(tmpdir(), "flow-outcome-files-"));
+				const history = join(scratch, ".flow", "history");
+				await mkdir(history, { recursive: true });
+				await writeFile(join(history, "a.json"), "{}");
+				await writeFile(join(history, "b.json"), "{}");
+				const host = Reflect.construct(EvalHost, [
+					scratch,
+					scratch,
+				]) as EvalHost;
+				Object.assign(host, { baseUrl: "http://fixture" });
+				const controller = new AbortController();
+				const reason = new CampaignCancelled(130);
+				const entered = Promise.withResolvers<void>();
+				const read = Reflect.get(host, "readJson").bind(host) as (
+					path: string,
+					signal?: AbortSignal,
+				) => Promise<Record<string, unknown> | null>;
+				const visited: string[] = [];
+				Object.assign(host, {
+					readJson: async (path: string, signal?: AbortSignal) => {
+						visited.push(path);
+						if (
+							path.endsWith(phase === "session" ? "session.json" : "a.json")
+						) {
+							if (!signal)
+								throw new Error("Missing filesystem cancellation signal");
+							const pending = new Promise<never>((_, reject) =>
+								signal.addEventListener("abort", () => reject(signal.reason), {
+									once: true,
+								}),
+							);
+							entered.resolve();
+							return pending;
+						}
+						return read(path, signal);
+					},
+				});
+				const requests = mockFetch(async (input) =>
+					String(input).endsWith("/children")
+						? Response.json([])
+						: Response.json([
+								{
+									info: {
+										id: "message",
+										sessionID: "id",
+										role: "assistant",
+										time: { created: 1, completed: 2 },
+										...(failed
+											? {
+													error: {
+														name: "FixtureProviderUnavailable",
+														data: { message: "Fake provider failure" },
+													},
+												}
+											: {}),
+									},
+									parts: [],
+								},
+							]),
+				);
+				try {
+					const result = host.outcome(["id"], 1, controller.signal);
+					const observed = result.catch((error) => error);
+					await entered.promise;
+					controller.abort(reason);
+					if (failed) {
+						expect(await observed).toMatchObject({
+							providerError: {
+								origin: "provider",
+								code: "provider-rejected-turn",
+							},
+							providerErrorObservation: { name: "FixtureProviderUnavailable" },
+						});
+					} else expect(await observed).toBe(reason);
+					expect(visited.some((path) => path.endsWith("b.json"))).toBe(false);
+				} finally {
+					requests.mockRestore();
+					await host.stop();
+				}
+			});
+		}
+	}
+	test("R10-04 preserves a wait rejection queued before the stop signal", async () => {
+		const controller = new AbortController();
+		const failure = new Error("known progress-read failure");
+		const waiting = Promise.withResolvers<never>();
+		const running = runSessionRequest({
+			signal: controller.signal,
+			post: async () => {},
+			url: "http://fixture/session/id/command",
+			body: {},
+			onRejected: () => {},
+			wait: () => waiting.promise,
+		});
+		const observed = running.catch((error) => error);
+		waiting.reject(failure);
+		controller.abort(new CampaignCancelled(130));
+		expect(await observed).toBe(failure);
+	});
+
+	for (const waitOwnsCancellation of [false, true]) {
+		test(`R10-04 preserves an observed POST rejection before cancellation (cooperative wait: ${waitOwnsCancellation})`, async () => {
+			const controller = new AbortController();
+			const reason = new CampaignCancelled(130);
+			const failure = new Error("known host POST failure");
+			const rejected = Promise.withResolvers<void>();
+			let cleaned = false;
+			const running = runSessionRequest({
+				signal: controller.signal,
+				waitOwnsCancellation,
+				post: async () => {
+					throw failure;
+				},
+				url: "http://fixture/session/id/command",
+				body: {},
+				onRejected: () => rejected.resolve(),
+				wait: () =>
+					new Promise((_resolve, reject) => {
+						if (waitOwnsCancellation) {
+							controller.signal.addEventListener(
+								"abort",
+								() => reject(controller.signal.reason),
+								{ once: true },
+							);
+						}
+					}),
+				onCancelled: async () => {
+					cleaned = true;
+				},
+			});
+			const observed = running.catch((error) => error);
+			await rejected.promise;
+			controller.abort(reason);
+			expect(await observed).toBe(failure);
+			expect(cleaned).toBe(true);
+		});
+	}
+
+	for (const failure of ["timeout", "wedge"] as const) {
+		test(`R10-04 drains ${failure} abort cleanup without replacing the failure with cancellation`, async () => {
+			const scratch = await mkdtemp(join(tmpdir(), "flow-eval-failure-race-"));
+			const controller = new AbortController();
+			const host = Reflect.construct(EvalHost, [
+				scratch,
+				scratch,
+				controller.signal,
+			]) as EvalHost;
+			Object.assign(host, { baseUrl: "http://fixture" });
+			const aborting = Promise.withResolvers<void>();
+			const cleanup = Promise.withResolvers<Response>();
+			let aborts = 0;
+			const requests = mockFetch(async (input) => {
+				const url = String(input);
+				if (url.endsWith("/abort")) {
+					aborts += 1;
+					aborting.resolve();
+					return cleanup.promise;
+				}
+				if (url.endsWith("/command")) return Response.json({});
+				return Response.json(
+					failure === "timeout"
+						? []
+						: [
+								{
+									info: { role: "assistant" },
+									parts: [
+										{
+											type: "tool",
+											tool: "bash",
+											state: { status: "running" },
+										},
+									],
+								},
+							],
+				);
+			});
+			let settled = false;
+			const running = host
+				.runCommand("id", "flow-auto", "fixture", "fixture/model", {
+					timeoutMs: failure === "timeout" ? 0 : 20_000,
+					stalledMs: 0,
+				})
+				.catch((error) => {
+					settled = true;
+					return error;
+				});
+			try {
+				await aborting.promise;
+				controller.abort(new CampaignCancelled(143));
+				await Bun.sleep(1);
+				expect(settled).toBe(false);
+				cleanup.resolve(Response.json(true));
+				const error = await running;
+				expect(error).toBeInstanceOf(Error);
+				expect(error).not.toBeInstanceOf(CampaignCancelled);
+				expect(error.message).toContain(
+					failure === "timeout"
+						? "Scenario exceeded 0ms"
+						: "Scenario made no progress for 0ms",
+				);
+				expect(aborts).toBe(1);
+			} finally {
+				cleanup.resolve(Response.json(true));
+				await running;
+				requests.mockRestore();
+				await host.stop();
+			}
+		}, 10_000);
+	}
+
+	for (const endpoint of ["children", "message"] as const) {
+		for (const operatorStop of [true, false]) {
+			test(`R10-06 cancels slow outcome ${endpoint} reads with an explicit ${operatorStop ? "campaign" : "evidence-drain"} signal`, async () => {
+				const scratch = await mkdtemp(
+					join(tmpdir(), "flow-eval-outcome-stop-"),
+				);
+				const controller = new AbortController();
+				const reason = operatorStop
+					? new CampaignCancelled(130)
+					: new Error("bounded evidence-drain timeout");
+				const host = Reflect.construct(EvalHost, [
+					scratch,
+					scratch,
+				]) as EvalHost;
+				Object.assign(host, { baseUrl: "http://fixture" });
+				const reading = Promise.withResolvers<void>();
+				let transport: AbortSignal | null | undefined;
+				let reads = 0;
+				const requests = mockFetch(async (input, init) => {
+					reads += 1;
+					if (String(input).endsWith(`/${endpoint}`)) {
+						transport = init?.signal;
+						reading.resolve();
+						return new Promise(() => {});
+					}
+					return Response.json([]);
+				});
+				try {
+					const observed = host
+						.outcome(["id", "next"], 1, controller.signal)
+						.catch((error) => error);
+					await reading.promise;
+					const admitted = reads;
+					controller.abort(reason);
+					expect(await observed).toBe(reason);
+					expect(transport?.aborted).toBe(true);
+					expect(reads).toBe(admitted);
+					await host.stop();
+					await expect(readdir(scratch)).rejects.toThrow();
+				} finally {
+					requests.mockRestore();
+					await host.stop();
+				}
+			});
+		}
+	}
+
+	for (const afterKill of ["gone", "alive", "unconfirmed"] as const) {
+		test(`R10-08 checks process-group liveness after SIGKILL: ${afterKill}`, async () => {
+			if (process.platform === "win32") return;
+			const scratch = await mkdtemp(join(tmpdir(), "flow-eval-kill-confirm-"));
+			const source = join(scratch, "original.json");
+			const target = join(scratch, "child.json");
+			const snapshot = '{"fixture":"before"}';
+			const rotated = '{"fixture":"after"}';
+			await writeFile(source, snapshot);
+			await writeFile(target, rotated);
+			const child = new ChildProcess();
+			// No process is spawned. Every signal, including probes, is intercepted;
+			// the synthetic group cannot target external or unowned processes.
+			const pid = 2_147_483_647;
+			Object.assign(child, { pid, exitCode: 0, signalCode: null });
+			const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
+			Object.assign(host, {
+				server: child,
+				credentialPaths: { source, target, snapshot },
+			});
+			let killed = false;
+			let confirmations = 0;
+			const kill = spyOn(process, "kill").mockImplementation(
+				(targetPid, signal) => {
+					expect(targetPid).toBe(-pid);
+					if (signal === "SIGKILL") killed = true;
+					if (signal === 0 && killed) {
+						confirmations += 1;
+						if (afterKill !== "alive") {
+							throw Object.assign(new Error(afterKill), {
+								code: afterKill === "gone" ? "ESRCH" : "EPERM",
+							});
+						}
+					}
+					return true;
+				},
+			);
+			let now = Date.now();
+			const clock = spyOn(Date, "now").mockImplementation(() => {
+				now += 10_000;
+				return now;
+			});
+			try {
+				if (afterKill === "gone") {
+					await host.stop();
+					await expect(readdir(scratch)).rejects.toThrow();
+				} else {
+					await expect(host.stop()).rejects.toThrow(
+						"Could not confirm eval host process tree",
+					);
+					expect(await readFile(source, "utf8")).toBe(snapshot);
+					expect(await readFile(target, "utf8")).toBe(rotated);
+				}
+				expect(killed).toBe(true);
+				expect(confirmations).toBeGreaterThan(0);
+			} finally {
+				clock.mockRestore();
+				kill.mockRestore();
+				await rm(scratch, { recursive: true, force: true });
+			}
+		});
+	}
+
+	test("rejects pre-aborted host startup before reading setup options", async () => {
+		const controller = new AbortController();
+		const reason = new CampaignCancelled(143);
+		controller.abort(reason);
+		await expect(
+			EvalHost.start({
+				get toolchain(): never {
+					throw new Error("must not start a host");
+				},
+				get packageCache(): never {
+					throw new Error("must not copy a cache");
+				},
+				opencodeVersion: "fixture",
+				files: {},
+				signal: controller.signal,
+			}),
+		).rejects.toBe(reason);
+	});
+
+	test("admits no queue or job for an initially aborted signal", async () => {
+		const controller = new AbortController();
+		controller.abort(new CampaignCancelled(143));
+		const started: number[] = [];
+		expect(
+			await runQueues(
+				[[1, 2], [3]],
+				2,
+				async (job) => {
+					started.push(job);
+					return job;
+				},
+				undefined,
+				controller.signal,
+			),
+		).toEqual([]);
+		expect(started).toEqual([]);
+	});
+
+	test("drains two queues but never admits their third job after cancellation", async () => {
+		const controller = new AbortController();
+		const stopped = new CampaignCancelled(130);
+		const cancel = Promise.withResolvers<void>();
+		const cleanup = Promise.withResolvers<void>();
+		const started: string[] = [];
+		let cleaned = false;
+		const running = runQueues(
+			[["a1", "a2", "a3"], ["b1", "b2", "b3"], ["c1"]],
+			2,
+			async (job) => {
+				started.push(job);
+				if (job.endsWith("1")) return job;
+				if (job === "a2") {
+					await cancel.promise;
+					await cleanup.promise;
+					cleaned = true;
+					throw stopped;
+				}
+				controller.abort(stopped);
+				cancel.resolve();
+				return job;
+			},
+			undefined,
+			controller.signal,
+		);
+		let settled = false;
+		void running.then(() => {
+			settled = true;
+		});
+		await cancel.promise;
+		await Bun.sleep(1);
+		expect(settled).toBe(false);
+		cleanup.resolve();
+		expect((await running).sort()).toEqual(["a1", "b1", "b2"]);
+		expect(cleaned).toBe(true);
+		expect(started).toEqual(["a1", "b1", "a2", "b2"]);
+	});
+
+	test("does not swallow unrelated cancellation or an in-flight real rejection", async () => {
+		const unrelated = new CampaignCancelled(130);
+		await expect(
+			runQueues([[1]], 1, async () => {
+				throw unrelated;
+			}),
+		).rejects.toBe(unrelated);
+		const controller = new AbortController();
+		const own = new CampaignCancelled(143);
+		const ready = Promise.withResolvers<void>();
+		const failed = new Error("credential persistence failed");
+		await expect(
+			runQueues(
+				[[1], [2]],
+				2,
+				async (job) => {
+					if (job === 1) {
+						await ready.promise;
+						throw own;
+					}
+					controller.abort(own);
+					ready.resolve();
+					await Bun.sleep(1);
+					throw failed;
+				},
+				undefined,
+				controller.signal,
+			),
+		).rejects.toBe(failed);
+		const different = new AbortController();
+		await expect(
+			runQueues(
+				[[1]],
+				1,
+				async () => {
+					different.abort(own);
+					throw unrelated;
+				},
+				undefined,
+				different.signal,
+			),
+		).rejects.toBe(unrelated);
+	});
+
+	test("does not send a session POST when already cancelled", async () => {
+		const controller = new AbortController();
+		const reason = new CampaignCancelled(143);
+		controller.abort(reason);
+		let posted = false;
+		await expect(
+			runSessionRequest({
+				signal: controller.signal,
+				post: async () => {
+					posted = true;
+				},
+				url: "http://fixture/session/id/command",
+				body: {},
+				onRejected: () => {},
+				wait: async () => "quiet",
+			}),
+		).rejects.toBe(reason);
+		expect(posted).toBe(false);
+	});
+
+	test("cancels a never-settling POST and waits for session abort cleanup", async () => {
+		const controller = new AbortController();
+		const reason = new CampaignCancelled(130);
+		const posted = Promise.withResolvers<void>();
+		const cleanup = Promise.withResolvers<void>();
+		let requestSignal: AbortSignal | undefined;
+		const rejected: string[] = [];
+		const running = runSessionRequest({
+			signal: controller.signal,
+			post: (_url, _body, options) => {
+				requestSignal = options.signal;
+				posted.resolve();
+				return new Promise((_resolve, reject) => {
+					options.signal.addEventListener("abort", () =>
+						reject(options.signal.reason),
+					);
+				});
+			},
+			url: "http://fixture/session/id/command",
+			body: {},
+			onRejected: (message) => rejected.push(message),
+			wait: () => new Promise(() => {}),
+			onCancelled: () => cleanup.promise,
+		});
+		let settled = false;
+		const observed = running.catch((error) => {
+			settled = true;
+			return error;
+		});
+		await posted.promise;
+		controller.abort(reason);
+		await Bun.sleep(1);
+		expect(requestSignal?.aborted).toBe(true);
+		expect(settled).toBe(false);
+		cleanup.resolve();
+		expect(await observed).toBe(reason);
+		expect(rejected).toEqual([]);
+	});
+
+	for (const accepted of [false, true]) {
+		test(`host cancels ${accepted ? "accepted" : "pending"} commands without cancelling outcome reads`, async () => {
+			const scratch = await mkdtemp(join(tmpdir(), "flow-eval-cancel-test-"));
+			const controller = new AbortController();
+			const reason = new CampaignCancelled(130);
+			// Construct a transport-only host: no executable or credential store is used.
+			const host = Reflect.construct(EvalHost, [
+				scratch,
+				scratch,
+				controller.signal,
+			]) as EvalHost;
+			Object.assign(host, { baseUrl: "http://fixture" });
+			const posted = Promise.withResolvers<void>();
+			let postSignal: AbortSignal | null | undefined;
+			let aborts = 0;
+			const requests = mockFetch(async (input, init) => {
+				const url = String(input);
+				if (url.endsWith("/command")) {
+					postSignal = init?.signal;
+					posted.resolve();
+					return accepted ? Response.json({}) : new Promise(() => {});
+				}
+				expect(init?.signal?.aborted).not.toBe(true);
+				if (url.endsWith("/abort")) {
+					aborts += 1;
+					return Response.json(true);
+				}
+				return Response.json([]);
+			});
+			try {
+				const running = host.runCommand(
+					"id",
+					"flow-auto",
+					"fixture",
+					"fixture/model",
+				);
+				const observed = running.catch((error) => error);
+				await posted.promise;
+				await Bun.sleep(1);
+				controller.abort(reason);
+				expect(await observed).toBe(reason);
+				expect(postSignal?.aborted).toBe(true);
+				expect(aborts).toBe(1);
+				expect(host.log).not.toContain("POST rejected");
+				expect((await host.outcome(["id"], 1)).providerError).toBeNull();
+				const first = host.stop();
+				expect(host.stop()).toBe(first);
+				await first;
+			} finally {
+				requests.mockRestore();
+				await host.stop();
+			}
+		});
+	}
+
+	test("bounds a non-cooperative host abort request", async () => {
+		const scratch = await mkdtemp(join(tmpdir(), "flow-eval-abort-test-"));
+		const controller = new AbortController();
+		const reason = new CampaignCancelled(143);
+		const host = Reflect.construct(EvalHost, [
+			scratch,
+			scratch,
+			controller.signal,
+		]) as EvalHost;
+		Object.assign(host, { baseUrl: "http://fixture" });
+		let abortSignal: AbortSignal | null | undefined;
+		const requests = mockFetch(async (input, init) => {
+			if (String(input).endsWith("/abort")) {
+				abortSignal = init?.signal;
+				return new Promise(() => {});
+			}
+			controller.abort(reason);
+			return Response.json({});
+		});
+		try {
+			await expect(
+				host.runCommand("id", "flow-auto", "fixture", "fixture/model"),
+			).rejects.toBe(reason);
+			expect(abortSignal?.aborted).toBe(true);
+		} finally {
+			requests.mockRestore();
+			await host.stop();
+		}
+	}, 10_000);
+
+	test("shares failed stop cleanup and retains rotated credentials in scratch", async () => {
+		const scratch = await mkdtemp(join(tmpdir(), "flow-eval-retain-test-"));
+		const target = join(scratch, "auth.json");
+		const rotated = JSON.stringify({ fixture: { refresh: "fake-rotated" } });
+		await writeFile(target, rotated);
+		const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
+		Object.assign(host, {
+			credentialPaths: {
+				source: join(scratch, "missing-parent", "auth.json"),
+				target,
+				snapshot: null,
+			},
+		});
+		const complaints = spyOn(console, "error").mockImplementation(() => {});
+		try {
+			const first = host.stop();
+			expect(host.stop()).toBe(first);
+			await expect(first).rejects.toThrow();
+			expect(host.stop()).toBe(first);
+			expect(await readFile(target, "utf8")).toBe(rotated);
+			expect(complaints).toHaveBeenCalledTimes(1);
+		} finally {
+			complaints.mockRestore();
+			await rm(scratch, { recursive: true, force: true });
+		}
+	});
+
+	test("syncs rotated fixture credentials before removing scratch exactly once", async () => {
+		const fixture = await mkdtemp(join(tmpdir(), "flow-eval-stop-test-"));
+		const scratch = join(fixture, "scratch");
+		await mkdir(scratch);
+		const source = join(fixture, "auth.json");
+		const target = join(scratch, "auth.json");
+		const snapshot = JSON.stringify({ fixture: { refresh: "fake-before" } });
+		const rotated = { fixture: { refresh: "fake-after" } };
+		await writeFile(source, snapshot);
+		await writeFile(target, JSON.stringify(rotated));
+		const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
+		Object.assign(host, { credentialPaths: { source, target, snapshot } });
+		try {
+			const first = host.stop();
+			expect(host.stop()).toBe(first);
+			await first;
+			expect(JSON.parse(await readFile(source, "utf8"))).toEqual(rotated);
+			await expect(readdir(scratch)).rejects.toThrow();
+		} finally {
+			await rm(fixture, { recursive: true, force: true });
+		}
+	});
+
+	test.each(["not-json-sensitive-fixture", "[]"])(
+		"retains invalid child credentials without echoing their contents: %s",
+		async (contents) => {
+			const scratch = await mkdtemp(join(tmpdir(), "flow-eval-invalid-auth-"));
+			const target = join(scratch, "child.json");
+			const source = join(scratch, "original.json");
+			await writeFile(target, contents);
+			await writeFile(source, '{"fixture":"original"}');
+			const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
+			Object.assign(host, {
+				credentialPaths: { source, target, snapshot: null },
+			});
+			try {
+				await expect(host.stop()).rejects.toThrow(
+					`Eval host credentials are invalid; retained at ${target}.`,
+				);
+				expect(await readFile(target, "utf8")).toBe(contents);
+				expect(await readFile(source, "utf8")).toBe('{"fixture":"original"}');
+			} finally {
+				await rm(scratch, { recursive: true, force: true });
+			}
+		},
+	);
+
+	test("does not replace a cancellation cleanup error with the stop reason", async () => {
+		const controller = new AbortController();
+		const reason = new CampaignCancelled(130);
+		const failure = new Error("cleanup persistence failed");
+		await expect(
+			runSessionRequest({
+				signal: controller.signal,
+				post: async () => {
+					controller.abort(reason);
+				},
+				url: "http://fixture/session/id/command",
+				body: {},
+				onRejected: () => {},
+				wait: async () => "quiet",
+				onCancelled: async () => {
+					throw failure;
+				},
+			}),
+		).rejects.toBe(failure);
+	});
+
+	for (const operation of ["catalog", "session", "probe"] as const) {
+		test(`interrupts a never-settling ${operation} request with the exact cancellation`, async () => {
+			const scratch = await mkdtemp(join(tmpdir(), "flow-eval-request-test-"));
+			const controller = new AbortController();
+			const reason = new CampaignCancelled(143);
+			const host = Reflect.construct(EvalHost, [
+				scratch,
+				scratch,
+				controller.signal,
+			]) as EvalHost;
+			Object.assign(host, { baseUrl: "http://fixture" });
+			let requestSignal: AbortSignal | null | undefined;
+			let aborts = 0;
+			const requests = mockFetch(async (input, init) => {
+				const url = String(input);
+				if (url.endsWith("/abort")) {
+					aborts += 1;
+					expect(init?.signal?.aborted).toBe(false);
+					return Response.json(true);
+				}
+				if (init?.method === "DELETE") return Response.json(true);
+				if (operation === "probe" && url.endsWith("/session"))
+					return Response.json({ id: "id" });
+				requestSignal = init?.signal;
+				queueMicrotask(() => controller.abort(reason));
+				return new Promise(() => {});
+			});
+			try {
+				const request =
+					operation === "catalog"
+						? host.catalogModels()
+						: operation === "session"
+							? host.createSession("fixture")
+							: host.probeModel("fixture/model");
+				await expect(request).rejects.toBe(reason);
+				expect(requestSignal?.aborted).toBe(true);
+				expect(aborts).toBe(operation === "probe" ? 1 : 0);
+			} finally {
+				requests.mockRestore();
+				await host.stop();
+			}
+		});
+	}
+
+	for (const phase of ["health", "cache", "cache-failure"] as const) {
+		test(`cleans startup scratch and temporary credentials on ${phase}`, async () => {
+			const fixture = await mkdtemp(join(tmpdir(), "flow-eval-start-test-"));
+			const source = join(fixture, "opencode", "auth.json");
+			await mkdir(join(fixture, "opencode"));
+			const credentials = JSON.stringify({
+				fixture: { refresh: "fake-original" },
+			});
+			await writeFile(source, credentials);
+			const oldData = process.env.XDG_DATA_HOME;
+			const oldOptOut = process.env.FLOW_EVAL_NO_AUTH_COPY;
+			process.env.XDG_DATA_HOME = fixture;
+			delete process.env.FLOW_EVAL_NO_AUTH_COPY;
+			const controller = new AbortController();
+			const reason = new CampaignCancelled(130);
+			let scratch = "";
+			let healthSignal: AbortSignal | null | undefined;
+			const stop = EvalHost.prototype.stop;
+			const stopping = spyOn(EvalHost.prototype, "stop").mockImplementation(
+				function (this: EvalHost) {
+					scratch = join(this.project, "..");
+					return stop.call(this);
+				},
+			);
+			const requests = mockFetch(async (_input, init) => {
+				healthSignal = init?.signal;
+				queueMicrotask(() => controller.abort(reason));
+				return new Promise(() => {});
+			});
+			try {
+				const starting = EvalHost.start({
+					toolchain: {
+						executable: process.platform === "win32" ? "cmd.exe" : "/bin/sh",
+						actualVersion: "fixture",
+						expectedVersion: "fixture",
+						environment: {},
+					},
+					get packageCache() {
+						if (phase === "cache")
+							queueMicrotask(() => controller.abort(reason));
+						if (phase === "cache-failure")
+							return join(fixture, "missing-cache");
+						return join(fixture, "opencode");
+					},
+					opencodeVersion: "fixture",
+					files: { "fixture.txt": "no paid calls" },
+					signal: controller.signal,
+				});
+				if (phase === "cache-failure") await expect(starting).rejects.toThrow();
+				else await expect(starting).rejects.toBe(reason);
+				expect(scratch).not.toBe("");
+				await expect(readdir(scratch)).rejects.toThrow();
+				expect(await readFile(source, "utf8")).toBe(credentials);
+				if (phase === "health") expect(healthSignal?.aborted).toBe(true);
+				else expect(requests).not.toHaveBeenCalled();
+			} finally {
+				requests.mockRestore();
+				stopping.mockRestore();
+				if (oldData === undefined) delete process.env.XDG_DATA_HOME;
+				else process.env.XDG_DATA_HOME = oldData;
+				if (oldOptOut === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
+				else process.env.FLOW_EVAL_NO_AUTH_COPY = oldOptOut;
+				await rm(fixture, { recursive: true, force: true });
+			}
+		});
+	}
 });
 
 describe("eval actor and instruction observations", () => {
@@ -1344,8 +2162,8 @@ describe("eval credential sync-back", () => {
 	});
 
 	test("keeps running later jobs after one of them throws", async () => {
-		// A sync that fails is a warning, not the end of the run — and must not take
-		// every host still to finish down with it.
+		// A failed sync must not prevent other already-started hosts from completing
+		// their own credential cleanup.
 		const queue = sequencer();
 		const ran: string[] = [];
 		const failed = queue(async () => {

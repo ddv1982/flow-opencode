@@ -216,6 +216,87 @@ describe("repository-owned v2 qualification", () => {
 		expect(inconclusive.decision.verdict).toBe("INCONCLUSIVE");
 	});
 
+	test("refuses an operator stop with otherwise VERIFIED full-target evidence", () => {
+		const report = releaseReport();
+		const verified = qualifyV2({
+			reportInput: report,
+			catalogInput: releaseCatalog(),
+			artifact: ARTIFACT,
+		});
+		expect(verified.decision.verdict).toBe("VERIFIED");
+		expect(verified.decision.reasons).toEqual([]);
+		expect(verified.report.attempts).toHaveLength(76);
+		expect(verified.decision.totals).toEqual({
+			scheduled: 76,
+			scored: 76,
+			passed: 76,
+		});
+
+		const stopped = qualifyV2({
+			reportInput: {
+				...report,
+				completion: {
+					...report.completion,
+					status: "stopped",
+					cause: "operator",
+				},
+			},
+			catalogInput: releaseCatalog(),
+			artifact: ARTIFACT,
+		});
+		expect(stopped.decision).toEqual({
+			...verified.decision,
+			verdict: "INCONCLUSIVE",
+			reasons: [
+				{
+					severity: "gap",
+					code: "campaign-stopped",
+					message:
+						"Campaign stopped by the operator; release qualification requires a completed campaign.",
+					caseId: null,
+					caseVersion: null,
+					provider: null,
+				},
+			],
+		});
+	});
+
+	test("R27-01 refuses full-target evidence after a budget stop", () => {
+		const report = releaseReport();
+		expect(
+			qualifyV2({
+				reportInput: report,
+				catalogInput: releaseCatalog(),
+				artifact: ARTIFACT,
+			}).decision.verdict,
+		).toBe("VERIFIED");
+		const first = report.attempts[0];
+		if (!first) throw new Error("Missing qualifying fixture attempt");
+		first.usage.outputTokens = report.plan.budget.maxOutputTokens + 1;
+		report.completion.observed.outputTokens = report.attempts.reduce(
+			(sum, attempt) => sum + attempt.usage.outputTokens,
+			0,
+		);
+		const stopped = qualifyV2({
+			reportInput: {
+				...report,
+				completion: {
+					...report.completion,
+					status: "stopped",
+					cause: "budget",
+				},
+			},
+			catalogInput: releaseCatalog(),
+			artifact: ARTIFACT,
+		});
+		expect(stopped.decision.verdict).not.toBe("VERIFIED");
+		expect(
+			stopped.decision.reasons.some(
+				(reason) => reason.code === "campaign-stopped",
+			),
+		).toBe(true);
+	});
+
 	test("qualifies with a retained host failure and its canonical passing reserve", () => {
 		const report = releaseReport(true);
 		const failed = report.attempts[0];

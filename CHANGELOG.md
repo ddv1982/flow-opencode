@@ -4,7 +4,8 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## [8.2.1] - 2026-09-05
 
-Validation and publication claims now reject three misleading success paths.
+Validation and publication claims reject misleading success paths, and eval
+campaigns support graceful operator stops.
 
 - Named JUnit evidence uses strict XML parsing. Truncated or malformed documents,
   comments, CDATA, and log markup cannot invent passing cases; DTDs are refused.
@@ -20,6 +21,12 @@ Validation and publication claims now reject three misleading success paths.
   and the Biome schema matches the pinned tool version.
 - The development lockfile updates the SDK's transitive `toml` dependency to
   `4.3.0`, clearing high-severity parser advisories without changing the host pin.
+- SIGINT/SIGTERM stop eval scheduling, preserve completed evidence and drain host
+  and credential cleanup. Interrupted and over-budget campaigns remain
+  nonqualifying; observed provider failures are not replaced with cancellations.
+  Reports and triage distinguish campaign stops from product failures.
+- Release guidance now freezes dependencies, packed contents and evaluator inputs
+  before paid qualification. Strict exact-artifact checks remain unchanged.
 - **Session v5 schema:** unchanged. Public tools, commands, guides, and agents
   retain their existing names and inputs.
 

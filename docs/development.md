@@ -144,12 +144,11 @@ deterministic hook and lifecycle gates.
 
 ## Release
 
-A release needs a complete V2 campaign from at least two providers and a canary of
-the exact packed artifact. Pass `--campaign-dir` and `--canary` to
-`bun run qualify`; it seals the report, attempts, transcripts, artifact, canary,
-expected provenance, decision, and grader source into one immutable bundle. Commit
-the bundle and canary before tagging. [Release qualification](release-qualification.md)
-publishes the thresholds and commands.
+Follow the [frozen-candidate sequence](release-qualification.md#running-it): finish
+fixes and dependency updates, pass deterministic checks, then approve paid evals.
+`bun run qualify -- --campaign-dir <dir> --canary <record>` seals the complete
+two-provider campaign, exact-artifact canary and grader evidence. Commit that bundle
+before tagging; never substitute interrupted results for qualification.
 
 Release tags use `v<package-version>`. Blocking release checks include the
 normal repository gate, package smoke, packed live OpenCode smoke, package

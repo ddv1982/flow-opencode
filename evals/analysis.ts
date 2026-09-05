@@ -765,6 +765,19 @@ export function deriveReleaseDecision(input: {
 			"campaign-stopped",
 			`Required evidence remained incomplete after a ${report.completion.cause} stop.`,
 		);
+	} else if (
+		report.completion.status === "stopped" &&
+		(report.completion.cause === "operator" ||
+			report.completion.cause === "budget")
+	) {
+		decisionReason(
+			reasons,
+			"gap",
+			"campaign-stopped",
+			report.completion.cause === "operator"
+				? "Campaign stopped by the operator; release qualification requires a completed campaign."
+				: `Campaign stopped (${report.completion.cause}); release qualification requires a completed campaign.`,
+		);
 	}
 	const verdict = reasons.some((item) => item.severity === "hard")
 		? "NOT VERIFIED"

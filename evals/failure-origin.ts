@@ -1,3 +1,4 @@
+import { CampaignCancelled } from "./campaign-stop.js";
 import type { AttemptOutcome } from "./report.js";
 
 export type DurableFailureOrigin = Extract<
@@ -91,6 +92,7 @@ export async function evaluationPhase<T>(
 		return await operation();
 	} catch (error) {
 		if (
+			error instanceof CampaignCancelled ||
 			error instanceof EvaluationPhaseError ||
 			error instanceof EvaluationPersistenceError
 		)
@@ -174,7 +176,7 @@ export async function preservePrimaryFailure<T>(
 	try {
 		await cleanup();
 	} catch (error) {
-		if (!failed) throw error;
+		if (!failed || primary instanceof CampaignCancelled) throw error;
 		cleanupFailure = error;
 	}
 	if (failed) {
