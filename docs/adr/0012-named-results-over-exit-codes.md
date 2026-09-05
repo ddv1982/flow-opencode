@@ -66,6 +66,11 @@ The bounded JUnit reader extracts only the attributes needed for declared names.
 Common test runners can produce the format without Flow learning runner-specific
 output text.
 
+Amended 2026-09-05: strict XML parsing replaces regex extraction, which accepted
+cases inside comments, CDATA, and truncated documents. Only cases within suite
+structure count; any parse error or DTD discards the report. The parser lives in
+infrastructure and retains only declared names, with no new state fields.
+
 Gate and extra evidence use the same record. A whole-suite exit claim uses
 `assertions: []`. A gate may also bind an exact acceptance case when that case is
 part of the whole-suite command; the command still remains the canonical broad gate.
