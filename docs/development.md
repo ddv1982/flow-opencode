@@ -165,3 +165,7 @@ the same ref proof. That draft is the recovery marker if npm succeeds and `main`
 then advances. Finalization rechecks the remote tag, refuses conflicting metadata
 or assets, and publishes only after every asset digest matches. Reruns converge
 after partial success without replacing published bytes.
+
+Preparing an already-published release is read-only and requires exact assets.
+Missing or pending assets fail preparation; use the explicit `github-publish`
+recovery path with the original inputs and tag proof to restore a missing asset.

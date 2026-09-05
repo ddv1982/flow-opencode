@@ -21,8 +21,11 @@ function fail(message: string, cause?: unknown): never {
 }
 
 function parseGitWorkspaceEntry(entry: string): string {
-	const staged = /^([0-7]{6}) [0-9a-f]+ [0-3]\t([\s\S]+)$/.exec(entry);
-	if (!staged) return entry;
+	// -t distinguishes raw untracked names from index records without guessing
+	// from filename bytes, which may themselves look exactly like a staged entry.
+	if (entry.startsWith("? ")) return entry.slice(2);
+	const staged = /^[HSM] ([0-7]{6}) [0-9a-f]+ [0-3]\t([\s\S]+)$/.exec(entry);
+	if (!staged) fail("Git returned an unrecognized workspace record.");
 	if (staged[1] === "160000") {
 		fail(
 			"Flow does not support Git submodules in source fingerprints; remove the tracked gitlink before continuing.",
@@ -42,6 +45,7 @@ function gitWorkspacePaths(workspace: string): Promise<string[]> {
 				"-co",
 				"--exclude-standard",
 				"--stage",
+				"-t",
 				"-z",
 			],
 			{ encoding: "buffer", maxBuffer: 32 * 1024 * 1024 },
@@ -55,10 +59,13 @@ function gitWorkspacePaths(workspace: string): Promise<string[]> {
 					);
 					return;
 				}
-				const text = Buffer.isBuffer(stdout)
-					? stdout.toString("utf8")
-					: String(stdout);
 				try {
+					let text: string;
+					try {
+						text = new TextDecoder("utf-8", { fatal: true }).decode(stdout);
+					} catch (error) {
+						fail("Flow requires UTF-8 workspace filenames.", error);
+					}
 					resolvePaths(
 						text.split("\0").filter(Boolean).map(parseGitWorkspaceEntry),
 					);

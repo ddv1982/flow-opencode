@@ -1,5 +1,4 @@
 import type { ReviewFinding, Session } from "../src/domain/session.js";
-import { observeAssertions } from "../src/domain/test-results.js";
 import { normalizeEvidencePlatform } from "../src/domain/validation.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
 import { createWorkspaceFlowService } from "../src/infrastructure/fs/workspace-flow-service.js";
@@ -8,6 +7,7 @@ import {
 	prepareWorkspaceValidation,
 	readWorkspaceTestReport,
 } from "../src/infrastructure/fs/workspace-validation.js";
+import { observeAssertions } from "../src/infrastructure/junit-results.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import {
 	assertReviewerCaseTruth,

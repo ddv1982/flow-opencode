@@ -40,7 +40,7 @@ expensive, and it is overhead when it is not.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@8.2.0 --global --force
+opencode plugin opencode-plugin-flow@8.2.1 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -51,7 +51,7 @@ The equivalent manual project configuration is:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@8.2.0"]
+  "plugin": ["opencode-plugin-flow@8.2.1"]
 }
 ```
 
@@ -62,7 +62,7 @@ For an explicit reviewer model, use OpenCode's plugin tuple options:
   "$schema": "https://opencode.ai/config.json",
   "plugin": [
     [
-      "opencode-plugin-flow@8.2.0",
+      "opencode-plugin-flow@8.2.1",
       { "reviewer": { "model": "provider/model", "steps": 80 } }
     ]
   ]

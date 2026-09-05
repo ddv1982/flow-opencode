@@ -21,10 +21,10 @@ import { join } from "node:path";
 import { MAX_TEST_REPORT_BYTES } from "../src/domain/limits.js";
 import {
 	assertionsSatisfied,
-	observeAssertions,
 	unmetAssertions,
 } from "../src/domain/test-results.js";
 import { readWorkspaceTestReport } from "../src/infrastructure/fs/workspace-validation.js";
+import { observeAssertions } from "../src/infrastructure/junit-results.js";
 
 /** One bun-shaped report: a pass, a skip, a failure, and a self-closing pass. */
 const REPORT = `<?xml version="1.0" encoding="UTF-8"?>
@@ -162,6 +162,68 @@ describe("observing named test results", () => {
 		expect(assertionsSatisfied(["renames a reserved device name"], [])).toBe(
 			false,
 		);
+	});
+
+	test.each([
+		'<testsuites><testcase name="never-ran"/>',
+		'<testsuites><!-- <testcase name="never-ran"/> --></testsuites>',
+		'<testsuites><system-out><![CDATA[<testcase name="never-ran"/>]]></system-out></testsuites>',
+		'<testsuites><system-out><testcase name="never-ran"/></system-out></testsuites>',
+		'<testsuites><testcase name="real"><system-out><testcase name="never-ran"/></system-out></testcase></testsuites>',
+		'<testsuites><testcase name="never-ran"/></wrong>',
+		'<testsuites><testcase name="never-ran"/></testsuites><testsuites/>',
+		'<testsuites><testcase name="never-ran" name="other"/></testsuites>',
+		'<testsuites><testcase name="never-ran" broken/></testsuites>',
+		'<!DOCTYPE testsuites><testsuites><testcase name="never-ran"/></testsuites>',
+		'<!DOCTYPE testsuites [<!ENTITY x SYSTEM "file:///etc/passwd">]><testsuites><testcase name="never-ran"/></testsuites>',
+		'<log><testsuites><testcase name="never-ran"/></testsuites></log>',
+	])("does not invent passing evidence from %s", (report) => {
+		expect(observeAssertions(["never-ran"], report)).toEqual([
+			{ name: "never-ran", status: "absent" },
+		]);
+	});
+
+	test("accepts XML quoting and character references without reading log markup", () => {
+		const report = `<testsuite><testcase name='a > b &amp; &#34;c&#x22;'>
+			<system-out><![CDATA[<failure/>]]></system-out><!-- <skipped/> -->
+		</testcase></testsuite>`;
+		expect(observeAssertions(['a > b & "c"'], report)).toEqual([
+			{ name: 'a > b & "c"', status: "passed" },
+		]);
+	});
+
+	test("handles deep suites with many cases within the report limit", () => {
+		const report =
+			"<testsuite>".repeat(100_000) +
+			'<testcase name="x"/>'.repeat(80_000) +
+			"</testsuite>".repeat(100_000);
+		expect(Buffer.byteLength(report)).toBeLessThan(MAX_TEST_REPORT_BYTES);
+		expect(observeAssertions(["x"], report)).toEqual([
+			{ name: "x", status: "passed" },
+		]);
+	});
+
+	test("restores suite eligibility after leaving nested log elements", () => {
+		const report = `<testsuites><testsuite><system-out><testsuite>
+			<testcase name="fake"/>
+		</testsuite></system-out><testcase name="real"><skipped/></testcase>
+		<testcase name="next"/></testsuite></testsuites>`;
+		expect(observeAssertions(["fake", "real", "next"], report)).toEqual([
+			{ name: "fake", status: "absent" },
+			{ name: "real", status: "skipped" },
+			{ name: "next", status: "passed" },
+		]);
+	});
+
+	test.each([
+		["<failure/>", "<skipped/>", ""],
+		["", "<skipped/>", "<error/>"],
+		["<skipped/>", "<failure/>", ""],
+	])("keeps failed duplicates regardless of ordering: %j", (...bodies) => {
+		const report = `<testsuites>${bodies.map((body) => `<testcase name="flaky">${body}</testcase>`).join("")}</testsuites>`;
+		expect(observeAssertions(["flaky"], report)).toEqual([
+			{ name: "flaky", status: "failed" },
+		]);
 	});
 
 	test("names the unmet cases with why, so a refusal can quote them", () => {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
 import {
 	mkdir,
 	mkdtemp,
@@ -83,6 +83,98 @@ describe("workspace content fingerprint", () => {
 
 		await writeFile(join(root, "untracked.txt"), "beta\n");
 		expect(await digest(root)).not.toBe(trackedChange);
+	});
+
+	test.skipIf(process.platform === "win32")(
+		"hashes index-shaped untracked filenames literally, including fake gitlinks",
+		async () => {
+			const root = await repository();
+			for (const mode of ["100644", "160000"]) {
+				const name = `${mode} ${"a".repeat(40)} 0\tdecoy.txt`;
+				await writeFile(join(root, name), "one\n");
+				const before = await digest(root);
+				await writeFile(join(root, name), "two\n");
+				expect(await digest(root)).not.toBe(before);
+				const untracked = await digest(root);
+				await git(root, "add", "--", name);
+				expect(await digest(root)).toBe(untracked);
+			}
+		},
+	);
+
+	test("preserves Unicode and whitespace paths before and after staging", async () => {
+		const root = await repository();
+		const names = ["space name.txt", "caf\u00e9.txt"];
+		if (process.platform !== "win32") names.push("tab\tand\nnewline.txt");
+		for (const name of names) {
+			await writeFile(join(root, name), "one\n");
+			const before = await digest(root);
+			await writeFile(join(root, name), "two\n");
+			expect(await digest(root)).not.toBe(before);
+			const untracked = await digest(root);
+			await git(root, "add", "--", name);
+			expect(await digest(root)).toBe(untracked);
+		}
+	});
+
+	test.each(["skip-worktree", "unmerged"])(
+		"fingerprints effective content independently of %s index records",
+		async (state) => {
+			const root = await repository();
+			await writeFile(join(root, "source.txt"), "one\n");
+			await git(root, "add", "source.txt");
+			const before = await digest(root);
+			if (state === "skip-worktree") {
+				await git(root, "update-index", "--skip-worktree", "source.txt");
+			} else {
+				const hash = (await git(root, "ls-files", "--stage")).split(" ")[1];
+				const indexed = spawnSync(
+					"git",
+					["-C", root, "update-index", "--index-info"],
+					{
+						input: `0 ${"0".repeat(40)}\tsource.txt\n${[1, 2, 3].map((stage) => `100644 ${hash} ${stage}\tsource.txt\n`).join("")}`,
+					},
+				);
+				expect(indexed.status).toBe(0);
+			}
+			const records = (
+				await git(
+					root,
+					"ls-files",
+					"-co",
+					"--exclude-standard",
+					"--stage",
+					"-t",
+					"-z",
+				)
+			)
+				.split("\0")
+				.filter(Boolean);
+			expect(records).toHaveLength(state === "skip-worktree" ? 1 : 3);
+			expect(
+				records.every((record) =>
+					record.startsWith(state === "skip-worktree" ? "S " : "M "),
+				),
+			).toBe(true);
+			expect(await digest(root)).toBe(before);
+			await writeFile(join(root, "source.txt"), "two\n");
+			expect(await digest(root)).not.toBe(before);
+		},
+	);
+
+	test("rejects non-UTF-8 index paths instead of hashing a missing replacement path", async () => {
+		const root = await repository();
+		const record = Buffer.concat([
+			Buffer.from(`100644 ${"a".repeat(40)} 0\tinvalid-`),
+			Buffer.from([0xff, 0]),
+		]);
+		const indexed = spawnSync(
+			"git",
+			["-C", root, "update-index", "-z", "--index-info"],
+			{ input: record },
+		);
+		expect(indexed.status).toBe(0);
+		await expect(digest(root)).rejects.toThrow("UTF-8 workspace filenames");
 	});
 
 	test("represents a missing tracked path and returns to the same digest when restored", async () => {

@@ -2,6 +2,33 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.2.1] - 2026-09-05
+
+Validation and publication claims now reject three misleading success paths.
+
+- Named JUnit evidence uses strict XML parsing. Truncated or malformed documents,
+  comments, CDATA, and log markup cannot invent passing cases; DTDs are refused.
+  Standard XML quoting and character references are supported, and deeply nested
+  reports no longer repeatedly scan their ancestry for each case.
+- Source fingerprints distinguish literal untracked filenames from Git index
+  records, including names that resemble gitlinks. Non-UTF-8 filenames fail closed
+  rather than being decoded into a different path.
+- Preparing an already-published GitHub release requires every expected asset to
+  have exact size and digest. Missing or pending assets no longer report success;
+  explicit publish recovery remains available without overwriting existing bytes.
+- Lock-recovery documentation now describes the shipped local-process behavior,
+  and the Biome schema matches the pinned tool version.
+- The development lockfile updates the SDK's transitive `toml` dependency to
+  `4.3.0`, clearing high-severity parser advisories without changing the host pin.
+- **Session v5 schema:** unchanged. Public tools, commands, guides, and agents
+  retain their existing names and inputs.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.2.1 --global --force
+```
+
 ## [8.2.0] - 2026-08-31
 
 Reviewer selection is now native plugin configuration, and Flow reports enough
