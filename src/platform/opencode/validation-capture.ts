@@ -8,8 +8,8 @@ import type {
 	ValidationIneligibleReason,
 	ValidationObservation,
 } from "../../domain/session.js";
-import { observeAssertions } from "../../domain/test-results.js";
 import { isValidationEligible } from "../../domain/validation.js";
+import { observeAssertions } from "../../infrastructure/junit-results.js";
 import type { Hooks } from "./sdk.js";
 
 const MAX_CAPTURES = 128;

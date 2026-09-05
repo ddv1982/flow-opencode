@@ -635,7 +635,13 @@ export async function convergeGithubRelease(
 	assertReleaseIdentity(release, input);
 	assertNoUnexpectedAssets(release, assets);
 	if (input.mode === "prepare" && !release.draft) {
-		for (const asset of assets) assetIssue(release, asset);
+		for (const asset of assets) {
+			if (assetIssue(release, asset) !== null) {
+				throw new Error(
+					`Published GitHub release asset ${asset.name} is not exact.`,
+				);
+			}
+		}
 		return { state: "prepared", releaseId: release.id };
 	}
 	for (const asset of assets) {
