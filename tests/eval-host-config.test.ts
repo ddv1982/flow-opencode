@@ -27,8 +27,8 @@ test("eval reviewer configuration keeps provenance and tuple options aligned", (
 
 test("eval host writes reviewer model through native plugin tuple options", async () => {
 	const repositoryRoot = join(import.meta.dir, "..");
-	const scratch = await mkdtemp(join(tmpdir(), "flow-eval-host-config-test-"));
 	const toolchain = currentBunToolchain(packageJson.packageManager);
+	const scratch = await mkdtemp(join(tmpdir(), "flow-eval-host-config-test-"));
 	const previous = process.env.FLOW_EVAL_NO_AUTH_COPY;
 	process.env.FLOW_EVAL_NO_AUTH_COPY = "1";
 	let host: EvalHost | null = null;
@@ -41,6 +41,8 @@ test("eval host writes reviewer model through native plugin tuple options", asyn
 			opencodeVersion: packageJson.devDependencies["@opencode-ai/plugin"],
 			files: { "package.json": '{"name":"eval-host-config-test"}\n' },
 			reviewer: { model: "provider/reviewer", steps: 80 },
+			// Let startup own cancellation/cleanup before the outer test expires.
+			signal: AbortSignal.timeout(180_000),
 		});
 
 		expect(
@@ -55,9 +57,13 @@ test("eval host writes reviewer model through native plugin tuple options", asyn
 			],
 		});
 	} finally {
-		await host?.stop();
-		if (previous === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
-		else process.env.FLOW_EVAL_NO_AUTH_COPY = previous;
-		await rm(scratch, { recursive: true, force: true });
+		try {
+			await host?.stop();
+		} finally {
+			if (previous === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
+			else process.env.FLOW_EVAL_NO_AUTH_COPY = previous;
+			await rm(scratch, { recursive: true, force: true });
+		}
 	}
-}, 30_000);
+	// The host already permits 180s startup; allow packaging and cleanup as well.
+}, 240_000);

@@ -1187,7 +1187,12 @@ describe("eval campaign cancellation", () => {
 		});
 	}
 
-	for (const phase of ["health", "cache", "cache-failure"] as const) {
+	for (const phase of [
+		"health",
+		"readiness",
+		"cache",
+		"cache-failure",
+	] as const) {
 		test(`cleans startup scratch and temporary credentials on ${phase}`, async () => {
 			const fixture = await mkdtemp(join(tmpdir(), "flow-eval-start-test-"));
 			const source = join(fixture, "opencode", "auth.json");
@@ -1201,9 +1206,12 @@ describe("eval campaign cancellation", () => {
 			process.env.XDG_DATA_HOME = fixture;
 			delete process.env.FLOW_EVAL_NO_AUTH_COPY;
 			const controller = new AbortController();
-			const reason = new CampaignCancelled(130);
+			const reason =
+				phase === "readiness"
+					? new DOMException("Startup deadline expired", "TimeoutError")
+					: new CampaignCancelled(130);
 			let scratch = "";
-			let healthSignal: AbortSignal | null | undefined;
+			let requestSignal: AbortSignal | null | undefined;
 			const stop = EvalHost.prototype.stop;
 			const stopping = spyOn(EvalHost.prototype, "stop").mockImplementation(
 				function (this: EvalHost) {
@@ -1211,8 +1219,14 @@ describe("eval campaign cancellation", () => {
 					return stop.call(this);
 				},
 			);
-			const requests = mockFetch(async (_input, init) => {
-				healthSignal = init?.signal;
+			const requests = mockFetch(async (input, init) => {
+				if (phase === "readiness" && String(input).endsWith("/global/health"))
+					return Response.json({ healthy: true });
+				if (phase === "readiness") {
+					expect(String(input)).toEndWith("/session");
+					expect(init?.method).toBe("POST");
+				}
+				requestSignal = init?.signal;
 				queueMicrotask(() => controller.abort(reason));
 				return new Promise(() => {});
 			});
@@ -1236,12 +1250,16 @@ describe("eval campaign cancellation", () => {
 					signal: controller.signal,
 				});
 				if (phase === "cache-failure") await expect(starting).rejects.toThrow();
+				else if (phase === "readiness")
+					await expect(starting).rejects.toThrow("Startup deadline expired");
 				else await expect(starting).rejects.toBe(reason);
 				expect(scratch).not.toBe("");
 				await expect(readdir(scratch)).rejects.toThrow();
 				expect(await readFile(source, "utf8")).toBe(credentials);
-				if (phase === "health") expect(healthSignal?.aborted).toBe(true);
+				if (phase === "health" || phase === "readiness")
+					expect(requestSignal?.aborted).toBe(true);
 				else expect(requests).not.toHaveBeenCalled();
+				if (phase === "readiness") expect(requests).toHaveBeenCalledTimes(2);
 			} finally {
 				requests.mockRestore();
 				stopping.mockRestore();
