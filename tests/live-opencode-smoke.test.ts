@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { type ChildProcess, spawn } from "node:child_process";
+import { describe, expect, spyOn, test } from "bun:test";
+import { spawn } from "node:child_process";
 import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import {
 	currentBunToolchain,
 	runPinnedBunSync,
 } from "../evals/bun-toolchain.js";
-import { packPlugin } from "../evals/harness.js";
+import { packPlugin, terminateChildProcessTree } from "../evals/harness.js";
 import packageJson from "../package.json" with { type: "json" };
 import {
 	buildHostEvidenceCapabilities,
@@ -94,29 +94,57 @@ function permissionFor(
 }
 
 async function fetchJson(url: string, timeout = REQUEST_TIMEOUT_MS) {
-	const response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
-	if (!response.ok) {
-		throw new Error(
-			`GET ${url} failed with ${response.status}: ${await response.text()}`,
-		);
+	let response: Response | undefined;
+	try {
+		response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
+		if (!response.ok) throw new Error();
+		return await response.json();
+	} catch (error) {
+		// Neither response bodies nor native error messages are safe diagnostics.
+		const reason =
+			response && !response.ok
+				? `HTTP ${response.status}`
+				: error instanceof Error &&
+						["TimeoutError", "AbortError", "SyntaxError", "TypeError"].includes(
+							error.name,
+						)
+					? error.name
+					: "Error";
+		throw new Error(`GET ${new URL(url).pathname} failed (${reason}).`);
 	}
-	return response.json();
 }
 
-async function waitForHealth(baseUrl: string): Promise<void> {
-	const deadline = Date.now() + STARTUP_TIMEOUT_MS;
-	while (Date.now() < deadline) {
+async function waitForCommands(
+	baseUrl: string,
+	deadline: number,
+): Promise<Array<{ name: string }>> {
+	for (;;) {
+		const beforeProbe = deadline - Date.now();
+		if (beforeProbe <= 0)
+			throw new Error("OpenCode startup deadline expired at /global/health.");
+		let healthy = false;
 		try {
-			const health = (await fetchJson(`${baseUrl}/global/health`, 3_000)) as {
+			const health = (await fetchJson(
+				`${baseUrl}/global/health`,
+				Math.min(3_000, beforeProbe),
+			)) as {
 				healthy?: boolean;
 			};
-			if (health.healthy) return;
+			healthy = health.healthy === true;
 		} catch {
 			// The process is still starting.
 		}
-		await Bun.sleep(500);
+		const remaining = deadline - Date.now();
+		if (healthy) {
+			if (remaining <= 0)
+				throw new Error("OpenCode startup deadline expired before /command.");
+			// Global health does not wait for project/plugin initialization.
+			return (await fetchJson(`${baseUrl}/command`, remaining)) as Array<{
+				name: string;
+			}>;
+		}
+		if (remaining > 0) await Bun.sleep(Math.min(500, remaining));
 	}
-	throw new Error(`OpenCode did not become healthy at ${baseUrl}.`);
 }
 
 async function availablePort(): Promise<number> {
@@ -135,16 +163,110 @@ async function availablePort(): Promise<number> {
 	return address.port;
 }
 
-async function stopServer(server: ChildProcess): Promise<void> {
-	if (server.exitCode !== null) return;
-	server.kill("SIGTERM");
-	await Promise.race([
-		new Promise<void>((resolve) => server.once("exit", () => resolve())),
-		Bun.sleep(2_000).then(() => {
-			if (server.exitCode === null) server.kill("SIGKILL");
-		}),
-	]);
-}
+describe("live smoke readiness deadlines", () => {
+	for (const mode of [
+		"ready",
+		"late-health",
+		"unhealthy",
+		"command-timeout",
+	] as const) {
+		test(`R19-01 shares one startup budget: ${mode}`, async () => {
+			let now = mode === "unhealthy" ? 179_750 : 0;
+			const budgets: number[] = [];
+			const clock = spyOn(Date, "now").mockImplementation(() => now);
+			const timeout = AbortSignal.timeout;
+			const deadlines = spyOn(AbortSignal, "timeout").mockImplementation(
+				(ms) => {
+					budgets.push(ms);
+					return timeout(ms);
+				},
+			);
+			const sleep = spyOn(Bun, "sleep").mockImplementation(async (ms) => {
+				if (typeof ms !== "number") throw new Error("Expected numeric delay");
+				now += ms;
+			});
+			const requests = spyOn(globalThis, "fetch").mockImplementation(
+				Object.assign(
+					async (input: Parameters<typeof fetch>[0]) => {
+						if (String(input).endsWith("/global/health")) {
+							if (mode === "unhealthy")
+								return Response.json({ healthy: false });
+							now =
+								mode === "late-health"
+									? 180_000
+									: mode === "command-timeout"
+										? 40_000
+										: 10_000;
+							return Response.json({ healthy: true });
+						}
+						if (mode === "command-timeout")
+							throw new DOMException("private diagnostic", "TimeoutError");
+						now = 155_000;
+						return Response.json([{ name: "flow-status" }]);
+					},
+					{ preconnect: fetch.preconnect },
+				),
+			);
+			try {
+				const ready = waitForCommands("http://127.0.0.1:1234", 180_000);
+				if (mode === "ready") {
+					expect(await ready).toEqual([{ name: "flow-status" }]);
+					await fetchJson("http://127.0.0.1:1234/agent");
+					expect(budgets).toEqual([3_000, 170_000, 120_000]);
+					expect(requests).toHaveBeenCalledTimes(3);
+				} else if (mode === "command-timeout") {
+					await expect(ready).rejects.toThrow(
+						"GET /command failed (TimeoutError).",
+					);
+					expect(budgets).toEqual([3_000, 140_000]);
+					expect(requests).toHaveBeenCalledTimes(2);
+				} else {
+					await expect(ready).rejects.toThrow(
+						mode === "late-health" ? "before /command" : "at /global/health",
+					);
+					expect(budgets).toEqual([mode === "late-health" ? 3_000 : 250]);
+					expect(requests).toHaveBeenCalledTimes(1);
+					if (mode === "unhealthy") expect(sleep).toHaveBeenCalledWith(250);
+				}
+			} finally {
+				requests.mockRestore();
+				sleep.mockRestore();
+				deadlines.mockRestore();
+				clock.mockRestore();
+			}
+		});
+	}
+
+	for (const kind of ["http", "json", "network"] as const) {
+		test(`R19-01 identifies ${kind} failure without exposing response/server text`, async () => {
+			const requests = spyOn(globalThis, "fetch").mockImplementation(
+				Object.assign(
+					async () => {
+						if (kind === "network") throw new TypeError("private diagnostic");
+						return new Response("private diagnostic", {
+							status: kind === "http" ? 503 : 200,
+						});
+					},
+					{ preconnect: fetch.preconnect },
+				),
+			);
+			try {
+				const expected =
+					kind === "http"
+						? "HTTP 503"
+						: kind === "json"
+							? "SyntaxError"
+							: "TypeError";
+				await expect(
+					fetchJson("http://127.0.0.1:1234/command?token=private"),
+				).rejects.toThrow(`GET /command failed (${expected}).`);
+				expect(requests).toHaveBeenCalledTimes(1);
+			} finally {
+				requests.mockRestore();
+			}
+		});
+	}
+});
 
 function observed(
 	endpoint: EndpointAttempt["endpoint"],
@@ -514,6 +636,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 
 			const port = await availablePort();
 			const baseUrl = `http://127.0.0.1:${port}`;
+			const startupDeadline = Date.now() + STARTUP_TIMEOUT_MS;
 			const server = spawn(
 				toolchain.executable,
 				[
@@ -527,6 +650,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				],
 				{
 					cwd: project,
+					detached: process.platform !== "win32",
 					env: {
 						...toolchain.environment,
 						HOME: childHome,
@@ -536,22 +660,12 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						XDG_DATA_HOME: join(childHome, ".local", "share"),
 						XDG_STATE_HOME: join(childHome, ".local", "state"),
 					},
-					stdio: ["ignore", "pipe", "pipe"],
+					stdio: "ignore",
 				},
 			);
-			let serverOutput = "";
-			server.stdout?.on("data", (chunk) => {
-				serverOutput += String(chunk);
-			});
-			server.stderr?.on("data", (chunk) => {
-				serverOutput += String(chunk);
-			});
 
 			try {
-				await waitForHealth(baseUrl);
-				const commands = (await fetchJson(`${baseUrl}/command`)) as Array<{
-					name: string;
-				}>;
+				const commands = await waitForCommands(baseUrl, startupDeadline);
 				expect(
 					commands
 						.map((command) => command.name)
@@ -634,12 +748,8 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				await expect(lstat(join(project, ".flow"))).rejects.toMatchObject({
 					code: "ENOENT",
 				});
-			} catch (error) {
-				throw new Error(
-					`${error instanceof Error ? error.message : String(error)}\nServer output:\n${serverOutput}`,
-				);
 			} finally {
-				await stopServer(server);
+				await terminateChildProcessTree(server);
 				await rm(scratch, { recursive: true, force: true });
 			}
 		},
