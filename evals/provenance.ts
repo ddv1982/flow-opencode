@@ -8,6 +8,10 @@ import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { normalizeRecorded, REDACTED } from "./cassette.js";
 import { pseudonymizeEvalIds } from "./grader-input.js";
 import type {
+	HostActorObservation,
+	ObservedActor,
+} from "./host-observation.js";
+import type {
 	ArtifactIdentity,
 	EvaluatorIdentity,
 	InstructionDelivery,
@@ -40,6 +44,7 @@ export type PackedArtifactIdentity = Pick<
 
 export type RequestedModelInput = {
 	readonly modelId: string;
+	readonly variant?: string | undefined;
 	readonly gateway: string | null;
 	readonly family: string;
 	readonly revision: string | null;
@@ -289,6 +294,18 @@ export function hostConfigSha256(config: unknown): string {
 	return canonicalSha256("flow-eval-host-config-v1", config);
 }
 
+export function hostActorObservation(
+	actor: ObservedActor,
+): HostActorObservation {
+	return {
+		model: actor.actualModel,
+		variant: actor.actualVariant ?? {
+			kind: "unobserved",
+			reason: "field-unavailable",
+		},
+	};
+}
+
 export function normalizeRequestedModel(
 	input: RequestedModelInput,
 ): ModelIdentity {
@@ -304,6 +321,7 @@ export function normalizeRequestedModel(
 		family: input.family,
 		model: input.modelId.slice(boundary + 1),
 		revision: input.revision,
+		...(input.variant === undefined ? {} : { variant: input.variant }),
 	};
 }
 

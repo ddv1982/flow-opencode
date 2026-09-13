@@ -5,9 +5,26 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
 import type { BenchmarkCase } from "./benchmark.js";
+import type {
+	RetainedBenchmarkEvidence,
+	RetainedBenchmarkInputs,
+} from "./benchmark-evidence.js";
+import {
+	benchmarkRuntimeIdentity,
+	bindBenchmarkCase,
+	gradeRetainedBenchmark,
+	retainBenchmarkInputs,
+} from "./benchmark-grader.js";
 import { BENCHMARK_CASES } from "./benchmarks.js";
 import { currentBunToolchain } from "./bun-toolchain.js";
+import { canonicalJson } from "./canonical-json.js";
 import { parseCaseCatalog } from "./catalog.js";
+import {
+	assessCompletionDeclaration,
+	COMPLETION_DECLARATION_INSTRUCTION,
+	declaredFalseCompletion,
+} from "./completion-claim.js";
+import { EvidenceStore, evidenceSha256 } from "./evidence-store.js";
 import {
 	armForCell,
 	createPairedPlan,
@@ -38,6 +55,7 @@ import {
 } from "./harness.js";
 import {
 	evaluatorIdentity,
+	hostActorObservation,
 	hostConfigSha256,
 	inspectArtifact,
 	instructionDelivery,
@@ -120,7 +138,7 @@ function model(id: string): ModelIdentity {
 function catalogFor(cases: readonly BenchmarkCase[]) {
 	return cases.map((c) => ({
 		caseId: c.id,
-		caseVersion: 1,
+		caseVersion: c.caseVersion,
 		evidenceClass: "paired-value" as const,
 		oracle: "hidden-executable" as const,
 		release: "report-only" as const,
@@ -157,6 +175,7 @@ function actorsFor(
 					role: "manager",
 					requestedModel: requested,
 					actualModel: observedActual(outcome),
+					hostObservation: hostActorObservation(actor),
 					sessionIds: [...actor.sessionIds],
 				},
 			]
@@ -171,7 +190,7 @@ function instructionsFor(
 			source: "command",
 			name: "benchmark-task",
 			sequence: 0,
-			text: benchmark.prompt,
+			text: benchmarkTaskPrompt(benchmark),
 		}),
 		...(outcome.guidanceLoads ?? []).map((load, i) =>
 			instructionDelivery({
@@ -183,7 +202,13 @@ function instructionsFor(
 		),
 	];
 }
-function completionClaim(outcome: Outcome, flow: boolean): boolean {
+export function benchmarkTaskPrompt(
+	benchmark: Pick<BenchmarkCase, "prompt">,
+): string {
+	return `${benchmark.prompt}\n\n${COMPLETION_DECLARATION_INSTRUCTION}`;
+}
+
+function workflowCompleted(outcome: Outcome): boolean {
 	const docs = [outcome.session, ...outcome.archives].filter(
 		(x): x is Record<string, unknown> => x !== null,
 	);
@@ -196,7 +221,7 @@ function completionClaim(outcome: Outcome, flow: boolean): boolean {
 		)
 	)
 		return true;
-	return !flow && /\b(done|completed|finished)\b/i.test(outcome.finalText);
+	return false;
 }
 function productAttempt(input: {
 	cell: CampaignPlan["cells"][number];
@@ -211,9 +236,10 @@ function productAttempt(input: {
 	endedBy: CommandEnd;
 	requested: ModelIdentity;
 	flow: boolean;
+	retained: RetainedBenchmarkEvidence;
 }): AttemptRecordV2 {
 	const hidden = input.hiddenCorrectness;
-	const claim = completionClaim(input.outcome, input.flow);
+	const claim = input.retained.completion;
 	const instructions = instructionsFor(input.benchmark, input.outcome);
 	return {
 		schemaVersion: 2,
@@ -242,8 +268,9 @@ function productAttempt(input: {
 			evidence: {
 				kind: "paired-value",
 				hiddenCorrectness: hidden,
-				claimedComplete: claim,
-				falseCompletion: !hidden && claim,
+				claimedComplete: claim.kind === "declared" ? claim.complete : null,
+				falseCompletion: declaredFalseCompletion(hidden, claim),
+				assessment: input.retained,
 			},
 		},
 		usage: {
@@ -296,8 +323,14 @@ async function main(): Promise<void> {
 	const requested = model(options.model);
 	const root = join(import.meta.dir, "..");
 	const opencodeVersion = packageJson.devDependencies["@opencode-ai/plugin"];
+	const runtimeSha256 = evidenceSha256(
+		canonicalJson(await benchmarkRuntimeIdentity()),
+	);
 	const experiment = createPairedPlan({
-		cases: selected.map((c) => ({ caseId: c.id, caseVersion: 1 })),
+		benchmarkCases: selected.map((benchmark) =>
+			bindBenchmarkCase(benchmark, runtimeSha256),
+		),
+		cases: selected.map((c) => ({ caseId: c.id, caseVersion: c.caseVersion })),
 		model: requested,
 		repetitions: options.repeat,
 		reservePairsPerBlock: options.reserves,
@@ -328,6 +361,7 @@ async function main(): Promise<void> {
 		mkdir(join(root, "evals", "results"), { recursive: true }),
 	);
 	const store = createReportStore({ directory, catalog });
+	const evidenceStore = new EvidenceStore(directory);
 	await persistEvaluation("initialize", () =>
 		store.initialize(experiment.plan),
 	);
@@ -349,6 +383,8 @@ async function main(): Promise<void> {
 			sourceCommit: artifact.sourceCommit,
 			caseCatalog: selected.map((c) => ({
 				id: c.id,
+				caseVersion: c.caseVersion,
+				probes: c.probes,
 				files: c.files,
 				prompt: c.prompt,
 			})),
@@ -434,6 +470,7 @@ async function main(): Promise<void> {
 				const cellStarted = Date.now();
 				let host: EvalHost | null = null;
 				let recorded = false;
+				let retainedInputs: RetainedBenchmarkInputs | null = null;
 				let runFailure: AttemptFailure<DurableFailureOrigin> | null = null;
 				let failureUsage: AttemptRecordV2["usage"] = {
 					durationMs: 0,
@@ -451,11 +488,22 @@ async function main(): Promise<void> {
 								withFlow: flow,
 							});
 							const activeHost = host;
+							activeHost.retainProjectOnStop(async (project) => {
+								retainedInputs = await persistEvaluation(
+									"benchmark-inputs",
+									() =>
+										retainBenchmarkInputs({
+											project,
+											benchmark,
+											store: evidenceStore,
+										}),
+								);
+							});
 							const session = await evaluationPhase(
 								"host",
 								"session-create-failed",
 								true,
-								() => activeHost.createSession("paired task"),
+								() => activeHost.createSession("Project task"),
 							);
 							let commandEnd: CommandEnd = "quiet";
 							try {
@@ -464,14 +512,14 @@ async function main(): Promise<void> {
 											activeHost.runCommand(
 												session,
 												"flow-auto",
-												benchmark.prompt,
+												benchmarkTaskPrompt(benchmark),
 												options.model,
 											),
 										)
 									: await evaluationPhase("host", "command-aborted", true, () =>
 											activeHost.runPrompt(
 												session,
-												benchmark.prompt,
+												benchmarkTaskPrompt(benchmark),
 												options.model,
 											),
 										);
@@ -492,17 +540,37 @@ async function main(): Promise<void> {
 							runFailure ??= outcome.providerError;
 							if (runFailure)
 								throw new EvaluationPhaseError(runFailure, runFailure);
+							await evaluationPhase("host", "host-cleanup-failed", false, () =>
+								activeHost.stop(),
+							);
+							const inputs = retainedInputs;
+							if (!inputs)
+								throw new Error(
+									"Benchmark inputs were not retained before cleanup.",
+								);
 							const grade = await evaluationPhase(
 								"evaluator",
 								"benchmark-grade-threw",
 								false,
-								() => benchmark.grade(activeHost.project),
+								() =>
+									gradeRetainedBenchmark({
+										inputs,
+										store: evidenceStore,
+									}),
+							);
+							const receipt = await persistEvaluation("benchmark-receipt", () =>
+								evidenceStore.writeJson(grade),
 							);
 							const transcript = redactTranscript({
 								projectPath: activeHost.project,
 								value: {
+									schemaVersion: 1,
 									calls: outcome.allCalls,
 									finalText: outcome.finalText,
+									workflowDocuments: [
+										outcome.session,
+										...outcome.archives,
+									].filter((document) => document !== null),
 								},
 							});
 							const stored = await persistEvaluation("transcript", () =>
@@ -527,8 +595,18 @@ async function main(): Promise<void> {
 								requested,
 								flow,
 								hiddenCorrectness: grade.passed,
-								gradeIssues: grade.issues,
+								gradeIssues: grade.probes
+									.filter((probe) => probe.disposition !== "passed")
+									.map((probe) => `${probe.id}: ${probe.detail}`),
 								endedBy: commandEnd,
+								retained: {
+									schemaVersion: 1,
+									inputs,
+									receipt,
+									completion: assessCompletionDeclaration(outcome.finalText),
+									workflowCompleted: workflowCompleted(outcome),
+									containment: grade.containment,
+								},
 							});
 							await persistEvaluation("attempt", () =>
 								store.writeAttempt(attempt),
@@ -543,6 +621,14 @@ async function main(): Promise<void> {
 								classified.origin === "evaluator"
 									? classified
 									: (runFailure ?? classified);
+							let cleanupFailure: unknown;
+							if (host) {
+								try {
+									await host.stop();
+								} catch (error) {
+									cleanupFailure = error;
+								}
+							}
 							const failure: AttemptRecordV2 = {
 								schemaVersion: 2,
 								attemptId: `attempt-${cell.cellId}`,
@@ -563,6 +649,7 @@ async function main(): Promise<void> {
 								instructions: [],
 								transcript: null,
 								outcome: failureOutcome(failed),
+								...(retainedInputs ? { retainedInputs } : {}),
 								usage:
 									failureUsage.durationMs > 0
 										? failureUsage
@@ -578,6 +665,7 @@ async function main(): Promise<void> {
 							attempts.push(failure);
 							nonProduct = true;
 							blockOrigin = failed.origin;
+							if (cleanupFailure) throw cleanupFailure;
 						}
 					},
 					async () => {

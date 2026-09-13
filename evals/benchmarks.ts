@@ -1,16 +1,12 @@
-import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
-import type {
-	BenchmarkCase,
-	BenchmarkGrade,
-	BenchmarkOracleMetadata,
-} from "./benchmark.js";
+import type { BenchmarkCase, BenchmarkOracleMetadata } from "./benchmark.js";
+import type { BenchmarkProbe, JsonValue } from "./benchmark-evidence.js";
+import { gradeDevelopmentProject } from "./benchmark-grader.js";
+import { DEVELOPMENT_CASES } from "./development-cases.js";
 
 const BASE_FIXTURE: Record<string, string> = {
 	"package.json": `${JSON.stringify(
 		{
-			name: "flow-benchmark-fixture",
+			name: "greeting-library",
 			private: true,
 			type: "module",
 			scripts: { test: "bun test" },
@@ -36,27 +32,11 @@ function oracle(
 	};
 }
 
-function hiddenBunCheck(project: string, source: string): BenchmarkGrade {
-	const result = spawnSync("bun", ["-e", source], {
-		cwd: project,
-		encoding: "utf8",
-		timeout: 30_000,
-	});
-	if (result.status === 0) return { passed: true, issues: [] };
-	const detail = `${result.stdout}\n${result.stderr}`.trim();
-	return {
-		passed: false,
-		issues: [
-			result.error
-				? result.error.message
-				: detail.split("\n").slice(-3).join(" ") ||
-					"hidden check exited non-zero",
-		],
-	};
-}
-
 /** Same implementable tasks are presented to both benchmark arms. */
-export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
+const SEED_CASES: readonly Omit<
+	BenchmarkCase,
+	"grade" | "caseVersion" | "probes"
+>[] = [
 	{
 		id: "farewell-export",
 		description:
@@ -93,12 +73,6 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				},
 			],
 		),
-		async grade(project) {
-			return hiddenBunCheck(
-				project,
-				'import { farewell } from "./src/index.ts"; if (farewell("Ada") !== "Goodbye, Ada!" || farewell("") !== "Goodbye, !") process.exit(1);',
-			);
-		},
 	},
 	{
 		id: "punctuated-slug-path",
@@ -135,12 +109,6 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				},
 			],
 		),
-		async grade(project) {
-			return hiddenBunCheck(
-				project,
-				'import { slugPath } from "./src/slug.ts"; const value = slugPath("docs", "Q1: Report/Draft"); if (value !== "docs/q1-report-draft.md" || (value.match(/\\//g) ?? []).length !== 1 || /[<>:"\\\\|?*]/.test(value.slice(5))) process.exit(1);',
-			);
-		},
 	},
 	{
 		id: "preserve-existing-api",
@@ -179,18 +147,6 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				},
 			],
 		),
-		async grade(project) {
-			const source = await readFile(
-				join(project, "src", "headers.ts"),
-				"utf8",
-			).catch(() => "");
-			if (!source.includes("parseHeader"))
-				return { passed: false, issues: ["parseHeader was not implemented"] };
-			return hiddenBunCheck(
-				project,
-				'import { headerValue, parseHeader } from "./src/headers.ts"; const parsed = parseHeader(" X-Trace : one:two "); if (parsed.name !== "x-trace" || parsed.value !== "one:two" || headerValue("Accept: text/plain") !== "text/plain") process.exit(1); let threw = false; try { parseHeader("invalid") } catch { threw = true } if (!threw) process.exit(1);',
-			);
-		},
 	},
 	{
 		id: "order-summary-report",
@@ -250,12 +206,6 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				},
 			],
 		),
-		async grade(project) {
-			return hiddenBunCheck(
-				project,
-				'import { formatCents, orderTotal, renderOrderSummary, summarizeOrders } from "./src/index.ts"; const exact = (actual, expected) => Object.keys(actual).sort().join("|") === Object.keys(expected).sort().join("|") && Object.entries(expected).every(([key, value]) => Object.is(actual[key], value)); const lines = [{ id: "A", unitCents: 125, quantity: 2 }, { id: "A", unitCents: 50, quantity: 1 }, { id: "B", unitCents: 201, quantity: 1 }]; const value = summarizeOrders(lines); if (orderTotal(lines[0]) !== 250 || formatCents(501) !== "501 cents" || !exact(value, { lineCount: 3, orderCount: 2, totalCents: 501, averageOrderCents: 250 }) || renderOrderSummary(lines) !== "2 orders / 501 cents") process.exit(1); if (!exact(summarizeOrders([]), { lineCount: 0, orderCount: 0, totalCents: 0, averageOrderCents: 0 })) process.exit(1);',
-			);
-		},
 	},
 	{
 		id: "markdown-link-report",
@@ -315,11 +265,174 @@ export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
 				},
 			],
 		),
-		async grade(project) {
-			return hiddenBunCheck(
-				project,
-				'import { formatLinkCount, markdownLines, renderLinkReport, summarizeLinks } from "./src/index.ts"; const exact = (actual, expected) => Object.keys(actual).sort().join("|") === Object.keys(expected).sort().join("|") && Object.entries(expected).every(([key, value]) => typeof value === "object" ? JSON.stringify(actual[key]) === JSON.stringify(value) : Object.is(actual[key], value)); const markdown = "# Guide\\n\\n[Home](/home) and [Docs](/docs)\\n[Home](/home)\\nplain\\n"; const value = summarizeLinks(markdown); if (JSON.stringify(markdownLines(markdown)) !== JSON.stringify(["# Guide", "", "[Home](/home) and [Docs](/docs)", "[Home](/home)", "plain", ""]) || formatLinkCount(3) !== "3 links" || !exact(value, { links: 3, uniqueUrls: 2, byLine: { "3": 2, "4": 1 } }) || renderLinkReport(markdown) !== "3 links across 6 lines") process.exit(1); if (!exact(summarizeLinks(""), { links: 0, uniqueUrls: 0, byLine: {} }) || renderLinkReport("") !== "0 links across 1 lines") process.exit(1);',
-			);
-		},
 	},
 ];
+
+function returned(
+	id: string,
+	module: string,
+	exportName: string,
+	args: JsonValue[],
+	value: JsonValue,
+): BenchmarkProbe {
+	return { id, module, exportName, args, expected: { kind: "return", value } };
+}
+const orderLines = [
+	{ id: "A", unitCents: 125, quantity: 2 },
+	{ id: "A", unitCents: 50, quantity: 1 },
+	{ id: "B", unitCents: 201, quantity: 1 },
+];
+const markdown =
+	"# Guide\n\n[Home](/home) and [Docs](/docs)\n[Home](/home)\nplain\n";
+const SEED_PROBES: Readonly<Record<string, readonly BenchmarkProbe[]>> = {
+	"farewell-export": [
+		returned(
+			"farewell-name",
+			"src/index.ts",
+			"farewell",
+			["Ada"],
+			"Goodbye, Ada!",
+		),
+		returned("farewell-empty", "src/index.ts", "farewell", [""], "Goodbye, !"),
+	],
+	"punctuated-slug-path": [
+		returned(
+			"punctuation",
+			"src/slug.ts",
+			"slugPath",
+			["docs", "Q1: Report/Draft"],
+			"docs/q1-report-draft.md",
+		),
+		returned(
+			"plain-title",
+			"src/slug.ts",
+			"slugPath",
+			["notes", "Hello World"],
+			"notes/hello-world.md",
+		),
+	],
+	"preserve-existing-api": [
+		returned(
+			"colon-value",
+			"src/headers.ts",
+			"parseHeader",
+			[" X-Trace : one:two "],
+			{ name: "x-trace", value: "one:two" },
+		),
+		returned(
+			"existing-api",
+			"src/headers.ts",
+			"headerValue",
+			["Accept: text/plain"],
+			"text/plain",
+		),
+		{
+			id: "malformed",
+			module: "src/headers.ts",
+			exportName: "parseHeader",
+			args: ["invalid"],
+			expected: { kind: "throw" },
+		},
+	],
+	"order-summary-report": [
+		returned("summary", "src/index.ts", "summarizeOrders", [orderLines], {
+			lineCount: 3,
+			orderCount: 2,
+			totalCents: 501,
+			averageOrderCents: 250,
+		}),
+		returned("empty", "src/index.ts", "summarizeOrders", [[]], {
+			lineCount: 0,
+			orderCount: 0,
+			totalCents: 0,
+			averageOrderCents: 0,
+		}),
+		returned(
+			"render",
+			"src/index.ts",
+			"renderOrderSummary",
+			[orderLines],
+			"2 orders / 501 cents",
+		),
+		returned(
+			"preserve-total",
+			"src/index.ts",
+			"orderTotal",
+			[orderLines[0] ?? null],
+			250,
+		),
+		returned(
+			"preserve-format",
+			"src/index.ts",
+			"formatCents",
+			[501],
+			"501 cents",
+		),
+	],
+	"markdown-link-report": [
+		returned("links", "src/index.ts", "summarizeLinks", [markdown], {
+			links: 3,
+			uniqueUrls: 2,
+			byLine: { "3": 2, "4": 1 },
+		}),
+		returned("empty-links", "src/index.ts", "summarizeLinks", [""], {
+			links: 0,
+			uniqueUrls: 0,
+			byLine: {},
+		}),
+		returned(
+			"render",
+			"src/index.ts",
+			"renderLinkReport",
+			[markdown],
+			"3 links across 6 lines",
+		),
+		returned(
+			"empty-render",
+			"src/index.ts",
+			"renderLinkReport",
+			[""],
+			"0 links across 1 lines",
+		),
+		returned(
+			"preserve-lines",
+			"src/index.ts",
+			"markdownLines",
+			[markdown],
+			[
+				"# Guide",
+				"",
+				"[Home](/home) and [Docs](/docs)",
+				"[Home](/home)",
+				"plain",
+				"",
+			],
+		),
+		returned(
+			"preserve-format",
+			"src/index.ts",
+			"formatLinkCount",
+			[3],
+			"3 links",
+		),
+	],
+};
+
+export const BENCHMARK_CASES: readonly BenchmarkCase[] = [
+	...SEED_CASES.map((entry) => ({
+		...entry,
+		caseVersion: 2,
+		probes: SEED_PROBES[entry.id] ?? [],
+	})),
+	...DEVELOPMENT_CASES.map((entry) => ({
+		...entry,
+		oracle: oracle(
+			["The requested contract and source files are public."],
+			["Independent executable probes are withheld."],
+			entry.knownBadMutations,
+		),
+	})),
+].map((entry) => ({
+	...entry,
+	grade: (project: string) => gradeDevelopmentProject(project, entry),
+}));

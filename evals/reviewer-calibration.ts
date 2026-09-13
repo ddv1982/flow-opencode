@@ -6,11 +6,8 @@ import type {
 	ModelIdentity,
 	ValidatedReport,
 } from "./report.js";
-import {
-	type HumanLabel,
-	REVIEWER_CASES,
-	type ReviewerTruth,
-} from "./reviewer-cases.js";
+import type { ReviewerAssessment, ReviewerTruth } from "./reviewer-cases.js";
+import type { ValidatedReviewerLabelImport } from "./reviewer-labels.js";
 
 export type ReviewerObservation = {
 	readonly caseId: string;
@@ -18,6 +15,7 @@ export type ReviewerObservation = {
 	readonly truth: ReviewerTruth;
 	readonly verdict: "passed" | "failed" | null;
 	readonly submitted: boolean;
+	readonly assessment?: ReviewerAssessment;
 };
 
 export type WilsonInterval = readonly [number, number];
@@ -34,15 +32,21 @@ export type ReviewerCalibrationAnalysis = {
 	readonly matrix: ReviewerConfusionMatrix;
 	readonly defectCases: number;
 	readonly cleanCases: number;
+	readonly falseFindings: number;
+	readonly unassessedFindings: number;
+	readonly assessedCases: number;
+	readonly historicalVerdictCases: number;
 	readonly detectionRate: number | null;
 	readonly detectionInterval95: WilsonInterval | null;
 	readonly falsePositiveRate: number | null;
 	readonly falsePositiveInterval95: WilsonInterval | null;
 };
 
-export type LabelAssignment = HumanLabel & {
+export type LabelAssignment = {
 	readonly caseId: string;
 	readonly caseVersion: number;
+	readonly raterId: string;
+	readonly truth: ReviewerTruth;
 };
 
 export type ReviewerPromotionRecord = {
@@ -178,15 +182,33 @@ export function analyzeReviewerCalibration(
 	let falsePositives = 0;
 	let trueNegatives = 0;
 	let unsubmitted = 0;
+	let falseFindings = 0;
+	let unassessedFindings = 0;
+	let assessedCases = 0;
+	let historicalVerdictCases = 0;
 	for (const observation of observations) {
 		if (!observation.submitted || observation.verdict === null) {
 			unsubmitted += 1;
 			continue;
 		}
+		if (observation.assessment) {
+			assessedCases += 1;
+			falseFindings += observation.assessment.falseFindingIds.length;
+			unassessedFindings += observation.assessment.unassessedFindingIds.length;
+		} else historicalVerdictCases += 1;
 		if (observation.truth === "defect") {
-			if (observation.verdict === "failed") truePositives += 1;
+			if (
+				observation.assessment
+					? observation.assessment.matchedDefectIds.length > 0
+					: observation.verdict === "failed"
+			)
+				truePositives += 1;
 			else falseNegatives += 1;
-		} else if (observation.verdict === "failed") falsePositives += 1;
+		} else if (
+			observation.verdict === "failed" ||
+			(observation.assessment?.falseFindingIds.length ?? 0) > 0
+		)
+			falsePositives += 1;
 		else trueNegatives += 1;
 	}
 	const defectCases = truePositives + falseNegatives;
@@ -201,6 +223,10 @@ export function analyzeReviewerCalibration(
 		},
 		defectCases,
 		cleanCases,
+		falseFindings,
+		unassessedFindings,
+		assessedCases,
+		historicalVerdictCases,
 		detectionRate: defectCases === 0 ? null : truePositives / defectCases,
 		detectionInterval95: wilson(truePositives, defectCases),
 		falsePositiveRate: cleanCases === 0 ? null : falsePositives / cleanCases,
@@ -223,6 +249,8 @@ export function krippendorffNominalAlpha(
 	const categories = new Map<ReviewerTruth, number>();
 	let total = 0;
 	for (const values of byCase.values()) {
+		if (values.length < 2) continue;
+		const pairWeight = 1 / (values.length - 1);
 		for (const value of values) {
 			categories.set(value.truth, (categories.get(value.truth) ?? 0) + 1);
 			total += 1;
@@ -230,8 +258,8 @@ export function krippendorffNominalAlpha(
 		for (const left of values) {
 			for (const right of values) {
 				if (left.raterId === right.raterId) continue;
-				observedPairs += 1;
-				if (left.truth !== right.truth) disagreements += 1;
+				observedPairs += pairWeight;
+				if (left.truth !== right.truth) disagreements += pairWeight;
 			}
 		}
 	}
@@ -260,37 +288,20 @@ function reviewerObservations(
 						truth: attempt.outcome.evidence.truth,
 						verdict: attempt.outcome.evidence.verdict,
 						submitted: attempt.outcome.evidence.submitted,
+						...(attempt.outcome.evidence.assessment
+							? { assessment: attempt.outcome.evidence.assessment }
+							: {}),
 					},
 				]
 			: [],
 	);
 }
 
-function orderedLabels(
-	labels: readonly LabelAssignment[],
-): readonly LabelAssignment[] {
-	return [...labels].sort((left, right) => {
-		const leftKey = [
-			left.caseId,
-			String(left.caseVersion),
-			left.raterId,
-			left.truth,
-		].join("\u0000");
-		const rightKey = [
-			right.caseId,
-			String(right.caseVersion),
-			right.raterId,
-			right.truth,
-		].join("\u0000");
-		return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
-	});
-}
-
 export function createReviewerPromotion(input: {
 	readonly mode: "pilot" | "promotion";
 	readonly report: ValidatedReport;
 	readonly catalog: ValidatedCaseCatalog;
-	readonly labels: readonly LabelAssignment[];
+	readonly labels: readonly LabelAssignment[] | ValidatedReviewerLabelImport;
 	readonly artifact: ArtifactIdentity;
 	readonly reviewerModels: readonly ModelIdentity[];
 	readonly minimumDetectionRate: number;
@@ -306,11 +317,23 @@ export function createReviewerPromotion(input: {
 	| { readonly kind: "promotion"; readonly record: ReviewerPromotionRecord } {
 	const observations = reviewerObservations(input.report);
 	const analysis = analyzeReviewerCalibration(observations);
-	const alpha = krippendorffNominalAlpha(input.labels);
+	const humanImport = "schemaVersion" in input.labels ? input.labels : null;
+	const labels: readonly LabelAssignment[] =
+		"schemaVersion" in input.labels
+			? input.labels.cases.flatMap((entry) =>
+					entry.labels.map((label) => ({
+						caseId: entry.caseId,
+						caseVersion: entry.caseVersion,
+						raterId: label.raterId,
+						truth: label.truth,
+					})),
+				)
+			: input.labels;
+	const alpha = krippendorffNominalAlpha(labels);
 	const labelsByCase = new Map<string, Set<string>>();
 	const labelAssignments = new Set<string>();
 	let duplicateRater = false;
-	for (const label of input.labels) {
+	for (const label of labels) {
 		const key = `${label.caseId}\u0000${label.caseVersion}`;
 		const assignment = `${key}\u0000${label.raterId}`;
 		if (labelAssignments.has(assignment)) duplicateRater = true;
@@ -333,28 +356,18 @@ export function createReviewerPromotion(input: {
 		[...plannedCases].every((key) => labelsByCase.has(key));
 	const labelsMatchTruth = observations.every((observation) => {
 		const key = `${observation.caseId}\u0000${observation.caseVersion}`;
-		return input.labels
+		if (humanImport) {
+			const entry = humanImport.cases.find(
+				(entry) => `${entry.caseId}\u0000${entry.caseVersion}` === key,
+			);
+			return (
+				(entry?.adjudication ?? entry?.labels[0])?.truth === observation.truth
+			);
+		}
+		return labels
 			.filter((label) => `${label.caseId}\u0000${label.caseVersion}` === key)
 			.every((label) => label.truth === observation.truth);
 	});
-	const registeredLabels = REVIEWER_CASES.filter((entry) =>
-		plannedCases.has(`${entry.caseId}\u0000${entry.caseVersion}`),
-	).flatMap((entry) =>
-		entry.humanLabels.map((label) => ({
-			...label,
-			caseId: entry.caseId,
-			caseVersion: entry.caseVersion,
-		})),
-	);
-	const labelsMatchRegistry =
-		canonicalSha256(
-			"flow-reviewer-human-labels-v1",
-			orderedLabels(input.labels),
-		) ===
-		canonicalSha256(
-			"flow-reviewer-human-labels-v1",
-			orderedLabels(registeredLabels),
-		);
 	const observedReviewerModels = input.report.attempts.flatMap((attempt) =>
 		attempt.outcome.kind === "product"
 			? attempt.actors.flatMap((actor) =>
@@ -375,6 +388,19 @@ export function createReviewerPromotion(input: {
 			),
 		);
 	const reasons = [
+		"Per-attempt and per-finding human adjudication provenance is absent from the F1 assessment format.",
+		...(!humanImport
+			? [
+					"Synthetic or unverified label arrays cannot establish human calibration; import independent human labels.",
+				]
+			: []),
+		...(observations.some(
+			(observation) => observation.assessment?.labelSource !== "human",
+		)
+			? [
+					"Promotion requires human finding assessments; synthetic and historical verdict grades are advisory.",
+				]
+			: []),
 		...(input.mode === "pilot"
 			? ["Pilot runs are advisory by definition."]
 			: []),
@@ -404,9 +430,6 @@ export function createReviewerPromotion(input: {
 		...(!labelsMatchTruth
 			? ["Human labels disagree with the executable fixed truth."]
 			: []),
-		...(!labelsMatchRegistry
-			? ["Human labels do not match the preregistered immutable labels."]
-			: []),
 		...(alpha === null || alpha < 0.8
 			? ["Krippendorff nominal alpha is below 0.8."]
 			: []),
@@ -429,68 +452,5 @@ export function createReviewerPromotion(input: {
 			? ["Calibration artifact does not exactly match every attempt."]
 			: []),
 	];
-	if (reasons.length > 0) return { kind: "advisory", analysis, reasons };
-	const detectionInterval95 = analysis.detectionInterval95;
-	const falsePositiveInterval95 = analysis.falsePositiveInterval95;
-	const detectionRate = analysis.detectionRate;
-	const falsePositiveRate = analysis.falsePositiveRate;
-	if (
-		!detectionInterval95 ||
-		!falsePositiveInterval95 ||
-		detectionRate === null ||
-		falsePositiveRate === null ||
-		alpha === null
-	) {
-		return {
-			kind: "advisory",
-			analysis,
-			reasons: ["Calibration lacks a finite statistic."],
-		};
-	}
-	const record = {
-		schemaVersion: 1 as const,
-		planSha256: input.report.plan.planSha256,
-		calibrationReportSha256: canonicalSha256(
-			"flow-reviewer-calibration-report-v1",
-			input.report,
-		),
-		caseCatalogSha256: canonicalSha256(
-			"flow-reviewer-calibration-catalog-v1",
-			input.catalog,
-		),
-		humanLabelsSha256: canonicalSha256(
-			"flow-reviewer-human-labels-v1",
-			orderedLabels(input.labels),
-		),
-		artifactSha256: canonicalSha256(
-			"flow-reviewer-artifact-v1",
-			input.artifact,
-		),
-		reviewerModels: input.reviewerModels,
-		defectCases: analysis.defectCases,
-		cleanCases: analysis.cleanCases,
-		ratersPerCase: minimumRaters,
-		agreement: {
-			method: "krippendorff-alpha" as const,
-			value: alpha,
-			minimum: 0.8,
-		},
-		observed: {
-			detectionRate,
-			detectionInterval95,
-			falsePositiveRate,
-			falsePositiveInterval95,
-		},
-		minimumDetectionRate: input.minimumDetectionRate,
-		maximumFalsePositiveRate: input.maximumFalsePositiveRate,
-		recordedAt: input.recordedAt,
-	};
-	const parsed = ReviewerPromotionRecordSchema.safeParse(record);
-	if (!parsed.success)
-		return {
-			kind: "advisory",
-			analysis,
-			reasons: ["Promotion record failed strict validation."],
-		};
-	return { kind: "promotion", record };
+	return { kind: "advisory", analysis, reasons };
 }

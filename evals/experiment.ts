@@ -380,6 +380,7 @@ export function createPairedPlan(input: {
 	readonly allocationSeed: string;
 	readonly commitmentNonce: string;
 	readonly budget: CampaignPlan["budget"];
+	readonly benchmarkCases?: CampaignPlan["benchmarkCases"];
 }): {
 	readonly plan: CampaignPlan;
 	readonly secret: AllocationSecret;
@@ -454,6 +455,7 @@ export function createPairedPlan(input: {
 		throw new Error("Attempt budget cannot cover every primary pair.");
 	}
 	const plan: CampaignPlan = {
+		...(input.benchmarkCases ? { benchmarkCases: input.benchmarkCases } : {}),
 		schemaVersion: 1,
 		planId: "paired-value-v1",
 		planSha256: `sha256:${"0".repeat(64)}`,

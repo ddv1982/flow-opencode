@@ -227,10 +227,45 @@ gating.
 
 ## Paired value benchmark
 
-`bun run benchmark -- --model <id> --repeat 3 --seed <text>` seed-shuffles identical,
-hidden-graded tasks through isolated Flow and ordinary arms. Reports compare
-correctness, false completion, messages, tokens, duration, and cost. This is
-exploratory, not qualification; see [ADR 0013](../docs/adr/0013-derived-assurance-and-paired-value-measurement.md).
+`bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
+ordinary OpenCode on 12 development tasks. Each product attempt retains its base
+and final source snapshots, executable probes, runtime identity, observations,
+and transcript before cleanup. A new campaign freezes those inputs before
+provider work. Historical reports remain readable but lack these retained inputs.
+
+Both arms receive the same final task-status declaration instruction. Reports
+separate that declaration from workflow closure and correctness. Missing,
+conflicting, or quoted declarations remain unassessed. This measures explicit
+declarations, not arbitrary natural-language claims.
+
+### Regrade retained results
+
+Keep the complete campaign directory, including its catalog, transcripts, and
+content-addressed objects. Use the recorded grader checkout, Bun binary, Zod
+contents, and lockfile, then run:
+
+```bash
+bun evals/regrade-benchmark.ts --report <campaign/report.json>
+```
+
+The command verifies retained hashes, recomputes transcript declarations and
+closure, and repeats executable grading. It refuses missing or altered evidence
+and mismatched runtimes. Each probe runs on a fresh reconstruction with cleared
+credentials, trusted Bun startup settings, and an authenticated result channel.
+Candidate-written passing text and exit status alone earn no credit. This is not
+an OS sandbox and does not contain arbitrary same-user filesystem or network access.
+
+### Interpret reviewer and confirmation evidence
+
+Reviewer controls have explicit synthetic truth and a narrow finding matcher.
+Unmatched findings on defective cases remain unassessed. Human case labels bind
+fixture versions and digests, but do not adjudicate individual findings. Reviewer
+promotion stays advisory until exact attempt/finding assessments are available.
+
+Twelve separate confirmation contracts are sealed outside the development bank.
+Do not inspect or run them while tuning prompts. Only the final frozen
+confirmation phase consumes them. Development results remain separate from
+release qualification; see [ADR 0013](../docs/adr/0013-derived-assurance-and-paired-value-measurement.md).
 
 ## Replaying recorded decisions
 
@@ -499,9 +534,9 @@ two providers, plus at most 16 environment reserves. Ordinary campaign size depe
 on the selected scenarios, models and repeats. Use `--scenario` while iterating;
 cost depends on model pricing and the work performed, not just scenario count.
 
-Cost is whatever the provider reports, and a provider that prices nothing reports
-zero rather than omitting the field: every OpenAI run measured here reported
-`cost: 0` on real token use. A zero total against non-zero output tokens is
+Cost is the host-reported figure, which may come from model-price estimates. It
+is not a provider invoice. Historical OpenAI runs reported `cost: 0` on real
+token use. A zero total against non-zero output tokens is
 therefore read as unknown and printed as `cost not reported by provider` — an
 unknown spend is not a free one. Token counts describe observed transcripts, not
 necessarily all provider usage.

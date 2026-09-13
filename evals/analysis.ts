@@ -831,10 +831,19 @@ export function analyzeReviewer(report: ValidatedReport): ReviewerAnalysis {
 		const evidence = attempt.outcome.evidence;
 		if (evidence.truth === "defect") {
 			defectLabels += 1;
-			if (evidence.verdict === "failed") detections += 1;
+			if (
+				evidence.assessment
+					? evidence.assessment.matchedDefectIds.length > 0
+					: evidence.verdict === "failed"
+			)
+				detections += 1;
 		} else {
 			cleanLabels += 1;
-			if (evidence.verdict === "failed") falsePositives += 1;
+			if (
+				evidence.verdict === "failed" ||
+				(evidence.assessment?.falseFindingIds.length ?? 0) > 0
+			)
+				falsePositives += 1;
 		}
 		if (!evidence.submitted) unsubmitted += 1;
 	}

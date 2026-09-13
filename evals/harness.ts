@@ -1329,6 +1329,7 @@ export class EvalHost {
 		observation: ProviderErrorObservation | null;
 	} | null = null;
 	private stopPromise: Promise<void> | undefined;
+	private projectRetention: ((project: string) => Promise<void>) | undefined;
 	private readonly signal: AbortSignal | undefined;
 
 	private constructor(project: string, scratch: string, signal?: AbortSignal) {
@@ -1351,7 +1352,7 @@ export class EvalHost {
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
 		checkCancellation(options.signal);
-		const scratch = await mkdtemp(join(tmpdir(), "flow-eval-"));
+		const scratch = await mkdtemp(join(tmpdir(), "workspace-"));
 		const project = join(scratch, "project");
 		const host = new EvalHost(project, scratch, options.signal);
 		try {
@@ -1618,21 +1619,32 @@ export class EvalHost {
 		command: string,
 		args: string,
 		model: string,
-		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
+		options: {
+			quietMs?: number;
+			timeoutMs?: number;
+			stalledMs?: number;
+			variant?: string;
+		} = {},
 	): Promise<CommandEnd> {
+		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
 			signal: this.signal,
 			waitOwnsCancellation: true,
 			onCancelled: () => this.abortSession(sessionId),
 			post: postSessionJson,
 			url: `${this.baseUrl}/session/${sessionId}/command`,
-			body: { command, arguments: args, model },
+			body: {
+				command,
+				arguments: args,
+				model,
+				...(variant === undefined ? {} : { variant }),
+			},
 			onRejected: (message) => {
 				this.serverLog += `\ncommand POST rejected: ${message}`;
 			},
 			wait: (request) =>
 				this.waitForQuiet(sessionId, {
-					...options,
+					...waitOptions,
 					request,
 				}),
 		});
@@ -1643,8 +1655,14 @@ export class EvalHost {
 		sessionId: string,
 		prompt: string,
 		model: string,
-		options: { quietMs?: number; timeoutMs?: number; stalledMs?: number } = {},
+		options: {
+			quietMs?: number;
+			timeoutMs?: number;
+			stalledMs?: number;
+			variant?: string;
+		} = {},
 	): Promise<CommandEnd> {
+		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
 			signal: this.signal,
 			waitOwnsCancellation: true,
@@ -1653,6 +1671,7 @@ export class EvalHost {
 			url: `${this.baseUrl}/session/${sessionId}/message`,
 			body: {
 				model: splitModel(model),
+				...(variant === undefined ? {} : { variant }),
 				parts: [{ type: "text", text: prompt }],
 			},
 			onRejected: (message) => {
@@ -1660,7 +1679,7 @@ export class EvalHost {
 			},
 			wait: (request) =>
 				this.waitForQuiet(sessionId, {
-					...options,
+					...waitOptions,
 					request,
 				}),
 		});
@@ -2193,13 +2212,33 @@ export class EvalHost {
 		return this.stopPromise;
 	}
 
+	retainProjectOnStop(retain: (project: string) => Promise<void>): void {
+		if (this.stopPromise || this.projectRetention)
+			throw new Error(
+				"Project retention must be registered once before shutdown.",
+			);
+		this.projectRetention = retain;
+	}
+
 	private async stopOnce(): Promise<void> {
 		if (this.server) await terminateChildProcessTree(this.server);
 		// Must happen before the scratch directory is removed: a refresh the child
 		// performed lives only in its copy of `auth.json`, and losing it here is
 		// exactly what silently rotates the developer's own stored refresh token
 		// out from under them.
-		await syncProviderCredentialsBack(this.credentialPaths);
+		const results = await Promise.allSettled([
+			syncProviderCredentialsBack(this.credentialPaths),
+			Promise.resolve().then(() => this.projectRetention?.(this.project)),
+		]);
+		const failures = results.flatMap((result) =>
+			result.status === "rejected" ? [result.reason] : [],
+		);
+		if (failures.length === 1) throw failures[0];
+		if (failures.length > 1)
+			throw new AggregateError(
+				failures,
+				"Credential synchronization and project retention did not complete.",
+			);
 		await rm(this.scratch, { recursive: true, force: true });
 	}
 }

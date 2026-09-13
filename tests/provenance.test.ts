@@ -1,12 +1,18 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
+import { EvalHost } from "../evals/harness.js";
+import {
+	extractObservedActor,
+	extractObservedVariant,
+} from "../evals/host-observation.js";
 import {
 	evaluatorIdentity,
+	hostActorObservation,
 	hostConfigSha256,
 	inspectArtifact,
 	inspectWorkingSource,
@@ -89,6 +95,235 @@ function unsafeTarball(path: string): Promise<void> {
 }
 
 describe("eval provenance", () => {
+	test("forwards requested variants to both native host endpoints without changing wait policy", async () => {
+		const posted: Array<{ path: string; body: Record<string, unknown> }> = [];
+		const waited: object[] = [];
+		const requests = spyOn(globalThis, "fetch").mockImplementation(
+			Object.assign(
+				async (
+					url: Parameters<typeof fetch>[0],
+					init?: Parameters<typeof fetch>[1],
+				) => {
+					posted.push({
+						path: new URL(String(url)).pathname,
+						body: JSON.parse(String(init?.body)),
+					});
+					return Response.json({});
+				},
+				{ preconnect: fetch.preconnect },
+			),
+		);
+		const host = Reflect.construct(EvalHost, [
+			"/unused",
+			"/unused",
+		]) as EvalHost;
+		Object.assign(host, {
+			baseUrl: "http://127.0.0.1:1",
+			waitForQuiet: async (
+				_sessionId: string,
+				options: { request: { settled: Promise<void> } },
+			) => {
+				waited.push(options);
+				await options.request.settled;
+				return "quiet";
+			},
+		});
+		try {
+			await host.runCommand("session", "flow-auto", "task", "route/model", {
+				variant: "high",
+				quietMs: 25,
+			});
+			await host.runPrompt("session", "task", "route/model", {
+				variant: "low",
+				quietMs: 35,
+			});
+			await host.runPrompt("session", "task", "route/model");
+			expect(posted).toEqual([
+				{
+					path: "/session/session/command",
+					body: {
+						command: "flow-auto",
+						arguments: "task",
+						model: "route/model",
+						variant: "high",
+					},
+				},
+				{
+					path: "/session/session/message",
+					body: {
+						model: { providerID: "route", modelID: "model" },
+						variant: "low",
+						parts: [{ type: "text", text: "task" }],
+					},
+				},
+				{
+					path: "/session/session/message",
+					body: {
+						model: { providerID: "route", modelID: "model" },
+						parts: [{ type: "text", text: "task" }],
+					},
+				},
+			]);
+			expect(waited[0]).toHaveProperty("quietMs", 25);
+			expect(waited[1]).toHaveProperty("quietMs", 35);
+			for (const options of waited)
+				expect(options).not.toHaveProperty("variant");
+		} finally {
+			requests.mockRestore();
+		}
+	});
+
+	test("retains a requested variant independently of observed host settings", () => {
+		const requested = normalizeRequestedModel({
+			modelId: "route/model",
+			variant: "high",
+			family: "declared-family",
+			gateway: null,
+			revision: null,
+		});
+		expect(requested).toEqual({
+			routeProvider: "route",
+			model: "model",
+			variant: "high",
+			family: "declared-family",
+			gateway: null,
+			revision: null,
+		});
+		expect(
+			normalizeRequestedModel({
+				modelId: "route/model",
+				family: "declared-family",
+				gateway: null,
+				revision: null,
+			}),
+		).not.toHaveProperty("variant");
+	});
+
+	test("retains host model fields when the variant and provider facts are unavailable", () => {
+		const actor = extractObservedActor({
+			role: "reviewer",
+			sessions: [
+				{
+					id: "reviewer",
+					messages: [
+						{
+							info: {
+								role: "assistant",
+								time: { completed: 2 },
+								providerID: "route",
+								modelID: "model",
+							},
+						},
+					],
+				},
+			],
+		});
+		expect(hostActorObservation(actor)).toEqual({
+			model: {
+				kind: "observed",
+				value: { providerID: "route", modelID: "model" },
+			},
+			variant: { kind: "unobserved", reason: "field-unavailable" },
+		});
+		expect(hostActorObservation(actor).model).not.toHaveProperty("family");
+	});
+
+	test("keeps completed-assistant variant observations separate from model identity", () => {
+		const messages = [
+			{
+				info: {
+					role: "assistant",
+					time: { completed: 2 },
+					providerID: "route",
+					modelID: "model",
+					variant: "high",
+				},
+			},
+			{
+				info: {
+					role: "assistant",
+					time: { completed: 3 },
+					model: { providerID: "route", modelID: "model", variant: "high" },
+				},
+			},
+		];
+		const actor = extractObservedActor({
+			role: "manager",
+			sessions: [{ id: "parent", messages }],
+		});
+		expect(hostActorObservation(actor)).toEqual({
+			model: {
+				kind: "observed",
+				value: { providerID: "route", modelID: "model" },
+			},
+			variant: { kind: "observed", value: "high" },
+		});
+		const conflicting = extractObservedActor({
+			role: "manager",
+			sessions: [
+				{
+					id: "parent",
+					messages: [
+						messages[0],
+						{ info: { ...messages[0]?.info, variant: "low" } },
+					],
+				},
+			],
+		});
+		expect(hostActorObservation(conflicting)).toEqual({
+			model: actor.actualModel,
+			variant: { kind: "unobserved", reason: "conflicting-observations" },
+		});
+	});
+
+	test("does not promote requested, errored, or incomplete variants to observations", () => {
+		for (const info of [
+			{ role: "user", time: { completed: 2 }, model: { variant: "high" } },
+			{ role: "assistant", time: { created: 1 }, variant: "high" },
+			{ role: "assistant", time: { completed: 2 }, error: {}, variant: "high" },
+		]) {
+			expect(extractObservedVariant([{ info }])).toEqual({
+				kind: "unobserved",
+				reason: "no-completed-assistant",
+			});
+		}
+		expect(extractObservedVariant(null)).toEqual({
+			kind: "unobserved",
+			reason: "endpoint-failure",
+		});
+		expect(
+			extractObservedVariant([
+				{
+					info: { role: "assistant", time: { completed: 2 }, variant: "high" },
+				},
+				{ info: { role: "assistant", time: { completed: 3 } } },
+			]),
+		).toEqual({ kind: "unobserved", reason: "field-unavailable" });
+	});
+
+	test("does not label missing variant evidence as a model identity conflict", () => {
+		const actor = extractObservedActor({
+			role: "manager",
+			sessions: [
+				{
+					id: "parent",
+					messages: ["first", "second"].map((modelID) => ({
+						info: {
+							role: "assistant",
+							time: { completed: 2 },
+							providerID: "route",
+							modelID,
+						},
+					})),
+				},
+			],
+		});
+		expect(hostActorObservation(actor)).toEqual({
+			model: { kind: "unobserved", reason: "conflicting-observations" },
+			variant: { kind: "unobserved", reason: "field-unavailable" },
+		});
+	});
+
 	test("binds a commit and dirty working-content digest separately", async () => {
 		const root = await repository();
 		const clean = await inspectWorkingSource(root);

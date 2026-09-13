@@ -82,6 +82,7 @@ import {
 } from "./metrics.js";
 import {
 	evaluatorIdentity,
+	hostActorObservation,
 	hostConfigSha256,
 	inspectArtifact,
 	instructionDelivery,
@@ -1103,6 +1104,7 @@ export async function runCampaign(
 						const actors = actorsWithSessions(outcome.actors ?? []).map(
 							(actor) => ({
 								...actor,
+								hostObservation: hostActorObservation(actor),
 								requestedModelId:
 									actor.role === "manager" ? model : reviewer.requestedModel,
 								requestedModel: legacyRequestedModel(

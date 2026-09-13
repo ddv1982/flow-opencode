@@ -29,6 +29,9 @@ export function retainedReportActors(
 					}
 				: actor.actualModel,
 		sessionIds: [...actor.sessionIds],
+		...(actor.hostObservation
+			? { hostObservation: actor.hostObservation }
+			: {}),
 	}));
 }
 
