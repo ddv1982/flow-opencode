@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -451,12 +452,43 @@ describe("repository-owned v2 qualification", () => {
 				"export const grade = () => 1;\n",
 			);
 			const before = releaseGraderBundle(root);
+			for (const args of [
+				["init"],
+				["add", "."],
+				[
+					"-c",
+					"user.name=Fixture",
+					"-c",
+					"user.email=fixture@example.invalid",
+					"-c",
+					"commit.gpgSign=false",
+					"-c",
+					"core.hooksPath=/dev/null",
+					"commit",
+					"-m",
+					"original authority",
+				],
+			]) {
+				const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+				expect(result.status).toBe(0);
+			}
+			const revision = spawnSync("git", ["rev-parse", "HEAD"], {
+				cwd: root,
+				encoding: "utf8",
+			}).stdout.trim();
+
 			await writeFile(
 				join(root, "evals", "grade.ts"),
 				"export const grade = () => 2;\n",
 			);
 			const after = releaseGraderBundle(root);
 			expect(after).not.toEqual(before);
+			expect(releaseGraderBundle(root, revision)).toEqual(before);
+			expect(() => releaseGraderBundle(root, "HEAD")).toThrow("exact commit");
+			expect(() => releaseGraderBundle(root, "0".repeat(40))).toThrow(
+				"unavailable",
+			);
+
 			expect(after.files.map((file) => file.path)).toContain("evals/grade.ts");
 		} finally {
 			await rm(root, { recursive: true, force: true });
