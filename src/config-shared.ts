@@ -197,27 +197,25 @@ function pluginReviewerOptions(
 	return Object.fromEntries(Object.entries(reviewer));
 }
 
-function pluginReviewerText(
+function reviewerTextSetting(
 	reviewer: Record<string, unknown>,
+	env: FlowEnvironment,
 	setting: "model" | "variant",
 	onWarning?: (message: string) => void,
-): string | undefined {
-	if (!Object.hasOwn(reviewer, setting)) return undefined;
-	const value = reviewer[setting];
-	if (typeof value !== "string") {
+): ExplicitReviewerText | undefined {
+	if (Object.hasOwn(reviewer, setting)) {
+		const raw = reviewer[setting];
+		const value = typeof raw === "string" ? raw.trim() : undefined;
+		if (value) return { kind: "explicit", source: "plugin-option", value };
 		onWarning?.(
 			`Flow plugin option reviewer.${setting} must be a non-empty string; ignoring it.`,
 		);
-		return undefined;
 	}
-	const model = value.trim();
-	if (!model) {
-		onWarning?.(
-			`Flow plugin option reviewer.${setting} must be a non-empty string; ignoring it.`,
-		);
-		return undefined;
-	}
-	return model;
+	const value = envValue(
+		env,
+		`OPENCODE_FLOW_REVIEWER_${setting.toUpperCase()}`,
+	);
+	return value ? { kind: "explicit", source: "environment", value } : undefined;
 }
 
 function pluginReviewerSteps(
@@ -250,66 +248,32 @@ export function resolveFlowReviewerConfiguration(options?: {
 		options?.pluginOptions,
 		options?.onWarning,
 	);
-	const configuredModel = pluginReviewerText(
+	const model = reviewerTextSetting(reviewer, env, "model", options?.onWarning);
+	const variant = reviewerTextSetting(
 		reviewer,
-		"model",
-		options?.onWarning,
-	);
-	const configuredVariant = pluginReviewerText(
-		reviewer,
+		env,
 		"variant",
 		options?.onWarning,
 	);
 	const configuredSteps = pluginReviewerSteps(reviewer, options?.onWarning);
-	const environmentModel = configuredModel
-		? undefined
-		: envValue(env, "OPENCODE_FLOW_REVIEWER_MODEL");
-	const variant =
-		configuredVariant ?? envValue(env, "OPENCODE_FLOW_REVIEWER_VARIANT");
-	const environmentSteps =
-		configuredSteps === undefined
-			? reviewerSteps(env, options?.onWarning)
-			: undefined;
-	if (variant && !configuredModel && !environmentModel) {
+	const steps = configuredSteps ?? reviewerSteps(env, options?.onWarning);
+	if (variant && !model) {
 		options?.onWarning?.(
 			"Configure an explicit reviewer.model to apply reviewer.variant.",
 		);
 	}
 	return {
-		...(variant
-			? {
-					variant: {
-						kind: "explicit" as const,
-						source: configuredVariant
-							? ("plugin-option" as const)
-							: ("environment" as const),
-						value: variant,
-					},
-				}
-			: {}),
-		model: configuredModel
-			? { kind: "explicit", source: "plugin-option", value: configuredModel }
-			: environmentModel
-				? {
-						kind: "explicit",
-						source: "environment",
-						value: environmentModel,
-					}
-				: { kind: "shared-with-manager" },
+		...(variant ? { variant } : {}),
+		model: model ?? { kind: "shared-with-manager" },
 		steps:
-			configuredSteps !== undefined
+			steps !== undefined
 				? {
 						kind: "explicit",
-						source: "plugin-option",
-						value: configuredSteps,
+						source:
+							configuredSteps !== undefined ? "plugin-option" : "environment",
+						value: steps,
 					}
-				: environmentSteps !== undefined
-					? {
-							kind: "explicit",
-							source: "environment",
-							value: environmentSteps,
-						}
-					: { kind: "host-default" },
+				: { kind: "host-default" },
 	};
 }
 
