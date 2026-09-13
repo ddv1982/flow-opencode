@@ -1,0 +1,65 @@
+{
+  "status": "unpromoted-draft",
+  "policyChanges": "none intended; independent semantic review passed for model-comparison admission only",
+  "files": {
+    "flow-plan": {
+      "source": "skills/flow-plan/SKILL.md",
+      "candidate": "skills/flow-plan/SKILL.md",
+      "original": {
+        "bytes": 6957,
+        "whitespaceWords": 976,
+        "sha256": "sha256:dd260edd1cf4a81a9cb64f6da26020c34393426d192ac44ac488481b1c2c43e4"
+      },
+      "draft": {
+        "bytes": 6378,
+        "whitespaceWords": 896,
+        "sha256": "sha256:39c35da033660c3cb89826253041fb44ba0e895aa80c1ef946ee7f5ce671d6e9"
+      },
+      "frontmatterIdentical": true,
+      "bytesSaved": 579
+    },
+    "flow-run": {
+      "source": "skills/flow-run/SKILL.md",
+      "candidate": "skills/flow-run/SKILL.md",
+      "original": {
+        "bytes": 8185,
+        "whitespaceWords": 1109,
+        "sha256": "sha256:73a3d966f3754bc03ebfc6f86ba57238dac13262c5898d9529b6079f38a6afb6"
+      },
+      "draft": {
+        "bytes": 7633,
+        "whitespaceWords": 1030,
+        "sha256": "sha256:53574c67c72c2ec9353098fb67e0fb6fd9d899c56172780aedb68fd7fdbc6271"
+      },
+      "frontmatterIdentical": true,
+      "bytesSaved": 552
+    }
+  },
+  "kernel": {
+    "placeholder": "${FLOW_MANAGER_KERNEL}",
+    "bytes": 788,
+    "whitespaceWords": 103,
+    "rawGuideFilesContainKernel": false,
+    "deliveryPositionsChanged": false,
+    "loadedRunSuffix": "\\n\\n${FLOW_MANAGER_KERNEL}\\n"
+  },
+  "managerStack": {
+    "original": {
+      "bytes": 17346,
+      "whitespaceWords": 2386
+    },
+    "draft": {
+      "bytes": 16215,
+      "whitespaceWords": 2227
+    },
+    "bytesSaved": 1131,
+    "percentSaved": 6.520235212729164,
+    "kernelOccurrencesOriginal": 2,
+    "kernelOccurrencesDraft": 2
+  },
+  "limitations": [
+    "Static bytes and whitespace words, not tokenizer counts.",
+    "No model campaign, outcome improvement, or policy equivalence has been established.",
+    "Production guide, kernel, router, continuation, compaction, tool schema and registry files were not changed."
+  ]
+}
