@@ -209,7 +209,7 @@ describe("npm publication reconciliation", () => {
 });
 
 describe("GitHub release reconciliation", () => {
-	test.each(["accepted", "disconnected", "rejected"])(
+	test.each(["accepted", "disconnected", "rejected", "unobserved"])(
 		"does not repeat %s draft creation while the listing is stale",
 		async (outcome) => {
 			const input = {
@@ -224,6 +224,7 @@ describe("GitHub release reconciliation", () => {
 			const releases: Array<Record<string, unknown>> = [];
 			let creates = 0;
 			let readsAfterCreate = 0;
+			let visible = outcome !== "unobserved";
 			const runtime: PublicationRuntime = {
 				fetch: async (_url, init) => {
 					if (init?.method === "POST") {
@@ -244,7 +245,10 @@ describe("GitHub release reconciliation", () => {
 						return jsonResponse(201, release);
 					}
 					if (creates > 0) readsAfterCreate += 1;
-					return jsonResponse(200, readsAfterCreate < 2 ? [] : releases);
+					return jsonResponse(
+						200,
+						!visible || readsAfterCreate < 2 ? [] : releases,
+					);
 				},
 				run: async () => {
 					throw new Error("Publication must not run model commands");
@@ -252,8 +256,15 @@ describe("GitHub release reconciliation", () => {
 				sleep: async () => {},
 			};
 			const preparation = convergeGithubRelease(input, runtime);
-			if (outcome === "rejected") {
+			if (outcome === "rejected" || outcome === "unobserved") {
 				await expect(preparation).rejects.toThrow("did not become observable");
+				if (outcome === "unobserved") {
+					visible = true;
+					await expect(convergeGithubRelease(input, runtime)).resolves.toEqual({
+						state: "prepared",
+						releaseId: 1,
+					});
+				}
 			} else {
 				await expect(preparation).resolves.toEqual({
 					state: "prepared",

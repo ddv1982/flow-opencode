@@ -83,6 +83,26 @@ Finish or close active sessions before changing Flow versions in either directio
   release and removed no earlier than the next major, so no session is stranded
   mid-lifecycle by an upgrade.
 
+## Recover publication without repeating qualification
+
+The release workflow verifies retained qualification and canary evidence offline.
+Its pinned OpenCode smoke does not call a model provider. Publication recovery
+does not require another paid matrix or canary when the qualified inputs remain
+unchanged.
+
+Draft preparation sends at most one creation request per invocation. It then
+retries release observations, including when the creation response is lost.
+If the draft remains unobservable, preparation stops with an unknown outcome.
+Before restarting, inspect GitHub for the existing draft and confirm its tag,
+commit, notes, and assets. A fresh process cannot distinguish a stale empty
+listing from absence. The workflow serializes publication jobs, but the command
+does not provide a durable creation receipt across process restarts.
+
+When the exact draft is visible, rerun the failed publication job to reuse it.
+Conflicting metadata, duplicate drafts, and mismatched assets still fail.
+Do not delete drafts automatically or regenerate passing provider evidence to
+resolve a publication error.
+
 ## Running it
 
 Finish code, dependency, version and changelog changes first. Pass frozen install,
