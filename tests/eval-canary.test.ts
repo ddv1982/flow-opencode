@@ -496,6 +496,55 @@ describe("canary record boundary", () => {
 		expect(derived.checks["loads-flow-tools"]).toBe(false);
 	});
 
+	for (const variant of [
+		"linked-retry",
+		"unlinked-reviewer",
+		"wrong-model",
+		"wrong-parent",
+	] as const) {
+		test(`review retry evidence: ${variant}`, () => {
+			const value = prepared();
+			const transcript = canaryTranscript();
+			const manager = transcript.messages[0];
+			const reviewer = transcript.messages[1];
+			if (!manager || !reviewer) throw new Error("Missing canary actors.");
+			const task = structuredClone(
+				manager.parts.find((part) => part.tool === "task"),
+			);
+			if (!task || !("metadata" in task.state) || !task.state.metadata)
+				throw new Error("Missing reviewer task.");
+			const retry = structuredClone(reviewer);
+			retry.info.sessionID = "ses_retry";
+			transcript.messages.push(retry);
+			task.state.metadata.sessionId = "ses_retry";
+			if (variant === "wrong-model")
+				task.state.metadata.model.modelID = "other-model";
+			if (variant === "wrong-parent")
+				task.state.metadata.parentSessionId = "ses_other";
+			if (variant !== "unlinked-reviewer") manager.parts.push(task);
+			const derived = deriveCanaryResult({
+				packageVersion: value.artifact.packageVersion,
+				artifactSha256: value.artifactSha256,
+				tarballSha256: value.artifact.tarballSha256,
+				preparedSha256: value.sha256,
+				pluginEntrySha256: value.pluginEntrySha256,
+				installation: installation(value),
+				session: canarySession(),
+				transcript,
+			});
+			expect(derived.status).toBe(
+				variant === "linked-retry" ? "passed" : "failed",
+			);
+			expect(derived.checks["dispatches-reviewer"]).toBe(
+				variant === "linked-retry",
+			);
+			if (variant === "linked-retry")
+				expect(
+					derived.actors.find((actor) => actor.role === "reviewer")?.sessionIds,
+				).toEqual(["ses_reviewer", "ses_retry"]);
+		});
+	}
+
 	test("requires reviewer task lineage to match both observed actors", () => {
 		const value = prepared();
 		const transcript = structuredClone(canaryTranscript()) as unknown as {

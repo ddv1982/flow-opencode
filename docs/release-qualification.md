@@ -29,6 +29,17 @@ This page owns release thresholds, candidate freezing, and publication order.
 | `project-gate-discovery` | ungated | Report-only until two provider baselines show whether planning selects the explicit whole-repository command over a narrower script. |
 | `task-risk-lenses` | ungated | Measures whether the manager supplies the relevant full review questions. It does not measure defect detection or false blockers. |
 
+Offline verification fixes do not require new provider runs when the measured
+package bytes and frozen case policy remain unchanged. Qualification preserves
+the original report and evaluator identity, verifies that identity against the
+exact recorded Git commit without executing historical code (that commit must
+be available in local Git history), and retains those
+execution sources separately from the current verifier sources. The current
+verifier independently recomputes every retained outcome before publication.
+Missing or mismatched execution sources, changed outcomes, and altered package
+bytes remain failures. Canary review retries may use multiple reviewer sessions
+when all are linked to the same observed manager with consistent identities.
+
 A new scenario needs an explicit release-policy decision. Any required canonical
 case missing from the report fails qualification.
 

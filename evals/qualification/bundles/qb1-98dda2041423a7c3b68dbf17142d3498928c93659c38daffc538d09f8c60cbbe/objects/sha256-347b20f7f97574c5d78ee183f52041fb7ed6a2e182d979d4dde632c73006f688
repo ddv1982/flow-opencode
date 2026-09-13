@@ -1,0 +1,29 @@
+export class UnreadableFlowSessionError extends Error {
+	readonly code = "UNREADABLE_FLOW_SESSION";
+	readonly reason: string;
+	constructor(message: string, reason: string) {
+		super(message);
+		this.name = "UnreadableFlowSessionError";
+		this.reason = reason;
+	}
+}
+
+export class UnsupportedFlowSessionVersionError extends Error {
+	readonly code = "UNSUPPORTED_FLOW_SESSION_VERSION";
+	readonly actualVersion: unknown;
+	constructor(actualVersion: unknown) {
+		super(
+			"This Flow build supports only Session v5 active state. Close active older sessions before upgrading; archived history remains inert.",
+		);
+		this.name = "UnsupportedFlowSessionVersionError";
+		this.actualVersion = actualVersion;
+	}
+}
+
+export class ArchiveCollisionError extends Error {
+	readonly code = "FLOW_ARCHIVE_COLLISION";
+	constructor(message: string) {
+		super(message);
+		this.name = "ArchiveCollisionError";
+	}
+}
