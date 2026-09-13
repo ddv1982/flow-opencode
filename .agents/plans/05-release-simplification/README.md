@@ -57,3 +57,25 @@ Migrate current callers together, then remove replaced path-coordination code.
 Task-proportional workflows and prompt reductions change agent behavior. Keep
 them separate from release tooling. Existing conformance evidence does not prove
 their efficiency or review quality.
+
+## Recovery
+
+The release workflow verifies retained qualification and canary evidence offline.
+Its pinned OpenCode smoke does not call a model provider. Publication recovery
+does not require another paid matrix or canary when the qualified inputs remain
+unchanged and retained evidence still satisfies release policy. Expired evidence
+stops publication for an explicit decision. It must not trigger an automatic
+paid rerun.
+
+Draft preparation sends at most one creation request per invocation. It then
+retries release observations, including when the creation response is lost.
+If the draft remains unobservable, preparation stops with an unknown outcome.
+Before restarting, inspect GitHub for the existing draft and confirm its tag,
+commit, notes, and assets. A fresh process cannot distinguish a stale empty
+listing from absence. The workflow serializes publication jobs, but the command
+does not provide a durable creation receipt across process restarts.
+
+When the exact draft is visible, rerun the failed publication job to reuse it.
+Conflicting metadata, duplicate drafts, and mismatched assets still fail.
+Do not delete drafts automatically or regenerate passing provider evidence to
+resolve a publication error.
