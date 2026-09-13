@@ -359,7 +359,10 @@ function compareExpectedProvenanceWithin(
 		exactSet,
 	);
 	if (expected.kind === "release") {
-		if (report.plan.analysis.kind === "paired") {
+		if (
+			report.plan.analysis.kind === "paired" ||
+			report.plan.analysis.kind === "paired-study"
+		) {
 			mismatch(
 				mismatches,
 				null,
@@ -381,7 +384,10 @@ function compareExpectedProvenanceWithin(
 		const expectedArtifacts = expected.artifacts.map((artifact) =>
 			canonicalJson(artifact),
 		);
-		if (report.plan.analysis.kind !== "paired") {
+		if (
+			report.plan.analysis.kind !== "paired" &&
+			report.plan.analysis.kind !== "paired-study"
+		) {
 			mismatch(
 				mismatches,
 				null,
@@ -389,7 +395,10 @@ function compareExpectedProvenanceWithin(
 				"Paired provenance requires a paired campaign.",
 			);
 		}
-		if (expectedArtifacts[0] === expectedArtifacts[1]) {
+		if (
+			report.plan.analysis.kind !== "paired-study" &&
+			expectedArtifacts[0] === expectedArtifacts[1]
+		) {
 			mismatch(
 				mismatches,
 				null,
@@ -865,7 +874,10 @@ export function analyzeReviewer(report: ValidatedReport): ReviewerAnalysis {
 }
 
 export function analyzePairs(report: ValidatedReport): PairedAnalysis {
-	if (report.plan.analysis.kind !== "paired") {
+	if (
+		report.plan.analysis.kind !== "paired" &&
+		report.plan.analysis.kind !== "paired-study"
+	) {
 		return {
 			eligible: 0,
 			complete: 0,

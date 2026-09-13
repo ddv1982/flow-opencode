@@ -109,7 +109,7 @@ function args(argv: readonly string[]): Options {
 			i += 1;
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
-				"usage: bun run benchmark -- --model provider/model [--case id] [--repeat n] [--seed text] [--reserve-pairs n] [--max-usd n]",
+				"usage: bun run benchmark -- --model provider/model [--case id] [--repeat n] [--seed text] [--reserve-pairs n] [--max-usd n]\n       bun run benchmark -- --manifest <study.json> [--dry-run]",
 			);
 			process.exit(0);
 		} else throw new Error(`Unknown or incomplete argument: ${flag ?? ""}`);
@@ -135,7 +135,7 @@ function model(id: string): ModelIdentity {
 		revision: null,
 	});
 }
-function catalogFor(cases: readonly BenchmarkCase[]) {
+export function catalogFor(cases: readonly BenchmarkCase[]) {
 	return cases.map((c) => ({
 		caseId: c.id,
 		caseVersion: c.caseVersion,
@@ -164,10 +164,29 @@ function observedActual(outcome: Outcome): ActorIdentity["actualModel"] {
 			}
 		: actor.actualModel;
 }
-function actorsFor(
+export function actorsFor(
 	requested: ModelIdentity,
 	outcome: Outcome,
+	reviewerRequested?: ModelIdentity | null,
 ): ActorIdentity[] {
+	if (reviewerRequested !== undefined) {
+		return (outcome.actors ?? [])
+			.filter((actor) => actor.sessionIds.length > 0)
+			.map((actor) => ({
+				role: actor.role,
+				requestedModel:
+					actor.role === "reviewer"
+						? (reviewerRequested ?? requested)
+						: requested,
+				actualModel: {
+					kind: "unobserved" as const,
+					reason:
+						"Complete provider identity is unavailable; retain the structured host observation.",
+				},
+				hostObservation: hostActorObservation(actor),
+				sessionIds: [...actor.sessionIds],
+			}));
+	}
 	const actor = outcome.actors?.find((a) => a.role === "manager");
 	return actor && actor.sessionIds.length > 0
 		? [
@@ -208,7 +227,7 @@ export function benchmarkTaskPrompt(
 	return `${benchmark.prompt}\n\n${COMPLETION_DECLARATION_INSTRUCTION}`;
 }
 
-function workflowCompleted(outcome: Outcome): boolean {
+export function workflowCompleted(outcome: Outcome): boolean {
 	const docs = [outcome.session, ...outcome.archives].filter(
 		(x): x is Record<string, unknown> => x !== null,
 	);
@@ -223,7 +242,7 @@ function workflowCompleted(outcome: Outcome): boolean {
 		return true;
 	return false;
 }
-function productAttempt(input: {
+export function productAttempt(input: {
 	cell: CampaignPlan["cells"][number];
 	benchmark: BenchmarkCase;
 	outcome: Outcome;
@@ -235,6 +254,8 @@ function productAttempt(input: {
 	gradeIssues: readonly string[];
 	endedBy: CommandEnd;
 	requested: ModelIdentity;
+	reviewerRequested?: ModelIdentity | null;
+	accounting?: NonNullable<AttemptRecordV2["usage"]["accounting"]>;
 	flow: boolean;
 	retained: RetainedBenchmarkEvidence;
 }): AttemptRecordV2 {
@@ -253,7 +274,7 @@ function productAttempt(input: {
 		artifact: input.artifact,
 		evaluator: input.evaluator,
 		hostConfigSha256: input.hostConfig,
-		actors: actorsFor(input.requested, input.outcome),
+		actors: actorsFor(input.requested, input.outcome, input.reviewerRequested),
 		instructions,
 		transcript: input.transcript,
 		outcome: {
@@ -276,7 +297,10 @@ function productAttempt(input: {
 		usage: {
 			durationMs: input.outcome.durationMs,
 			outputTokens: input.outcome.tokens.output,
-			costUsd: input.outcome.costUsd,
+			costUsd: input.accounting
+				? input.accounting.costUsd
+				: input.outcome.costUsd,
+			...(input.accounting ? { accounting: input.accounting } : {}),
 		},
 	};
 }
@@ -307,6 +331,14 @@ export function pairedBudgetExceeded(input: {
 }
 
 async function main(): Promise<void> {
+	if (
+		process.argv.includes("--manifest") ||
+		process.argv.includes("--dry-run")
+	) {
+		const { runStudyCommand } = await import("./study-runner.js");
+		await runStudyCommand(process.argv.slice(2));
+		return;
+	}
 	const options = args(process.argv.slice(2));
 	const toolchain = currentBunToolchain(packageJson.packageManager);
 	const selected = options.cases.length

@@ -13,7 +13,10 @@ export const PAIRED_ANALYSIS_VERSION_SHA256 = canonicalSha256(
 );
 
 export function requiredPairedPowerPairs(
-	policy: Extract<CampaignPlan["analysis"], { kind: "paired" }>,
+	policy: Pick<
+		Extract<CampaignPlan["analysis"], { kind: "paired" }>,
+		"alpha" | "targetPower" | "minimumDetectableEffect"
+	>,
 ): number {
 	return Math.ceil(
 		(2 * Math.log(2 / (policy.alpha * (1 - policy.targetPower)))) /

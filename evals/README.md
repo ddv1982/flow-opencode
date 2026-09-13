@@ -238,6 +238,47 @@ separate that declaration from workflow closure and correctness. Missing,
 conflicting, or quoted declarations remain unassessed. This measures explicit
 declarations, not arbitrary natural-language claims.
 
+### Versioned studies
+
+For exact artifact and model-profile comparisons, supply a version-1 manifest
+matching [StudyManifestSchema](study-manifest.ts):
+
+```bash
+bun run benchmark -- --manifest study.json --dry-run
+bun run benchmark -- --manifest study.json
+```
+
+Dry-run validates local tarballs, profiles, cases, and declared budget estimates;
+it starts no host, copies no credentials, and makes no provider requests. Execution
+is the second command and requires a funded campaign. Each arm declares its
+artifact path and full identity, manager model and optional variant, and reviewer
+configuration. Cache paths include the tarball digest, so equal package versions
+cannot substitute different bytes. Paths are relative to the manifest.
+
+Choose `smoke`/`descriptive`, `exploratory`/`equal-task-cluster-bootstrap-v1`, or
+`confirmatory`/`legacy-fixed-task-bounded-pair-v1`. Smoke and exploratory results
+do not establish power. Exploratory intervals resample whole tasks with equal task
+weight; repeats do not create new tasks. Confirmatory power applies to the fixed
+task population and retains the existing bounded-pair calculation. Historical
+`paired` reports keep their original hashes and interpretation.
+
+Comparisons may isolate artifact or manager changes, measure
+`reviewer-workflow-effect`, or declare `total-effect`. Reviewer workflow effects
+measure the whole run; isolated reviewer quality needs frozen code and review
+evidence. Requested profiles remain distinct from observed host metadata.
+
+Studies pin OpenCode 1.18.6 and disable ambient host configuration and reviewer
+environment overrides. Catalog membership does not prove model entitlement or
+effective effort. Optional entitlement probes have a separate explicit allowance
+and retained receipts. A failed probe stops the study.
+
+Budget limits are observed stop thresholds, not guaranteed invoice caps. Declare
+primary-attempt estimates, attempt and wall-clock bounds, generated-output bounds,
+and a monetary limit or explicit unknown-cost policy. Generated output sums the
+host's output and reasoning buckets; input and cache categories remain separate.
+Cost is a host-rate estimate, and missing accounting stays unknown. Incomplete
+evidence retention halts execution before another attempt or reserve can run.
+
 ### Regrade retained results
 
 Keep the complete campaign directory, including its catalog, transcripts, and

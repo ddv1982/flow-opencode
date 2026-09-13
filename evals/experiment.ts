@@ -15,6 +15,13 @@ import {
 	type ScheduledCell,
 	type ValidatedReport,
 } from "./report.js";
+import {
+	assertStudyBudget,
+	type PairedStudyPolicy,
+	studyArmMatches,
+	studyReviewerModel,
+} from "./study-protocol.js";
+import { analyzeTaskClusters } from "./study-statistics.js";
 
 const SCANNER_VERSION_SHA256 = canonicalSha256(
 	"flow-paired-transcript-scanner-v1",
@@ -65,16 +72,25 @@ export type MaskedPairObservation = {
 	readonly armTokens: readonly [string, string];
 	readonly outcomes: readonly [boolean, boolean];
 };
-export type PowerMetadata = {
-	readonly method: "conservative-bounded-pair";
-	readonly plannedPairs: number;
-	readonly requiredPairs: number;
-	readonly targetPower: number;
-	readonly minimumDetectableEffect: number;
-	readonly sufficient: boolean;
-};
+export type PowerMetadata =
+	| {
+			readonly method: "conservative-bounded-pair";
+			readonly plannedPairs: number;
+			readonly requiredPairs: number;
+			readonly targetPower: number;
+			readonly minimumDetectableEffect: number;
+			readonly sufficient: boolean;
+	  }
+	| {
+			readonly method: "unestablished";
+			readonly plannedPairs: number;
+			readonly requiredPairs: null;
+			readonly targetPower: null;
+			readonly minimumDetectableEffect: null;
+			readonly sufficient: false;
+	  };
 export type MaskedAnalysisRecord = {
-	readonly schemaVersion: 1;
+	readonly schemaVersion: 1 | 2;
 	readonly reportId: string;
 	readonly planSha256: string;
 	readonly reportSha256: string;
@@ -87,12 +103,21 @@ export type MaskedAnalysisRecord = {
 	readonly opaqueEstimate: number | null;
 	readonly interval95: readonly [number, number] | null;
 	readonly power: PowerMetadata;
+	readonly study?:
+		| Readonly<{
+				purpose: PairedStudyPolicy["purpose"];
+				method: PairedStudyPolicy["method"];
+				distinctTasks: number;
+		  }>
+		| undefined;
 	readonly scannerSha256: string;
 	readonly scannerPassed: boolean;
 	readonly scans: readonly TranscriptScan[];
 	readonly gateReasons: readonly string[];
 	readonly claimEligible: boolean;
-	readonly treatmentBlinding: "flow-tool-presence-visible";
+	readonly treatmentBlinding:
+		| "flow-tool-presence-visible"
+		| "artifact-and-profile-visible";
 	readonly frozenAt: string;
 	readonly sha256: string;
 };
@@ -235,7 +260,7 @@ const TranscriptScanSchema = z
 
 export const MaskedAnalysisRecordSchema = z
 	.object({
-		schemaVersion: z.literal(1),
+		schemaVersion: z.union([z.literal(1), z.literal(2)]),
 		reportId: TextSchema,
 		planSha256: DigestSchema,
 		reportSha256: DigestSchema,
@@ -247,13 +272,40 @@ export const MaskedAnalysisRecordSchema = z
 		ties: z.number().int().safe().nonnegative(),
 		opaqueEstimate: z.number().finite().min(-1).max(1).nullable(),
 		interval95: IntervalSchema.nullable(),
-		power: PowerSchema,
+		power: z.union([
+			PowerSchema,
+			z
+				.object({
+					method: z.literal("unestablished"),
+					plannedPairs: z.number().int().safe().nonnegative(),
+					requiredPairs: z.null(),
+					targetPower: z.null(),
+					minimumDetectableEffect: z.null(),
+					sufficient: z.literal(false),
+				})
+				.strict(),
+		]),
+		study: z
+			.object({
+				purpose: z.enum(["smoke", "exploratory", "confirmatory"]),
+				method: z.enum([
+					"descriptive",
+					"equal-task-cluster-bootstrap-v1",
+					"legacy-fixed-task-bounded-pair-v1",
+				]),
+				distinctTasks: z.number().int().safe().nonnegative(),
+			})
+			.strict()
+			.optional(),
 		scannerSha256: DigestSchema,
 		scannerPassed: z.boolean(),
 		scans: z.array(TranscriptScanSchema),
 		gateReasons: z.array(TextSchema),
 		claimEligible: z.boolean(),
-		treatmentBlinding: z.literal("flow-tool-presence-visible"),
+		treatmentBlinding: z.enum([
+			"flow-tool-presence-visible",
+			"artifact-and-profile-visible",
+		]),
 		frozenAt: z.string().datetime({ offset: true }),
 		sha256: DigestSchema,
 	})
@@ -266,11 +318,24 @@ export const MaskedAnalysisRecordSchema = z
 				message: "Complete-pair count must match observations.",
 			});
 		}
-		if ((record.opaqueEstimate === null) !== (record.interval95 === null)) {
+		if (
+			record.schemaVersion === 1 &&
+			(record.opaqueEstimate === null) !== (record.interval95 === null)
+		) {
 			context.addIssue({
 				code: "custom",
 				path: ["interval95"],
 				message: "Estimate and interval must be present together.",
+			});
+		}
+		if (
+			(record.schemaVersion === 2) !== (record.study !== undefined) ||
+			(record.schemaVersion === 1 &&
+				record.power.method !== "conservative-bounded-pair")
+		) {
+			context.addIssue({
+				code: "custom",
+				message: "Masked study metadata does not match its version.",
 			});
 		}
 		if (record.claimEligible !== (record.gateReasons.length === 0)) {
@@ -332,7 +397,10 @@ export function pairedReportSha256(report: ValidatedReport): string {
 
 export function maskedAnalysisSha256(record: MaskedAnalysisRecord): string {
 	const { sha256: _sha256, ...withoutHash } = record;
-	return canonicalSha256("flow-masked-analysis-v1", withoutHash);
+	return canonicalSha256(
+		`flow-masked-analysis-v${record.schemaVersion}`,
+		withoutHash,
+	);
 }
 
 function blockId(input: {
@@ -374,6 +442,7 @@ function allocationFor(input: {
 export function createPairedPlan(input: {
 	readonly cases: readonly ExperimentCase[];
 	readonly model: ModelIdentity;
+	readonly study?: PairedStudyPolicy;
 	readonly repetitions: number;
 	readonly reservePairsPerBlock: number;
 	readonly randomizationSeed: string;
@@ -435,6 +504,12 @@ export function createPairedPlan(input: {
 					}),
 				);
 				for (const armToken of tokens) {
+					const arm =
+						input.study?.arms[
+							(armToken === tokens[0]) === candidateFirst
+								? "candidate"
+								: "baseline"
+						];
 					cells.push({
 						cellId: `cell-${canonicalSha256("flow-paired-cell-v1", { currentBlockId, armToken }).slice(7)}`,
 						blockId: currentBlockId,
@@ -442,8 +517,8 @@ export function createPairedPlan(input: {
 						caseVersion: task.caseVersion,
 						armToken,
 						repetition,
-						managerModel: input.model,
-						reviewerModel: null,
+						managerModel: arm?.manager ?? input.model,
+						reviewerModel: arm ? studyReviewerModel(arm) : null,
 						schedule,
 					});
 				}
@@ -454,6 +529,8 @@ export function createPairedPlan(input: {
 	if (input.budget.maxAttempts < primaryPairs * 2) {
 		throw new Error("Attempt budget cannot cover every primary pair.");
 	}
+	if (input.study)
+		assertStudyBudget(input.study, input.budget, primaryPairs * 2);
 	const plan: CampaignPlan = {
 		...(input.benchmarkCases ? { benchmarkCases: input.benchmarkCases } : {}),
 		schemaVersion: 1,
@@ -466,7 +543,7 @@ export function createPairedPlan(input: {
 			maxReplacementBlocks: primaryPairs * input.reservePairsPerBlock,
 		},
 		stoppingRule: { kind: "fixed-complete-pairs", count: primaryPairs },
-		analysis: {
+		analysis: input.study ?? {
 			kind: "paired",
 			primaryOutcome: "hidden-correctness",
 			estimand: "candidate-minus-baseline-risk-difference",
@@ -713,10 +790,66 @@ export function taskStratifiedPairedBootstrap(input: {
 }
 
 function policyReasons(report: ValidatedReport): string[] {
+	if (report.plan.analysis.kind === "paired-study") return [];
 	if (report.plan.analysis.kind !== "paired") return ["policy-kind-invalid"];
 	return report.plan.analysis.versionSha256 === PAIRED_ANALYSIS_VERSION_SHA256
 		? []
 		: ["policy-version-invalid"];
+}
+
+function pairedEstimate(
+	policy: CampaignPlan["analysis"],
+	values: readonly MaskedPairObservation[],
+) {
+	if (policy.kind === "paired-study") {
+		if (policy.purpose === "smoke") return { estimate: null, interval95: null };
+		if (policy.purpose === "exploratory")
+			return analyzeTaskClusters({
+				observations: values,
+				seed: policy.bootstrapSeed,
+			});
+	}
+	return taskStratifiedPairedBootstrap({
+		observations: values,
+		seed:
+			policy.kind === "paired" || policy.kind === "paired-study"
+				? policy.bootstrapSeed
+				: "invalid",
+	});
+}
+
+function pairedPower(
+	policy: CampaignPlan["analysis"],
+	plannedPairs: number,
+): PowerMetadata {
+	if (
+		(policy.kind === "paired" ||
+			(policy.kind === "paired-study" && policy.purpose === "confirmatory")) &&
+		typeof policy.targetPower === "number" &&
+		typeof policy.minimumDetectableEffect === "number"
+	) {
+		const requiredPairs = requiredPairedPowerPairs({
+			alpha: policy.alpha,
+			targetPower: policy.targetPower,
+			minimumDetectableEffect: policy.minimumDetectableEffect,
+		});
+		return {
+			method: "conservative-bounded-pair",
+			plannedPairs,
+			requiredPairs,
+			targetPower: policy.targetPower,
+			minimumDetectableEffect: policy.minimumDetectableEffect,
+			sufficient: plannedPairs >= requiredPairs,
+		};
+	}
+	return {
+		method: "unestablished",
+		plannedPairs,
+		requiredPairs: null,
+		targetPower: null,
+		minimumDetectableEffect: null,
+		sufficient: false,
+	};
 }
 
 function scanSha256(scan: TranscriptScan): string {
@@ -743,30 +876,21 @@ function maskedBase(input: {
 	readonly frozenAt: string;
 }): Omit<MaskedAnalysisRecord, "sha256"> {
 	if (
-		input.report.plan.analysis.kind !== "paired" ||
+		(input.report.plan.analysis.kind !== "paired" &&
+			input.report.plan.analysis.kind !== "paired-study") ||
 		!input.report.allocationCommitmentSha256
 	) {
 		throw new Error("Masked analysis requires a paired report and commitment.");
 	}
 	const selected = observations(input.report);
-	const bootstrap = taskStratifiedPairedBootstrap({
-		observations: selected.complete,
-		seed: input.report.plan.analysis.bootstrapSeed,
-	});
+	const policy = input.report.plan.analysis;
+	const bootstrap = pairedEstimate(policy, selected.complete);
 	const primaryPairs = new Set(
 		input.report.plan.cells
 			.filter((cell) => cell.schedule === "primary")
 			.map((cell) => cell.blockId),
 	).size;
-	const required = requiredPairedPowerPairs(input.report.plan.analysis);
-	const power: PowerMetadata = {
-		method: "conservative-bounded-pair",
-		plannedPairs: primaryPairs,
-		requiredPairs: required,
-		targetPower: input.report.plan.analysis.targetPower,
-		minimumDetectableEffect: input.report.plan.analysis.minimumDetectableEffect,
-		sufficient: primaryPairs >= required,
-	};
+	const power = pairedPower(policy, primaryPairs);
 	const scansValid = input.scans.every(
 		(scan) =>
 			TranscriptScanSchema.safeParse(scan).success &&
@@ -776,6 +900,38 @@ function maskedBase(input: {
 	const scannerPassed =
 		scansValid && bindingMatches && input.scans.every((scan) => scan.passed);
 	const gateReasons = [
+		...(policy.kind === "paired-study" &&
+		input.report.attempts.some(
+			(attempt) =>
+				attempt.outcome.kind === "product" &&
+				attempt.actors.some(
+					(actor) =>
+						actor.hostObservation?.model.kind !== "observed" ||
+						(actor.requestedModel.variant !== undefined &&
+							actor.hostObservation?.variant.kind !== "observed"),
+				),
+		)
+			? ["profile-observation-unverified"]
+			: []),
+		...(policy.kind === "paired-study" &&
+		Object.values(policy.arms)
+			.flatMap((arm) => [
+				arm.manager,
+				...(arm.reviewer?.model ? [arm.reviewer.model] : []),
+			])
+			.some(
+				(model) =>
+					model.variant !== undefined &&
+					!input.report.completion.preflight?.some(
+						(entry) =>
+							canonicalJson(entry.model) === canonicalJson(model) &&
+							entry.providerCalled &&
+							entry.variantAvailability === "listed" &&
+							entry.failure === null,
+					),
+			)
+			? ["variant-availability-unverified"]
+			: []),
 		...(input.report.completion.status === "complete"
 			? []
 			: ["report-incomplete"]),
@@ -785,10 +941,16 @@ function maskedBase(input: {
 			: ["scan-failed"]),
 		...(bindingMatches ? [] : ["scan-binding-mismatch"]),
 		...policyReasons(input.report),
-		...(power.sufficient ? [] : ["power-insufficient"]),
+		...(power.method === "unestablished"
+			? [
+					`${policy.kind === "paired-study" ? policy.purpose : "unsupported"}-only`,
+				]
+			: power.sufficient
+				? []
+				: ["power-insufficient"]),
 	];
 	return {
-		schemaVersion: 1 as const,
+		schemaVersion: policy.kind === "paired-study" ? 2 : 1,
 		reportId: input.report.reportId,
 		planSha256: input.report.plan.planSha256,
 		reportSha256: pairedReportSha256(input.report),
@@ -806,12 +968,28 @@ function maskedBase(input: {
 		opaqueEstimate: bootstrap.estimate,
 		interval95: bootstrap.interval95,
 		power,
+		...(policy.kind === "paired-study"
+			? {
+					study: {
+						purpose: policy.purpose,
+						method: policy.method,
+						distinctTasks: new Set(
+							selected.complete.map(
+								(pair) => `${pair.caseId}\u0000${pair.caseVersion}`,
+							),
+						).size,
+					},
+				}
+			: {}),
 		scannerSha256: canonicalSha256("flow-paired-scans-v1", input.scans),
 		scannerPassed,
 		scans: input.scans,
 		gateReasons,
 		claimEligible: gateReasons.length === 0,
-		treatmentBlinding: "flow-tool-presence-visible" as const,
+		treatmentBlinding:
+			policy.kind === "paired-study"
+				? "artifact-and-profile-visible"
+				: "flow-tool-presence-visible",
 		frozenAt: input.frozenAt,
 	};
 }
@@ -824,7 +1002,10 @@ export function freezeMaskedAnalysis(input: {
 	const base = maskedBase(input);
 	const record: MaskedAnalysisRecord = {
 		...base,
-		sha256: canonicalSha256("flow-masked-analysis-v1", base),
+		sha256: canonicalSha256(
+			`flow-masked-analysis-v${base.schemaVersion}`,
+			base,
+		),
 	};
 	const parsed = MaskedAnalysisRecordSchema.safeParse(record);
 	if (!parsed.success || canonicalJson(record).match(/candidate|baseline/i)) {
@@ -906,7 +1087,13 @@ function validateRevealBindings(input: {
 		const arm = attempt.armToken
 			? block?.tokenToArm[attempt.armToken]
 			: undefined;
-		if (!arm || (arm === "baseline") !== isOrdinaryArtifact(attempt.artifact)) {
+		const policy = input.report.plan.analysis;
+		if (
+			!arm ||
+			(policy.kind === "paired-study"
+				? !studyArmMatches(policy, policy.arms[arm], attempt)
+				: (arm === "baseline") !== isOrdinaryArtifact(attempt.artifact))
+		) {
 			throw new Error(
 				"Attempt artifacts do not match the revealed allocation.",
 			);
@@ -960,13 +1147,7 @@ export function revealPairedAnalysis(input: {
 		throw new Error("Allocation record is invalid.");
 	}
 	const directed = directedObservations(input.masked, input.secret);
-	const estimate = taskStratifiedPairedBootstrap({
-		observations: directed,
-		seed:
-			input.report.plan.analysis.kind === "paired"
-				? input.report.plan.analysis.bootstrapSeed
-				: "invalid",
-	});
+	const estimate = pairedEstimate(input.report.plan.analysis, directed);
 	const candidateWins = directed.filter(
 		(pair) => pair.outcomes[0] && !pair.outcomes[1],
 	).length;
@@ -976,7 +1157,9 @@ export function revealPairedAnalysis(input: {
 	const reasons = [...input.masked.gateReasons];
 	if (
 		estimate.interval95 &&
-		input.report.plan.analysis.kind === "paired" &&
+		(input.report.plan.analysis.kind === "paired" ||
+			input.report.plan.analysis.kind === "paired-study") &&
+		typeof input.report.plan.analysis.minimumDetectableEffect === "number" &&
 		estimate.interval95[1] - estimate.interval95[0] >
 			2 * input.report.plan.analysis.minimumDetectableEffect
 	) {

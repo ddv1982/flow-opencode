@@ -10,21 +10,26 @@ import {
 	deriveEnvironmentReserveState,
 	environmentStratumKey,
 } from "./environment-reserves.js";
+import {
+	ArtifactIdentitySchema,
+	ReportDigestSchema as DigestSchema,
+	ModelIdentitySchema,
+	ReportTextSchema as TextSchema,
+} from "./report-identities.js";
 import { validatePairing } from "./report-pairing.js";
 import {
 	assessReviewerFindings,
 	REVIEWER_CASES,
 	reviewerAssessmentPassed,
 } from "./reviewer-cases.js";
+import { PairedStudyPolicySchema } from "./study-protocol.js";
+import { StudyUsageSchema } from "./study-usage.js";
+import {
+	studyBudgetRequiresStop,
+	studyReportIssues,
+} from "./study-validation.js";
 import { type DeepReadonly, freezeTree } from "./validated.js";
 
-const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-const TextSchema = z
-	.string()
-	.min(1)
-	.max(4096)
-	.regex(/\S/)
-	.refine((value) => value.isWellFormed());
 const CountSchema = z.number().int().safe().nonnegative();
 const PositiveCountSchema = CountSchema.positive();
 const RateSchema = z.number().finite().min(0).max(1);
@@ -45,17 +50,6 @@ const RelativeTranscriptArtifactSchema = TextSchema.superRefine(
 	},
 );
 
-const ModelIdentitySchema = z
-	.object({
-		routeProvider: TextSchema,
-		gateway: TextSchema.nullable(),
-		family: TextSchema,
-		model: TextSchema,
-		revision: TextSchema.nullable(),
-		variant: TextSchema.optional(),
-	})
-	.strict();
-
 const ObservedModelIdentitySchema = z.discriminatedUnion("kind", [
 	z
 		.object({ kind: z.literal("observed"), value: ModelIdentitySchema })
@@ -63,15 +57,7 @@ const ObservedModelIdentitySchema = z.discriminatedUnion("kind", [
 	z.object({ kind: z.literal("unobserved"), reason: TextSchema }).strict(),
 ]);
 
-export const ArtifactIdentitySchema = z
-	.object({
-		packageVersion: TextSchema,
-		sourceCommit: TextSchema,
-		sourceTreeSha256: DigestSchema,
-		tarballSha256: DigestSchema,
-		unpackedManifestSha256: DigestSchema,
-	})
-	.strict();
+export { ArtifactIdentitySchema } from "./report-identities.js";
 
 const EvaluatorIdentitySchema = z
 	.object({
@@ -249,6 +235,7 @@ const ScheduledCellSchema = z
 	.strict();
 
 const AnalysisPolicySchema = z.discriminatedUnion("kind", [
+	PairedStudyPolicySchema,
 	z
 		.object({
 			kind: z.literal("rate"),
@@ -345,6 +332,7 @@ const AttemptRecordSchema = z
 				durationMs: CountSchema,
 				outputTokens: CountSchema,
 				costUsd: z.number().finite().nonnegative().nullable(),
+				accounting: StudyUsageSchema.optional(),
 			})
 			.strict(),
 	})
@@ -372,8 +360,29 @@ const CampaignCompletionSchema = z
 				outputTokens: CountSchema,
 				costUsd: z.number().finite().nonnegative().nullable(),
 				wallClockMs: CountSchema,
+				accounting: StudyUsageSchema.optional(),
 			})
 			.strict(),
+		preflight: z
+			.array(
+				z
+					.object({
+						model: ModelIdentitySchema,
+						failure: TextSchema.nullable(),
+						providerCalled: z.boolean(),
+						variantAvailability: z.enum([
+							"not-requested",
+							"listed",
+							"missing",
+							"unobserved",
+						]),
+						durationMs: CountSchema,
+						accounting: StudyUsageSchema,
+					})
+					.strict(),
+			)
+			.optional(),
+		preflightWallClockMs: CountSchema.optional(),
 	})
 	.strict();
 
@@ -494,6 +503,8 @@ function semanticIssues(
 	catalog: ValidatedCaseCatalog,
 ): readonly SemanticIssue[] {
 	const issues: SemanticIssue[] = [];
+	for (const message of studyReportIssues(report))
+		issue(issues, "$.plan.analysis", "policy", message);
 	const cases = new Map<string, CasePolicy>();
 	for (const policy of catalog) {
 		cases.set(`${policy.caseId}\u0000${policy.caseVersion}`, policy);
@@ -513,7 +524,8 @@ function semanticIssues(
 			),
 		);
 		if (
-			report.plan.analysis.kind !== "paired" ||
+			(report.plan.analysis.kind !== "paired" &&
+				report.plan.analysis.kind !== "paired-study") ||
 			report.plan.benchmarkCases.length !== plannedCases.size ||
 			report.plan.benchmarkCases.some(
 				(entry) =>
@@ -1024,14 +1036,17 @@ function semanticIssues(
 			}
 		}
 	}
-	const budgetRequiresStop = requiresBudgetStop(
-		report.plan.budget,
-		report.completion.observed,
-	);
+	const budgetRequiresStop =
+		requiresBudgetStop(report.plan.budget, report.completion.observed) ||
+		studyBudgetRequiresStop(report);
 	if (
 		budgetRequiresStop &&
 		(report.completion.status !== "stopped" ||
-			report.completion.cause !== "budget")
+			(report.completion.cause !== "budget" &&
+				!(
+					report.plan.analysis.kind === "paired-study" &&
+					report.completion.cause === "operator"
+				)))
 	) {
 		issue(
 			issues,
@@ -1137,7 +1152,8 @@ function semanticIssues(
 		const policy = cases.get(`${cell.caseId}\u0000${cell.caseVersion}`);
 		if (!policy) continue;
 		const compatible =
-			report.plan.analysis.kind === "paired"
+			report.plan.analysis.kind === "paired" ||
+			report.plan.analysis.kind === "paired-study"
 				? policy.evidenceClass === "paired-value"
 				: report.plan.analysis.kind === "reviewer"
 					? policy.evidenceClass === "reviewer-only"

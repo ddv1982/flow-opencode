@@ -46,6 +46,12 @@ import {
 	reviewerActorObservation,
 	selectLineageValidatedReviewers,
 } from "./host-observation.js";
+import {
+	exactPackageVersion,
+	packedPackageManifest,
+	tarballSha256,
+} from "./provenance.js";
+import { normalizeStudyUsage, type StudyUsage } from "./study-usage.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
 const REQUEST_TIMEOUT_MS = 120_000;
@@ -298,6 +304,7 @@ export type Outcome = {
 		cacheRead: number;
 		cacheWrite: number;
 	};
+	readonly usageAvailability?: "observed" | "incomplete" | "unobserved";
 	/**
 	 * Total reported cost, or null when the provider priced nothing. Reporting an
 	 * unpriced run as 0 reads as "this run was free", which is the opposite of
@@ -306,7 +313,8 @@ export type Outcome = {
 	 * A provider that does not price a run reports zero rather than omitting the
 	 * field, so checking only for an absent number is not enough: every OpenAI run
 	 * measured here reported `cost: 0` on real token use and printed `$0.0000`. A
-	 * zero total against non-zero output tokens is an unknown spend.
+	 * zero total against any reported token use is an unknown cost estimate.
+	 * Host estimates do not establish invoice cost or the effective service tier.
 	 */
 	readonly costUsd: number | null;
 	readonly assistantMessages: number;
@@ -1132,15 +1140,19 @@ export function formatRate(rate: PassRate): string {
  * treatment: a provider that does not price a run reports `cost: 0` rather than
  * omitting the field, and every OpenAI run measured here did exactly that, so
  * checking only for an absent number printed `$0.0000` over real spend. A run that
- * produced no output tokens really can be free, so only a zero against real output
- * is unknown.
+ * has no reported token use can report zero. Any metered category makes a zero
+ * estimate unknown. Historical outputTokens fields retain the host output bucket.
  */
 export function reportedCost(
 	total: number | null,
-	outputTokens: number,
+	tokens: number | Outcome["tokens"],
 ): number | null {
 	if (total === null) return null;
-	return total > 0 || outputTokens === 0 ? total : null;
+	const used =
+		typeof tokens === "number"
+			? tokens > 0
+			: Object.values(tokens).some((count) => count > 0);
+	return total > 0 || !used ? total : null;
 }
 
 /** Reduces a host error payload to one readable line. */
@@ -1203,7 +1215,10 @@ export async function packPlugin(
 	);
 	if (pack.status !== 0)
 		throw new Error(`pack failed:\n${pack.stdout}\n${pack.stderr}`);
-	return join(into, `opencode-plugin-flow-${packageJson.version}.tgz`);
+	const manifest = JSON.parse(
+		await readFile(join(repositoryRoot, "package.json"), "utf8"),
+	);
+	return join(into, `opencode-plugin-flow-${manifest.version}.tgz`);
 }
 
 /**
@@ -1220,7 +1235,11 @@ export async function preparePackageCache(
 	into: string,
 	toolchain: BunToolchain,
 ): Promise<string> {
-	const cache = join(into, `opencode-plugin-flow@${packageJson.version}`);
+	const version = exactPackageVersion(
+		(await packedPackageManifest(tarball)).version,
+	);
+	const digest = (await tarballSha256(tarball)).replace(":", "-");
+	const cache = join(into, digest, `opencode-plugin-flow@${version}`);
 	await mkdir(cache, { recursive: true });
 	await writeFile(
 		join(cache, "package.json"),
@@ -1294,6 +1313,7 @@ type SessionMessages = ObservedSession & {
  */
 export type EvalReviewerOptions = Readonly<{
 	model?: string;
+	variant?: string;
 	steps?: number;
 }>;
 
@@ -1343,6 +1363,10 @@ export class EvalHost {
 		toolchain: BunToolchain;
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
+		packageVersion?: string;
+		reviewerEnvironment?: "inherit" | "disabled";
+		nativeLlm?: false;
+		ambientConfig?: "inherit" | "disabled";
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
 		/** Configures the hidden reviewer through the same native tuple users set. */
@@ -1352,6 +1376,9 @@ export class EvalHost {
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
 		checkCancellation(options.signal);
+		const version = exactPackageVersion(
+			options.packageVersion ?? packageJson.version,
+		);
 		const scratch = await mkdtemp(join(tmpdir(), "workspace-"));
 		const project = join(scratch, "project");
 		const host = new EvalHost(project, scratch, options.signal);
@@ -1363,6 +1390,27 @@ export class EvalHost {
 			const childData = join(childHome, ".local", "share");
 			await mkdir(childHome, { recursive: true });
 			await mkdir(join(project, ".opencode"), { recursive: true });
+			const gitConfig = join(scratch, "gitconfig");
+			const gitHooks = join(scratch, "git-hooks");
+			await writeFile(gitConfig, "");
+			await mkdir(gitHooks);
+			const environment: NodeJS.ProcessEnv = {
+				...Object.fromEntries(
+					Object.entries(options.toolchain.environment).filter(
+						([name]) => !name.startsWith("GIT_"),
+					),
+				),
+				GIT_CONFIG_NOSYSTEM: "1",
+				GIT_CONFIG_GLOBAL: gitConfig,
+			};
+			if (options.ambientConfig === "disabled") {
+				for (const name of [
+					"OPENCODE_CONFIG",
+					"OPENCODE_CONFIG_CONTENT",
+					"OPENCODE_CONFIG_DIR",
+				])
+					delete environment[name];
+			}
 			host.credentialPaths = await evaluationPhase(
 				"host",
 				"credential-copy-failed",
@@ -1379,13 +1427,25 @@ export class EvalHost {
 			}
 			for (const argv of [
 				["init", "--initial-branch=main"],
-				["config", "user.email", "eval@example.com"],
-				["config", "user.name", "Flow Eval"],
+				["config", "user.email", "project@example.invalid"],
+				["config", "user.name", "Project"],
 				["add", "-A"],
 				["commit", "-m", "fixture"],
 			]) {
 				checkCancellation(options.signal);
-				const git = spawnSync("git", argv, { cwd: project, encoding: "utf8" });
+				const git = spawnSync(
+					"git",
+					[
+						"-c",
+						`core.hooksPath=${gitHooks}`,
+						"-c",
+						"commit.gpgSign=false",
+						"-c",
+						"tag.gpgSign=false",
+						...argv,
+					],
+					{ cwd: project, encoding: "utf8", env: environment },
+				);
 				if (git.status !== 0)
 					throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
 			}
@@ -1397,7 +1457,7 @@ export class EvalHost {
 				await mkdir(packages, { recursive: true });
 				await cp(
 					options.packageCache,
-					join(packages, `opencode-plugin-flow@${packageJson.version}`),
+					join(packages, `opencode-plugin-flow@${version}`),
 					{
 						recursive: true,
 						filter: () => {
@@ -1408,11 +1468,13 @@ export class EvalHost {
 				);
 			}
 			checkCancellation(options.signal);
-			const pluginEntry = `opencode-plugin-flow@${packageJson.version}`;
+			const pluginEntry = `opencode-plugin-flow@${version}`;
 			const reviewer = options.reviewer;
 			const configuredPlugin =
 				reviewer &&
-				(reviewer.model !== undefined || reviewer.steps !== undefined)
+				(reviewer.model !== undefined ||
+					reviewer.variant !== undefined ||
+					reviewer.steps !== undefined)
 					? [pluginEntry, { reviewer }]
 					: pluginEntry;
 			await writeFile(
@@ -1448,7 +1510,17 @@ export class EvalHost {
 							cwd: project,
 							detached: process.platform !== "win32",
 							env: {
-								...options.toolchain.environment,
+								...environment,
+								...(options.nativeLlm === false
+									? { OPENCODE_EXPERIMENTAL_NATIVE_LLM: "false" }
+									: {}),
+								...(options.reviewerEnvironment === "disabled"
+									? {
+											OPENCODE_FLOW_REVIEWER_MODEL: "",
+											OPENCODE_FLOW_REVIEWER_VARIANT: "",
+											OPENCODE_FLOW_REVIEWER_STEPS: "",
+										}
+									: {}),
 								HOME: childHome,
 								XDG_CACHE_HOME: childCache,
 								XDG_CONFIG_HOME: join(childHome, ".config"),
@@ -1543,6 +1615,12 @@ export class EvalHost {
 	 * `probeModel` to establish that.
 	 */
 	async catalogModels(): Promise<string[]> {
+		return (await this.catalogProfiles()).map((profile) => profile.model);
+	}
+
+	async catalogProfiles(): Promise<
+		Array<{ model: string; variants: string[] | null }>
+	> {
 		const listed = (await fetchJson(
 			`${this.baseUrl}/config/providers`,
 			REQUEST_TIMEOUT_MS,
@@ -1551,9 +1629,13 @@ export class EvalHost {
 			providers?: { id: string; models?: Record<string, unknown> }[];
 		};
 		return (listed.providers ?? []).flatMap((provider) =>
-			Object.keys(provider.models ?? {}).map(
-				(modelId) => `${provider.id}/${modelId}`,
-			),
+			Object.entries(provider.models ?? {}).map(([modelId, config]) => {
+				const variants =
+					isRecord(config) && isRecord(config.variants)
+						? Object.keys(config.variants)
+						: null;
+				return { model: `${provider.id}/${modelId}`, variants };
+			}),
 		);
 	}
 
@@ -1566,19 +1648,49 @@ export class EvalHost {
 	 * the run starts, and the provider rejects the first request partway into a
 	 * paid pass. One near-free request converts that into an upfront failure.
 	 */
-	async probeModel(model: string): Promise<string | null> {
+	async probeModel(
+		model: string,
+		options?: {
+			variant?: string;
+			onDispatch?: () => void;
+			observeUsage?: (usage: StudyUsage) => void;
+		},
+	): Promise<string | null> {
 		const sessionId = await this.createSession(`flow-eval probe ${model}`);
+		let usage = normalizeStudyUsage({ tokens: {}, costUsd: null });
 		try {
+			checkCancellation(this.signal);
+			options?.onDispatch?.();
 			const reply = (await this.post(
 				`${this.baseUrl}/session/${sessionId}/message`,
 				{
 					// `/session/:id/message` takes a split model, unlike `/command`,
 					// which takes the joined string.
 					model: splitModel(model),
+					...(options?.variant === undefined
+						? {}
+						: { variant: options.variant }),
 					system: "Reply with the single word OK. Call no tools.",
 					parts: [{ type: "text", text: "ping" }],
 				},
 			)) as MessageEntry;
+			const tokens = reply.info?.tokens;
+			usage = normalizeStudyUsage({
+				tokens: tokens
+					? {
+							input: tokens.input,
+							output: tokens.output,
+							reasoning: tokens.reasoning,
+							...(tokens.cache
+								? {
+										cacheRead: tokens.cache.read,
+										cacheWrite: tokens.cache.write,
+									}
+								: {}),
+						}
+					: {},
+				costUsd: reply.info?.cost,
+			});
 			const failure = reply.info?.error;
 			return failure ? summarizeError(failure) : null;
 		} catch (error) {
@@ -1589,6 +1701,7 @@ export class EvalHost {
 			return error instanceof Error ? error.message : String(error);
 		} finally {
 			await this.deleteSession(sessionId);
+			options?.observeUsage?.(usage);
 		}
 	}
 
@@ -1994,7 +2107,10 @@ export class EvalHost {
 		};
 		let costUsd = 0;
 		let costReported = false;
+		let unknownMessageCost = false;
 		let assistantMessages = 0;
+		let completeUsageMessages = 0;
+		let anyUsageMessages = 0;
 		let providerError: AttemptFailure<"provider"> | null =
 			polled?.failure ?? null;
 		let observedProviderError: NonNullable<
@@ -2007,15 +2123,37 @@ export class EvalHost {
 		for (const { sessionIndex, entry } of messages) {
 			if (entry.info.role === "assistant") {
 				assistantMessages += 1;
-				if (typeof entry.info.cost === "number") {
-					costUsd += entry.info.cost;
+				const used = entry.info.tokens;
+				const messageCost = reportedCost(
+					typeof entry.info.cost === "number" ? entry.info.cost : null,
+					{
+						input: used?.input ?? 0,
+						output: used?.output ?? 0,
+						reasoning: used?.reasoning ?? 0,
+						cacheRead: used?.cache?.read ?? 0,
+						cacheWrite: used?.cache?.write ?? 0,
+					},
+				);
+				if (messageCost === null) unknownMessageCost = true;
+				else {
+					costUsd += messageCost;
 					costReported = true;
 				}
-				const used = entry.info.tokens;
 				if (used) {
-					tokens.input += used.input;
-					tokens.output += used.output;
-					tokens.reasoning += used.reasoning;
+					anyUsageMessages += 1;
+					if (
+						[
+							used.input,
+							used.output,
+							used.reasoning,
+							used.cache?.read,
+							used.cache?.write,
+						].every((count) => typeof count === "number")
+					)
+						completeUsageMessages += 1;
+					tokens.input += used.input ?? 0;
+					tokens.output += used.output ?? 0;
+					tokens.reasoning += used.reasoning ?? 0;
 					tokens.cacheRead += used.cache?.read ?? 0;
 					tokens.cacheWrite += used.cache?.write ?? 0;
 				}
@@ -2142,7 +2280,16 @@ export class EvalHost {
 			archives,
 			finalText,
 			tokens,
-			costUsd: reportedCost(costReported ? costUsd : null, tokens.output),
+			usageAvailability:
+				assistantMessages > 0 && completeUsageMessages === assistantMessages
+					? "observed"
+					: anyUsageMessages > 0
+						? "incomplete"
+						: "unobserved",
+			costUsd: reportedCost(
+				costReported && !unknownMessageCost ? costUsd : null,
+				tokens,
+			),
 			assistantMessages,
 			durationMs,
 			providerError,

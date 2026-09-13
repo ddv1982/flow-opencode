@@ -196,6 +196,22 @@ export async function packedPackageManifest(
 	return packageManifest(await archiveEntries(tarballPath));
 }
 
+/** Execution accepts an exact bounded SemVer, never a registry tag or path. */
+export function exactPackageVersion(value: string): string {
+	const parts = value.match(
+		/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/,
+	);
+	if (
+		value.length > 256 ||
+		!parts ||
+		parts[0] !== value ||
+		parts.slice(1, 4).some((part) => !Number.isSafeInteger(Number(part))) ||
+		parts[4]?.split(".").some((part) => /^0\d+$/.test(part))
+	)
+		throw new Error("Artifact package version must be a bounded exact SemVer.");
+	return value;
+}
+
 async function gitCommit(repositoryRoot: string): Promise<string> {
 	return text(
 		await run("git", ["-C", repositoryRoot, "rev-parse", "HEAD"]),

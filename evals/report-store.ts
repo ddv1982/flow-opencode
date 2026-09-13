@@ -215,6 +215,21 @@ export class ReportStore {
 		);
 	}
 
+	async writePreflightRequest(
+		index: number,
+		receipt: NonNullable<CampaignCompletion["preflight"]>[number],
+	): Promise<"written" | "replayed"> {
+		if (!Number.isSafeInteger(index) || index < 0)
+			fail("Invalid preflight request index.");
+		const directory = join(dirname(this.reportPath), "preflight");
+		await mkdir(directory, { recursive: true });
+		return writeImmutable(
+			join(directory, `${index}.json`),
+			Buffer.from(canonicalJson(receipt)),
+			this.hooks,
+		);
+	}
+
 	private async plan(): Promise<CampaignPlan> {
 		const parsed = CampaignPlanSchema.safeParse(await readJson(this.planPath));
 		if (!parsed.success) fail("Stored campaign plan is invalid.");
@@ -357,6 +372,15 @@ export class ReportStore {
 		readonly allocationCommitmentSha256: string | null;
 	}): Promise<ValidatedReport> {
 		const plan = await this.plan();
+		for (const [index, request] of (
+			input.completion.preflight ?? []
+		).entries()) {
+			const retained = await readJson(
+				join(dirname(this.reportPath), "preflight", `${index}.json`),
+			);
+			if (canonicalJson(retained) !== canonicalJson(request))
+				fail("Preflight receipt does not match its retained request.");
+		}
 		const report = {
 			schemaVersion: 2,
 			reportId: input.reportId,

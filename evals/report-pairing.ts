@@ -17,7 +17,9 @@ export function validatePairing(
 	readonly scoredOutcomes: number;
 } {
 	const issues: PairingIssue[] = [];
-	const paired = report.plan.analysis.kind === "paired";
+	const paired =
+		report.plan.analysis.kind === "paired" ||
+		report.plan.analysis.kind === "paired-study";
 	const add = (path: string, code: PairingIssue["code"], message: string) =>
 		issues.push({ path, code, message });
 
@@ -110,9 +112,11 @@ export function validatePairing(
 			first.caseVersion !== second.caseVersion ||
 			first.repetition !== second.repetition ||
 			first.schedule !== second.schedule ||
-			canonicalJson(first.managerModel) !==
-				canonicalJson(second.managerModel) ||
-			canonicalJson(first.reviewerModel) !== canonicalJson(second.reviewerModel)
+			(report.plan.analysis.kind !== "paired-study" &&
+				(canonicalJson(first.managerModel) !==
+					canonicalJson(second.managerModel) ||
+					canonicalJson(first.reviewerModel) !==
+						canonicalJson(second.reviewerModel)))
 		) {
 			add("$.plan.cells", "pair", `Invalid paired block ${blockId}.`);
 		}
