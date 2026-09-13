@@ -313,10 +313,11 @@ mutations. `flow_session_close` additionally returns derived delivery under
 | `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Bash, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
 | `flow-reviewer` | Independent workspace-read-only inspection; only `flow_status` and its exact `flow_feature_complete` lifecycle submission are allowed among Flow tools. |
 
-User configuration may select the reviewer's model and step budget with
-`{ reviewer: { model, steps } }`; the environment variables remain fallbacks.
-`flow_status` reports this process-local visibility without persisting it to
-Session v5.
+Reviewer options `{ reviewer: { model, variant, steps } }` override environment
+fallbacks. A native variant requires an explicit reviewer model. Status reports
+requested settings and unsupported combinations without persisting them to v5.
+Continuation sends the resolved manager variant at the native prompt boundary.
+Configuration acceptance does not prove provider application or availability.
 
 Duplicate plugin instances for the same canonical project fail closed through a
 small process-global guard. Instances for different projects do not conflict.

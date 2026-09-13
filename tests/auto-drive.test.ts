@@ -4,6 +4,7 @@ import {
 	AutoDriveCoordinator,
 	type AutoDriveDelivery,
 	type AutoDriveProjection,
+	autoDriveDelivery,
 	FLOW_AUTO_METADATA_KEY,
 } from "../src/platform/opencode/auto-drive.js";
 
@@ -100,6 +101,79 @@ function harness(initial: AutoDriveProjection) {
 }
 
 describe("Flow auto-drive coordinator", () => {
+	test("reads the resolved native variant without leaking nested host fields", () => {
+		const delivery = autoDriveDelivery(
+			{
+				agent: "build",
+				model: { ...DELIVERY.model, variant: "resolved" },
+			},
+			"requested",
+		);
+		expect(delivery).toEqual({ ...DELIVERY, variant: "resolved" });
+		expect(delivery.model).not.toHaveProperty("variant");
+		expect(autoDriveDelivery(DELIVERY, "requested")).toEqual({
+			...DELIVERY,
+			variant: "requested",
+		});
+		expect(autoDriveDelivery(DELIVERY)).toEqual(DELIVERY);
+		expect(
+			autoDriveDelivery(
+				{ ...DELIVERY, model: { ...DELIVERY.model, variant: undefined } },
+				"previously-requested",
+			),
+		).toEqual(DELIVERY);
+	});
+
+	test("keeps the resolved variant through authenticated compaction and continuation", async () => {
+		const state = harness({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 11,
+			nextAction: "flow_run_start",
+		});
+		const delivery = autoDriveDelivery({
+			...DELIVERY,
+			model: { ...DELIVERY.model, variant: "high" },
+		});
+		await state.activate("host-1", delivery);
+		compact(state.driver, "host-1", "command-message", "compacted-user");
+		state.setProjection({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 12,
+			nextAction: "flow_run_start",
+		});
+		mutate(state.driver, "host-1", 12, undefined, "compacted-user");
+		await state.driver.onIdle("host-1");
+		expect(state.prompts.map((prompt) => prompt.delivery)).toEqual([delivery]);
+	});
+
+	test("a checkpoint reply can clear the preceding variant", async () => {
+		const state = harness({
+			sessionId: "flow-1",
+			status: "planning",
+			revision: 4,
+			nextAction: "flow_plan_approve",
+		});
+		await state.activate("host-1", { ...DELIVERY, variant: "high" });
+		await state.driver.onIdle("host-1");
+		await state.driver.observeMessage(
+			"host-1",
+			autoDriveDelivery(DELIVERY),
+			[{ synthetic: false }],
+			"reply",
+		);
+		state.setProjection({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 5,
+			nextAction: "flow_run_start",
+		});
+		mutate(state.driver, "host-1", 5, undefined, "reply");
+		await state.driver.onIdle("host-1");
+		expect(state.prompts.map((prompt) => prompt.delivery)).toEqual([DELIVERY]);
+	});
+
 	test("continues ready work once and does not reprompt an unchanged revision", async () => {
 		const state = harness({
 			sessionId: "flow-1",

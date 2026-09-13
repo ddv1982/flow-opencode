@@ -1368,11 +1368,15 @@ describe("flow-auto host continuation", () => {
 			FLOW_MANAGER_KERNEL,
 		);
 
-		await chat({ sessionID: "auto-host" }, {
+		await chat({ sessionID: "auto-host", variant: "requested-high" }, {
 			message: {
 				id: "auto-approval",
 				agent: "build-approved",
-				model: { providerID: "provider", modelID: "approved-model" },
+				model: {
+					providerID: "provider",
+					modelID: "approved-model",
+					variant: "resolved-high",
+				},
 			},
 			parts: [{ type: "text", text: "Approve the plan." }],
 		} as unknown as Parameters<typeof chat>[1]);
@@ -1428,6 +1432,7 @@ describe("flow-auto host continuation", () => {
 			body: {
 				agent: "build-approved",
 				model: { providerID: "provider", modelID: "approved-model" },
+				variant: "resolved-high",
 				parts: [
 					{
 						type: "text",
@@ -1440,6 +1445,10 @@ describe("flow-auto host continuation", () => {
 				],
 			},
 			throwOnError: true,
+		});
+		expect((promptCalls[0] as { body: { model: object } }).body.model).toEqual({
+			providerID: "provider",
+			modelID: "approved-model",
 		});
 		const status = hooks.tool?.flow_status;
 		if (!status) throw new Error("Missing status tool.");

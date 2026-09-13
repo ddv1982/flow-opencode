@@ -3,6 +3,7 @@ import {
 	applyFlowConfig,
 	createFlowCoreConfigEntries,
 	FLOW_CORE_AGENTS,
+	flowReviewerStatus,
 	resolveFlowReviewerConfiguration,
 } from "../src/config-shared.js";
 import { createConfigHook } from "../src/platform/opencode/config.js";
@@ -11,6 +12,84 @@ const REVIEWER_STEPS_WARNING =
 	"OPENCODE_FLOW_REVIEWER_STEPS must be an integer from 1 through 1000; ignoring it.";
 
 describe("Flow configuration", () => {
+	test("preserves a native reviewer variant with plugin precedence", () => {
+		const reviewer = resolveFlowReviewerConfiguration({
+			env: { OPENCODE_FLOW_REVIEWER_VARIANT: "low" },
+			pluginOptions: {
+				reviewer: { model: "provider/reviewer", variant: " high " },
+			},
+		});
+		expect(reviewer.variant).toEqual({
+			kind: "explicit",
+			source: "plugin-option",
+			value: "high",
+		});
+		expect(
+			createFlowCoreConfigEntries({ reviewerConfiguration: reviewer }).agent[
+				"flow-reviewer"
+			],
+		).toMatchObject({
+			model: "provider/reviewer",
+			variant: "high",
+		});
+		expect(flowReviewerStatus(reviewer)).toMatchObject({
+			variant: {
+				kind: "explicit",
+				source: "plugin-option",
+				requested: "high",
+				application: "host-configured",
+			},
+			availability: "unverified",
+		});
+	});
+
+	test("uses the environment variant and labels the native model requirement", () => {
+		const warnings: string[] = [];
+		const reviewer = resolveFlowReviewerConfiguration({
+			env: { OPENCODE_FLOW_REVIEWER_VARIANT: " high " },
+			onWarning: (warning) => warnings.push(warning),
+		});
+		expect(reviewer.variant).toEqual({
+			kind: "explicit",
+			source: "environment",
+			value: "high",
+		});
+		expect(flowReviewerStatus(reviewer)).toMatchObject({
+			model: { kind: "shared-manager-model" },
+			variant: { requested: "high", application: "requires-explicit-model" },
+		});
+		expect(warnings).toEqual([
+			"Configure an explicit reviewer.model to apply reviewer.variant.",
+		]);
+	});
+
+	test("rejects invalid reviewer variants without changing defaults", () => {
+		const warnings: string[] = [];
+		const reviewer = resolveFlowReviewerConfiguration({
+			env: {},
+			pluginOptions: { reviewer: { variant: 3 } },
+			onWarning: (warning) => warnings.push(warning),
+		});
+		expect(reviewer).not.toHaveProperty("variant");
+		expect(flowReviewerStatus(reviewer)).not.toHaveProperty("variant");
+		expect(warnings).toEqual([
+			"Flow plugin option reviewer.variant must be a non-empty string; ignoring it.",
+		]);
+	});
+
+	test("applies a variant when the explicit reviewer model comes from the environment", () => {
+		const warnings: string[] = [];
+		const reviewer = resolveFlowReviewerConfiguration({
+			env: { OPENCODE_FLOW_REVIEWER_MODEL: "provider/reviewer" },
+			pluginOptions: { reviewer: { variant: "high" } },
+			onWarning: (warning) => warnings.push(warning),
+		});
+		expect(flowReviewerStatus(reviewer).variant?.application).toBe(
+			"host-configured",
+		);
+		expect(warnings).toEqual([]);
+	});
+
 	for (const example of [
 		{
 			name: "trims the reviewer model and a valid step limit",
