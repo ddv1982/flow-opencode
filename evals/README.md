@@ -227,10 +227,93 @@ gating.
 
 ## Paired value benchmark
 
-`bun run benchmark -- --model <id> --repeat 3 --seed <text>` seed-shuffles identical,
-hidden-graded tasks through isolated Flow and ordinary arms. Reports compare
-correctness, false completion, messages, tokens, duration, and cost. This is
-exploratory, not qualification; see [ADR 0013](../docs/adr/0013-derived-assurance-and-paired-value-measurement.md).
+`bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
+ordinary OpenCode on 12 development tasks. Each product attempt retains its base
+and final source snapshots, executable probes, runtime identity, observations,
+and transcript before cleanup. A new campaign freezes those inputs before
+provider work. Historical reports remain readable but lack these retained inputs.
+
+Both arms receive the same final task-status declaration instruction. Reports
+separate that declaration from workflow closure and correctness. Missing,
+conflicting, or quoted declarations remain unassessed. This measures explicit
+declarations, not arbitrary natural-language claims.
+
+### Versioned studies
+
+For exact artifact and model-profile comparisons, supply a version-1 manifest
+matching [StudyManifestSchema](study-manifest.ts):
+
+```bash
+bun run benchmark -- --manifest study.json --dry-run
+bun run benchmark -- --manifest study.json
+```
+
+Dry-run validates local tarballs, profiles, cases, and declared budget estimates;
+it starts no host, copies no credentials, and makes no provider requests. Execution
+is the second command and requires a funded campaign. Each arm declares its
+artifact path, package version, tarball hash, unpacked-manifest hash, manager model
+and optional variant, and reviewer configuration. New study identities contain
+only the verified package version and byte hashes. Legacy input sourceCommit and
+sourceTreeSha256 claims are accepted for manifest compatibility but excluded from
+policy identities, reports, and comparison hashes because tarballs cannot verify
+them. Historical reports remain readable under their original protocol digest.
+Artifact preparation and separately budgeted entitlement preflight finish before
+the main study clock starts; its admission checks, request timeouts, and reported
+wall time all use that main clock. Cache paths include the tarball digest, so equal package versions
+cannot substitute different bytes. Paths are relative to the manifest.
+
+Choose `smoke`/`descriptive`, `exploratory`/`equal-task-cluster-bootstrap-v1`, or
+`confirmatory`/`legacy-fixed-task-bounded-pair-v1`. Smoke and exploratory results
+do not establish power. Exploratory intervals resample whole tasks with equal task
+weight; repeats do not create new tasks. Confirmatory power applies to the fixed
+task population and retains the existing bounded-pair calculation. Historical
+`paired` reports keep their original hashes and interpretation.
+
+Comparisons may isolate artifact or manager changes, measure
+`reviewer-workflow-effect`, or declare `total-effect`. Reviewer workflow effects
+measure the whole run; isolated reviewer quality needs frozen code and review
+evidence. Requested profiles remain distinct from observed host metadata.
+
+Studies pin OpenCode 1.18.6 and disable ambient host configuration and reviewer
+environment overrides. Catalog membership does not prove model entitlement or
+effective effort. Optional entitlement probes have a separate explicit allowance
+and retained receipts. A failed probe stops the study.
+
+Budget limits are observed stop thresholds, not guaranteed invoice caps. Declare
+primary-attempt estimates, attempt and wall-clock bounds, generated-output bounds,
+and a monetary limit or explicit unknown-cost policy. Generated output sums the
+host's output and reasoning buckets; input and cache categories remain separate.
+Cost is a host-rate estimate, and missing accounting stays unknown. Incomplete
+evidence retention halts execution before another attempt or reserve can run.
+
+### Regrade retained results
+
+Keep the complete campaign directory, including its catalog, transcripts, and
+content-addressed objects. Use the recorded grader checkout, Bun binary, Zod
+contents, and lockfile, then run:
+
+```bash
+bun evals/regrade-benchmark.ts --report <campaign/report.json>
+```
+
+The command verifies retained hashes, recomputes transcript declarations and
+closure, and repeats executable grading. It refuses missing or altered evidence
+and mismatched runtimes. Each probe runs on a fresh reconstruction with cleared
+credentials, trusted Bun startup settings, and an authenticated result channel.
+Candidate-written passing text and exit status alone earn no credit. This is not
+an OS sandbox and does not contain arbitrary same-user filesystem or network access.
+
+### Interpret reviewer and confirmation evidence
+
+Reviewer controls have explicit synthetic truth and a narrow finding matcher.
+Unmatched findings on defective cases remain unassessed. Human case labels bind
+fixture versions and digests, but do not adjudicate individual findings. Reviewer
+promotion stays advisory until exact attempt/finding assessments are available.
+
+Twelve separate confirmation contracts are sealed outside the development bank.
+Do not inspect or run them while tuning prompts. Only the final frozen
+confirmation phase consumes them. Development results remain separate from
+release qualification; see [ADR 0013](../docs/adr/0013-derived-assurance-and-paired-value-measurement.md).
 
 ## Replaying recorded decisions
 
@@ -499,9 +582,9 @@ two providers, plus at most 16 environment reserves. Ordinary campaign size depe
 on the selected scenarios, models and repeats. Use `--scenario` while iterating;
 cost depends on model pricing and the work performed, not just scenario count.
 
-Cost is whatever the provider reports, and a provider that prices nothing reports
-zero rather than omitting the field: every OpenAI run measured here reported
-`cost: 0` on real token use. A zero total against non-zero output tokens is
+Cost is the host-reported figure, which may come from model-price estimates. It
+is not a provider invoice. Historical OpenAI runs reported `cost: 0` on real
+token use. A zero total against non-zero output tokens is
 therefore read as unknown and printed as `cost not reported by provider` — an
 unknown spend is not a free one. Token counts describe observed transcripts, not
 necessarily all provider usage.

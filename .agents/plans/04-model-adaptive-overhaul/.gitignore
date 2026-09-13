@@ -1,0 +1,12 @@
+# Generated investigation evidence stays on the originating machine.
+/evidence/**/*.log
+/evidence/**/*.json
+/evidence/**/*.ts
+/evidence/**/*.py
+/evidence/f4-candidates/compact/artifacts/source.patch
+
+# Portable campaign inputs and reviewed candidate metrics are durable sources.
+!/evidence/f3-parent/artifact-smoke.dry-run.json
+!/evidence/f4-candidates/campaign-proposal/astra.json
+!/evidence/f4-candidates/campaign-proposal/fable.json
+!/evidence/f4-candidates/compact/metrics.json

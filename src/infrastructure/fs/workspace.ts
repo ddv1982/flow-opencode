@@ -23,6 +23,7 @@ import { SessionSchema } from "../../application/schema.js";
 import {
 	MAX_SESSION_BYTES,
 	MAX_SESSION_ID_LENGTH,
+	SESSION_CLOSE_RESERVE_BYTES,
 } from "../../domain/limits.js";
 import { operationInputDigest } from "../../domain/operation.js";
 import type { Session } from "../../domain/session.js";
@@ -206,7 +207,10 @@ async function readManaged(
 	const handle = await open(path, access | noFollow);
 	try {
 		const stat = await handle.stat();
-		if (!stat.isFile() || stat.size > MAX_SESSION_BYTES) {
+		if (
+			!stat.isFile() ||
+			stat.size > MAX_SESSION_BYTES + SESSION_CLOSE_RESERVE_BYTES
+		) {
 			throw new UnreadableFlowSessionError(
 				`${description} is not a bounded regular file.`,
 				"state exceeds the supported session size",
@@ -292,6 +296,14 @@ function parseSession(raw: string, description: string): Session {
 		throw new UnreadableFlowSessionError(
 			`${description} does not match Session v5: ${reason}`,
 			reason,
+		);
+	}
+	const rawLimit =
+		MAX_SESSION_BYTES + (result.data.closure ? SESSION_CLOSE_RESERVE_BYTES : 0);
+	if (Buffer.byteLength(raw) > rawLimit) {
+		throw new UnreadableFlowSessionError(
+			`${description} exceeds the supported session size.`,
+			"state exceeds the supported session size",
 		);
 	}
 	return result.data;

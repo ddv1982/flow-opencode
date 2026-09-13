@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { deliveryProjection } from "../src/application/delivery.js";
 import { ArchiveCollisionError } from "../src/application/errors.js";
 import { findingsDigest } from "../src/application/findings-digest.js";
 import { createFlowService } from "../src/application/flow-service.js";
+import { SessionSchema } from "../src/application/schema.js";
 import type { Plan, Session } from "../src/domain/session.js";
 import {
 	approveSession,
@@ -30,6 +32,170 @@ function planlessSession(id: string, goal: string): Session {
 		closure: null,
 	};
 }
+
+describe("Flow reviewed feature outcomes", () => {
+	for (const scenario of [
+		{
+			name: "an inspection with blocking findings",
+			kind: "inspect",
+			verdict: "failed",
+			state: "completed",
+			summary: "Inspection completed with blocking findings.",
+		},
+		{
+			name: "a clean inspection",
+			kind: "inspect",
+			verdict: "passed",
+			state: "completed",
+			summary: "Inspection completed.",
+		},
+		{
+			name: "a failed implementation",
+			kind: "change",
+			verdict: "failed",
+			state: "blocked",
+			summary: "Feature blocked by review.",
+		},
+		{
+			name: "a passing implementation",
+			kind: "change",
+			verdict: "passed",
+			state: "completed",
+			summary: "Feature completed.",
+		},
+	] as const) {
+		test(`reports ${scenario.name} consistently through replay and closure`, async () => {
+			const repository = new MemorySessionRepository();
+			const flow = await approveSession(
+				repository,
+				deterministicEnvironment(),
+				{
+					plan: {
+						...plan,
+						features: plan.features.map((feature) => ({
+							...feature,
+							kind: scenario.kind,
+						})),
+					},
+				},
+			);
+			const assignment = await startReviewedRun(flow, repository, {
+				suffix: "outcome",
+			});
+			const findings =
+				scenario.verdict === "failed"
+					? [
+							{
+								severity: "blocking" as const,
+								summary: "Retry loses data.",
+								evidence: "src/retry.ts:7 overwrites accepted state on replay.",
+							},
+						]
+					: [];
+			const request = {
+				request: {
+					operationId: "complete-outcome",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					assignmentId: assignment.id,
+					summary:
+						scenario.verdict === "failed" ? "Retry loses data." : "Reviewed.",
+					result: {
+						verdict: scenario.verdict,
+						findings,
+						terminalDisposition: "submitted" as const,
+					},
+				},
+			};
+			const completed = await flow.featureComplete(request);
+			expectOk(completed);
+			expect(completed.summary).toBe(scenario.summary);
+			expect(completed.workflowData.projection).toMatchObject({
+				status: scenario.state,
+				progress: { completed: scenario.state === "completed" ? 1 : 0 },
+				nextAction:
+					scenario.state === "completed"
+						? "flow_session_close"
+						: "flow_feature_reset",
+			});
+			expect(completed.workflowData.operation.entity).toMatchObject({
+				state: scenario.state,
+				reviews: [{ result: { verdict: scenario.verdict } }],
+			});
+
+			const active = repository.session;
+			if (!active) throw new Error("Expected the reviewed session.");
+			const saves = repository.saveCount;
+			const transactions = repository.transactionCount;
+			repository.sourceDigestFailure = new Error(
+				"Replay must not reread source.",
+			);
+			for (const replay of [flow.featureComplete, flow.featureCompleteReplay]) {
+				const response = await replay(request);
+				expectOk(response);
+				expect(response.summary).toBe(scenario.summary);
+				expect(response.workflowData.operation.replayed).toBe(true);
+				expect(response.workflowData.projection).toEqual(
+					completed.workflowData.projection,
+				);
+			}
+			expect(repository.session).toBe(active);
+			expect(repository.saveCount).toBe(saves);
+			expect(repository.transactionCount).toBe(transactions);
+			repository.sourceDigestFailure = null;
+
+			const closeRequest = {
+				request: {
+					operationId: "close-outcome",
+					expectedRevision: active.revision,
+					sessionId: active.id,
+					kind: "completed" as const,
+					summary: request.request.summary,
+				},
+			};
+			const closed = await flow.sessionClose(closeRequest);
+			if (scenario.state === "blocked") {
+				expectError(closed);
+				expect(repository.session).toBe(active);
+				expect(repository.archives.size).toBe(0);
+				return;
+			}
+			expectOk(closed);
+			expect(closed.workflowData.delivery).toMatchObject({
+				progress: { completed: 1, total: 1 },
+				features: [
+					{
+						latestState: "completed",
+						terminalFindings: findings.map(({ severity, summary }) => ({
+							severity,
+							summary,
+						})),
+					},
+				],
+				assurance: {
+					conclusion:
+						scenario.verdict === "failed"
+							? "completion-unsupported"
+							: "completion-supported",
+				},
+			});
+			const archived = SessionSchema.parse(
+				JSON.parse(JSON.stringify(repository.archives.get(active.id))),
+			);
+			expect(deliveryProjection(archived)).toEqual(
+				closed.workflowData.delivery,
+			);
+			expect(archived.runs[0]?.reviews[0]?.result?.verdict).toBe(
+				scenario.verdict,
+			);
+			const replayedClose = await flow.sessionClose(closeRequest);
+			expectOk(replayedClose);
+			expect(replayedClose.workflowData.delivery).toEqual(
+				closed.workflowData.delivery,
+			);
+		});
+	}
+});
 
 describe("Flow close recovery and delivery", () => {
 	test("confirms visible close replay durability before reporting archive recovery", async () => {

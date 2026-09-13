@@ -30,7 +30,7 @@ import {
 	RELEASE_POLICY_SHA256,
 	releaseGraderBundle,
 } from "./release-policy.js";
-import type { ValidatedReport } from "./report.js";
+import type { ArtifactIdentity, ValidatedReport } from "./report.js";
 import { SCENARIOS } from "./scenarios.js";
 
 type BundleFile = Awaited<
@@ -38,10 +38,7 @@ type BundleFile = Awaited<
 >["files"][number];
 type RegradedDecision = Readonly<{
 	verdict: "VERIFIED" | "NOT VERIFIED" | "INCONCLUSIVE";
-	artifact: Exclude<
-		ValidatedReport["attempts"][number]["artifact"],
-		{ kind: string }
-	>;
+	artifact: ArtifactIdentity;
 	canarySha256: string | null;
 	analyzerSha256: string;
 	[key: string]: unknown;

@@ -30,6 +30,7 @@ import {
 } from "./harness.js";
 import {
 	evaluatorIdentity,
+	hostActorObservation,
 	hostConfigSha256,
 	inspectArtifact,
 	instructionDelivery,
@@ -50,12 +51,20 @@ import {
 	readDurableReviewerSubmission,
 	seedReviewerAssignment,
 } from "./reviewer-assignment.js";
-import { REVIEWER_CASES, type ReviewerCase } from "./reviewer-cases.js";
+import {
+	assessReviewerFindings,
+	REVIEWER_CASES,
+	type ReviewerCase,
+	type ReviewerFindingDetail,
+	reviewerAssessmentPassed,
+} from "./reviewer-cases.js";
 
-const ANALYSIS_DIGEST = canonicalSha256("flow-reviewer-analysis-v1", {
+const ANALYSIS_DIGEST = canonicalSha256("flow-reviewer-analysis-v2", {
 	kind: "reviewer",
 	interval: "wilson",
 	alpha: 0.05,
+	assessmentSchemaVersion: 1,
+	labelSource: "synthetic",
 });
 
 type Options = {
@@ -133,7 +142,7 @@ function planFor(
 	}));
 	const plan = {
 		schemaVersion: 1 as const,
-		planId: "flow-reviewer-pilot-v1",
+		planId: "flow-reviewer-pilot-v2",
 		planSha256: `sha256:${"0".repeat(64)}`,
 		randomizationSeed: canonicalSha256("flow-reviewer-seed-v1", {
 			caseIds: cases.map((entry) => entry.caseId),
@@ -160,9 +169,9 @@ function planFor(
 	return plan;
 }
 
-function reportReviewerActor(
+export function reportReviewerActor(
 	model: ModelIdentity,
-	outcome: Outcome,
+	outcome: Pick<Outcome, "actors">,
 ): ActorIdentity | null {
 	const observed = outcome.actors?.find((actor) => actor.role === "reviewer");
 	if (!observed || observed.sessionIds.length === 0) return null;
@@ -180,6 +189,7 @@ function reportReviewerActor(
 		role: "reviewer",
 		requestedModel: model,
 		actualModel,
+		hostObservation: hostActorObservation(observed),
 		sessionIds: [...observed.sessionIds],
 	};
 }
@@ -190,31 +200,41 @@ export function reviewerOutcome(
 	endedBy: CommandEnd,
 ): AttemptRecordV2["outcome"] {
 	const verdict = submission.kind === "submitted" ? submission.verdict : null;
-	const passed =
-		verdict !== null &&
-		(entry.truth === "defect" ? verdict === "failed" : verdict === "passed");
-	const findings =
+	const findingDetails: ReviewerFindingDetail[] =
 		submission.kind === "submitted"
-			? submission.findings.map((finding) =>
-					[
-						finding.severity,
-						finding.summary,
-						...(finding.evidence ? [finding.evidence] : []),
-					]
-						.join(": ")
-						.slice(0, 4096),
-				)
+			? submission.findings.map((finding, index) => ({
+					...finding,
+					findingId: finding.findingId ?? `unidentified-finding-${index + 1}`,
+				}))
 			: [];
+	const assessment = assessReviewerFindings(entry, findingDetails);
+	const passed = reviewerAssessmentPassed(entry.truth, verdict, assessment);
+	const findings = findingDetails.map((finding) =>
+		[finding.findingId, finding.severity, finding.summary, finding.evidence]
+			.filter((value) => value !== undefined)
+			.join(": ")
+			.slice(0, 4096)
+			.toWellFormed(),
+	);
 	return {
 		kind: "product",
 		passed,
 		endedBy: endedBy === "escalated" ? "user-escalation" : "quiet",
-		issues: passed ? [] : ["Reviewer verdict did not match the fixed label."],
+		issues: passed
+			? []
+			: ["Reviewer findings or verdict did not match the fixed case truth."],
 		evidence: {
 			kind: "reviewer-only",
 			truth: entry.truth,
 			verdict,
 			findings,
+			findingDetails,
+			assessment: {
+				...assessment,
+				matchedDefectIds: [...assessment.matchedDefectIds],
+				falseFindingIds: [...assessment.falseFindingIds],
+				unassessedFindingIds: [...assessment.unassessedFindingIds],
+			},
 			submitted: submission.kind === "submitted",
 		},
 	};

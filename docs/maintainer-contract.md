@@ -1,30 +1,26 @@
 # Maintainer Contract
 
-This document defines the small set of invariants Flow must preserve.
+This document defines Flow's invariants.
 
 ## Product boundary
 
-Flow is in preview. [Positioning](positioning.md) owns the audience and the cases
-Flow is the wrong tool for, and [what Flow guarantees](guarantees.md) is the public
-map of which claims are TS-enforced, host-attested, caller-declared, model-judgment,
-or unenforced. A claim in neither a test nor a scheduled eval is unmeasured and is
-labelled so there.
+Flow is in preview. [Positioning](positioning.md) defines its audience and limits.
+[What Flow guarantees](guarantees.md) classifies claims by enforcement and labels
+claims without tests or scheduled evals as unmeasured.
 
-The public surface — tools, commands, guides, agents, and the Session v5 shape —
-stays frozen while those guarantees are measured; additive optional fields are
-allowed, and a removal or rename waits for a major announced one release ahead.
+Tools, commands, guides, agents, and Session v5 stay frozen while those guarantees
+are measured. Optional fields may be added. Removal or rename requires a major
+announced one release ahead.
 A new required-at-save plan declaration is a major. `evidence` entries own
 `scope`, `platform`, and `assertions`; named commands bind `.flow/results.xml`.
 Do not add another evidence field to close a measured cheat.
 [Release qualification](release-qualification.md) owns the thresholds and cadence.
 
-Flow is a serial durable workflow plugin, not a general orchestration framework.
-It owns planning state, one active run, observed validation, one independent
-review, reset, and closure. Implementation inside that run may use one bounded,
-ephemeral host-native worker wave. Flow exposes ten tools, five commands,
-four guides, and two hidden subagents. Active work uses only the root manager
-and the reserved `flow-worker` and `flow-reviewer` roles; generic agents are not
-part of the Flow execution model.
+Flow owns a serial durable lifecycle with planning, one active run, observed
+validation, one independent review, reset, and closure. Implementation may use a
+bounded, ephemeral host-native worker wave. Flow exposes ten tools, five commands,
+four guides, and two hidden subagents. Active work uses only the root manager,
+`flow-worker`, and `flow-reviewer`, never generic agents.
 
 An active Flow session is authoritative for its goal until an explicit close
 records completed, deferred, or abandoned disposition. The manager must not
@@ -78,27 +74,15 @@ it.
 that OpenCode session. They do not mutate or close the durable Flow session.
 
 Initial auto/run prompts, compaction context, and synthetic continuations share
-one concise manager kernel: root ownership of manager mutations and
-reviewer-owned result submission, reserved Flow roles, the exact
-`failedReviewCount === 1` retry gate, and current-source plus relevant base-diff
-evidence. This
-repetition adds no runtime role registry or durable policy state.
+a manager kernel covering mutation ownership, reviewer-owned submission,
+reserved roles, the `failedReviewCount === 1` retry gate, and current-source and
+relevant base-diff evidence. The kernel adds no role registry or durable policy.
 
-A feature whose latest relevant reviewed outcome remains failed is never
-selected implicitly. `/flow-auto` may continue an untouched,
-dependency-independent feature; when only retry-required candidates remain,
-compact status is `ready` with `await-user-direction`. An automatic fresh full
-retry is allowed only as the Session v5 convergence bound below permits. At a
-blocked checkpoint, optional `nextFeatureId` on `flow_feature_reset` names the
-exact authorized retry or independent feature, and reset plus run start occur in
-one transaction. If that reset selects independent work, then all untouched work
-finishes, the failed run is already superseded; ready `await-user-direction`
-resumes an authorized retry through
-`flow_run_start(featureId)`, not another reset. The session remains authoritative
-while waiting. Flow otherwise pauses only for a material product or scope
-choice, missing authority for an external Git or release action, a hard
-operational failure, or the user's explicit choice of deferred or abandoned
-closure. Only the user may select either non-completed disposition.
+Retry selection follows the [Session v5 convergence rules](#session-v5).
+The session remains authoritative while waiting. Other pauses require a material
+product or scope choice, missing external Git or release authority, a hard
+operational failure, or user-chosen deferred or abandoned closure. Only the user
+may select those non-completed dispositions.
 
 Flow does not own plugin installation, automatic activation, cache cleanup,
 configuration repair, optional worker admission, audit schemas, benchmark
@@ -131,22 +115,39 @@ or delivery document.
 - Runs remain in strictly increasing durable start-revision order, so derived
   latest-attempt delivery cannot disagree with canonical progress.
 - At most one run is active. Dependencies must be complete before a run starts.
-- A failed review blocks the run. Reset supersedes the selected feature and its
-  dependent runs; an optional exact `nextFeatureId` starts the chosen runnable
-  feature in the same transaction, and its new run starts empty. A failed
+- A failed review blocks a change run. An inspection completes with its findings,
+  including blockers, without accepting the inspected code. Reset supersedes the
+  selected feature and its dependent runs. An optional exact `nextFeatureId`
+  starts the chosen runnable feature in the same transaction, and its new run
+  starts empty. A failed
   feature is excluded from implicit selection while its latest relevant reviewed
   outcome remains failed; untouched dependency-independent features remain
   eligible. Automatic convergence is bounded by recorded failed review results:
-  only `failedReviewCount === 1` without a `scopeBlocker` finding may retry
-  automatically; every scope blocker or count of two or greater projects
+  only `failedReviewCount === 1` without a `scopeBlocker` finding permits one fresh
+  full automatic retry. Every scope blocker or count of two or greater projects
   `await-user-direction` before another user-authorized attempt. When all
-  runnable candidates require an explicit retry, status is `ready` and also
-  projects `await-user-direction`. Detail identifies the failed feature from
-  durable runs; explicit `flow_run_start(featureId)` begins that retry without
-  reset. Pre-review resets and rejected stale-source submissions do not
+  runnable candidates require an explicit retry, status is `ready` and projects
+  `await-user-direction`. This includes a blocked run superseded by reset to
+  independent work once that work finishes. Detail identifies the failed feature
+  from durable runs. Explicit `flow_run_start(featureId)` begins that retry
+  without reset. Pre-review resets and rejected stale-source submissions do not
   increment the derived count.
-- Completed close is allowed only after every feature has a passing current run.
+- Completed close is allowed only after every feature has a completed current run.
+  Inspections may complete with negative findings. Full completion assurance still
+  requires passing current reviews and the declared evidence.
   Deferred and abandoned close explicitly supersede active work.
+
+## Terminal capacity
+
+New nonterminal mutations reserve one operation, 197,632 compact JSON bytes, and
+the last safe revision for close. Exact replays bypass admission. Legacy open v5 limits
+remain 4,096 operations and 4 MiB. A final matching close at the session revision
+may reach 4,097 operations and 4,391,936 bytes. Removing terminal material must
+leave at most 4,096 operations and 4 MiB plus four bytes for run supersession.
+Closure digests and all session invariants still apply. No operation is pruned.
+Open files retain their physical 4 MiB limit. Extended archives require a newer
+reader, including after downgrade. Legacy MAX_SAFE_INTEGER revisions stay
+readable but have no successor. See [terminal recovery](guarantees.md#terminal-recovery-and-inspection-outcomes).
 
 ## Causality and idempotency
 
@@ -183,9 +184,8 @@ projection. The report owns human lifecycle and recovery text and is not stored.
 
 ## Validation and review
 
-Split into its own document as this section outgrew the rest of the contract:
-[validation and review](validation-and-review.md) owns the evidence, review,
-finding-identity, and closure invariants normatively.
+[Validation and review](validation-and-review.md) defines the evidence, review,
+finding-identity, and closure invariants.
 
 ## Bounded worker waves
 
@@ -255,20 +255,13 @@ manager contract.
 
 ## OpenCode surface
 
-Compact `flow_status` includes the active goal so the manager can align the
-current request before mutation. When blocked, it also includes
-`blockedFeature.featureId`, the latest attempt number, and a
-`failedReviewCount` derived only from recorded failed review results. Compact
-always includes `findingsDigest` (derived; empty is `[]`). No intent,
-hold, or retry budget is persisted. After the second
-failure, blocked status has `nextAction: await-user-direction`; the same action
-is projected with ready status when every runnable candidate requires an
-explicit retry. For either form the manager reads detail once and reports
-`findingsDigest`. While blocked, an authorized choice is passed
-as optional `nextFeatureId` so reset and exact run start are atomic. Once ready,
-there is no blocked run to reset: explicit `flow_run_start(featureId)` starts
-the authorized retry. A reset-only compatibility request never makes the failed
-feature eligible for default selection.
+Compact `flow_status` includes the active goal and derived `findingsDigest`, empty
+as `[]`. Blocked status also includes `blockedFeature.featureId`, the latest
+attempt number, and `failedReviewCount` from recorded failed reviews. No intent,
+hold, or retry budget is persisted. The [Session v5 rules](#session-v5) determine
+retry routing. At blocked or ready `await-user-direction`, the manager reads
+detail once and reports `findingsDigest`. A reset-only compatibility request
+never makes a failed feature eligible for default selection.
 
 ### Commands
 
@@ -320,10 +313,11 @@ mutations. `flow_session_close` additionally returns derived delivery under
 | `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Bash, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
 | `flow-reviewer` | Independent workspace-read-only inspection; only `flow_status` and its exact `flow_feature_complete` lifecycle submission are allowed among Flow tools. |
 
-User configuration may select the reviewer's model and step budget with
-`{ reviewer: { model, steps } }`; the environment variables remain fallbacks.
-`flow_status` reports this process-local visibility without persisting it to
-Session v5.
+Reviewer options `{ reviewer: { model, variant, steps } }` override environment
+fallbacks. A native variant requires an explicit reviewer model. Status reports
+requested settings and unsupported combinations without persisting them to v5.
+Continuation sends the resolved manager variant at the native prompt boundary.
+Configuration acceptance does not prove provider application or availability.
 
 Duplicate plugin instances for the same canonical project fail closed through a
 small process-global guard. Instances for different projects do not conflict.

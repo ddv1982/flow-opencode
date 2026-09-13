@@ -57,6 +57,7 @@ const RequestedModelSchema = z
 		family: TextSchema,
 		model: TextSchema,
 		revision: TextSchema.nullable(),
+		variant: TextSchema.optional(),
 	})
 	.strict();
 const RetainedActorSchema = z
@@ -64,6 +65,26 @@ const RetainedActorSchema = z
 		role: z.enum(["manager", "reviewer"]),
 		sessionIds: z.array(TextSchema).min(1),
 		actualModel: ObservedModelSchema,
+		actualVariant: z
+			.discriminatedUnion("kind", [
+				z.object({ kind: z.literal("observed"), value: TextSchema }).strict(),
+				z
+					.object({ kind: z.literal("unobserved"), reason: TextSchema })
+					.strict(),
+			])
+			.optional(),
+		hostObservation: z
+			.object({
+				model: ObservedModelSchema,
+				variant: z.discriminatedUnion("kind", [
+					z.object({ kind: z.literal("observed"), value: TextSchema }).strict(),
+					z
+						.object({ kind: z.literal("unobserved"), reason: TextSchema })
+						.strict(),
+				]),
+			})
+			.strict()
+			.optional(),
 		requestedModelId: TextSchema,
 		requestedModel: RequestedModelSchema,
 	})

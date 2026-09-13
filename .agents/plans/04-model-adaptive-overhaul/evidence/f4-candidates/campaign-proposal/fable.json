@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "purpose": "smoke",
+  "comparison": "artifact",
+  "method": "descriptive",
+  "opencodeVersion": "1.18.6",
+  "arms": {
+    "baseline": {
+      "artifact": {
+        "path": "../../f3-parent/artifacts/opencode-plugin-flow-8.2.1.tgz",
+        "identity": {
+          "packageVersion": "8.2.1",
+          "sourceCommit": "f10c386b8c0cc873b0a0816a7f34535e15b3c6ae",
+          "sourceTreeSha256": "sha256:7daf6650123cc8b9e5a9a19d2d95acbd09b3de07c56066ef803849038bf722ba",
+          "tarballSha256": "sha256:f9769b46d6b4c4c8f7f95c7fedf5576df8811496e19d4166df5100113448bfe5",
+          "unpackedManifestSha256": "sha256:f647f30208b59cd77fc8da7bcb33cd0afdcc52fb8b7d637d0521dc1087cd5e88"
+        }
+      },
+      "manager": {
+        "routeProvider": "anthropic",
+        "model": "claude-fable-5",
+        "family": "claude",
+        "gateway": null,
+        "revision": null,
+        "variant": "high"
+      },
+      "reviewer": {
+        "model": {
+          "routeProvider": "anthropic",
+          "model": "claude-fable-5",
+          "family": "claude",
+          "gateway": null,
+          "revision": null,
+          "variant": "high"
+        },
+        "steps": null
+      }
+    },
+    "candidate": {
+      "artifact": {
+        "path": "../compact/artifacts/opencode-plugin-flow-8.2.1.tgz",
+        "identity": {
+          "packageVersion": "8.2.1",
+          "sourceCommit": "f10c386b8c0cc873b0a0816a7f34535e15b3c6ae",
+          "sourceTreeSha256": "sha256:cf02eda1d535b8076322d3e4be5f086e74c013895b000d5b69d1414f727c408d",
+          "tarballSha256": "sha256:2e20455237b69811fe3b0ebc930c360b5d1e2108ae64330532f4c0c246dfb594",
+          "unpackedManifestSha256": "sha256:9a64fd7b04e0e4cb6cb1e9f1925308a7b851e1ec0fc6e38c500a139b52a31a86"
+        }
+      },
+      "manager": {
+        "routeProvider": "anthropic",
+        "model": "claude-fable-5",
+        "family": "claude",
+        "gateway": null,
+        "revision": null,
+        "variant": "high"
+      },
+      "reviewer": {
+        "model": {
+          "routeProvider": "anthropic",
+          "model": "claude-fable-5",
+          "family": "claude",
+          "gateway": null,
+          "revision": null,
+          "variant": "high"
+        },
+        "steps": null
+      }
+    }
+  },
+  "cases": [
+    {
+      "caseId": "farewell-export",
+      "caseVersion": 2
+    },
+    {
+      "caseId": "markdown-link-report",
+      "caseVersion": 2
+    }
+  ],
+  "repetitions": 1,
+  "reservePairsPerBlock": 0,
+  "seed": "compact-smoke-2026-09-13-fable",
+  "budget": {
+    "maxUsd": 25,
+    "unknownCostPolicy": "stop",
+    "maxWallClockMs": 2400000,
+    "maxAttempts": 4
+  },
+  "accounting": {
+    "schemaVersion": 1,
+    "hostContract": "opencode-1.18.6-disjoint-output-v1",
+    "maxGeneratedOutputTokens": 80000,
+    "estimate": {
+      "generatedOutputTokensPerAttempt": 20000,
+      "wallClockMsPerAttempt": 600000,
+      "costUsdPerAttempt": 5,
+      "basis": "Planning allowance, not a measured forecast: 20k generated tokens plus input/cache allowance at documented standard rates. Stop on missing cost."
+    },
+    "preflight": {
+      "kind": "entitlement",
+      "maxRequests": 1,
+      "maxGeneratedOutputTokens": 1000,
+      "maxWallClockMs": 120000,
+      "maxUsd": 1,
+      "unknownCostPolicy": "stop"
+    }
+  }
+}

@@ -20,7 +20,17 @@ export type ObservedActor = {
 	readonly role: "manager" | "reviewer";
 	readonly sessionIds: readonly string[];
 	readonly actualModel: ObservedModelIdentity;
+	readonly actualVariant?: ObservedVariant | undefined;
 };
+
+export type ObservedVariant =
+	| { readonly kind: "observed"; readonly value: string }
+	| Extract<ObservedModelIdentity, { kind: "unobserved" }>;
+
+export type HostActorObservation = Readonly<{
+	model: ObservedModelIdentity;
+	variant: ObservedVariant;
+}>;
 
 export type ObservedGuidanceLoad = {
 	readonly sequence: number;
@@ -99,6 +109,45 @@ export function extractObservedModelIdentity(
 		: { kind: "unobserved", reason: "field-unavailable" };
 }
 
+function messageVariant(message: unknown): string | null {
+	if (!isRecord(message) || !isRecord(message.info)) return null;
+	const info = message.info;
+	if (info.role !== "assistant" || "error" in info) return null;
+	if (!isRecord(info.time) || typeof info.time.completed !== "number")
+		return null;
+	const model = isRecord(info.model) ? info.model : null;
+	return nonEmptyString(info.variant) ?? nonEmptyString(model?.variant);
+}
+
+export function extractObservedVariant(
+	messages: readonly unknown[] | null,
+): ObservedVariant {
+	if (messages === null)
+		return { kind: "unobserved", reason: "endpoint-failure" };
+	const completed = messages.filter((message) => {
+		if (!isRecord(message) || !isRecord(message.info)) return false;
+		const info = message.info;
+		return (
+			info.role === "assistant" &&
+			!("error" in info) &&
+			isRecord(info.time) &&
+			typeof info.time.completed === "number"
+		);
+	});
+	if (completed.length === 0)
+		return { kind: "unobserved", reason: "no-completed-assistant" };
+	const values = completed.map(messageVariant);
+	const known = new Set(
+		values.filter((value): value is string => value !== null),
+	);
+	if (known.size > 1)
+		return { kind: "unobserved", reason: "conflicting-observations" };
+	const value = values[0];
+	return value !== null && value !== undefined && !values.includes(null)
+		? { kind: "observed", value }
+		: { kind: "unobserved", reason: "field-unavailable" };
+}
+
 /** Only children linked to a known session and named flow-reviewer are reviewers. */
 export function selectLineageValidatedReviewers(
 	parentSessionIds: readonly string[],
@@ -159,10 +208,29 @@ export function extractObservedActor(input: {
 					kind: "unobserved",
 					reason: "field-unavailable",
 				});
+	const variantEvidence = input.sessions.some((session) =>
+		(session.messages ?? []).some(
+			(message) => messageVariant(message) !== null,
+		),
+	);
+	const variants = input.sessions.map((session) =>
+		extractObservedVariant(session.messages),
+	);
+	const variantValues = new Set(
+		variants.flatMap((variant) =>
+			variant.kind === "observed" ? [variant.value] : [],
+		),
+	);
+	const actualVariant: ObservedVariant =
+		variantValues.size > 1
+			? { kind: "unobserved", reason: "conflicting-observations" }
+			: (variants.find((variant) => variant.kind === "unobserved") ??
+				variants[0] ?? { kind: "unobserved", reason: "field-unavailable" });
 	return {
 		role: input.role,
 		sessionIds: input.sessions.map((session) => session.id),
 		actualModel,
+		...(variantEvidence ? { actualVariant } : {}),
 	};
 }
 
@@ -181,6 +249,14 @@ export function reviewerActorObservation(input: {
 		? {
 				...actor,
 				actualModel: { kind: "unobserved", reason: "endpoint-failure" },
+				...(actor.actualVariant
+					? {
+							actualVariant: {
+								kind: "unobserved" as const,
+								reason: "endpoint-failure" as const,
+							},
+						}
+					: {}),
 			}
 		: actor;
 }

@@ -70,8 +70,10 @@ For an explicit reviewer model, use OpenCode's plugin tuple options:
 ```
 
 The tuple values take precedence over `OPENCODE_FLOW_REVIEWER_MODEL` and
-`OPENCODE_FLOW_REVIEWER_STEPS`. `/flow-status` reports the process-local
-selection, but only a successful reviewer run confirms model availability.
+`OPENCODE_FLOW_REVIEWER_STEPS`. Optional `reviewer.variant` selects a native
+model variant and overrides `OPENCODE_FLOW_REVIEWER_VARIANT`. It requires an
+explicit reviewer model. `/flow-status` reports the requested settings and
+unsupported combinations. Only a successful reviewer run confirms availability.
 
 Restart OpenCode after changing configuration. OpenCode owns installation and
 configuration; see its

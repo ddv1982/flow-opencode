@@ -249,7 +249,7 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						});
 						expect(legacy.results).toHaveLength(retained);
 						const first = required(report.attempts[0]);
-						if ("kind" in first.artifact)
+						if (!("sourceCommit" in first.artifact))
 							throw new Error("Expected packed artifact identity.");
 						const decision = deriveReleaseDecision({
 							report,

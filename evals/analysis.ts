@@ -7,6 +7,7 @@ import {
 } from "./release-progress.js";
 import type {
 	ArtifactIdentity,
+	AttemptRecordV2,
 	EvaluatorIdentity,
 	InstructionDelivery,
 	ModelIdentity,
@@ -49,9 +50,7 @@ export type ReleaseExpectedProvenance = CommonExpectedProvenance & {
 	readonly artifact: ArtifactIdentity;
 };
 
-export type ExpectedArtifact =
-	| ArtifactIdentity
-	| { readonly kind: "ordinary-opencode" };
+export type ExpectedArtifact = AttemptRecordV2["artifact"];
 
 export type PairedExpectedProvenance = CommonExpectedProvenance & {
 	readonly kind: "paired";
@@ -359,7 +358,10 @@ function compareExpectedProvenanceWithin(
 		exactSet,
 	);
 	if (expected.kind === "release") {
-		if (report.plan.analysis.kind === "paired") {
+		if (
+			report.plan.analysis.kind === "paired" ||
+			report.plan.analysis.kind === "paired-study"
+		) {
 			mismatch(
 				mismatches,
 				null,
@@ -381,7 +383,10 @@ function compareExpectedProvenanceWithin(
 		const expectedArtifacts = expected.artifacts.map((artifact) =>
 			canonicalJson(artifact),
 		);
-		if (report.plan.analysis.kind !== "paired") {
+		if (
+			report.plan.analysis.kind !== "paired" &&
+			report.plan.analysis.kind !== "paired-study"
+		) {
 			mismatch(
 				mismatches,
 				null,
@@ -389,7 +394,10 @@ function compareExpectedProvenanceWithin(
 				"Paired provenance requires a paired campaign.",
 			);
 		}
-		if (expectedArtifacts[0] === expectedArtifacts[1]) {
+		if (
+			report.plan.analysis.kind !== "paired-study" &&
+			expectedArtifacts[0] === expectedArtifacts[1]
+		) {
 			mismatch(
 				mismatches,
 				null,
@@ -831,10 +839,19 @@ export function analyzeReviewer(report: ValidatedReport): ReviewerAnalysis {
 		const evidence = attempt.outcome.evidence;
 		if (evidence.truth === "defect") {
 			defectLabels += 1;
-			if (evidence.verdict === "failed") detections += 1;
+			if (
+				evidence.assessment
+					? evidence.assessment.matchedDefectIds.length > 0
+					: evidence.verdict === "failed"
+			)
+				detections += 1;
 		} else {
 			cleanLabels += 1;
-			if (evidence.verdict === "failed") falsePositives += 1;
+			if (
+				evidence.verdict === "failed" ||
+				(evidence.assessment?.falseFindingIds.length ?? 0) > 0
+			)
+				falsePositives += 1;
 		}
 		if (!evidence.submitted) unsubmitted += 1;
 	}
@@ -856,7 +873,10 @@ export function analyzeReviewer(report: ValidatedReport): ReviewerAnalysis {
 }
 
 export function analyzePairs(report: ValidatedReport): PairedAnalysis {
-	if (report.plan.analysis.kind !== "paired") {
+	if (
+		report.plan.analysis.kind !== "paired" &&
+		report.plan.analysis.kind !== "paired-study"
+	) {
 		return {
 			eligible: 0,
 			complete: 0,

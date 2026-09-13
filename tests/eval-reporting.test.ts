@@ -94,6 +94,26 @@ describe("eval run classification", () => {
 		expect(processExists(childPid)).toBe(false);
 	});
 
+	test("rechecks transient EPERM until process-group exit is confirmed", async () => {
+		if (process.platform === "win32") return;
+		const child = new ChildProcess();
+		Object.assign(child, { pid: 2_147_483_647, exitCode: 0, signalCode: null });
+		let probes = 0;
+		const probe = spyOn(process, "kill").mockImplementation((pid, signal) => {
+			expect(pid).toBe(-2_147_483_647);
+			expect(signal).toBe(0);
+			throw Object.assign(new Error("probe"), {
+				code: ++probes < 3 ? "EPERM" : "ESRCH",
+			});
+		});
+		try {
+			await terminateChildProcessTree(child);
+			expect(probes).toBe(3);
+		} finally {
+			probe.mockRestore();
+		}
+	});
+
 	test("refuses an unconfirmed EPERM group even after the wrapper exits", async () => {
 		if (process.platform === "win32") return;
 		const child = spawn(process.execPath, ["-e", ""]);

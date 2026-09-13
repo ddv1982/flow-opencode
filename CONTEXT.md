@@ -4,17 +4,12 @@ Flow coordinates one approved plan through a serial durable lifecycle, observed
 validation, independent review, and explicit closure. Implementation inside one
 active feature may use an ephemeral bounded worker wave.
 
-An active Flow session is authoritative for its goal until a completed,
-deferred, or abandoned close is recorded. Work on that goal must not silently
-fall back to an ordinary non-Flow workflow. Before every manager-owned lifecycle
-mutation, including direct planning or execution, the root manager compares the
-compact-projected goal with the current request. This is a semantic manager
-judgment, not a persisted intent classifier: a continuation or compatible
-narrowing may proceed, while a materially new or expanded request makes no
-mutation and has not started. The manager offers to continue, defer, or abandon
-the active work; completed-but-unclosed work is closed as completed before a new
-request begins. Exact projected recovery of an already-accepted close runs
-before this comparison because it authorizes no new work.
+An active session owns its goal until completed, deferred, or abandoned closure.
+Before each manager mutation, including direct planning or execution, compare the
+request with the compact-projected goal. The [authority and goal-alignment
+rules](docs/maintainer-contract.md#product-boundary) govern continuation,
+narrowing, new scope, and exact accepted-close recovery. Work must not silently
+fall back to a non-Flow workflow.
 
 ## Versions
 
@@ -24,11 +19,15 @@ before this comparison because it authorizes no new work.
 documents are not migrated. Historical archives are inert and are never used to
 resume work.
 
-Compatibility is forward-reading within v5: newer Flow builds accept state
-written by earlier builds. Rolling an active session back is unsupported once
-a newer writer has used a widened bounded collection, such as the 65-observation
-ceiling needed for 64 exact planned gates plus separate broad evidence. This is
-an explicit no-migration boundary, not a capability-negotiation subsystem.
+Newer Flow builds read older v5 state. Downgrade is unsupported after a writer
+uses widened bounds, such as 65 observations for 64 planned gates and separate
+broad evidence. Flow provides neither migration nor capability negotiation.
+
+New nonterminal mutations reserve terminal capacity without pruning operations.
+Previously valid full v5 documents remain readable. Extended closed documents
+require this reader, including archive replay after downgrade. See [terminal
+capacity](docs/maintainer-contract.md#terminal-capacity) for byte, operation, and
+revision limits.
 
 ## Core terms
 
@@ -36,9 +35,9 @@ an explicit no-migration boundary, not a capability-negotiation subsystem.
 immutable. A same-goal approved plan-only request reports that plan and current
 progress, then stops without another mutation or implementation.
 
-**Feature run**: The canonical aggregate for one attempt. It owns its feature,
-attempt number, validation observations, review assignment, result, artifacts,
-and state. Avoid separate “history entry” or copied feature-status concepts.
+**Feature run**: One attempt's canonical aggregate, containing its feature,
+attempt number, validation, review, result, artifacts, and state. No separate
+history entry or copied feature status exists.
 
 **Active run**: The one run currently allowed to receive validation or review.
 Flow has no lanes, concurrent active features, or durable worker execution
@@ -96,11 +95,10 @@ v5 workflow is active.
 requires broad passing validation and replaces, rather than follows, a feature
 review.
 
-**Blocked run**: A run whose review failed or was observed but not submitted. Old
-run data is superseded, not reused. Automatic convergence is bounded: the first
-in-scope failed review may retry as one fresh full run, while a scope blocker or a
-second failure checkpoints for user direction. The count is derived from recorded
-failed review results, never from a persisted retry counter.
+**Blocked run**: A run whose review was observed but not submitted, or a change
+run whose submitted review failed. Retry uses a fresh full run. Only the first
+in-scope failed review may retry automatically. A scope blocker or second
+failure requires user direction. Recorded failed reviews determine the count.
 
 **Workspace-content digest**: A SHA-256 fingerprint of effective tracked and
 nonignored workspace content. It binds validation and review to source without
@@ -113,15 +111,14 @@ revision and record order, not wall-clock time.
 replays; different input under the same ID conflicts.
 
 **Closure**: The explicit completed, deferred, or abandoned terminal state.
-Completed closure requires every planned feature to have a passing run.
-Deferred and abandoned closure require an explicit user choice.
+Completed closure requires every planned feature's current run to be completed.
+Inspections may complete with blocking findings without accepting the inspected
+code. Deferred and abandoned closure require an explicit user choice.
 
-**Delivery projection**: The concise deterministic handoff returned after a close
-is durably accepted, recomputed from the closed Session rather than persisted as
-another state model. Its artifact paths are declarations supplied to Flow, not an
-exact Git delta. It also carries `report`: the same fields already formatted, so
-the handoff shape is a runtime guarantee rather than formatting instructions
-restated on every surface that can report a close.
+**Delivery projection**: A deterministic handoff derived from durably closed
+Session state, never persisted separately. Artifact paths are caller declarations,
+not an exact Git delta. Its `report` contains the same fields formatted by the
+runtime.
 
 **Delivery handoff**: The versioned marker inside a delivery projection.
 `externalActionAuthority: "not-granted"` means the handoff never authorizes Git,

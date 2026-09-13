@@ -1,20 +1,36 @@
 import { z } from "zod";
+import {
+	BenchmarkCaseBindingSchema,
+	RetainedBenchmarkEvidenceSchema,
+	RetainedBenchmarkInputsSchema,
+} from "./benchmark-evidence.js";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import type { CasePolicy, ValidatedCaseCatalog } from "./catalog.js";
 import {
 	deriveEnvironmentReserveState,
 	environmentStratumKey,
 } from "./environment-reserves.js";
+import {
+	ArtifactIdentitySchema,
+	ReportDigestSchema as DigestSchema,
+	ModelIdentitySchema,
+	PackedArtifactIdentitySchema,
+	ReportTextSchema as TextSchema,
+} from "./report-identities.js";
 import { validatePairing } from "./report-pairing.js";
+import {
+	assessReviewerFindings,
+	REVIEWER_CASES,
+	reviewerAssessmentPassed,
+} from "./reviewer-cases.js";
+import { PairedStudyPolicySchema } from "./study-protocol.js";
+import { StudyUsageSchema } from "./study-usage.js";
+import {
+	studyBudgetRequiresStop,
+	studyReportIssues,
+} from "./study-validation.js";
 import { type DeepReadonly, freezeTree } from "./validated.js";
 
-const DigestSchema = z.string().regex(/^sha256:[a-f0-9]{64}$/);
-const TextSchema = z
-	.string()
-	.min(1)
-	.max(4096)
-	.regex(/\S/)
-	.refine((value) => value.isWellFormed());
 const CountSchema = z.number().int().safe().nonnegative();
 const PositiveCountSchema = CountSchema.positive();
 const RateSchema = z.number().finite().min(0).max(1);
@@ -35,16 +51,6 @@ const RelativeTranscriptArtifactSchema = TextSchema.superRefine(
 	},
 );
 
-const ModelIdentitySchema = z
-	.object({
-		routeProvider: TextSchema,
-		gateway: TextSchema.nullable(),
-		family: TextSchema,
-		model: TextSchema,
-		revision: TextSchema.nullable(),
-	})
-	.strict();
-
 const ObservedModelIdentitySchema = z.discriminatedUnion("kind", [
 	z
 		.object({ kind: z.literal("observed"), value: ModelIdentitySchema })
@@ -52,15 +58,7 @@ const ObservedModelIdentitySchema = z.discriminatedUnion("kind", [
 	z.object({ kind: z.literal("unobserved"), reason: TextSchema }).strict(),
 ]);
 
-export const ArtifactIdentitySchema = z
-	.object({
-		packageVersion: TextSchema,
-		sourceCommit: TextSchema,
-		sourceTreeSha256: DigestSchema,
-		tarballSha256: DigestSchema,
-		unpackedManifestSha256: DigestSchema,
-	})
-	.strict();
+export { ArtifactIdentitySchema } from "./report-identities.js";
 
 const EvaluatorIdentitySchema = z
 	.object({
@@ -76,6 +74,30 @@ const ActorIdentitySchema = z
 		role: z.enum(["manager", "reviewer"]),
 		requestedModel: ModelIdentitySchema,
 		actualModel: ObservedModelIdentitySchema,
+		hostObservation: z
+			.object({
+				model: z.discriminatedUnion("kind", [
+					z
+						.object({
+							kind: z.literal("observed"),
+							value: z
+								.object({ providerID: TextSchema, modelID: TextSchema })
+								.strict(),
+						})
+						.strict(),
+					z
+						.object({ kind: z.literal("unobserved"), reason: TextSchema })
+						.strict(),
+				]),
+				variant: z.discriminatedUnion("kind", [
+					z.object({ kind: z.literal("observed"), value: TextSchema }).strict(),
+					z
+						.object({ kind: z.literal("unobserved"), reason: TextSchema })
+						.strict(),
+				]),
+			})
+			.strict()
+			.optional(),
 		sessionIds: z.array(TextSchema).min(1),
 	})
 	.strict();
@@ -127,14 +149,45 @@ const ProductEvidenceSchema = z.discriminatedUnion("kind", [
 			verdict: z.enum(["passed", "failed"]).nullable(),
 			findings: z.array(TextSchema),
 			submitted: z.boolean(),
+			findingDetails: z
+				.array(
+					z
+						.object({
+							findingId: TextSchema,
+							severity: z.enum(["blocking", "advisory"]),
+							summary: z
+								.string()
+								.min(1)
+								.max(32 * 1024),
+							evidence: z
+								.string()
+								.max(32 * 1024)
+								.optional(),
+							scopeBlocker: z.boolean().optional(),
+						})
+						.strict(),
+				)
+				.max(100)
+				.optional(),
+			assessment: z
+				.object({
+					schemaVersion: z.literal(1),
+					matchedDefectIds: z.array(TextSchema).max(100),
+					falseFindingIds: z.array(TextSchema).max(100),
+					unassessedFindingIds: z.array(TextSchema).max(100),
+					labelSource: z.enum(["synthetic", "human"]),
+				})
+				.strict()
+				.optional(),
 		})
 		.strict(),
 	z
 		.object({
 			kind: z.literal("paired-value"),
 			hiddenCorrectness: z.boolean(),
-			claimedComplete: z.boolean(),
-			falseCompletion: z.boolean(),
+			claimedComplete: z.boolean().nullable(),
+			falseCompletion: z.boolean().nullable(),
+			assessment: RetainedBenchmarkEvidenceSchema.optional(),
 		})
 		.strict(),
 	z
@@ -183,6 +236,7 @@ const ScheduledCellSchema = z
 	.strict();
 
 const AnalysisPolicySchema = z.discriminatedUnion("kind", [
+	PairedStudyPolicySchema,
 	z
 		.object({
 			kind: z.literal("rate"),
@@ -216,6 +270,7 @@ const AnalysisPolicySchema = z.discriminatedUnion("kind", [
 
 export const CampaignPlanSchema = z
 	.object({
+		benchmarkCases: z.array(BenchmarkCaseBindingSchema).min(1).optional(),
 		schemaVersion: z.literal(1),
 		planId: TextSchema,
 		planSha256: DigestSchema,
@@ -258,6 +313,7 @@ const AttemptRecordSchema = z
 		repetition: CountSchema,
 		artifact: z.union([
 			ArtifactIdentitySchema,
+			PackedArtifactIdentitySchema,
 			z.object({ kind: z.literal("ordinary-opencode") }).strict(),
 		]),
 		evaluator: EvaluatorIdentitySchema,
@@ -272,11 +328,13 @@ const AttemptRecordSchema = z
 			.strict()
 			.nullable(),
 		outcome: AttemptOutcomeSchema,
+		retainedInputs: RetainedBenchmarkInputsSchema.optional(),
 		usage: z
 			.object({
 				durationMs: CountSchema,
 				outputTokens: CountSchema,
 				costUsd: z.number().finite().nonnegative().nullable(),
+				accounting: StudyUsageSchema.optional(),
 			})
 			.strict(),
 	})
@@ -304,8 +362,29 @@ const CampaignCompletionSchema = z
 				outputTokens: CountSchema,
 				costUsd: z.number().finite().nonnegative().nullable(),
 				wallClockMs: CountSchema,
+				accounting: StudyUsageSchema.optional(),
 			})
 			.strict(),
+		preflight: z
+			.array(
+				z
+					.object({
+						model: ModelIdentitySchema,
+						failure: TextSchema.nullable(),
+						providerCalled: z.boolean(),
+						variantAvailability: z.enum([
+							"not-requested",
+							"listed",
+							"missing",
+							"unobserved",
+						]),
+						durationMs: CountSchema,
+						accounting: StudyUsageSchema,
+					})
+					.strict(),
+			)
+			.optional(),
+		preflightWallClockMs: CountSchema.optional(),
 	})
 	.strict();
 
@@ -426,11 +505,42 @@ function semanticIssues(
 	catalog: ValidatedCaseCatalog,
 ): readonly SemanticIssue[] {
 	const issues: SemanticIssue[] = [];
+	for (const message of studyReportIssues(report))
+		issue(issues, "$.plan.analysis", "policy", message);
 	const cases = new Map<string, CasePolicy>();
 	for (const policy of catalog) {
 		cases.set(`${policy.caseId}\u0000${policy.caseVersion}`, policy);
 	}
 	const cells = new Map<string, (typeof report.plan.cells)[number]>();
+	if (report.plan.benchmarkCases) {
+		duplicateIssues(
+			issues,
+			report.plan.benchmarkCases,
+			"$.plan.benchmarkCases",
+			"benchmark binding",
+			(entry) => `${entry.caseId}\u0000${entry.caseVersion}`,
+		);
+		const plannedCases = new Set(
+			report.plan.cells.map(
+				(cell) => `${cell.caseId}\u0000${cell.caseVersion}`,
+			),
+		);
+		if (
+			(report.plan.analysis.kind !== "paired" &&
+				report.plan.analysis.kind !== "paired-study") ||
+			report.plan.benchmarkCases.length !== plannedCases.size ||
+			report.plan.benchmarkCases.some(
+				(entry) =>
+					!plannedCases.has(`${entry.caseId}\u0000${entry.caseVersion}`),
+			)
+		)
+			issue(
+				issues,
+				"$.plan.benchmarkCases",
+				"policy",
+				"Frozen benchmark bindings must name exactly the paired cases.",
+			);
+	}
 	duplicateIssues(
 		issues,
 		report.plan.cells,
@@ -476,6 +586,41 @@ function semanticIssues(
 		}
 	}
 	for (const [index, attempt] of report.attempts.entries()) {
+		if (
+			report.plan.analysis.kind !== "paired-study" &&
+			!("kind" in attempt.artifact) &&
+			!("sourceCommit" in attempt.artifact)
+		) {
+			issue(
+				issues,
+				`$.attempts.${index}.artifact`,
+				"policy",
+				"Packed-only artifact identities require a paired study.",
+			);
+		}
+		if (attempt.retainedInputs) {
+			const retained = attempt.retainedInputs;
+			const binding = report.plan.benchmarkCases?.find(
+				(entry) =>
+					entry.caseId === attempt.caseId &&
+					entry.caseVersion === attempt.caseVersion,
+			);
+			if (
+				attempt.outcome.kind !== "failure" ||
+				!binding ||
+				retained.caseId !== attempt.caseId ||
+				retained.caseVersion !== attempt.caseVersion ||
+				retained.base.sha256 !== binding.baseSha256 ||
+				retained.oracle.sha256 !== binding.oracleSha256 ||
+				retained.runtime.sha256 !== binding.runtimeSha256
+			)
+				issue(
+					issues,
+					`$.attempts.${index}.retainedInputs`,
+					"policy",
+					"Failure evidence must match the frozen benchmark inputs.",
+				);
+		}
 		const base = `$.attempts.${index}`;
 		if (attemptedCells.has(attempt.cellId)) {
 			issue(
@@ -562,11 +707,88 @@ function semanticIssues(
 				);
 			}
 			if (attempt.outcome.evidence.kind === "reviewer-only") {
-				const correctVerdict =
-					attempt.outcome.evidence.verdict !== null &&
-					(attempt.outcome.evidence.truth === "defect"
-						? attempt.outcome.evidence.verdict === "failed"
-						: attempt.outcome.evidence.verdict === "passed");
+				const evidence = attempt.outcome.evidence;
+				if (evidence.assessment) {
+					const details = evidence.findingDetails;
+					const ids = new Set(details?.map((finding) => finding.findingId));
+					const assessment = evidence.assessment;
+					const unmatched = [
+						...assessment.falseFindingIds,
+						...assessment.unassessedFindingIds,
+					];
+					if (
+						new Set(unmatched).size !== unmatched.length ||
+						unmatched.some((id) => !ids.has(id))
+					)
+						issue(
+							issues,
+							`${base}.outcome.evidence.assessment`,
+							"policy",
+							"Unmatched reviewer classifications require distinct retained finding identities.",
+						);
+					const fixture = REVIEWER_CASES.find(
+						(entry) =>
+							entry.caseId === attempt.caseId &&
+							entry.caseVersion === attempt.caseVersion,
+					);
+					if (
+						fixture &&
+						details &&
+						(evidence.truth !== fixture.truth ||
+							(assessment.labelSource === "synthetic" &&
+								canonicalJson(assessment) !==
+									canonicalJson(assessReviewerFindings(fixture, details))))
+					)
+						issue(
+							issues,
+							`${base}.outcome.evidence.assessment`,
+							"policy",
+							"Synthetic reviewer assessment must reproduce from the retained finding evidence.",
+						);
+					if (
+						!fixture ||
+						assessment.matchedDefectIds.some(
+							(id) => !fixture.defects.some((defect) => defect.defectId === id),
+						)
+					)
+						issue(
+							issues,
+							`${base}.outcome.evidence.assessment`,
+							"policy",
+							"Reviewer defect matches require registered case identities.",
+						);
+					if (
+						!details ||
+						ids.size !== details.length ||
+						new Set(assessment.matchedDefectIds).size !==
+							assessment.matchedDefectIds.length ||
+						new Set(assessment.falseFindingIds).size !==
+							assessment.falseFindingIds.length ||
+						assessment.falseFindingIds.some((id) => !ids.has(id)) ||
+						(!evidence.submitted &&
+							(details.length > 0 ||
+								assessment.matchedDefectIds.length > 0 ||
+								assessment.falseFindingIds.length > 0)) ||
+						(evidence.truth === "clean" &&
+							assessment.matchedDefectIds.length > 0)
+					)
+						issue(
+							issues,
+							`${base}.outcome.evidence.assessment`,
+							"policy",
+							"Reviewer assessment requires complete unique finding details and consistent evidence identities.",
+						);
+				}
+				const correctVerdict = attempt.outcome.evidence.assessment
+					? reviewerAssessmentPassed(
+							attempt.outcome.evidence.truth,
+							attempt.outcome.evidence.verdict,
+							attempt.outcome.evidence.assessment,
+						)
+					: attempt.outcome.evidence.verdict !== null &&
+						(attempt.outcome.evidence.truth === "defect"
+							? attempt.outcome.evidence.verdict === "failed"
+							: attempt.outcome.evidence.verdict === "passed");
 				if (attempt.outcome.passed !== correctVerdict) {
 					issue(
 						issues,
@@ -576,20 +798,52 @@ function semanticIssues(
 					);
 				}
 			}
-			if (
-				attempt.outcome.evidence.kind === "paired-value" &&
-				(attempt.outcome.passed !==
-					attempt.outcome.evidence.hiddenCorrectness ||
-					attempt.outcome.evidence.falseCompletion !==
-						(attempt.outcome.evidence.claimedComplete &&
-							!attempt.outcome.evidence.hiddenCorrectness))
-			) {
-				issue(
-					issues,
-					`${base}.outcome.evidence`,
-					"policy",
-					"Paired product outcome must agree with its hidden evidence.",
+			if (attempt.outcome.evidence.kind === "paired-value") {
+				const evidence = attempt.outcome.evidence;
+				const binding = report.plan.benchmarkCases?.find(
+					(entry) =>
+						entry.caseId === attempt.caseId &&
+						entry.caseVersion === attempt.caseVersion,
 				);
+				const retained = evidence.assessment?.inputs;
+				if (
+					retained
+						? !binding ||
+							retained.caseId !== attempt.caseId ||
+							retained.caseVersion !== attempt.caseVersion ||
+							retained.base.sha256 !== binding.baseSha256 ||
+							retained.oracle.sha256 !== binding.oracleSha256 ||
+							retained.runtime.sha256 !== binding.runtimeSha256
+						: binding !== undefined
+				)
+					issue(
+						issues,
+						`${base}.outcome.evidence`,
+						"policy",
+						"Retained benchmark inputs must match the frozen case and grader bindings.",
+					);
+				const completion = evidence.assessment?.completion;
+				const expectedClaim = completion
+					? completion.kind === "declared"
+						? completion.complete
+						: null
+					: evidence.claimedComplete;
+				const expectedFalse = evidence.hiddenCorrectness
+					? false
+					: expectedClaim;
+				if (
+					attempt.outcome.passed !== evidence.hiddenCorrectness ||
+					evidence.claimedComplete !== expectedClaim ||
+					evidence.falseCompletion !== expectedFalse ||
+					(!evidence.assessment && evidence.claimedComplete === null)
+				) {
+					issue(
+						issues,
+						`${base}.outcome.evidence`,
+						"policy",
+						"Paired product outcome must agree with its hidden evidence.",
+					);
+				}
 			}
 		}
 		const roles = new Set<string>();
@@ -796,14 +1050,17 @@ function semanticIssues(
 			}
 		}
 	}
-	const budgetRequiresStop = requiresBudgetStop(
-		report.plan.budget,
-		report.completion.observed,
-	);
+	const budgetRequiresStop =
+		requiresBudgetStop(report.plan.budget, report.completion.observed) ||
+		studyBudgetRequiresStop(report);
 	if (
 		budgetRequiresStop &&
 		(report.completion.status !== "stopped" ||
-			report.completion.cause !== "budget")
+			(report.completion.cause !== "budget" &&
+				!(
+					report.plan.analysis.kind === "paired-study" &&
+					report.completion.cause === "operator"
+				)))
 	) {
 		issue(
 			issues,
@@ -909,7 +1166,8 @@ function semanticIssues(
 		const policy = cases.get(`${cell.caseId}\u0000${cell.caseVersion}`);
 		if (!policy) continue;
 		const compatible =
-			report.plan.analysis.kind === "paired"
+			report.plan.analysis.kind === "paired" ||
+			report.plan.analysis.kind === "paired-study"
 				? policy.evidenceClass === "paired-value"
 				: report.plan.analysis.kind === "reviewer"
 					? policy.evidenceClass === "reviewer-only"

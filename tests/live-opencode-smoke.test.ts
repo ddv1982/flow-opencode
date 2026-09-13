@@ -63,6 +63,8 @@ type PermissionRule = {
 type ResolvedAgent = {
 	name: string;
 	mode?: "subagent" | "primary" | "all";
+	model?: { providerID: string; modelID: string };
+	variant?: string;
 	steps?: number;
 	permission?: PermissionRule[];
 };
@@ -624,7 +626,13 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						plugin: [
 							[
 								`opencode-plugin-flow@${packageJson.version}`,
-								{ reviewer: { steps: 80 } },
+								{
+									reviewer: {
+										model: "flow-probe/model",
+										variant: "high",
+										steps: 80,
+									},
+								},
 							],
 						],
 					},
@@ -693,6 +701,11 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				if (!reviewer) throw new Error("Flow reviewer was not registered.");
 				expect(reviewer.mode).toBe("subagent");
 				expect(reviewer.steps).toBe(80);
+				expect(reviewer.model).toEqual({
+					providerID: "flow-probe",
+					modelID: "model",
+				});
+				expect(reviewer.variant).toBe("high");
 				for (const permission of [
 					"edit",
 					"bash",

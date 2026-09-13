@@ -1,0 +1,92 @@
+{
+	"count": 12,
+	"objects": [
+		{
+			"artifact": "objects/sha256-0d99002835584300fe27d059e9926f41ff248fab1f4db87492e9edd5aa8fa362",
+			"bytes": 5185,
+			"id": "sha256-0d99002835584300fe27d059e9926f41ff248fab1f4db87492e9edd5aa8fa362",
+			"sha256": "sha256:0d99002835584300fe27d059e9926f41ff248fab1f4db87492e9edd5aa8fa362",
+			"taskClass": "allocation"
+		},
+		{
+			"artifact": "objects/sha256-4c1b3e61c6981b2261aa2424c012d188ad313aec46cbf714c2c3b625191e90ab",
+			"bytes": 5271,
+			"id": "sha256-4c1b3e61c6981b2261aa2424c012d188ad313aec46cbf714c2c3b625191e90ab",
+			"sha256": "sha256:4c1b3e61c6981b2261aa2424c012d188ad313aec46cbf714c2c3b625191e90ab",
+			"taskClass": "preference-selection"
+		},
+		{
+			"artifact": "objects/sha256-4d1f6b0736d523f87b9ca0c8b685726a14c9e4419556ee2f64b1ff15b982eccd",
+			"bytes": 3114,
+			"id": "sha256-4d1f6b0736d523f87b9ca0c8b685726a14c9e4419556ee2f64b1ff15b982eccd",
+			"sha256": "sha256:4d1f6b0736d523f87b9ca0c8b685726a14c9e4419556ee2f64b1ff15b982eccd",
+			"taskClass": "numeric-processing"
+		},
+		{
+			"artifact": "objects/sha256-5a5201ab209726dc5384229bb52e6fefcb4dbefd8b4625382774255f826db48e",
+			"bytes": 6455,
+			"id": "sha256-5a5201ab209726dc5384229bb52e6fefcb4dbefd8b4625382774255f826db48e",
+			"sha256": "sha256:5a5201ab209726dc5384229bb52e6fefcb4dbefd8b4625382774255f826db48e",
+			"taskClass": "numeric-processing"
+		},
+		{
+			"artifact": "objects/sha256-82a795dd3f2527ce1b2d8b5b3479c4729ef62c6dfd0d2121d65ad0be7b46ea8c",
+			"bytes": 5615,
+			"id": "sha256-82a795dd3f2527ce1b2d8b5b3479c4729ef62c6dfd0d2121d65ad0be7b46ea8c",
+			"sha256": "sha256:82a795dd3f2527ce1b2d8b5b3479c4729ef62c6dfd0d2121d65ad0be7b46ea8c",
+			"taskClass": "text-transformation"
+		},
+		{
+			"artifact": "objects/sha256-9f76d553dc5301b3d33373fdb91ff934049956393ff8ec8b1132b0a9f8216ae3",
+			"bytes": 4668,
+			"id": "sha256-9f76d553dc5301b3d33373fdb91ff934049956393ff8ec8b1132b0a9f8216ae3",
+			"sha256": "sha256:9f76d553dc5301b3d33373fdb91ff934049956393ff8ec8b1132b0a9f8216ae3",
+			"taskClass": "date-processing"
+		},
+		{
+			"artifact": "objects/sha256-a8802d06567159dea4206f30d31bef00e2c8fa02045c690e192160c0afd5a193",
+			"bytes": 4350,
+			"id": "sha256-a8802d06567159dea4206f30d31bef00e2c8fa02045c690e192160c0afd5a193",
+			"sha256": "sha256:a8802d06567159dea4206f30d31bef00e2c8fa02045c690e192160c0afd5a193",
+			"taskClass": "path-validation"
+		},
+		{
+			"artifact": "objects/sha256-af34117b63b3d51385769182eee2d2622f228e6cb08ec37c6e1d68688d8c45b9",
+			"bytes": 5202,
+			"id": "sha256-af34117b63b3d51385769182eee2d2622f228e6cb08ec37c6e1d68688d8c45b9",
+			"sha256": "sha256:af34117b63b3d51385769182eee2d2622f228e6cb08ec37c6e1d68688d8c45b9",
+			"taskClass": "structure-traversal"
+		},
+		{
+			"artifact": "objects/sha256-b89159d98b25bab8613fffdb6d788e800f4147e714fea5f1685fc0de4e89a78c",
+			"bytes": 5809,
+			"id": "sha256-b89159d98b25bab8613fffdb6d788e800f4147e714fea5f1685fc0de4e89a78c",
+			"sha256": "sha256:b89159d98b25bab8613fffdb6d788e800f4147e714fea5f1685fc0de4e89a78c",
+			"taskClass": "batch-processing"
+		},
+		{
+			"artifact": "objects/sha256-d446baf7b002ef31b2743dd1da334345136c21aa64214e9d31391c34c9e7d7e6",
+			"bytes": 6243,
+			"id": "sha256-d446baf7b002ef31b2743dd1da334345136c21aa64214e9d31391c34c9e7d7e6",
+			"sha256": "sha256:d446baf7b002ef31b2743dd1da334345136c21aa64214e9d31391c34c9e7d7e6",
+			"taskClass": "state-lifecycle"
+		},
+		{
+			"artifact": "objects/sha256-f6c4f3676aa48918b9a4637f641d98fa5df9e4cec5232fa8427e09878cd50d66",
+			"bytes": 4309,
+			"id": "sha256-f6c4f3676aa48918b9a4637f641d98fa5df9e4cec5232fa8427e09878cd50d66",
+			"sha256": "sha256:f6c4f3676aa48918b9a4637f641d98fa5df9e4cec5232fa8427e09878cd50d66",
+			"taskClass": "encoding-validation"
+		},
+		{
+			"artifact": "objects/sha256-fb192045d5a66c3e9ee173432a7cf144e1dfc2c12f5c2e3585de911c27228760",
+			"bytes": 4923,
+			"id": "sha256-fb192045d5a66c3e9ee173432a7cf144e1dfc2c12f5c2e3585de911c27228760",
+			"sha256": "sha256:fb192045d5a66c3e9ee173432a7cf144e1dfc2c12f5c2e3585de911c27228760",
+			"taskClass": "ordering"
+		}
+	],
+	"purpose": "sealed-confirmation",
+	"schemaVersion": 1,
+	"used": false
+}

@@ -37,6 +37,7 @@ import {
 	planEvidence,
 	reviewResultSemanticIssues,
 } from "./session.js";
+import { assertTerminalHeadroom } from "./session-capacity.js";
 import { FlowTransitionError } from "./transition-error.js";
 import {
 	evidenceRefusal,
@@ -141,9 +142,11 @@ function commit(
 	entityId?: string,
 ): Session {
 	const revision = session.revision + 1;
+	if (!Number.isSafeInteger(revision))
+		fail("Session revision has no safe successor.");
 	const draft = copy(session);
 	const changed = change(draft, revision);
-	return {
+	const next: Session = {
 		...changed,
 		revision,
 		operations: [
@@ -157,6 +160,8 @@ function commit(
 			},
 		],
 	};
+	if (kind !== "session-close") assertTerminalHeadroom(next);
+	return next;
 }
 
 function assertMutable(session: Session): void {
@@ -392,7 +397,7 @@ export function anchorRequest(
 	const id = environment.newId("session");
 	if (id.length > MAX_SESSION_ID_LENGTH)
 		fail("Generated session id is too long.");
-	return {
+	const created: Session = {
 		version: 5,
 		id,
 		revision: 0,
@@ -404,6 +409,8 @@ export function anchorRequest(
 		operations: [],
 		closure: null,
 	};
+	assertTerminalHeadroom(created);
+	return created;
 }
 
 function requiresExplicitRetry(

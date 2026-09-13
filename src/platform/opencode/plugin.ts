@@ -14,7 +14,7 @@ import {
 	readWorkspaceTestReport,
 } from "../../infrastructure/fs/workspace-validation.js";
 import { resolveFlowPluginVersion } from "../../version.js";
-import { AutoDriveCoordinator } from "./auto-drive.js";
+import { AutoDriveCoordinator, autoDriveDelivery } from "./auto-drive.js";
 import { createConfigHook } from "./config.js";
 import {
 	createFlowPluginInstanceId,
@@ -304,6 +304,9 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 				body: {
 					agent: delivery.agent,
 					model: delivery.model,
+					...(delivery.variant === undefined
+						? {}
+						: { variant: delivery.variant }),
 					parts: [textPart(prompt, true, metadata)],
 				},
 				throwOnError: true,
@@ -337,10 +340,7 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		"chat.message": async (input, output) => {
 			const observed = await autoDrive.observeMessage(
 				input.sessionID,
-				{
-					agent: output.message.agent,
-					model: output.message.model,
-				},
+				autoDriveDelivery(output.message, input.variant),
 				output.parts,
 				output.message.id,
 			);

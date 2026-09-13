@@ -1,3 +1,4 @@
+import type { BenchmarkProbe } from "./benchmark-evidence.js";
 import type { Outcome } from "./harness.js";
 
 export type BenchmarkMode = "flow" | "ordinary";
@@ -27,6 +28,8 @@ export type BenchmarkOracleMetadata = {
 /** One task whose result can be graded without trusting model-written tests. */
 export type BenchmarkCase = {
 	readonly id: string;
+	readonly caseVersion: number;
+	readonly probes: readonly BenchmarkProbe[];
 	readonly description: string;
 	readonly files: Readonly<Record<string, string>>;
 	readonly prompt: string;
@@ -40,8 +43,8 @@ export type BenchmarkResult = {
 	readonly attempt: number;
 	readonly mode: BenchmarkMode;
 	readonly passed: boolean;
-	readonly claimedComplete: boolean;
-	readonly falseCompletion: boolean;
+	readonly claimedComplete: boolean | null;
+	readonly falseCompletion: boolean | null;
 	readonly issues: readonly string[];
 	readonly tokens: Outcome["tokens"];
 	readonly costUsd: number | null;
@@ -59,6 +62,7 @@ export type BenchmarkModeSummary = {
 	readonly passed: number;
 	readonly correctnessRate: number | null;
 	readonly completionClaims: number;
+	readonly unassessedCompletionClaims: number;
 	readonly falseCompletions: number;
 	readonly falseCompletionRate: number | null;
 	readonly aborted: number;
@@ -146,6 +150,9 @@ function summarizeMode(
 		passed,
 		correctnessRate: scored.length === 0 ? null : passed / scored.length,
 		completionClaims: claims.length,
+		unassessedCompletionClaims: scored.filter(
+			(result) => result.claimedComplete === null,
+		).length,
 		falseCompletions,
 		falseCompletionRate:
 			claims.length === 0 ? null : falseCompletions / claims.length,

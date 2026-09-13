@@ -11,7 +11,6 @@ import {
 	MAX_PLAN_BYTES,
 	MAX_PLAN_FEATURES,
 	MAX_REVIEW_FINDINGS,
-	MAX_SESSION_BYTES,
 	MAX_SESSION_ID_LENGTH,
 	MAX_TEXT_BYTES,
 	MAX_VALIDATION_ID_LENGTH,
@@ -23,6 +22,7 @@ import {
 } from "../domain/review-findings.js";
 import type { Session, SourceDigest } from "../domain/session.js";
 import { reviewResultSemanticIssues } from "../domain/session.js";
+import { persistedCapacityIssues } from "../domain/session-capacity.js";
 import { sessionInvariantIssues } from "../domain/session-invariants.js";
 import {
 	EVIDENCE_PLATFORMS,
@@ -296,17 +296,13 @@ export const SessionSchema: z.ZodType<Session> = z
 		approval: z.enum(["pending", "approved"]),
 		plan: PlanSchema.nullable(),
 		runs: z.array(FeatureRunSchema).max(512),
-		operations: z.array(OperationRecordSchema).max(4096),
+		operations: z.array(OperationRecordSchema),
 		closure: ClosureSchema.nullable(),
 	})
 	.strict()
 	.superRefine((session, context) => {
-		const bytes = encoder.encode(JSON.stringify(session)).byteLength;
-		if (bytes > MAX_SESSION_BYTES) {
-			context.addIssue({
-				code: "custom",
-				message: `Session cannot exceed ${MAX_SESSION_BYTES} UTF-8 bytes.`,
-			});
+		for (const issue of persistedCapacityIssues(session)) {
+			context.addIssue({ code: "custom", message: issue });
 		}
 		for (const issue of sessionInvariantIssues(session)) {
 			context.addIssue({ code: "custom", message: issue });

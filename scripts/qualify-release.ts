@@ -252,7 +252,7 @@ export function qualifyV2(input: {
 	}
 	assertFrozenReleasePlan(parsed.value);
 	const measuredArtifact = parsed.value.attempts[0]?.artifact;
-	if (!measuredArtifact || "kind" in measuredArtifact) {
+	if (!measuredArtifact || !("sourceCommit" in measuredArtifact)) {
 		throw new Error("A v2 qualification report requires a Flow artifact.");
 	}
 	const evaluator = canonicalEvaluator(measuredArtifact);

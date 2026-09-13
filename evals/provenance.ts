@@ -8,6 +8,10 @@ import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { normalizeRecorded, REDACTED } from "./cassette.js";
 import { pseudonymizeEvalIds } from "./grader-input.js";
 import type {
+	HostActorObservation,
+	ObservedActor,
+} from "./host-observation.js";
+import type {
 	ArtifactIdentity,
 	EvaluatorIdentity,
 	InstructionDelivery,
@@ -40,6 +44,7 @@ export type PackedArtifactIdentity = Pick<
 
 export type RequestedModelInput = {
 	readonly modelId: string;
+	readonly variant?: string | undefined;
 	readonly gateway: string | null;
 	readonly family: string;
 	readonly revision: string | null;
@@ -191,6 +196,22 @@ export async function packedPackageManifest(
 	return packageManifest(await archiveEntries(tarballPath));
 }
 
+/** Execution accepts an exact bounded SemVer, never a registry tag or path. */
+export function exactPackageVersion(value: string): string {
+	const parts = value.match(
+		/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/,
+	);
+	if (
+		value.length > 256 ||
+		!parts ||
+		parts[0] !== value ||
+		parts.slice(1, 4).some((part) => !Number.isSafeInteger(Number(part))) ||
+		parts[4]?.split(".").some((part) => /^0\d+$/.test(part))
+	)
+		throw new Error("Artifact package version must be a bounded exact SemVer.");
+	return value;
+}
+
 async function gitCommit(repositoryRoot: string): Promise<string> {
 	return text(
 		await run("git", ["-C", repositoryRoot, "rev-parse", "HEAD"]),
@@ -289,6 +310,18 @@ export function hostConfigSha256(config: unknown): string {
 	return canonicalSha256("flow-eval-host-config-v1", config);
 }
 
+export function hostActorObservation(
+	actor: ObservedActor,
+): HostActorObservation {
+	return {
+		model: actor.actualModel,
+		variant: actor.actualVariant ?? {
+			kind: "unobserved",
+			reason: "field-unavailable",
+		},
+	};
+}
+
 export function normalizeRequestedModel(
 	input: RequestedModelInput,
 ): ModelIdentity {
@@ -304,6 +337,7 @@ export function normalizeRequestedModel(
 		family: input.family,
 		model: input.modelId.slice(boundary + 1),
 		revision: input.revision,
+		...(input.variant === undefined ? {} : { variant: input.variant }),
 	};
 }
 

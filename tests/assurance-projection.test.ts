@@ -141,6 +141,55 @@ describe("assurance projection", () => {
 		);
 	});
 
+	test("keeps negative inspection completion distinct from accepted implementation", () => {
+		const session = completedSession();
+		if (!session.plan) throw new Error("Expected an approved plan.");
+		const inspection: Session = {
+			...session,
+			plan: {
+				...session.plan,
+				features: session.plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+			},
+			runs: session.runs.map((run) => ({
+				...run,
+				reviews: run.reviews.map((review) => ({
+					...review,
+					result: {
+						verdict: "failed",
+						findings: [
+							{
+								severity: "blocking",
+								summary: "Retry loses data.",
+								evidence:
+									"src/delivery.ts:7 overwrites accepted state on replay.",
+							},
+						],
+						terminalDisposition: "submitted",
+						recordedRevision: 6,
+					},
+				})),
+			})),
+		};
+
+		const assurance = assuranceProjection(inspection);
+		expect(assurance.conclusion).toBe("completion-unsupported");
+		expect(assurance.checks).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "recorded-completion",
+					status: "unsatisfied",
+				}),
+				expect.objectContaining({
+					id: "accepted-validation",
+					status: "unsatisfied",
+				}),
+			]),
+		);
+	});
+
 	test("reports a contradictory completed document without throwing", () => {
 		const session = completedSession();
 		const contradictory: Session = {

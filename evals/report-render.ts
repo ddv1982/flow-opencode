@@ -25,6 +25,12 @@ export type EvidenceRender = {
 	readonly evaluatorDigests: readonly string[];
 	readonly reviewer: ReturnType<typeof analyzeReviewer>;
 	readonly paired: ReturnType<typeof analyzePairs>;
+	readonly completionClaims: {
+		readonly declaredComplete: number;
+		readonly declaredIncomplete: number;
+		readonly unassessed: number;
+		readonly historicalBoolean: number;
+	};
 };
 export type ComparisonKey = {
 	readonly sha256: string;
@@ -74,6 +80,25 @@ function caseKey(input: {
 }
 
 export function renderEvidence(report: ValidatedReport): EvidenceRender {
+	const completionClaims = {
+		declaredComplete: 0,
+		declaredIncomplete: 0,
+		unassessed: 0,
+		historicalBoolean: 0,
+	};
+	for (const attempt of report.attempts) {
+		if (
+			attempt.outcome.kind !== "product" ||
+			attempt.outcome.evidence.kind !== "paired-value"
+		)
+			continue;
+		const declaration = attempt.outcome.evidence.assessment?.completion;
+		if (!declaration) completionClaims.historicalBoolean += 1;
+		else if (declaration.kind === "unassessed")
+			completionClaims.unassessed += 1;
+		else if (declaration.complete) completionClaims.declaredComplete += 1;
+		else completionClaims.declaredIncomplete += 1;
+	}
 	const cards = new Map<string, EvidenceCard>();
 	for (const cell of activeCells(report)) {
 		const key = caseKey(cell);
@@ -154,6 +179,7 @@ export function renderEvidence(report: ValidatedReport): EvidenceRender {
 		].sort(),
 		reviewer: analyzeReviewer(report),
 		paired: analyzePairs(report),
+		completionClaims,
 	};
 }
 

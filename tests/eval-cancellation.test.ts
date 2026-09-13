@@ -471,7 +471,7 @@ describe("real runner cancellation reports without provider spend", () => {
 						// Exercise the real release decision helper, not a copied stop rule.
 						// This ordinary one-case fixture necessarily lacks release evidence.
 						const first = report.attempts[0];
-						if (first && !("kind" in first.artifact)) {
+						if (first && "sourceCommit" in first.artifact) {
 							const decision = deriveReleaseDecision({
 								report,
 								catalog: releaseCatalog(),

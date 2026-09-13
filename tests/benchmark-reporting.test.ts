@@ -136,7 +136,7 @@ describe("hidden benchmark graders", () => {
 		}
 	});
 
-	test("accept known implementations for every case", async () => {
+	test("accept known implementations for the original five cases", async () => {
 		const implementations: Record<string, Record<string, string>> = {
 			"farewell-export": {
 				"src/greet.ts":
@@ -169,7 +169,9 @@ describe("hidden benchmark graders", () => {
 			},
 		};
 
-		for (const benchmark of BENCHMARK_CASES) {
+		for (const benchmark of BENCHMARK_CASES.filter(
+			(entry) => entry.id in implementations,
+		)) {
 			const project = await mkdtemp(join(tmpdir(), "flow-benchmark-grade-"));
 			try {
 				const files = { ...benchmark.files, ...implementations[benchmark.id] };
@@ -268,9 +270,9 @@ describe("hidden benchmark graders", () => {
 		}
 	});
 
-	test("rejects every declared known-bad mutation", async () => {
-		for (const benchmark of BENCHMARK_CASES) {
-			for (const mutation of benchmark.oracle.knownBadMutations) {
+	for (const benchmark of BENCHMARK_CASES) {
+		for (const mutation of benchmark.oracle.knownBadMutations) {
+			test(`rejects ${benchmark.id} mutation ${mutation.id}`, async () => {
 				const project = await mkdtemp(
 					join(tmpdir(), "flow-benchmark-mutation-"),
 				);
@@ -289,7 +291,7 @@ describe("hidden benchmark graders", () => {
 				} finally {
 					await rm(project, { recursive: true, force: true });
 				}
-			}
+			});
 		}
-	});
+	}
 });

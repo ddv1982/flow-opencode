@@ -15,6 +15,30 @@ interface AutoDriveMessagePart {
 export interface AutoDriveDelivery {
 	readonly agent: string;
 	readonly model: Readonly<{ providerID: string; modelID: string }>;
+	readonly variant?: string | undefined;
+}
+
+/** OpenCode stores the resolved variant inside the model but accepts it beside it. */
+export function autoDriveDelivery(
+	message: Readonly<{
+		agent: string;
+		model: AutoDriveDelivery["model"] & Readonly<{ variant?: unknown }>;
+	}>,
+	requestedVariant?: string,
+): AutoDriveDelivery {
+	const variant = Object.hasOwn(message.model, "variant")
+		? typeof message.model.variant === "string"
+			? message.model.variant
+			: undefined
+		: requestedVariant;
+	return {
+		agent: message.agent,
+		model: {
+			providerID: message.model.providerID,
+			modelID: message.model.modelID,
+		},
+		...(variant === undefined ? {} : { variant }),
+	};
 }
 type HostMessage = Record<"id" | "role", string> & {
 	parentID?: string;

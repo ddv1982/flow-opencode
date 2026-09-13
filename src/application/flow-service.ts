@@ -4,6 +4,7 @@ import type {
 	RequestEvidenceAnchor,
 } from "../domain/request-evidence.js";
 import type { FeatureRun, Session } from "../domain/session.js";
+import { featureKind } from "../domain/session.js";
 import {
 	activeRun,
 	anchorRequest,
@@ -105,15 +106,21 @@ function featureCompleteResponse(
 	run: FeatureRun,
 	replayed: boolean,
 ): CompactMutationResponse {
-	return ok(
-		request.result.verdict === "passed"
-			? "Feature completed."
-			: "Feature blocked by review.",
-		{
-			operation: operationResult(session, request.operationId, replayed, run),
-			projection: compactProjection(session),
-		},
+	const feature = session.plan?.features.find(
+		(item) => item.id === run.featureId,
 	);
+	const summary =
+		run.state === "completed"
+			? featureKind(feature) === "inspect"
+				? request.result.verdict === "failed"
+					? "Inspection completed with blocking findings."
+					: "Inspection completed."
+				: "Feature completed."
+			: "Feature blocked by review.";
+	return ok(summary, {
+		operation: operationResult(session, request.operationId, replayed, run),
+		projection: compactProjection(session),
+	});
 }
 
 function exactFeatureCompleteReplay(

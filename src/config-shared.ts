@@ -14,6 +14,7 @@ type FlowAgentConfig = {
 	prompt: string;
 	hidden?: boolean;
 	model?: string;
+	variant?: string;
 	steps?: number;
 	permission?: FlowPermissionConfig;
 };
@@ -35,14 +36,15 @@ type FlowPluginOptions = Readonly<{
 	reviewer?: unknown;
 }>;
 
-type ExplicitReviewerModel = Readonly<{
+type ExplicitReviewerText = Readonly<{
 	kind: "explicit";
 	source: ReviewerSettingSource;
 	value: string;
 }>;
 
 export type FlowReviewerConfiguration = Readonly<{
-	model: ExplicitReviewerModel | Readonly<{ kind: "shared-with-manager" }>;
+	model: ExplicitReviewerText | Readonly<{ kind: "shared-with-manager" }>;
+	variant?: ExplicitReviewerText | undefined;
 	steps:
 		| Readonly<{
 				kind: "explicit";
@@ -54,6 +56,14 @@ export type FlowReviewerConfiguration = Readonly<{
 
 type FlowReviewerStatus = Readonly<{
 	scope: "current-plugin-process";
+	variant?:
+		| Readonly<{
+				kind: "explicit";
+				source: ReviewerSettingSource;
+				requested: string;
+				application: "host-configured" | "requires-explicit-model";
+		  }>
+		| undefined;
 	model:
 		| Readonly<{
 				kind: "explicit";
@@ -187,26 +197,25 @@ function pluginReviewerOptions(
 	return Object.fromEntries(Object.entries(reviewer));
 }
 
-function pluginReviewerModel(
+function reviewerTextSetting(
 	reviewer: Record<string, unknown>,
+	env: FlowEnvironment,
+	setting: "model" | "variant",
 	onWarning?: (message: string) => void,
-): string | undefined {
-	if (!Object.hasOwn(reviewer, "model")) return undefined;
-	const value = reviewer.model;
-	if (typeof value !== "string") {
+): ExplicitReviewerText | undefined {
+	if (Object.hasOwn(reviewer, setting)) {
+		const raw = reviewer[setting];
+		const value = typeof raw === "string" ? raw.trim() : undefined;
+		if (value) return { kind: "explicit", source: "plugin-option", value };
 		onWarning?.(
-			"Flow plugin option reviewer.model must be a non-empty string; ignoring it.",
+			`Flow plugin option reviewer.${setting} must be a non-empty string; ignoring it.`,
 		);
-		return undefined;
 	}
-	const model = value.trim();
-	if (!model) {
-		onWarning?.(
-			"Flow plugin option reviewer.model must be a non-empty string; ignoring it.",
-		);
-		return undefined;
-	}
-	return model;
+	const value = envValue(
+		env,
+		`OPENCODE_FLOW_REVIEWER_${setting.toUpperCase()}`,
+	);
+	return value ? { kind: "explicit", source: "environment", value } : undefined;
 }
 
 function pluginReviewerSteps(
@@ -239,45 +248,49 @@ export function resolveFlowReviewerConfiguration(options?: {
 		options?.pluginOptions,
 		options?.onWarning,
 	);
-	const configuredModel = pluginReviewerModel(reviewer, options?.onWarning);
+	const model = reviewerTextSetting(reviewer, env, "model", options?.onWarning);
+	const variant = reviewerTextSetting(
+		reviewer,
+		env,
+		"variant",
+		options?.onWarning,
+	);
 	const configuredSteps = pluginReviewerSteps(reviewer, options?.onWarning);
-	const environmentModel = configuredModel
-		? undefined
-		: envValue(env, "OPENCODE_FLOW_REVIEWER_MODEL");
-	const environmentSteps =
-		configuredSteps === undefined
-			? reviewerSteps(env, options?.onWarning)
-			: undefined;
+	const steps = configuredSteps ?? reviewerSteps(env, options?.onWarning);
+	if (variant && !model) {
+		options?.onWarning?.(
+			"Configure an explicit reviewer.model to apply reviewer.variant.",
+		);
+	}
 	return {
-		model: configuredModel
-			? { kind: "explicit", source: "plugin-option", value: configuredModel }
-			: environmentModel
-				? {
-						kind: "explicit",
-						source: "environment",
-						value: environmentModel,
-					}
-				: { kind: "shared-with-manager" },
+		...(variant ? { variant } : {}),
+		model: model ?? { kind: "shared-with-manager" },
 		steps:
-			configuredSteps !== undefined
+			steps !== undefined
 				? {
 						kind: "explicit",
-						source: "plugin-option",
-						value: configuredSteps,
+						source:
+							configuredSteps !== undefined ? "plugin-option" : "environment",
+						value: steps,
 					}
-				: environmentSteps !== undefined
-					? {
-							kind: "explicit",
-							source: "environment",
-							value: environmentSteps,
-						}
-					: { kind: "host-default" },
+				: { kind: "host-default" },
 	};
 }
 
 export function flowReviewerStatus(
 	reviewer: FlowReviewerConfiguration,
 ): FlowReviewerStatus {
+	const variant: FlowReviewerStatus["variant"] = reviewer.variant
+		? {
+				kind: "explicit",
+				source: reviewer.variant.source,
+				requested: reviewer.variant.value,
+				application:
+					reviewer.model.kind === "explicit"
+						? "host-configured"
+						: "requires-explicit-model",
+			}
+		: undefined;
 	const model =
 		reviewer.model.kind === "explicit"
 			? {
@@ -304,6 +317,7 @@ export function flowReviewerStatus(
 				};
 	return {
 		scope: "current-plugin-process",
+		...(variant ? { variant } : {}),
 		model,
 		steps,
 		availability: "unverified",
@@ -314,6 +328,16 @@ export function flowReviewerStatus(
 			model.kind === "explicit"
 				? `Requested reviewer model: ${model.requested} (from ${model.source}).`
 				: "Requested reviewer model: none; the reviewer inherits the manager model.",
+			...(variant
+				? [
+						`Requested reviewer variant: ${variant.requested} (from ${variant.source}).`,
+						...(variant.application === "requires-explicit-model"
+							? [
+									"Reviewer variant cannot apply without an explicit reviewer model.",
+								]
+							: []),
+					]
+				: []),
 			reviewer.steps.kind === "host-default"
 				? "Requested reviewer step budget: host default."
 				: `Requested reviewer step budget: ${reviewer.steps.value} (from ${reviewer.steps.source}).`,
@@ -344,6 +368,7 @@ export function createFlowCoreConfigEntries(options?: {
 			"flow-reviewer": {
 				...FLOW_CORE_AGENTS["flow-reviewer"],
 				...(model ? { model } : {}),
+				...(reviewer.variant ? { variant: reviewer.variant.value } : {}),
 				...(steps ? { steps } : {}),
 				permission: structuredClone(
 					FLOW_CORE_AGENTS["flow-reviewer"].permission,

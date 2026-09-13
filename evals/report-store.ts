@@ -1,8 +1,15 @@
 import { createHash } from "node:crypto";
 import { link, mkdir, open, readdir, readFile, unlink } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import type { RetainedBenchmarkInputs } from "./benchmark-evidence.js";
+import {
+	BenchmarkOracleSchema,
+	GradeReceiptSchema,
+} from "./benchmark-grader.js";
+import { verifyBenchmarkTranscript } from "./benchmark-transcript.js";
 import { canonicalJson } from "./canonical-json.js";
 import type { ValidatedCaseCatalog } from "./catalog.js";
+import { EvidenceStore } from "./evidence-store.js";
 import {
 	type AllocationRecord,
 	AllocationRecordSchema,
@@ -14,6 +21,7 @@ import {
 	pairedReportSha256,
 	validateMaskedAnalysis,
 } from "./experiment.js";
+import { FixtureSnapshotSchema } from "./fixture-snapshot.js";
 import {
 	type AttemptRecordV2,
 	type CampaignCompletion,
@@ -159,6 +167,7 @@ export class ReportStore {
 	private readonly allocationPath: string;
 	private readonly catalog: ValidatedCaseCatalog;
 	private readonly hooks: ReportStoreHooks;
+	private readonly evidence: EvidenceStore;
 
 	constructor(
 		directory: string,
@@ -167,6 +176,7 @@ export class ReportStore {
 	) {
 		this.catalog = catalog;
 		this.hooks = hooks;
+		this.evidence = new EvidenceStore(directory);
 		this.attemptsDirectory = join(directory, "attempts");
 		this.transcriptsDirectory = join(directory, "transcripts");
 		this.catalogPath = join(directory, "catalog.json");
@@ -205,6 +215,21 @@ export class ReportStore {
 		);
 	}
 
+	async writePreflightRequest(
+		index: number,
+		receipt: NonNullable<CampaignCompletion["preflight"]>[number],
+	): Promise<"written" | "replayed"> {
+		if (!Number.isSafeInteger(index) || index < 0)
+			fail("Invalid preflight request index.");
+		const directory = join(dirname(this.reportPath), "preflight");
+		await mkdir(directory, { recursive: true });
+		return writeImmutable(
+			join(directory, `${index}.json`),
+			Buffer.from(canonicalJson(receipt)),
+			this.hooks,
+		);
+	}
+
 	private async plan(): Promise<CampaignPlan> {
 		const parsed = CampaignPlanSchema.safeParse(await readJson(this.planPath));
 		if (!parsed.success) fail("Stored campaign plan is invalid.");
@@ -236,11 +261,71 @@ export class ReportStore {
 		if (!plan.cells.some((cell) => cell.cellId === attempt.cellId)) {
 			fail(`Attempt references an unknown plan cell: ${attempt.cellId}.`);
 		}
+		await this.verifyAttemptEvidence(attempt);
 		return writeImmutable(
 			join(this.attemptsDirectory, reportStoreCellFileName(attempt.cellId)),
 			Buffer.from(canonicalJson(attempt)),
 			this.hooks,
 		);
+	}
+
+	private async verifyAttemptEvidence(
+		attempt: Pick<
+			ValidatedReport["attempts"][number],
+			| "attemptId"
+			| "caseId"
+			| "caseVersion"
+			| "outcome"
+			| "retainedInputs"
+			| "transcript"
+		>,
+	): Promise<void> {
+		const assessment =
+			attempt.outcome.kind === "product" &&
+			attempt.outcome.evidence.kind === "paired-value"
+				? attempt.outcome.evidence.assessment
+				: undefined;
+		const inputs: RetainedBenchmarkInputs | undefined =
+			assessment?.inputs ?? attempt.retainedInputs;
+		if (!inputs) return;
+		if (
+			inputs.caseId !== attempt.caseId ||
+			inputs.caseVersion !== attempt.caseVersion
+		)
+			fail("Retained benchmark inputs belong to another case.");
+		const [base, final, oracleInput] = await Promise.all([
+			this.evidence.readJson(inputs.base),
+			this.evidence.readJson(inputs.final),
+			this.evidence.readJson(inputs.oracle),
+			this.evidence.read(inputs.runtime),
+		]);
+		FixtureSnapshotSchema.parse(base);
+		FixtureSnapshotSchema.parse(final);
+		const oracle = BenchmarkOracleSchema.parse(oracleInput);
+		if (
+			oracle.caseId !== inputs.caseId ||
+			oracle.caseVersion !== inputs.caseVersion
+		)
+			fail("Retained benchmark oracle belongs to another case.");
+		if (assessment) {
+			await verifyBenchmarkTranscript({
+				directory: this.evidence.directory,
+				attemptId: attempt.attemptId,
+				transcript: attempt.transcript,
+				assessment,
+			});
+			const receipt = GradeReceiptSchema.parse(
+				await this.evidence.readJson(assessment.receipt),
+			);
+			if (
+				canonicalJson(receipt.inputs) !== canonicalJson(inputs) ||
+				canonicalJson(receipt.probes.map((probe) => probe.id)) !==
+					canonicalJson(oracle.probes.map((probe) => probe.id)) ||
+				(attempt.outcome.kind === "product" &&
+					receipt.passed !== attempt.outcome.passed)
+			)
+				fail("Benchmark receipt does not reproduce the recorded assessment.");
+		}
 	}
 
 	async writeTranscript(input: {
@@ -287,6 +372,15 @@ export class ReportStore {
 		readonly allocationCommitmentSha256: string | null;
 	}): Promise<ValidatedReport> {
 		const plan = await this.plan();
+		for (const [index, request] of (
+			input.completion.preflight ?? []
+		).entries()) {
+			const retained = await readJson(
+				join(dirname(this.reportPath), "preflight", `${index}.json`),
+			);
+			if (canonicalJson(retained) !== canonicalJson(request))
+				fail("Preflight receipt does not match its retained request.");
+		}
 		const report = {
 			schemaVersion: 2,
 			reportId: input.reportId,
@@ -303,6 +397,8 @@ export class ReportStore {
 					.join("; ")}`,
 			);
 		}
+		for (const attempt of parsed.value.attempts)
+			await this.verifyAttemptEvidence(attempt);
 		const completionBytes = Buffer.from(canonicalJson(input.completion));
 		const reportBytes = Buffer.from(canonicalJson(report));
 		await writeImmutable(this.completionPath, completionBytes, this.hooks);

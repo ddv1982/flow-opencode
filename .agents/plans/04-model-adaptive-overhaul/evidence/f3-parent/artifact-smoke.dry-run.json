@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "purpose": "smoke",
+  "comparison": "artifact",
+  "method": "descriptive",
+  "opencodeVersion": "1.18.6",
+  "arms": {
+    "baseline": {
+      "artifact": {
+        "path": "../../../../../evals/results/2026-09-05T12-24-38-776Z.v2/artifact.tgz",
+        "identity": {
+          "packageVersion": "8.2.1",
+          "sourceCommit": "8a935dedd339a654cd1e4677b3a63dd1fbb0b0f0",
+          "sourceTreeSha256": "sha256:e6d69049e231b43876f2172e5d6c1978d0832e507dc2ec555d2dc41e84cfd456",
+          "tarballSha256": "sha256:2f3054067a4e5a58a2856aeb9e255dfc23780cbf596fe52d8e5ed411214f4b97",
+          "unpackedManifestSha256": "sha256:81196504f8149d949437e5a2c36d8c3d66da2b8c372d3ab2edc1072086a3218b"
+        }
+      },
+      "manager": {
+        "routeProvider": "openai",
+        "model": "gpt-6-astra",
+        "family": "gpt-6",
+        "gateway": null,
+        "revision": null,
+        "variant": "high"
+      },
+      "reviewer": null
+    },
+    "candidate": {
+      "artifact": {
+        "path": "artifacts/opencode-plugin-flow-8.2.1.tgz",
+        "identity": {
+          "packageVersion": "8.2.1",
+          "sourceCommit": "f10c386b8c0cc873b0a0816a7f34535e15b3c6ae",
+          "sourceTreeSha256": "sha256:7daf6650123cc8b9e5a9a19d2d95acbd09b3de07c56066ef803849038bf722ba",
+          "tarballSha256": "sha256:f9769b46d6b4c4c8f7f95c7fedf5576df8811496e19d4166df5100113448bfe5",
+          "unpackedManifestSha256": "sha256:f647f30208b59cd77fc8da7bcb33cd0afdcc52fb8b7d637d0521dc1087cd5e88"
+        }
+      },
+      "manager": {
+        "routeProvider": "openai",
+        "model": "gpt-6-astra",
+        "family": "gpt-6",
+        "gateway": null,
+        "revision": null,
+        "variant": "high"
+      },
+      "reviewer": null
+    }
+  },
+  "cases": [
+    {
+      "caseId": "farewell-export",
+      "caseVersion": 2
+    },
+    {
+      "caseId": "markdown-link-report",
+      "caseVersion": 2
+    }
+  ],
+  "repetitions": 1,
+  "reservePairsPerBlock": 0,
+  "seed": "f3-local-artifact-dry-run-2026-09-13",
+  "budget": {
+    "maxUsd": null,
+    "unknownCostPolicy": "token-wall-clock-bounds",
+    "maxWallClockMs": 1200000,
+    "maxAttempts": 4
+  },
+  "accounting": {
+    "schemaVersion": 1,
+    "hostContract": "opencode-1.18.6-disjoint-output-v1",
+    "maxGeneratedOutputTokens": 80000,
+    "estimate": {
+      "generatedOutputTokensPerAttempt": 20000,
+      "wallClockMsPerAttempt": 300000,
+      "costUsdPerAttempt": null,
+      "basis": "Unfunded local dry-run arithmetic only; not a measured model estimate."
+    },
+    "preflight": {
+      "kind": "none"
+    }
+  }
+}
