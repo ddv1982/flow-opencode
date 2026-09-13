@@ -13,6 +13,7 @@ import type {
 	ValidationScope,
 } from "./session.js";
 import { planEvidence, planGate } from "./session.js";
+import { assertTerminalHeadroom } from "./session-capacity.js";
 import { assertionsSatisfied, unmetAssertions } from "./test-results.js";
 import { FlowTransitionError } from "./transition-error.js";
 
@@ -247,19 +248,21 @@ export function recordValidation(
 			: {}),
 	};
 	const draft = structuredClone(session);
+	const next: Session = {
+		...draft,
+		revision,
+		runs: draft.runs.map((candidate) =>
+			candidate.id === run.id
+				? {
+						...candidate,
+						validations: [...candidate.validations, observation],
+					}
+				: candidate,
+		),
+	};
+	assertTerminalHeadroom(next);
 	return {
-		session: {
-			...draft,
-			revision,
-			runs: draft.runs.map((candidate) =>
-				candidate.id === run.id
-					? {
-							...candidate,
-							validations: [...candidate.validations, observation],
-						}
-					: candidate,
-			),
-		},
+		session: next,
 		value: observation,
 		replayed: false,
 	};

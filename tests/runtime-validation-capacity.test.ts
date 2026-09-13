@@ -11,6 +11,7 @@ import {
 	MAX_ARTIFACTS,
 	MAX_SESSION_BYTES,
 	MAX_TEXT_BYTES,
+	SESSION_CLOSE_RESERVE_BYTES,
 } from "../src/domain/limits.js";
 import type { Session } from "../src/domain/session.js";
 import { recordValidation } from "../src/domain/transitions.js";
@@ -100,9 +101,9 @@ function validationCapacitySession(artifactPathLength: number): Session {
 }
 
 describe("Flow validation capacity gate", () => {
-	test("preflights and reloads a fitting 64th maximum command within the Session byte budget", async () => {
+	test("preflights and reloads a fitting 64th maximum command with terminal headroom", async () => {
 		const command = "x".repeat(MAX_TEXT_BYTES);
-		const fitting = validationCapacitySession(4_020);
+		const fitting = validationCapacitySession(3_600);
 		expect(SessionSchema.parse(structuredClone(fitting))).toEqual(fitting);
 		const fittingRepository = new MemorySessionRepository();
 		fittingRepository.session = fitting;
@@ -131,8 +132,8 @@ describe("Flow validation capacity gate", () => {
 			hostPlatform: "linux",
 		}).session;
 		expect(
-			Buffer.byteLength(JSON.stringify(fittingProspective, null, 2), "utf8"),
-		).toBeGreaterThan(MAX_SESSION_BYTES);
+			Buffer.byteLength(JSON.stringify(fittingProspective), "utf8"),
+		).toBeLessThanOrEqual(MAX_SESSION_BYTES - SESSION_CLOSE_RESERVE_BYTES);
 		const workspace = await mkdtemp(join(tmpdir(), "flow-capacity-"));
 		try {
 			await saveSession(workspace, fittingProspective);
@@ -153,21 +154,20 @@ describe("Flow validation capacity gate", () => {
 		expect(SessionSchema.parse(structuredClone(overflowing))).toEqual(
 			overflowing,
 		);
-		const prospective = recordValidation(overflowing, {
-			captureId: "capture-capacity-64",
-			featureId: FEATURE,
-			runId: "capacity-active",
-			command,
-			scope: "focused",
-			sourceDigest: SOURCE_A,
-			exitCode: 0,
-			outputDigest: OUTPUT,
-			outputComplete: true,
-			hostPlatform: "linux",
-		}).session;
-		expect(() => SessionSchema.parse(prospective)).toThrow(
-			`Session cannot exceed ${MAX_SESSION_BYTES} UTF-8 bytes.`,
-		);
+		expect(() =>
+			recordValidation(overflowing, {
+				captureId: "capture-capacity-64",
+				featureId: FEATURE,
+				runId: "capacity-active",
+				command,
+				scope: "focused",
+				sourceDigest: SOURCE_A,
+				exitCode: 0,
+				outputDigest: OUTPUT,
+				outputComplete: true,
+				hostPlatform: "linux",
+			}),
+		).toThrow(/capacity is reserved for closure/);
 		const overflowingRepository = new MemorySessionRepository();
 		overflowingRepository.session = overflowing;
 		const overflowingRequest = ValidationStartInputSchema.parse({
@@ -181,9 +181,7 @@ describe("Flow validation capacity gate", () => {
 
 		await expect(
 			prepareValidation(overflowingRepository, overflowingRequest, "linux"),
-		).rejects.toThrow(
-			`Session cannot exceed ${MAX_SESSION_BYTES} UTF-8 bytes.`,
-		);
+		).rejects.toThrow(/capacity is reserved for closure/);
 		expect(overflowingRepository.session.runs.at(-1)?.validations).toHaveLength(
 			63,
 		);

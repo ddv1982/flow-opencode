@@ -1,14 +1,8 @@
 # What Flow guarantees
 
-Flow's public claim is that work is planned, validated, and independently reviewed
-before it is reported as done. That claim is not one thing. Some of it is enforced
-by types and transition guards and cannot be talked out of; some of it is a host
-observation Flow trusts; some of it is a judgment a language model makes, which
-means it holds most of the time and not always.
-
-This page is the contract. It exists because the difference was previously
-invisible: the same confident prose described a rule the runtime refuses to break
-and a rule that lives only in a prompt.
+Flow plans, validates, and independently reviews work before reporting it done.
+This contract distinguishes runtime enforcement, trusted host observations, and
+model judgments. Each tier names what can fail.
 
 ## The five tiers
 
@@ -24,7 +18,8 @@ and a rule that lives only in a prompt.
 
 - One active feature run; dependencies complete before a run starts.
 - A plan is a bounded acyclic graph, immutable after approval.
-- `completed` closure requires a passing current run for every planned feature.
+- `completed` closure requires a completed current run for every planned feature.
+  Inspections may complete with blocking findings, without full completion assurance.
 - Exactly one review assignment per run; `feature` or `final` is derived, never
   chosen by the caller.
 - Only the reserved `flow-reviewer` identity may submit a new review result.
@@ -73,12 +68,10 @@ and a rule that lives only in a prompt.
 
 ## Model-judgment
 
-These are real parts of the workflow with no runtime enforcement. They are the
-reason Flow asks you to read the review rather than trust the verdict.
+The runtime cannot enforce these judgments. Read the review before trusting its verdict.
 
-- **Goal alignment.** That a new request is a continuation rather than a different
-  goal. The most-repeated rule in the repository and the least enforced; the evidence
-  is a pair in `evals/`, `goal-change-refused` and `continuation-accepted`.
+- **Goal alignment.** Whether a request continues the same goal. Evaluated by
+  `goal-change-refused` and `continuation-accepted` in `evals/`.
 - **Review substance.** That the reviewer read the artifacts, completed the risk
   checklist, and failed an unprovable claim instead of passing it conditionally.
   `unprovable-claim-refused` and `defect-fails-review` put work in front of it that
@@ -86,11 +79,9 @@ reason Flow asks you to read the review rather than trust the verdict.
 - **Reviewer independence.** Without an explicit reviewer model from plugin tuple
   configuration or `OPENCODE_FLOW_REVIEWER_MODEL`, the reviewer shares the
   manager's model; independence rests on structure alone.
-- **Evidence completeness.** That an evidence entry names the observation the
-  goal actually asks for, a command that would really produce it, and the
-  platform it actually needs. The runtime enforces that the declared command
-  passed on the declared OS. That the entry describes the goal is judged in the
-  approved plan and the review.
+- **Evidence completeness.** Whether an entry names the requested observation,
+  a suitable command, and the required platform. Plan approval and review judge
+  fitness. The runtime checks that the declared command passed on the declared OS.
 - **Scope discipline.** That implementation stayed inside the approved plan, and
   that a worker wave respected its assigned paths.
 - **Honest reporting.** That the closing summary matches what happened.
@@ -131,11 +122,9 @@ Who can break a run, and what each is up against.
   approved with the plan, and their fitness stays caller-declared. A gate that
   cannot fail is a declared gate, not an enforced one.
 
-Worker path limits beyond `.flow` and `.git` remain a prompt contract the
-manager audits afterward, as the Unenforced tier says. An allowlist for armed
-commands is deliberately absent. It would duplicate the host's permission layer
-and the plan approval, and the guarantee Flow makes is byte-equality, not
-safety.
+Armed commands have no extra allowlist. Host permissions and plan approval govern
+their use. Flow guarantees byte-equality, not command safety. The Unenforced tier
+describes worker path limits.
 
 ## Assurance at close
 
@@ -154,3 +143,17 @@ independently audits the document, while the paired benchmark measures
 hidden-graded correctness against ordinary OpenCode.
 
 Release thresholds are in [release qualification](release-qualification.md).
+
+## Terminal recovery and inspection outcomes
+
+New nonterminal mutations reserve terminal capacity. Legacy full v5 sessions
+remain readable and can use the bounded extension except at revision exhaustion. Operation IDs
+remain intact. Extended archives support exact replay with a compatible reader.
+[Terminal capacity](maintainer-contract.md#terminal-capacity) defines the limits
+and downgrade boundary.
+
+An inspection with blocking findings is complete as an inspection. Its findings
+remain visible in delivery and prevent full completion assurance. A change run
+with a failed review remains blocked. These distinctions are runtime-enforced
+and covered by `tests/runtime-close.test.ts`, `tests/assurance-projection.test.ts`,
+and `tests/session-capacity.test.ts`.
