@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -330,6 +330,10 @@ describe("paired-study runner", () => {
 			);
 			expect(result.report.completion.status).toBe("complete");
 			expect(new Set(fake.caches).size).toBe(2);
+			for (const attempt of result.report.attempts) {
+				expect(attempt.artifact).not.toHaveProperty("sourceCommit");
+				expect(attempt.artifact).not.toHaveProperty("sourceTreeSha256");
+			}
 			expect(fake.starts.map((entry) => entry.packageVersion)).toEqual([
 				"8.2.1",
 				"8.2.1",
@@ -454,6 +458,67 @@ describe("paired-study runner", () => {
 			await rm(directory, { recursive: true, force: true });
 		}
 	}, 30000);
+
+	test("preflight time does not consume task admission, timeouts, or reported study duration", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "study-separate-clock-"));
+		let now = Date.parse("2026-09-13T00:00:00Z");
+		setSystemTime(now);
+		try {
+			const manifest = studyManifest();
+			manifest.budget.maxWallClockMs = 10000;
+			manifest.accounting.estimate.wallClockMsPerAttempt = 5000;
+			manifest.accounting.preflight = {
+				kind: "entitlement",
+				maxRequests: 1,
+				maxGeneratedOutputTokens: 10,
+				maxWallClockMs: 30000,
+				maxUsd: 1,
+				unknownCostPolicy: "stop",
+			};
+			const fake = fakeStudyTransport({
+				afterProbe: () => {
+					now += 15000;
+					setSystemTime(now);
+				},
+				afterRun: () => {
+					now += 5000;
+					setSystemTime(now);
+				},
+			});
+			const timeouts: number[] = [];
+			const startHost = fake.transport.startHost;
+			fake.transport.startHost = async (options) => {
+				const host = await startHost(options);
+				const run = host.runPrompt;
+				host.runPrompt = async (...args) => {
+					timeouts.push(args[3]?.timeoutMs ?? -1);
+					return run(...args);
+				};
+				return host;
+			};
+			const result = await executeStudy(
+				await prepareStudyManifest(manifest, directory),
+				{
+					directory,
+					benchmarks: [studyCase],
+					transport: fake.transport,
+				},
+			);
+			expect(fake.probes()).toBe(1);
+			expect(result.report.attempts).toHaveLength(2);
+			expect(timeouts).toEqual([10000, 5000]);
+			expect(result.report.completion).toMatchObject({
+				status: "complete",
+				preflightWallClockMs: 15000,
+				startedAt: "2026-09-13T00:00:15.000Z",
+				finishedAt: "2026-09-13T00:00:25.000Z",
+				observed: { wallClockMs: 10000 },
+			});
+		} finally {
+			setSystemTime();
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
 
 	test("retains separately funded entitlement usage and rejects an unavailable variant before probing", async () => {
 		const directory = await mkdtemp(

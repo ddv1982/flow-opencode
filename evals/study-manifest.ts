@@ -13,6 +13,7 @@ import {
 import {
 	ArtifactIdentitySchema,
 	ModelIdentitySchema,
+	PackedArtifactIdentitySchema,
 	ReportTextSchema,
 } from "./report-identities.js";
 import {
@@ -28,7 +29,13 @@ const InputArmSchema = z
 		artifact: z.union([
 			z.object({ kind: z.literal("ordinary-opencode") }).strict(),
 			z
-				.object({ path: ReportTextSchema, identity: ArtifactIdentitySchema })
+				.object({
+					path: ReportTextSchema,
+					identity: z.union([
+						ArtifactIdentitySchema,
+						PackedArtifactIdentitySchema,
+					]),
+				})
 				.strict(),
 		]),
 		manager: ModelIdentitySchema,
@@ -95,7 +102,14 @@ export async function prepareStudyManifest(input: unknown, directory: string) {
 			);
 		}
 		return {
-			specification: StudyArmSchema.parse({ ...arm, artifact: expected }),
+			specification: StudyArmSchema.parse({
+				...arm,
+				artifact: {
+					packageVersion: expected.packageVersion,
+					tarballSha256: expected.tarballSha256,
+					unpackedManifestSha256: expected.unpackedManifestSha256,
+				},
+			}),
 			bytes,
 		};
 	};
@@ -209,6 +223,8 @@ export async function prepareStudyManifest(input: unknown, directory: string) {
 					: preflight.maxUsd === 0
 						? "blocked-by-zero-monetary-allowance"
 						: "declared-allowance",
+			artifactVerification:
+				"Package version and packed-byte hashes only; manifest source claims are not verified or included in study identities.",
 			budgetSemantics:
 				"Observation-based stop thresholds, not a guaranteed invoice cap.",
 			providerCalls: 0,

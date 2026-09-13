@@ -7,6 +7,7 @@ import {
 } from "./release-progress.js";
 import type {
 	ArtifactIdentity,
+	AttemptRecordV2,
 	EvaluatorIdentity,
 	InstructionDelivery,
 	ModelIdentity,
@@ -49,9 +50,7 @@ export type ReleaseExpectedProvenance = CommonExpectedProvenance & {
 	readonly artifact: ArtifactIdentity;
 };
 
-export type ExpectedArtifact =
-	| ArtifactIdentity
-	| { readonly kind: "ordinary-opencode" };
+export type ExpectedArtifact = AttemptRecordV2["artifact"];
 
 export type PairedExpectedProvenance = CommonExpectedProvenance & {
 	readonly kind: "paired";

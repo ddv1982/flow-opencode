@@ -3,6 +3,7 @@ import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import {
 	ArtifactIdentitySchema,
 	ModelIdentitySchema,
+	PackedArtifactIdentitySchema,
 	ReportDigestSchema,
 	ReportTextSchema,
 } from "./report-identities.js";
@@ -16,6 +17,7 @@ export const StudyArmSchema = z
 	.object({
 		artifact: z.union([
 			ArtifactIdentitySchema,
+			PackedArtifactIdentitySchema,
 			z.object({ kind: z.literal("ordinary-opencode") }).strict(),
 		]),
 		manager: ModelIdentitySchema,
@@ -57,7 +59,7 @@ const PreflightSchema = z.discriminatedUnion("kind", [
 		.strict(),
 ]);
 
-export const STUDY_PROTOCOL_VERSION_SHA256 = canonicalSha256(
+export const LEGACY_STUDY_PROTOCOL_VERSION_SHA256 = canonicalSha256(
 	"flow-paired-study-protocol-v1",
 	{
 		artifact: "exact-arm-artifact-and-requested-profile",
@@ -66,6 +68,15 @@ export const STUDY_PROTOCOL_VERSION_SHA256 = canonicalSha256(
 		preflight: "separate-explicit-allowance",
 		cancellation: "operator-cause-retains-budget-observations",
 		statistics: STUDY_STATISTICS_VERSION_SHA256,
+	},
+);
+
+export const STUDY_PROTOCOL_VERSION_SHA256 = canonicalSha256(
+	"flow-paired-study-protocol-v2",
+	{
+		previous: LEGACY_STUDY_PROTOCOL_VERSION_SHA256,
+		artifact: "verified-package-version-and-packed-hashes-only",
+		preflight: "main-clock-starts-after-preflight-and-artifact-preparation",
 	},
 );
 
@@ -168,7 +179,10 @@ export const PairedStudyPolicySchema = z
 					"Only fixed-task confirmatory studies declare power parameters.",
 			});
 		}
-		if (policy.versionSha256 !== STUDY_PROTOCOL_VERSION_SHA256) {
+		if (
+			policy.versionSha256 !== STUDY_PROTOCOL_VERSION_SHA256 &&
+			policy.versionSha256 !== LEGACY_STUDY_PROTOCOL_VERSION_SHA256
+		) {
 			context.addIssue({
 				code: "custom",
 				message: "Unsupported paired-study protocol version.",

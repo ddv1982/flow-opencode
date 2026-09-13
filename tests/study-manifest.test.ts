@@ -6,7 +6,10 @@ import { BENCHMARK_CASES } from "../evals/benchmarks.js";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import { EvalHost, preparePackageCache } from "../evals/harness.js";
 import { exactPackageVersion } from "../evals/provenance.js";
-import { ArtifactIdentitySchema } from "../evals/report-identities.js";
+import {
+	ArtifactIdentitySchema,
+	PackedArtifactIdentitySchema,
+} from "../evals/report-identities.js";
 import { prepareStudyManifest } from "../evals/study-manifest.js";
 import { runStudyCommand } from "../evals/study-runner.js";
 import packageJson from "../package.json" with { type: "json" };
@@ -185,6 +188,43 @@ describe("paired-study manifest", () => {
 		expect(prepared.policy.purpose).toBe("confirmatory");
 	});
 
+	test("unverified source claims do not enter verified identities or comparison hashes", async () => {
+		const directory = await mkdtemp(join(tmpdir(), "study-source-claims-"));
+		try {
+			const artifact = await studyArtifact(directory, "source", "8.2.1");
+			const manifest = studyManifest();
+			manifest.arms.baseline.artifact = artifact;
+			const original = await prepareStudyManifest(manifest, directory);
+			artifact.identity.sourceCommit = "arbitrary-other-checkout";
+			artifact.identity.sourceTreeSha256 = `sha256:${"f".repeat(64)}`;
+			const changed = await prepareStudyManifest(manifest, directory);
+			expect(changed.policy).toEqual(original.policy);
+			expect(changed.summary.manifestSha256).toBe(
+				original.summary.manifestSha256,
+			);
+			expect(changed.policy.arms.baseline.artifact).not.toHaveProperty(
+				"sourceCommit",
+			);
+			expect(changed.policy.arms.baseline.artifact).not.toHaveProperty(
+				"sourceTreeSha256",
+			);
+			expect(changed.summary.artifactVerification).toContain("not verified");
+			manifest.arms.baseline.artifact = {
+				path: artifact.path,
+				identity: {
+					packageVersion: artifact.identity.packageVersion,
+					tarballSha256: artifact.identity.tarballSha256,
+					unpackedManifestSha256: artifact.identity.unpackedManifestSha256,
+				},
+			};
+			expect((await prepareStudyManifest(manifest, directory)).policy).toEqual(
+				original.policy,
+			);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+
 	test("rejects artifact substitution and uses digest-separated real package caches", async () => {
 		const directory = await mkdtemp(join(tmpdir(), "study-cache-"));
 		try {
@@ -194,7 +234,13 @@ describe("paired-study manifest", () => {
 			manifest.arms.baseline.artifact = old;
 			manifest.arms.candidate.artifact = newer;
 			const prepared = await prepareStudyManifest(manifest, directory);
-			expect(prepared.policy.arms.baseline.artifact).toEqual(old.identity);
+			expect(prepared.policy.arms.baseline.artifact).toEqual(
+				PackedArtifactIdentitySchema.parse({
+					packageVersion: old.identity.packageVersion,
+					tarballSha256: old.identity.tarballSha256,
+					unpackedManifestSha256: old.identity.unpackedManifestSha256,
+				}),
+			);
 			const changed = structuredClone(manifest);
 			changed.arms.baseline.artifact = { ...old, path: newer.path };
 			await expect(prepareStudyManifest(changed, directory)).rejects.toThrow(

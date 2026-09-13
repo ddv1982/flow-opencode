@@ -28,3 +28,8 @@ export const ArtifactIdentitySchema = z
 		unpackedManifestSha256: ReportDigestSchema,
 	})
 	.strict();
+
+export const PackedArtifactIdentitySchema = ArtifactIdentitySchema.omit({
+	sourceCommit: true,
+	sourceTreeSha256: true,
+});

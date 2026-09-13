@@ -226,7 +226,7 @@ export async function executeStudy(
 	const activatedReserveCellIds: string[] = [];
 	const preflight: NonNullable<CampaignCompletion["preflight"]> = [];
 	let preflightWallClockMs = 0;
-	const startedAt = new Date().toISOString();
+	let startedAt = new Date().toISOString();
 	let cause: CampaignCompletion["cause"] = "fixed-target";
 	const accounting = () =>
 		aggregateStudyUsage(
@@ -433,6 +433,7 @@ export async function executeStudy(
 					cause = "budget";
 			}
 		}
+		startedAt = new Date().toISOString();
 		const runCell = async (
 			cell: ExperimentBlock["cells"][number],
 		): Promise<AttemptFailure<DurableFailureOrigin> | null> => {

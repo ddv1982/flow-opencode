@@ -102,7 +102,7 @@ function expectedActor(
 
 function releaseExpected(report: ValidatedReport): ReleaseExpectedProvenance {
 	const first = report.attempts[0];
-	if (first === undefined || "kind" in first.artifact) {
+	if (first === undefined || !("sourceCommit" in first.artifact)) {
 		throw new Error("Release fixture needs exact artifact provenance.");
 	}
 	return {

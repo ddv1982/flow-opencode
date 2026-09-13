@@ -14,6 +14,7 @@ import {
 	ArtifactIdentitySchema,
 	ReportDigestSchema as DigestSchema,
 	ModelIdentitySchema,
+	PackedArtifactIdentitySchema,
 	ReportTextSchema as TextSchema,
 } from "./report-identities.js";
 import { validatePairing } from "./report-pairing.js";
@@ -312,6 +313,7 @@ const AttemptRecordSchema = z
 		repetition: CountSchema,
 		artifact: z.union([
 			ArtifactIdentitySchema,
+			PackedArtifactIdentitySchema,
 			z.object({ kind: z.literal("ordinary-opencode") }).strict(),
 		]),
 		evaluator: EvaluatorIdentitySchema,
@@ -584,6 +586,18 @@ function semanticIssues(
 		}
 	}
 	for (const [index, attempt] of report.attempts.entries()) {
+		if (
+			report.plan.analysis.kind !== "paired-study" &&
+			!("kind" in attempt.artifact) &&
+			!("sourceCommit" in attempt.artifact)
+		) {
+			issue(
+				issues,
+				`$.attempts.${index}.artifact`,
+				"policy",
+				"Packed-only artifact identities require a paired study.",
+			);
+		}
 		if (attempt.retainedInputs) {
 			const retained = attempt.retainedInputs;
 			const binding = report.plan.benchmarkCases?.find(

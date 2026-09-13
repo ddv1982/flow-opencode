@@ -6,7 +6,7 @@ import {
 	PAIRED_BOOTSTRAP_SAMPLES,
 	requiredPairedPowerPairs,
 } from "./experiment-power.js";
-import type { ArtifactIdentity } from "./report.js";
+import type { AttemptRecordV2 } from "./report.js";
 import {
 	type CampaignPlan,
 	CampaignPlanSchema,
@@ -1032,9 +1032,7 @@ export function validateMaskedAnalysis(
 	return canonicalJson(expected) === canonicalJson(record);
 }
 
-function isOrdinaryArtifact(
-	artifact: ArtifactIdentity | { readonly kind: "ordinary-opencode" },
-): boolean {
+function isOrdinaryArtifact(artifact: AttemptRecordV2["artifact"]): boolean {
 	return "kind" in artifact && artifact.kind === "ordinary-opencode";
 }
 

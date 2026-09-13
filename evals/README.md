@@ -251,8 +251,15 @@ bun run benchmark -- --manifest study.json
 Dry-run validates local tarballs, profiles, cases, and declared budget estimates;
 it starts no host, copies no credentials, and makes no provider requests. Execution
 is the second command and requires a funded campaign. Each arm declares its
-artifact path and full identity, manager model and optional variant, and reviewer
-configuration. Cache paths include the tarball digest, so equal package versions
+artifact path, package version, tarball hash, unpacked-manifest hash, manager model
+and optional variant, and reviewer configuration. New study identities contain
+only the verified package version and byte hashes. Legacy input sourceCommit and
+sourceTreeSha256 claims are accepted for manifest compatibility but excluded from
+policy identities, reports, and comparison hashes because tarballs cannot verify
+them. Historical reports remain readable under their original protocol digest.
+Artifact preparation and separately budgeted entitlement preflight finish before
+the main study clock starts; its admission checks, request timeouts, and reported
+wall time all use that main clock. Cache paths include the tarball digest, so equal package versions
 cannot substitute different bytes. Paths are relative to the manifest.
 
 Choose `smoke`/`descriptive`, `exploratory`/`equal-task-cluster-bootstrap-v1`, or
