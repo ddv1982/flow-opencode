@@ -2,6 +2,39 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.3.0] - 2026-09-13
+
+Flow preserves native model settings across continuation, keeps full sessions
+closable, and makes model evaluation results independently reproducible.
+
+- Configure an optional reviewer reasoning variant with `reviewer.variant` or
+  `OPENCODE_FLOW_REVIEWER_VARIANT`, alongside an explicit reviewer model. Manager
+  continuation preserves the host's native variant selection.
+- Sessions reserve capacity for a terminal close. Existing full Session v5
+  documents remain readable and can close without dropping accepted operations.
+- Completed inspections with blocking findings now report inspection completion
+  accurately while retaining those findings and limited delivery assurance.
+- Evaluations retain inputs, final snapshots, transcripts and authenticated probe
+  receipts for independent regrading. Versioned paired studies support exact
+  package-byte comparisons, explicit model profiles and conservative accounting.
+- Access probes have a separate time allowance. New study identities exclude
+  unverified source checkout claims, and transient process-cleanup permission
+  errors are retried without accepting persistent failures as success.
+- Includes the unpublished 8.2.1 fixes: strict named JUnit evidence parsing,
+  unambiguous source fingerprints, exact release-asset verification, and graceful
+  evaluation cancellation with retained evidence.
+- Update Biome to 2.5.13, Bun types to 1.4.2, and Node types to 26.5.1.
+- Experimental compact guides remain research candidates. Production guides are
+  unchanged; the Sol/Grok smoke does not establish model or prompt superiority.
+- **Session v5 schema:** unchanged. Existing public tool, command, guide and agent
+  names remain unchanged; reviewer variant configuration is additive.
+
+Install or update:
+
+```bash
+opencode plugin opencode-plugin-flow@8.3.0 --global --force
+```
+
 ## [8.2.1] - 2026-09-05
 
 Validation and publication claims reject misleading success paths, and eval
