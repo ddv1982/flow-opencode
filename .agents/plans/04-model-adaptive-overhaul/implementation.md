@@ -138,3 +138,25 @@ F4 model comparisons; F5–F7 cannot be decided or qualified from local tests.
 
 F3 committed locally as `f821b31` after staged preflight passed. Optional gitleaks
 was unavailable. No push, merge, or release was performed.
+
+## F4 first live smoke: Sol and Grok
+
+The user subsequently authorized the prepared eval scope with OpenAI Sol and xAI
+Grok. OpenCode 1.18.6 ran both as manager/reviewer at requested high effort, using
+the frozen baseline and compact guide artifacts. Sol used explicit token/time
+bounds because subscription dollar pricing was unavailable; Grok retained its
+$25/$1 observed allowances. See [the live smoke record](evidence/f4-candidates/sol-grok-smoke.md)
+for exact inputs, reports, accounting, and limitations.
+
+Eight task attempts ran: Sol three product passes and one host interruption;
+Grok four product passes. Independent retained regrading reproduced all seven
+scorable passes. Sol's pair is unresolved; Grok's final attempt crossed the
+80,000 generated-token observed threshold (92,260 total), so both decisions remain
+inconclusive. F4 qualification, human calibration, and F5–F7 remain pending. No
+production prompt changes or further campaigns follow automatically.
+
+A live macOS cleanup failure required a bounded EPERM liveness-probe retry in the
+eval harness. Persistent permission failures still halt. The fix passes 105
+reporting tests, 20 runner/isolation tests, typecheck, and focused formatting.
+Raw run evidence remains local under ignored `evals/results/`; durable results
+and the regression fix are retained in Git.

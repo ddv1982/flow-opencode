@@ -15,7 +15,9 @@ establish model effectiveness. Production guides remain under the root `skills/`
 
 The three tracked campaign manifests use paths relative to their own directory
 and retain exact artifact identities. The [first funded comparison proposal](evidence/f4-candidates/campaign-proposal/README.md)
-remains unapproved. Housekeeping does not authorize paid execution.
+was superseded for the user-authorized Sol/Grok smoke. See the
+[live results and limits](evidence/f4-candidates/sol-grok-smoke.md). The original
+Astra/Fable proposal and larger campaigns remain unexecuted.
 
 ## Local evidence
 
@@ -37,5 +39,6 @@ artifact: record its new identity and freeze a new manifest instead of relabelin
 it with the existing hashes. Dry-run verifies artifact identities without provider
 requests. Raw evidence has not been uploaded or deleted by this cleanup.
 
-The four pre-existing 8.2.1 canary files are outside this work record and remain
-untouched for their separate release review.
+The four expired 8.2.1 canary files were subsequently archived with verified
+contents under `.release-artifacts/canary-archive/8.2.1-2026-09-05/`. They refer
+to the older release artifact, not this overhaul.

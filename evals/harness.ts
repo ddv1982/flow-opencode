@@ -718,48 +718,51 @@ async function signalProcessTreeDescendants(
 	}
 }
 
-function processTreeAlive(child: ChildProcess): boolean {
+async function processTreeAlive(child: ChildProcess): Promise<boolean> {
 	const pid = child.pid;
 	if (pid === undefined) return false;
 	const childExited = child.exitCode !== null || child.signalCode !== null;
 	if (process.platform === "win32") return !childExited;
-	try {
-		process.kill(-pid, 0);
-		return true;
-	} catch (error) {
-		const code = (error as NodeJS.ErrnoException).code;
-		if (code === "ESRCH") return false;
-		if (code === "EPERM") {
-			throw new Error(
-				`Could not confirm eval host process tree ${pid} terminated: permission denied.`,
-			);
+	for (let probe = 0; ; probe++) {
+		try {
+			process.kill(-pid, 0);
+			return true;
+		} catch (error) {
+			const code = (error as NodeJS.ErrnoException).code;
+			if (code === "ESRCH") return false;
+			if (code !== "EPERM") throw error;
+			if (probe === 5) {
+				throw new Error(
+					`Could not confirm eval host process tree ${pid} terminated: permission denied.`,
+				);
+			}
+			await Bun.sleep(50);
 		}
-		throw error;
 	}
 }
 
 export async function terminateChildProcessTree(
 	child: ChildProcess,
 ): Promise<void> {
-	if (!processTreeAlive(child)) return;
+	if (!(await processTreeAlive(child))) return;
 	const exited = new Promise<void>((resolve) =>
 		child.once("exit", () => resolve()),
 	);
 	await signalProcessTreeDescendants(child, "SIGTERM");
 	await Promise.race([exited, Bun.sleep(500)]);
-	if (!processTreeAlive(child)) return;
+	if (!(await processTreeAlive(child))) return;
 	signalProcessTree(child, "SIGTERM");
 	const gracefulDeadline = Date.now() + 3_000;
-	while (processTreeAlive(child) && Date.now() < gracefulDeadline) {
+	while ((await processTreeAlive(child)) && Date.now() < gracefulDeadline) {
 		await Bun.sleep(50);
 	}
-	if (processTreeAlive(child)) {
+	if (await processTreeAlive(child)) {
 		signalProcessTree(child, "SIGKILL");
 		const killedDeadline = Date.now() + 1_000;
-		while (processTreeAlive(child) && Date.now() < killedDeadline) {
+		while ((await processTreeAlive(child)) && Date.now() < killedDeadline) {
 			await Bun.sleep(50);
 		}
-		if (processTreeAlive(child)) {
+		if (await processTreeAlive(child)) {
 			throw new Error(
 				`Could not confirm eval host process tree ${child.pid} terminated after SIGKILL.`,
 			);
