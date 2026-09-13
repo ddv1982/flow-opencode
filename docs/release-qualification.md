@@ -88,7 +88,9 @@ Finish or close active sessions before changing Flow versions in either directio
 The release workflow verifies retained qualification and canary evidence offline.
 Its pinned OpenCode smoke does not call a model provider. Publication recovery
 does not require another paid matrix or canary when the qualified inputs remain
-unchanged.
+unchanged and retained evidence still satisfies release policy. Expired evidence
+stops publication for an explicit decision. It must not trigger an automatic
+paid rerun.
 
 Draft preparation sends at most one creation request per invocation. It then
 retries release observations, including when the creation response is lost.
