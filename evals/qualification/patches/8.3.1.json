@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "kind": "baseline-qualified-patch",
+  "version": "8.3.1",
+  "baseline": {
+    "commit": "3edd7034f9ce94a911132e4ae4e21ad893a7e53a",
+    "artifact": {
+      "packageVersion": "8.3.0",
+      "sourceCommit": "ac4fdb8ca6d9f4315c11c3d1fb142a6b15c9067f",
+      "sourceTreeSha256": "sha256:f4659b8c7cd20afd31de3bb5edfff216b020b2c7ca8fc4c375493d4662a7fc34",
+      "tarballSha256": "sha256:f2cad40877d616a25df9f675ddbd4aeb0e0a6a342ef246e5d109a3978c891563",
+      "unpackedManifestSha256": "sha256:28564da328dee6369ef1befccfb4977efe7b4fc010908800dec0de695f99a5d0"
+    },
+    "canary": "evals/canary/8.3.0.json",
+    "bundleSha256": "sha256:c61abd32788d84b1950e7908cf3b96bc57e4dad1a6af26c950a6d3124bd2e6a4"
+  },
+  "artifact": {
+    "packageVersion": "8.3.1",
+    "tarballSha256": "sha256:29c7a3c1a4a652b5e3b95f9966d502556d944317bc73b820e2e048067e3df14c",
+    "unpackedManifestSha256": "sha256:53f731df696d1a20c5ed181580ef841d73eecffab32820725291242a95e200d2"
+  },
+  "guidance": [
+    {
+      "path": "skills/flow-run/SKILL.md",
+      "sha256": "sha256:80e8a41f9a81c39ea1ba4dba1fe35dcef5927e41c7238039598fe48e08fad427",
+      "rationale": "PR #75 clarifies the existing independent reviewer inventory obligation: capture before edits and recover retained observations on resume. Review authority, gates and evidence requirements remain unchanged."
+    }
+  ],
+  "approvedBy": "Operator approval in this Codex session, 2026-09-14",
+  "rationale": "Explicitly approved baseline-qualified patch policy; core runtime, dependencies and build settings unchanged. No candidate live model eval or canary; retain original baseline evidence and disclose reduced assurance."
+}
