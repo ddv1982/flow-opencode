@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "8.3.1",
+	"version": "8.4.0",
 	"description": "Small durable planning, validation, and review workflow for OpenCode",
 	"type": "module",
 	"repository": {
@@ -10,6 +10,10 @@
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
 	"exports": {
+		"./tui": {
+			"types": "./dist/tui.d.ts",
+			"import": "./dist/tui.js"
+		},
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js",
@@ -17,6 +21,9 @@
 		}
 	},
 	"files": [
+		"dist/tui.js",
+		"dist/tui.js.map",
+		"dist/tui.d.ts",
 		"dist/index.js",
 		"dist/index.js.map",
 		"dist/index.d.ts",
@@ -27,8 +34,9 @@
 		"CHANGELOG.md"
 	],
 	"scripts": {
-		"build": "bun run clean && bun run build:plugin && bun run build:types",
+		"build": "bun run clean && bun run build:plugin && bun run build:tui && bun run build:types",
 		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --sourcemap=external ./src/index.ts",
+		"build:tui": "bun build --target=bun --outdir=./dist --entry-naming=tui.js --sourcemap=external ./src/tui.ts",
 		"build:types": "tsc -p tsconfig.types.json && bun run scripts/prune-dist-declarations.ts",
 		"clean": "bun run scripts/clean-dist.ts",
 		"eval": "bun run evals/run.ts",

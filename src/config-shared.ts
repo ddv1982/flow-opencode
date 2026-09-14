@@ -30,7 +30,7 @@ export type MutableFlowConfig = {
 };
 
 type FlowEnvironment = Readonly<Record<string, string | undefined>>;
-type ReviewerSettingSource = "plugin-option" | "environment";
+type ReviewerSettingSource = "plugin-option" | "environment" | "picker";
 
 type FlowPluginOptions = Readonly<{
 	reviewer?: unknown;

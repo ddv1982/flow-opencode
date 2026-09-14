@@ -53,6 +53,7 @@ type ToolOptions = Readonly<{
 		| (() => ProcessLocalAutoContinuationSupport)
 		| undefined;
 	reviewerConfiguration?: FlowReviewerConfiguration | undefined;
+	readReviewerConfiguration?: () => FlowReviewerConfiguration;
 	runtimeIdentity?:
 		| Readonly<{ packageVersion: string; pluginEntrySha256: string }>
 		| undefined;
@@ -90,7 +91,8 @@ function withAutoContext(
 	view?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
-	const reviewer = options.reviewerConfiguration;
+	const reviewer =
+		options.readReviewerConfiguration?.() ?? options.reviewerConfiguration;
 	if (reviewer) {
 		workflowData = {
 			...workflowData,

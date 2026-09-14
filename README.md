@@ -40,46 +40,43 @@ expensive, and it is overhead when it is not.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@8.3.1 --global --force
+opencode plugin opencode-plugin-flow@8.4.0 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
 their own; to update, rerun the command with the new version.
 
-The equivalent manual project configuration is:
+Manual setup needs this entry in both `opencode.json` and `tui.json`:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-plugin-flow@8.3.1"]
+  "plugin": ["opencode-plugin-flow@8.4.0"]
 }
 ```
 
-For an explicit reviewer model, use OpenCode's plugin tuple options:
+Run `/flow-reviewer` for the global reviewer picker. Saving reloads the server;
+finish other projects' work first. Project picker preferences take precedence.
+“Use default” restores plugin/environment settings. No model call.
+
+`opencode.json` reviewer options:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    [
-      "opencode-plugin-flow@8.3.1",
-      { "reviewer": { "model": "provider/model", "steps": 80 } }
-    ]
-  ]
+  "plugin": [["opencode-plugin-flow@8.4.0", {
+    "reviewer": { "model": "provider/model", "steps": 80 }
+  }]]
 }
 ```
 
-The tuple values take precedence over `OPENCODE_FLOW_REVIEWER_MODEL` and
-`OPENCODE_FLOW_REVIEWER_STEPS`. Optional `reviewer.variant` selects a native
-model variant and overrides `OPENCODE_FLOW_REVIEWER_VARIANT`. It requires an
-explicit reviewer model. `/flow-status` reports the requested settings and
-unsupported combinations. Only a successful reviewer run confirms availability.
+Picker preferences take priority. Otherwise tuple settings override
+`OPENCODE_FLOW_REVIEWER_MODEL`,
+`OPENCODE_FLOW_REVIEWER_STEPS`, and `OPENCODE_FLOW_REVIEWER_VARIANT`.
+`reviewer.variant` requires an explicit model. `/flow-status` shows requested
+settings; only successful reviews confirm availability.
 
-Restart OpenCode after changing configuration. OpenCode owns installation and
-configuration; see its
-[plugin documentation](https://opencode.ai/docs/plugins/). Flow has no installer
-or activation CLI, and removing the plugin entry disables it. If two Flow copies
-load for one project, both fail closed until the duplicate is removed.
+[OpenCode](https://opencode.ai/docs/plugins/) owns installation and configuration.
+Restart after manual changes. Remove the plugin entry to disable Flow; duplicate
+copies fail closed until one remains.
 
 **Changing versions.** Finish or explicitly close any active session first, in
 either direction. Flow opens only Session v5 active state, and an older build

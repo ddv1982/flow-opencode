@@ -1,6 +1,13 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { spawn } from "node:child_process";
-import { lstat, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+	lstat,
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -642,6 +649,23 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				"utf8",
 			);
 
+			const globalConfig = join(
+				childHome,
+				".config",
+				"opencode",
+				"opencode.json",
+			);
+			await mkdir(join(childHome, ".config", "opencode"), { recursive: true });
+			await writeFile(
+				globalConfig,
+				JSON.stringify({
+					agent: {
+						"fixture-other": {
+							options: { reference: "{env:FLOW_PICKER_FIXTURE}" },
+						},
+					},
+				}),
+			);
 			const port = await availablePort();
 			const baseUrl = `http://127.0.0.1:${port}`;
 			const startupDeadline = Date.now() + STARTUP_TIMEOUT_MS;
@@ -663,6 +687,7 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						...toolchain.environment,
 						HOME: childHome,
 						OPENCODE_TEST_HOME: childHome,
+						FLOW_PICKER_FIXTURE: "fixture-resolved-value",
 						XDG_CACHE_HOME: childCache,
 						XDG_CONFIG_HOME: join(childHome, ".config"),
 						XDG_DATA_HOME: join(childHome, ".local", "share"),
@@ -756,6 +781,40 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 				]) {
 					expect(permissionFor(worker.permission ?? [], permission)).toBe(
 						"deny",
+					);
+				}
+				// Exercise the real global preference API and config reload without
+				// creating a session, submitting a prompt, or calling a provider.
+				for (const selected of ["flow-probe/selected", ""]) {
+					const response = await fetch(`${baseUrl}/global/config`, {
+						method: "PATCH",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							agent: {
+								"flow-reviewer": { options: { flowReviewerModel: selected } },
+							},
+						}),
+						signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+					});
+					expect(response.ok).toBe(true);
+					const expected = selected ? "selected" : "model";
+					let refreshed: ResolvedAgent | undefined;
+					const deadline = Date.now() + 5000;
+					do {
+						refreshed = (
+							(await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[]
+						).find((agent) => agent.name === "flow-reviewer");
+						if (refreshed?.model?.modelID === expected) break;
+						await Bun.sleep(50);
+					} while (Date.now() < deadline);
+					expect(refreshed?.model).toEqual({
+						providerID: "flow-probe",
+						modelID: expected,
+					});
+					expect(refreshed?.steps).toBe(80);
+					expect(refreshed?.variant ?? null).toBe(selected ? null : "high");
+					expect(await readFile(globalConfig, "utf8")).toContain(
+						"{env:FLOW_PICKER_FIXTURE}",
 					);
 				}
 				await expect(lstat(join(project, ".flow"))).rejects.toMatchObject({

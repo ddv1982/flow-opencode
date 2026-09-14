@@ -34,10 +34,7 @@ type CommandHook = NonNullable<Hooks["command.execute.before"]>;
 type CommandOutput = Parameters<CommandHook>[1];
 type Part = CommandOutput["parts"][number];
 type TextPart = Extract<Part, { type: "text" }>;
-/**
- * A text part as the plugin writes one: the host assigns id, sessionID, and
- * messageID only after the command hook returns.
- */
+// Host assigns id, sessionID and messageID after the command hook returns.
 type DraftTextPart = Omit<TextPart, "id" | "sessionID" | "messageID">;
 const MUTATION =
 	/^flow_(?:plan_save|plan_approve|run_start|review_start|feature_complete|feature_reset|session_close)$/;
@@ -260,7 +257,7 @@ function guardTools(
 
 const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 	const log = createFlowLog(ctx);
-	const reviewerConfiguration = resolveFlowReviewerConfiguration({
+	let reviewerConfiguration = resolveFlowReviewerConfiguration({
 		pluginOptions,
 		onWarning: (warning) => log("warn", warning),
 	});
@@ -323,13 +320,16 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
 		autoContinuationSupport: () => autoDrive.continuationSupport(),
-		reviewerConfiguration,
+		readReviewerConfiguration: () => reviewerConfiguration,
 		runtimeIdentity: { packageVersion: version, pluginEntrySha256 },
 	});
 	return {
 		config: createConfigHook(ctx, {
 			assertOperational: (action) => runtimeGuard.assertOperational(action),
 			reviewerConfiguration,
+			onReviewerConfiguration: (configuration) => {
+				reviewerConfiguration = configuration;
+			},
 		}),
 		tool: guardTools(tools, runtimeGuard, autoDrive),
 		"command.execute.before": createCommandHook(

@@ -349,3 +349,7 @@ host-visible configuration without adding a scheduler or tests-of-tests.
 
 See [Model-driven wave evidence](development.md#model-driven-wave-evidence) for
 the manual canary policy.
+
+
+The optional `./tui` export adds native `/flow-reviewer` selection of the global
+reviewer. Saving requires confirmation. No server command or lifecycle tool is added.
