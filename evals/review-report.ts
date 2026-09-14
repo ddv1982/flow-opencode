@@ -20,12 +20,22 @@ const ReviewDocumentSchema = z.object({
 							verdict: z.enum(["passed", "failed"]),
 							terminalDisposition: Text.optional(),
 							findings: z.array(
-								z.object({
-									findingId: Text.optional(),
-									severity: z.enum(["blocking", "advisory"]),
-									summary: Text,
-									evidence: Text,
-								}),
+								z
+									.object({
+										findingId: Text.optional(),
+										severity: z.enum(["blocking", "advisory"]),
+										summary: Text,
+										evidence: Text.optional(),
+									})
+									.refine(
+										(finding) =>
+											finding.severity !== "blocking" ||
+											Boolean(finding.evidence),
+										{
+											message: "A blocking finding requires concrete evidence.",
+											path: ["evidence"],
+										},
+									),
 							),
 						})
 						.nullable(),

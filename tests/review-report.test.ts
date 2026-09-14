@@ -165,3 +165,42 @@ test("rejects repeated attempts and repeated finding identities", async () => {
 		reviewEvidenceReport([duplicated.record], async () => duplicated.bytes),
 	).rejects.toThrow("Duplicate finding");
 });
+
+test("counts advisories without evidence but keeps unsupported blockers unassessed", async () => {
+	const advisory = {
+		findingId: "advisory",
+		severity: "advisory",
+		summary: "Consider documenting the default",
+	};
+	const f = fixture([
+		{ ...passed, result: { ...passed.result, findings: [advisory] } },
+	]);
+	const result = await reviewEvidenceReport([f.record], async () => f.bytes);
+	expect(result.totals).toMatchObject({
+		reviewObserved: 1,
+		passed: 1,
+		unclassifiedFindings: 1,
+		unassessed: 0,
+	});
+	const observation = result.attempts[0];
+	expect(
+		observation && "reviews" in observation
+			? observation.reviews?.[0]?.findings[0]
+			: null,
+	).toMatchObject(advisory);
+	for (const evidence of [undefined, "   "]) {
+		const blocked = fixture([
+			{
+				...failed,
+				result: {
+					...failed.result,
+					findings: [{ ...advisory, severity: "blocking", evidence }],
+				},
+			},
+		]);
+		expect(
+			(await reviewEvidenceReport([blocked.record], async () => blocked.bytes))
+				.totals,
+		).toMatchObject({ unassessed: 1, reviewObserved: 0, failed: 0 });
+	}
+});
