@@ -223,12 +223,10 @@ export async function verifyReleaseEvidence(
 	if (input.patch && input.feature)
 		throw new Error("Conflicting qualification modes.");
 	if (input.feature)
+		// The baseline seal is code-owned; a caller cannot supply one.
 		return assertOfflineFeatureReleaseEvidence({
 			path: input.feature,
 			expectedArtifact: input.expectedArtifact,
-			bundlesDirectory:
-				input.bundlesDirectory ??
-				".agents/plans/08-reviewer-picker-release/baselines",
 		});
 	if (input.patch)
 		return assertPatchReleaseEvidence({

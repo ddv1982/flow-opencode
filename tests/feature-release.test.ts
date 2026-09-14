@@ -49,16 +49,25 @@ function fixture(entry: OfflineFeature) {
 test("every authorized feature measures against the one fully qualified baseline", () => {
 	expect(OFFLINE_FEATURE_BASELINE).toBe("8.3.0");
 	expect(OFFLINE_FEATURES.length).toBeGreaterThan(0);
+	// An offline release must never become the baseline for the next one.
+	expect(
+		OFFLINE_FEATURES.some(
+			(entry) => entry.version === OFFLINE_FEATURE_BASELINE,
+		),
+	).toBe(false);
+	// One entry per version and per feature, so selection cannot be ambiguous.
+	expect(new Set(OFFLINE_FEATURES.map((entry) => entry.version)).size).toBe(
+		OFFLINE_FEATURES.length,
+	);
+	expect(new Set(OFFLINE_FEATURES.map((entry) => entry.feature)).size).toBe(
+		OFFLINE_FEATURES.length,
+	);
 	for (const entry of OFFLINE_FEATURES) {
-		// An offline release must never become the baseline for the next one.
-		expect(
-			OFFLINE_FEATURES.some(
-				(other) => other.version === OFFLINE_FEATURE_BASELINE,
-			),
-		).toBe(false);
 		expect(entry.guidance.every((path) => entry.files.includes(path))).toBe(
 			true,
 		);
+		expect(new Set(entry.guidance).size).toBe(entry.guidance.length);
+		expect(new Set(entry.files).size).toBe(entry.files.length);
 	}
 });
 
@@ -80,6 +89,31 @@ for (const entry of OFFLINE_FEATURES) {
 				}),
 			).toThrow("Full qualification");
 		}
+	});
+
+	test(`${entry.feature} guidance must name each changed guide exactly once`, () => {
+		const f = fixture(entry);
+		const first = entry.guidance[0];
+		if (!first) throw new Error("Fixture needs a guidance path.");
+		const duplicated = f.guidance.map((approval) => ({
+			...approval,
+			path: first,
+		}));
+		// Duplicates are the only bypass attempt that clears the schema.
+		if (entry.guidance.length > 1)
+			expect(() =>
+				assertOfflineFeatureScope({ ...f, guidance: duplicated }),
+			).toThrow("Duplicate guidance approval");
+		expect(() => assertOfflineFeatureScope({ ...f, guidance: [] })).toThrow(
+			"Full qualification",
+		);
+		for (const omitted of entry.guidance)
+			expect(() =>
+				assertOfflineFeatureScope({
+					...f,
+					guidance: f.guidance.filter((approval) => approval.path !== omitted),
+				}),
+			).toThrow("Full qualification");
 	});
 
 	test(`pins every reviewed ${entry.feature} file's content and mode`, () => {

@@ -188,7 +188,6 @@ export function assertOfflineFeatureScope(input: {
 export async function assertOfflineFeatureReleaseEvidence(input: {
 	path: string;
 	expectedArtifact: ArtifactIdentity;
-	bundlesDirectory: string;
 	repositoryRoot?: string;
 }) {
 	const root = resolve(input.repositoryRoot ?? process.cwd());
