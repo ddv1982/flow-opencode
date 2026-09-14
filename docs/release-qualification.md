@@ -115,3 +115,7 @@ ordinary OpenCode on hidden-graded tasks. It is not a qualification input.
 Scheduled campaigns require explicit authorization and a dispatch budget.
 They retain the ledger and complete campaign directory. Sealing still requires
 the exact-artifact canary. Workflow retries never start another paid campaign.
+
+## Retained review reporting
+
+For offline review counts and assessed findings, see [reporting](../.agents/plans/04-model-adaptive-overhaul/evidence/f6-retained/reporting.md).

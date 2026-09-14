@@ -1,0 +1,11 @@
+[
+  {
+    "attemptId": "attempt-cell-a369e1d7d282a7988c9139d3b396342df350ed092d40ee8ad3589258e76aa832",
+    "transcriptSha256": "sha256:27e16438a9a3389542f99ce92fc564e2114b42642409c555113bfc781744362b",
+    "assignmentId": "id_f095b06b4ddea224",
+    "findingId": "reserved-windows-device-filenames.R5-01",
+    "category": "evidence-gap",
+    "assessor": "Codex retained-evidence audit (assistant assessment)",
+    "rationale": "The first packet omitted the baseline inventory required by flow-review. The retry supplied it with the same source digest and passed; this is an evidence handoff gap, not a demonstrated code defect."
+  }
+]
