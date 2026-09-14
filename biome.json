@@ -9,7 +9,8 @@
 			"!evals/results",
 			"!evals/canary",
 			"!evals/decisions",
-			"!evals/qualification/bundles"
+			"!evals/qualification/bundles",
+			"!evals/qualification/patch-baselines"
 		]
 	},
 	"formatter": {

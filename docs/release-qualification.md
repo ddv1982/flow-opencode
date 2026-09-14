@@ -29,16 +29,15 @@ This page owns release thresholds, candidate freezing, and publication order.
 | `project-gate-discovery` | ungated | Report-only until two provider baselines show whether planning selects the explicit whole-repository command over a narrower script. |
 | `task-risk-lenses` | ungated | Measures whether the manager supplies the relevant full review questions. It does not measure defect detection or false blockers. |
 
-Offline verification fixes do not require new provider runs when the measured
-package bytes and frozen case policy remain unchanged. Qualification preserves
-the original report and evaluator identity, verifies that identity against the
-exact recorded Git commit without executing historical code (that commit must
-be available in local Git history), and retains those
-execution sources separately from the current verifier sources. The current
-verifier independently recomputes every retained outcome before publication.
-Missing or mismatched execution sources, changed outcomes, and altered package
-bytes remain failures. Canary review retries may use multiple reviewer sessions
-when all are linked to the same observed manager with consistent identities.
+Offline verifier fixes may reuse runs only for unchanged package bytes and frozen
+case policy. Current code regrades retained outcomes without executing historical
+code; execution sources must match the recorded Git commit. Missing sources or
+changed outcomes fail. Canary retries must retain consistent manager/reviewer identity.
+
+Eligible patches may instead use the [baseline-qualified patch policy](../.agents/plans/06-patch-release/README.md).
+This explicitly permits no new model eval or canary, binds the new artifact, and
+labels prior results as baseline evidence only. Full qualification remains the
+default; patch version numbers alone grant no exception.
 
 A new scenario needs an explicit release-policy decision. Any required canonical
 case missing from the report fails qualification.
@@ -72,7 +71,8 @@ Finish or close active sessions before changing Flow versions in either directio
 - **Freeze on the public surface** while the guarantees are being measured: tools,
   commands, guides, agents, and the Session v5 shape. Additive optional fields are
   allowed; removals and renames are not.
-- **No release** without a sealed V2 qualification bundle and fresh canary.
+- **Full qualification** requires a sealed V2 bundle and fresh canary; eligible
+  baseline-qualified patches use the explicit policy above.
   The bundle retains every attempt, transcript, grader source, and exact artifact
   needed to reproduce its decision. Release metadata independently regrades those
   bytes before publication and derives the provider-count evidence table added to

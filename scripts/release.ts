@@ -5,6 +5,7 @@ import { z } from "zod";
 import { inspectArtifact } from "../evals/provenance.js";
 import packageJson from "../package.json" with { type: "json" };
 import { writeBytesExclusive, writeExclusive } from "./lib/exclusive-json.js";
+import { assertPatchReleaseEvidence } from "./patch-release.js";
 import {
 	assertStrictReleaseEvidence,
 	releaseEvidenceMarkdown,
@@ -37,6 +38,7 @@ export const ReleaseRecordSchema = z
 		checksum: File,
 		notes: File,
 		canary: z.string().min(1),
+		patch: z.string().min(1).optional(),
 		bundles: z.string().min(1),
 		bundleSha256: Hash,
 		creationOwner: z.string().min(1),
@@ -149,7 +151,8 @@ export async function resumeRelease(
 			repositoryRoot: process.cwd(),
 			tarballPath: join(directory, record.artifact.name),
 		});
-		const result = await assertStrictReleaseEvidence({
+		const result = await verifyReleaseEvidence({
+			...(record.patch ? { patch: record.patch } : {}),
 			version: record.version,
 			tag: record.tag,
 			canaryPath: record.canary,
@@ -205,6 +208,22 @@ export async function resumeRelease(
 	await receipt(directory, "github-published.json", published);
 }
 
+export async function verifyReleaseEvidence(
+	input: Parameters<typeof assertStrictReleaseEvidence>[0] & { patch?: string },
+) {
+	if (input.patch)
+		return assertPatchReleaseEvidence({
+			path: input.patch,
+			expectedArtifact: input.expectedArtifact,
+			bundlesDirectory: input.bundlesDirectory ?? "evals/qualification/bundles",
+		});
+	const result = await assertStrictReleaseEvidence(input);
+	return {
+		bundleSha256: result.bundleSha256,
+		notes: releaseEvidenceMarkdown(result.summary),
+	};
+}
+
 async function initialize(directory: string, options: Map<string, string>) {
 	const required = (key: string) => {
 		const value = options.get(key);
@@ -215,15 +234,25 @@ async function initialize(directory: string, options: Map<string, string>) {
 	if (!repository) throw new Error("GITHUB_REPOSITORY is required.");
 	const commit = required("--commit");
 	const artifactPath = required("--artifact");
-	const canary = required("--canary");
-	const bundles = options.get("--bundles") ?? "evals/qualification/bundles";
+	const patch = options.get("--patch");
+	if (patch && options.has("--canary"))
+		throw new Error("Choose full or patch qualification, not both.");
+	const canary = patch
+		? "not-run:baseline-qualified-patch"
+		: required("--canary");
+	const bundles =
+		options.get("--bundles") ??
+		(patch
+			? "evals/qualification/patch-baselines"
+			: "evals/qualification/bundles");
 	const metadata = JSON.parse(await readFile("package.json", "utf8"));
 	const tag = `v${metadata.version}`;
 	const artifact = await inspectArtifact({
 		repositoryRoot: process.cwd(),
 		tarballPath: artifactPath,
 	});
-	const evidence = await assertStrictReleaseEvidence({
+	const evidence = await verifyReleaseEvidence({
+		...(patch ? { patch } : {}),
 		version: metadata.version,
 		tag,
 		canaryPath: canary,
@@ -240,6 +269,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 			record.artifact.sha256 !== digest(await readFile(artifactPath)) ||
 			record.bundleSha256 !== evidence.bundleSha256 ||
 			record.canary !== canary ||
+			record.patch !== patch ||
 			record.bundles !== bundles
 		)
 			throw new Error(
@@ -277,7 +307,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 	);
 	await store(
 		"release-notes.md",
-		Buffer.from(`${notes}\n\n${releaseEvidenceMarkdown(evidence.summary)}\n`),
+		Buffer.from(`${notes}\n\n${evidence.notes}\n`),
 	);
 	const file = async (name: string) => ({
 		name,
@@ -294,6 +324,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 		checksum: await file(checksumName),
 		notes: await file("release-notes.md"),
 		canary,
+		...(patch ? { patch } : {}),
 		bundles,
 		bundleSha256: evidence.bundleSha256,
 		creationOwner: owner(),
@@ -305,7 +336,7 @@ async function main(args: string[]) {
 	const [command, path, ...rest] = args;
 	if (!command || command === "--help") {
 		console.log(
-			"release init <directory> --artifact <tgz> --canary <json> --commit <sha> [--bundles <directory>] | status <directory> | resume <directory>",
+			"release init <directory> --artifact <tgz> (--canary <json> | --patch <json>) --commit <sha> [--bundles <directory>] | status <directory> | resume <directory>",
 		);
 		return;
 	}
@@ -318,7 +349,13 @@ async function main(args: string[]) {
 			const value = rest[index + 1];
 			if (
 				!key ||
-				!["--artifact", "--canary", "--commit", "--bundles"].includes(key) ||
+				![
+					"--artifact",
+					"--canary",
+					"--patch",
+					"--commit",
+					"--bundles",
+				].includes(key) ||
 				!value ||
 				options.has(key)
 			)

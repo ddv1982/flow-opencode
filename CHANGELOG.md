@@ -2,6 +2,27 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.3.1] - 2026-09-14
+
+Clarify review handoffs and make release operations recoverable.
+
+- Capture the feature baseline before edits and include its inventory in review.
+  Recover retained observations on resume and identify missing evidence explicitly.
+- Resume publication from a durable release record without repeating uncertain
+  GitHub draft creation. Verify existing assets and npm integrity on recovery.
+- Require persistent authorization for supported paid eval and canary launchers.
+  Consumed top-level dispatches survive failure and restart; this is not a token
+  or billing ceiling.
+- Report review observations, missing evidence, and attributed finding categories
+  offline. Advisory findings may omit optional evidence without losing the review.
+- Add a restricted baseline-qualified patch route. This candidate has no new live
+  model eval or canary; prior 8.3.0 results describe 8.3.0 only. Offline checks and
+  reviewed scope support this release, without claims of improved model accuracy
+  or measured cost savings.
+- Schema impact: Session v5 schema, runtime tool schemas, and package exports are unchanged.
+
+Upgrade with `opencode plugin opencode-plugin-flow@8.3.1 --global --force`.
+
 ## [8.3.0] - 2026-09-13
 
 Flow preserves native model settings across continuation, keeps full sessions

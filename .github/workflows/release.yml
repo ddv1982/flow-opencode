@@ -157,16 +157,20 @@ jobs:
             exit 1
           fi
 
-      - name: Verify independently regraded qualification bundle and fresh canary
+      - name: Verify full or baseline-qualified patch evidence
         timeout-minutes: 5
         shell: bash
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
+          evidence=(--canary "evals/canary/${version}.json")
+          if [ -f "evals/qualification/patches/${version}.json" ]; then
+            evidence=(--patch "evals/qualification/patches/${version}.json")
+          fi
           bun run scripts/release.ts init .release-state \
             --artifact "$tarball" \
-            --canary "evals/canary/${version}.json" \
+            "${evidence[@]}" \
             --commit "${GITHUB_SHA}"
 
       - name: Persist release record before publication
