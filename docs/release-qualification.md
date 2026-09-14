@@ -35,9 +35,9 @@ must match their recorded Git commit. Missing sources or changed outcomes fail.
 Canary retries must retain consistent manager/reviewer identity.
 
 Reviewed offline exceptions: [narrow patches](../.agents/plans/06-patch-release/README.md)
-and the [frozen 8.4.0 picker](../.agents/plans/08-reviewer-picker-release/README.md).
-Their notes distinguish prior evidence from candidate measurements. Full
-qualification remains the default outside these explicit scopes.
+and [frozen features](../.agents/plans/09-planning-models/README.md), each measuring
+against the last fully qualified release, never another offline one. Their notes
+distinguish prior evidence from candidate measurements.
 
 A new scenario needs an explicit release-policy decision. Any required canonical
 case missing from the report fails qualification.

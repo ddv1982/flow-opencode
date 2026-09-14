@@ -4,7 +4,10 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import { inspectArtifact } from "../evals/provenance.js";
 import packageJson from "../package.json" with { type: "json" };
-import { assertReviewerPickerReleaseEvidence } from "./feature-release.js";
+import {
+	assertOfflineFeatureReleaseEvidence,
+	offlineFeatureBaselines,
+} from "./feature-release.js";
 import { writeBytesExclusive, writeExclusive } from "./lib/exclusive-json.js";
 import { assertPatchReleaseEvidence } from "./patch-release.js";
 import {
@@ -220,12 +223,10 @@ export async function verifyReleaseEvidence(
 	if (input.patch && input.feature)
 		throw new Error("Conflicting qualification modes.");
 	if (input.feature)
-		return assertReviewerPickerReleaseEvidence({
+		// The baseline seal is code-owned; a caller cannot supply one.
+		return assertOfflineFeatureReleaseEvidence({
 			path: input.feature,
 			expectedArtifact: input.expectedArtifact,
-			bundlesDirectory:
-				input.bundlesDirectory ??
-				".agents/plans/08-reviewer-picker-release/baselines",
 		});
 	if (input.patch)
 		return assertPatchReleaseEvidence({
@@ -261,13 +262,13 @@ async function initialize(directory: string, options: Map<string, string>) {
 		: patch
 			? "not-run:baseline-qualified-patch"
 			: required("--canary");
-	const bundles =
-		options.get("--bundles") ??
-		(feature
-			? ".agents/plans/08-reviewer-picker-release/baselines"
-			: patch
+	// A feature's baseline seal is code-owned and cannot be overridden.
+	const bundles = feature
+		? await offlineFeatureBaselines(feature)
+		: (options.get("--bundles") ??
+			(patch
 				? "evals/qualification/patch-baselines"
-				: "evals/qualification/bundles");
+				: "evals/qualification/bundles"));
 	const metadata = JSON.parse(await readFile("package.json", "utf8"));
 	const tag = `v${metadata.version}`;
 	const artifact = await inspectArtifact({
