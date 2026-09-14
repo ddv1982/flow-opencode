@@ -4,7 +4,11 @@ import {
 	type MutableFlowConfig,
 } from "../../config-shared.js";
 import { createFlowLog } from "./logging.js";
-import { applyReviewerPreference, modelPreference } from "./model-picker.js";
+import {
+	applyReviewerPreference,
+	FLOW_MODEL_ROLES,
+	modelPreference,
+} from "./model-picker.js";
 
 export function createConfigHook(
 	ctx: unknown,
@@ -36,6 +40,28 @@ export function createConfigHook(
 			? applyReviewerPreference(options.reviewerConfiguration, preference)
 			: undefined;
 		if (reviewer) options?.onReviewerConfiguration?.(reviewer);
+		for (const { agent, key } of Object.values(FLOW_MODEL_ROLES)) {
+			const entry = config.agent?.[agent];
+			if (
+				!entry ||
+				typeof entry !== "object" ||
+				Object.keys(entry).length !== 1 ||
+				!("options" in entry)
+			)
+				continue;
+			const value = entry.options;
+			if (
+				value &&
+				typeof value === "object" &&
+				Object.keys(value).length === 1 &&
+				Object.hasOwn(value, key) &&
+				typeof Reflect.get(value, key) === "string"
+			) {
+				config.agent = { ...config.agent };
+				delete config.agent[agent];
+			}
+		}
+
 		applyFlowConfig(config, {
 			planningModel,
 			...(reviewer ? { reviewerConfiguration: reviewer } : {}),

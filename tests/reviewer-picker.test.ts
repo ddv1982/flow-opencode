@@ -347,3 +347,47 @@ test("no planning preference disables specialist discovery and leaves command mo
 		configured.agent["flow-reviewer"],
 	);
 });
+
+test("saved role preferences do not produce collision warnings but custom agents do", async () => {
+	const warnings: string[] = [];
+	const ctx = {
+		client: {
+			app: {
+				log: ({ body }: { body: { level: string; message: string } }) => {
+					if (body.level === "warn") warnings.push(body.message);
+				},
+			},
+		},
+	};
+	const base = resolveFlowReviewerConfiguration({ env: {} });
+	for (const role of ["planning", "review"] as const) {
+		for (const model of ["test/model", ""]) {
+			warnings.length = 0;
+			const preference = modelPreferencePatch(role, model);
+			const original = preference.agent;
+			const saved = structuredClone(original);
+			await createConfigHook(ctx, { reviewerConfiguration: base })(preference);
+			expect(original).toEqual(saved);
+			expect(
+				warnings.filter((message) => message.includes("user-defined")),
+			).toEqual([]);
+		}
+		const stored = modelPreferencePatch(role, "test/model");
+		const name = Object.keys(stored.agent)[0];
+		if (!name) throw new Error("Missing fixture role");
+		for (const entry of [
+			{ ...stored.agent[name], prompt: "Custom agent" },
+			{ options: { ...stored.agent[name]?.options, custom: true } },
+		]) {
+			warnings.length = 0;
+			await createConfigHook(ctx, { reviewerConfiguration: base })({
+				agent: { [name]: entry },
+			});
+			expect(
+				warnings.some((message) =>
+					message.includes(`user-defined agent named '${name}'`),
+				),
+			).toBe(true);
+		}
+	}
+});
