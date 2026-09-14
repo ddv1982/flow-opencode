@@ -83,6 +83,8 @@ Finish or close active sessions before changing Flow versions in either directio
   release and removed no earlier than the next major, so no session is stranded
   mid-lifecycle by an upgrade.
 
+[Publication recovery](../.agents/plans/05-release-simplification/README.md#recovery).
+
 ## Running it
 
 Finish code, dependency, version and changelog changes first. Pass frozen install,

@@ -529,27 +529,29 @@ async function createDraft(
 	runtime: PublicationRuntime,
 	beforeMutation: () => Promise<void>,
 ): Promise<Release> {
-	for (let attempt = 1; attempt <= MUTATION_ATTEMPTS; attempt += 1) {
-		await beforeMutation();
-		await fetchBounded(runtime, githubApi(input, "/releases"), {
-			method: "POST",
-			headers: {
-				...githubHeaders(input.token),
-				"content-type": "application/json",
-			},
-			body: JSON.stringify({
-				tag_name: input.tag,
-				target_commitish: input.commitSha,
-				name: input.tag,
-				body: input.notes,
-				draft: true,
-			}),
-		}).catch(() => null);
+	await beforeMutation();
+	await fetchBounded(runtime, githubApi(input, "/releases"), {
+		method: "POST",
+		headers: {
+			...githubHeaders(input.token),
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			tag_name: input.tag,
+			target_commitish: input.commitSha,
+			name: input.tag,
+			body: input.notes,
+			draft: true,
+		}),
+	}).catch(() => null);
+	for (let attempt = 1; attempt <= OBSERVATION_ATTEMPTS; attempt += 1) {
 		const observed = await observeGithubRelease(input, runtime);
 		if (observed) return observed;
-		if (attempt < MUTATION_ATTEMPTS) await runtime.sleep(RETRY_DELAY_MS);
+		if (attempt < OBSERVATION_ATTEMPTS) await runtime.sleep(RETRY_DELAY_MS);
 	}
-	throw new Error("GitHub release draft did not become observable.");
+	throw new Error(
+		"GitHub release draft did not become observable. Creation outcome is unknown. Inspect existing drafts before retrying.",
+	);
 }
 
 async function uploadAsset(

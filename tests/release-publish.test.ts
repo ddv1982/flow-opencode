@@ -209,6 +209,76 @@ describe("npm publication reconciliation", () => {
 });
 
 describe("GitHub release reconciliation", () => {
+	test.each(["accepted", "disconnected", "rejected", "unobserved"])(
+		"does not repeat %s draft creation while the listing is stale",
+		async (outcome) => {
+			const input = {
+				repository: "owner/repo",
+				token: "test-token",
+				tag: "v1.2.3",
+				commitSha: COMMIT,
+				notes: "exact notes",
+				assets: [],
+				mode: "prepare" as const,
+			};
+			const releases: Array<Record<string, unknown>> = [];
+			let creates = 0;
+			let readsAfterCreate = 0;
+			let visible = outcome !== "unobserved";
+			const runtime: PublicationRuntime = {
+				fetch: async (_url, init) => {
+					if (init?.method === "POST") {
+						creates += 1;
+						if (outcome === "rejected") return jsonResponse(503, {});
+						const release = {
+							id: creates,
+							tag_name: input.tag,
+							name: input.tag,
+							body: input.notes,
+							target_commitish: COMMIT,
+							draft: true,
+							prerelease: false,
+							assets: [],
+						};
+						releases.push(release);
+						if (outcome === "disconnected") throw new Error("response lost");
+						return jsonResponse(201, release);
+					}
+					if (creates > 0) readsAfterCreate += 1;
+					return jsonResponse(
+						200,
+						!visible || readsAfterCreate < 2 ? [] : releases,
+					);
+				},
+				run: async () => {
+					throw new Error("Publication must not run model commands");
+				},
+				sleep: async () => {},
+			};
+			const preparation = convergeGithubRelease(input, runtime);
+			if (outcome === "rejected" || outcome === "unobserved") {
+				await expect(preparation).rejects.toThrow("did not become observable");
+				if (outcome === "unobserved") {
+					visible = true;
+					await expect(convergeGithubRelease(input, runtime)).resolves.toEqual({
+						state: "prepared",
+						releaseId: 1,
+					});
+				}
+			} else {
+				await expect(preparation).resolves.toEqual({
+					state: "prepared",
+					releaseId: 1,
+				});
+				await expect(convergeGithubRelease(input, runtime)).resolves.toEqual({
+					state: "prepared",
+					releaseId: 1,
+				});
+			}
+			expect(creates).toBe(1);
+		},
+	);
+
 	test.each(["missing", "pending", "conflicting", "wrong-size", "exact"])(
 		"preparing a published release with %s assets stays read-only",
 		async (state) => {
