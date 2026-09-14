@@ -93,6 +93,7 @@ export function assertPatchScope(input: {
 				"CHANGELOG.md",
 				".gitignore",
 				".github/workflows/evals.yml",
+				".github/workflows/ci.yml",
 				".github/workflows/release.yml",
 			].includes(path)
 		)
