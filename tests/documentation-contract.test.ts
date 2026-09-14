@@ -552,9 +552,7 @@ describe("Flow documentation contract", () => {
 		expect(release).toContain("tags:");
 		expect(release).toMatch(/tag="v\$\{version\}"/);
 		expect(release).toMatch(/--commit "\$\{GITHUB_SHA\}"/);
-		expect(release).toContain(
-			"Verify full or baseline-qualified patch evidence",
-		);
+		expect(release).toContain("Verify selected release evidence");
 		expect(release).toContain("bun run eval:canary -- verify");
 		expect(release).toContain("--mode dry-run");
 		expect(release).toMatch(/evals\/canary\/\$\{version\}\.json/);

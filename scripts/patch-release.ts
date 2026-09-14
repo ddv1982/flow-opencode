@@ -79,6 +79,13 @@ export function assertPatchScope(input: {
 		throw new Error(
 			"Patch package metadata may change only version; dependencies and build settings must match.",
 		);
+	assertPatchPaths(input);
+}
+
+export function assertPatchPaths(input: {
+	changedPaths: readonly string[];
+	guidance: PatchRelease["guidance"];
+}) {
 	const guides = new Set(input.guidance.map((entry) => entry.path));
 	if (guides.size !== input.guidance.length)
 		throw new Error("Duplicate guidance approval.");
@@ -99,7 +106,7 @@ export function assertPatchScope(input: {
 		)
 			continue;
 		if (
-			/^scripts\/(?:release(?:-metadata|-publish)?|patch-release|qualify-release|eval-canary|canary-run|paid-budget)\.ts$/.test(
+			/^scripts\/(?:release(?:-metadata|-publish)?|patch-release|feature-release|qualify-release|eval-canary|canary-run|paid-budget)\.ts$/.test(
 				path,
 			) ||
 			path === "scripts/lib/exclusive-json.ts"
@@ -112,7 +119,7 @@ export function assertPatchScope(input: {
 			throw new Error("Guidance approval does not name a changed guide.");
 }
 
-async function git(root: string, args: string[]) {
+export async function releaseGit(root: string, args: string[]) {
 	const process = Bun.spawn(["git", "-C", root, ...args], {
 		stdout: "pipe",
 		stderr: "pipe",
@@ -145,31 +152,33 @@ export async function assertPatchReleaseEvidence(
 	)
 		throw new Error("Patch record does not match exact candidate artifact.");
 	if (
-		(await git(root, ["status", "--porcelain", "--untracked-files=all"])).trim()
+		(
+			await releaseGit(root, ["status", "--porcelain", "--untracked-files=all"])
+		).trim()
 	)
 		throw new Error("Patch verification requires a clean checkout.");
 	const tagCommit = (
-		await git(root, [
+		await releaseGit(root, [
 			"rev-parse",
 			`refs/tags/v${record.baseline.artifact.packageVersion}^{commit}`,
 		])
 	).trim();
 	if (tagCommit !== record.baseline.commit)
 		throw new Error("Baseline tag/commit mismatch.");
-	await git(root, [
+	await releaseGit(root, [
 		"merge-base",
 		"--is-ancestor",
 		record.baseline.commit,
 		"HEAD",
 	]);
-	await git(root, [
+	await releaseGit(root, [
 		"merge-base",
 		"--is-ancestor",
 		record.baseline.artifact.sourceCommit,
 		record.baseline.commit,
 	]);
 	const changedPaths = (
-		await git(root, [
+		await releaseGit(root, [
 			"diff",
 			"--name-only",
 			"--no-renames",
@@ -184,7 +193,7 @@ export async function assertPatchReleaseEvidence(
 		baselineVersion: record.baseline.artifact.packageVersion,
 		version: record.version,
 		baselinePackage: JSON.parse(
-			await git(root, [
+			await releaseGit(root, [
 				"show",
 				`${record.baseline.artifact.sourceCommit}:package.json`,
 			]),
@@ -195,7 +204,7 @@ export async function assertPatchReleaseEvidence(
 	});
 	if (changedPaths.includes("biome.json")) {
 		const oldConfig = JSON.parse(
-			await git(root, [
+			await releaseGit(root, [
 				"show",
 				`${record.baseline.artifact.sourceCommit}:biome.json`,
 			]),
@@ -214,9 +223,9 @@ export async function assertPatchReleaseEvidence(
 	for (const entry of record.guidance) {
 		for (const revision of [record.baseline.artifact.sourceCommit, "HEAD"]) {
 			if (
-				!(await git(root, ["ls-tree", revision, "--", entry.path])).startsWith(
-					"100644 blob ",
-				)
+				!(
+					await releaseGit(root, ["ls-tree", revision, "--", entry.path])
+				).startsWith("100644 blob ")
 			)
 				throw new Error("Guidance must remain a regular non-executable file.");
 		}

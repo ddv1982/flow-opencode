@@ -131,6 +131,9 @@ jobs:
         timeout-minutes: 5
         run: bun run smoke:live
 
+      - name: Replay recorded decisions without models
+        run: bun run replay
+
       - name: Prepare package
         timeout-minutes: 2
         shell: bash
@@ -157,7 +160,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify full or baseline-qualified patch evidence
+      - name: Verify selected release evidence
         timeout-minutes: 5
         shell: bash
         run: |
@@ -165,7 +168,13 @@ jobs:
           version="$(node -p "require('./package.json').version")"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
           evidence=(--canary "evals/canary/${version}.json")
-          if [ -f "evals/qualification/patches/${version}.json" ]; then
+          if [ -f "evals/qualification/features/${version}.json" ]; then
+            if [ -f "evals/qualification/patches/${version}.json" ]; then
+              echo "::error::Conflicting offline qualification records."
+              exit 1
+            fi
+            evidence=(--feature "evals/qualification/features/${version}.json")
+          elif [ -f "evals/qualification/patches/${version}.json" ]; then
             evidence=(--patch "evals/qualification/patches/${version}.json")
           fi
           bun run scripts/release.ts init .release-state \
