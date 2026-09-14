@@ -22,6 +22,7 @@ import {
 	samePackedArtifact,
 	unpackedManifestSha256,
 } from "../evals/provenance.js";
+import { authorizePaidRun } from "../scripts/paid-budget.js";
 
 const exec = promisify(execFile);
 const temporary: string[] = [];
@@ -96,6 +97,16 @@ function unsafeTarball(path: string): Promise<void> {
 
 describe("eval provenance", () => {
 	test("forwards requested variants to both native host endpoints without changing wait policy", async () => {
+		const previousAuthorization = process.env.FLOW_EVAL_AUTHORIZATION;
+		const authorization = await directory();
+		await authorizePaidRun(authorization, {
+			schemaVersion: 1,
+			purpose: "Fake variant transport",
+			models: ["route/model"],
+			maxDispatches: 3,
+			expiresAt: new Date(Date.now() + 60000).toISOString(),
+		});
+		process.env.FLOW_EVAL_AUTHORIZATION = authorization;
 		const posted: Array<{ path: string; body: Record<string, unknown> }> = [];
 		const waited: object[] = [];
 		const requests = spyOn(globalThis, "fetch").mockImplementation(
@@ -170,6 +181,9 @@ describe("eval provenance", () => {
 				expect(options).not.toHaveProperty("variant");
 		} finally {
 			requests.mockRestore();
+			if (previousAuthorization === undefined)
+				delete process.env.FLOW_EVAL_AUTHORIZATION;
+			else process.env.FLOW_EVAL_AUTHORIZATION = previousAuthorization;
 		}
 	});
 

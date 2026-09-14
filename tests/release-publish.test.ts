@@ -57,14 +57,23 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("release ref proof", () => {
-	test("documents the required tag on the npm command", () => {
-		const help = spawnSync(
+	test("obsolete publication commands fail with migration guidance", () => {
+		const legacy = spawnSync(
 			"bun",
-			["run", "scripts/release-publish.ts", "--help"],
+			["run", "scripts/release-publish.ts", "npm"],
 			{ cwd: process.cwd(), encoding: "utf8" },
 		);
+		expect(legacy.status).toBe(2);
+		expect(legacy.stderr).toContain("scripts/release.ts");
+	});
+
+	test("documents the record-based release commands", () => {
+		const help = spawnSync("bun", ["run", "scripts/release.ts", "--help"], {
+			cwd: process.cwd(),
+			encoding: "utf8",
+		});
 		expect(help.status).toBe(0);
-		expect(help.stdout).toContain("npm --artifact <tarball> --tag <tag>");
+		expect(help.stdout).toContain("resume <directory>");
 	});
 
 	test("accepts an annotated tag at the exact event and main commit", () => {

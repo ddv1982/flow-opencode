@@ -1,4 +1,6 @@
 #!/usr/bin/env bun
+import { requirePaidAuthorization } from "../scripts/paid-budget.js";
+
 // Runs Flow's outcome scenarios against one or more real models.
 //
 // Every report records the prompt-surface size alongside the pass rate and token
@@ -772,6 +774,7 @@ export async function runCampaign(
 	beginFinalization: () => void = () => {},
 ): Promise<number> {
 	const { models, scenarios, sampling, concurrency } = parseArgs(args);
+	if (import.meta.main) await requirePaidAuthorization();
 	const selected =
 		sampling.kind === "release"
 			? releaseScenarios()

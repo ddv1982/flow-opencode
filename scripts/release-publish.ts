@@ -69,6 +69,7 @@ type GithubReleaseInput = {
 	readonly assets: readonly string[];
 	readonly mode: "prepare" | "publish";
 	readonly beforeMutation?: () => Promise<void>;
+	readonly beforeCreate?: () => Promise<void>;
 };
 
 type ReleaseAsset = {
@@ -94,18 +95,6 @@ type DesiredAsset = {
 	readonly bytes: Uint8Array;
 	readonly digest: string;
 };
-
-function usage(): string {
-	return [
-		"usage: bun run scripts/release-publish.ts <command> [options]",
-		"",
-		"commands:",
-		"  verify-ref --tag <tag>",
-		"  npm --artifact <tarball> --tag <tag>",
-		"  github-prepare --tag <tag> --commit <sha> --notes <file> --asset <file>...",
-		"  github-publish --tag <tag> --commit <sha> --notes <file> --asset <file>...",
-	].join("\n");
-}
 
 function appendOutput(current: string, chunk: Buffer): string {
 	const remaining = MAX_COMMAND_OUTPUT_BYTES - Buffer.byteLength(current);
@@ -151,7 +140,7 @@ async function runCommand(
 	});
 }
 
-const defaultRuntime: PublicationRuntime = {
+export const defaultRuntime: PublicationRuntime = {
 	fetch: globalThis.fetch,
 	run: runCommand,
 	sleep: async (milliseconds) => {
@@ -231,7 +220,7 @@ async function revParse(
 	);
 }
 
-async function verifyReleaseRef(
+export async function verifyReleaseRef(
 	tag: string,
 	runtime: PublicationRuntime,
 	requireCurrentMain = true,
@@ -530,6 +519,7 @@ async function createDraft(
 	beforeMutation: () => Promise<void>,
 ): Promise<Release> {
 	await beforeMutation();
+	await input.beforeCreate?.();
 	await fetchBounded(runtime, githubApi(input, "/releases"), {
 		method: "POST",
 		headers: {
@@ -675,126 +665,9 @@ export async function convergeGithubRelease(
 	return { state: "exact", releaseId: release.id };
 }
 
-function valuesFor(argv: readonly string[], flag: string): string[] {
-	const values: string[] = [];
-	for (let index = 0; index < argv.length; index += 1) {
-		if (argv[index] !== flag) continue;
-		const value = argv[index + 1];
-		if (!value || value.startsWith("--")) {
-			throw new Error(`${flag} requires a value.`);
-		}
-		values.push(value);
-	}
-	return values;
-}
-
-function rejectUnknownOptions(
-	argv: readonly string[],
-	allowed: ReadonlySet<string>,
-): void {
-	for (let index = 0; index < argv.length; index += 2) {
-		const flag = argv[index];
-		if (!flag || !allowed.has(flag)) {
-			throw new Error(
-				`Unknown release publication option: ${flag ?? "(missing)"}`,
-			);
-		}
-		if (!argv[index + 1] || argv[index + 1]?.startsWith("--")) {
-			throw new Error(`${flag} requires a value.`);
-		}
-	}
-}
-
-function valueFor(argv: readonly string[], flag: string): string {
-	const values = valuesFor(argv, flag);
-	if (values.length !== 1)
-		throw new Error(`${flag} must be provided exactly once.`);
-	return values[0] as string;
-}
-
-async function main(argv: readonly string[]): Promise<void> {
-	const [command, ...options] = argv;
-	if (!command || command === "--help" || command === "-h") {
-		process.stdout.write(`${usage()}\n`);
-		return;
-	}
-	if (command === "verify-ref") {
-		rejectUnknownOptions(options, new Set(["--tag"]));
-		const evidence = await verifyReleaseRef(
-			valueFor(options, "--tag"),
-			defaultRuntime,
-		);
-		process.stdout.write(
-			`Release ref verified at current origin/main commit ${evidence.mainCommitSha}.\n`,
-		);
-		return;
-	}
-	if (command === "npm") {
-		rejectUnknownOptions(options, new Set(["--artifact", "--tag"]));
-		const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
-			name?: unknown;
-			version?: unknown;
-		};
-		if (
-			typeof packageJson.name !== "string" ||
-			typeof packageJson.version !== "string"
-		) {
-			throw new Error(
-				"package.json does not contain a package name and version.",
-			);
-		}
-		const result = await convergeNpmPublication({
-			packageName: packageJson.name,
-			packageVersion: packageJson.version,
-			artifactPath: valueFor(options, "--artifact"),
-			beforePublish: async () => {
-				await verifyReleaseRef(valueFor(options, "--tag"), defaultRuntime);
-			},
-		});
-		process.stdout.write(`npm publication verified at ${result.integrity}.\n`);
-		return;
-	}
-	if (command === "github-prepare" || command === "github-publish") {
-		rejectUnknownOptions(
-			options,
-			new Set(["--tag", "--commit", "--notes", "--asset"]),
-		);
-		const token = process.env.GH_TOKEN;
-		const repository = process.env.GITHUB_REPOSITORY;
-		if (!token || !repository) {
-			throw new Error(
-				"GitHub publication requires GH_TOKEN and GITHUB_REPOSITORY.",
-			);
-		}
-		const result = await convergeGithubRelease({
-			repository,
-			token,
-			tag: valueFor(options, "--tag"),
-			commitSha: valueFor(options, "--commit"),
-			notes: await readFile(valueFor(options, "--notes"), "utf8"),
-			assets: valuesFor(options, "--asset"),
-			mode: command === "github-prepare" ? "prepare" : "publish",
-			beforeMutation: async () => {
-				await verifyReleaseRef(
-					valueFor(options, "--tag"),
-					defaultRuntime,
-					command === "github-prepare",
-				);
-			},
-		});
-		process.stdout.write(
-			`GitHub release publication verified at release ${result.releaseId}.\n`,
-		);
-		return;
-	}
-	throw new Error(`Unknown release publication command: ${command}`);
-}
-
 if (import.meta.main) {
-	main(process.argv.slice(2)).catch((error) => {
-		process.stderr.write(
-			`${error instanceof Error ? error.message : String(error)}\n`,
-		);
-		process.exitCode = 1;
-	});
+	process.stderr.write(
+		"Publication now uses a release record. Use scripts/release.ts init, status, or resume.\n",
+	);
+	process.exitCode = 2;
 }

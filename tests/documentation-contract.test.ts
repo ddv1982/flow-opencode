@@ -547,7 +547,7 @@ describe("Flow documentation contract", () => {
 		expect(combined).toContain("bun run check");
 		expect(combined).toContain("bun run smoke:live");
 		expect(combined).toContain("tests/workspace-persistence.test.ts");
-		expect(combined).toContain("scripts/release-publish.ts npm");
+		expect(combined).toContain("scripts/release.ts resume");
 		const release = await readFile(".github/workflows/release.yml", "utf8");
 		expect(release).toMatch(/^ {2}push:\n {4}branches:/m);
 		expect(release).toContain("tags:");
@@ -560,13 +560,17 @@ describe("Flow documentation contract", () => {
 		expect(release).toContain("--mode dry-run");
 		expect(release).toMatch(/evals\/canary\/\$\{version\}\.json/);
 		expect(release.match(/^ {4}timeout-minutes:/gm)).toHaveLength(3);
+		expect(release).toContain("bun run scripts/release.ts init");
+		expect(release).toContain("bun run scripts/release.ts resume");
+		expect(release).toContain("bun run scripts/release.ts status");
+		expect(
+			release.indexOf("Persist release record before publication"),
+		).toBeLessThan(release.indexOf("Resume verified publication"));
 		expect(release).toContain(
-			"bun run scripts/release-publish.ts github-prepare",
+			'gh run download "$GITHUB_RUN_ID" --name release-state',
 		);
-		expect(release).toContain("bun run scripts/release-publish.ts npm");
-		expect(release).toContain(
-			"bun run scripts/release-publish.ts github-publish",
-		);
+		expect(release).toContain('elif [ "$GITHUB_RUN_ATTEMPT" != 1 ]');
+		expect(release).not.toContain("bun run eval --");
 		expect(release).not.toContain("--clobber");
 		expect(release).not.toContain("canary-not-enabled");
 
@@ -583,6 +587,11 @@ describe("Flow documentation contract", () => {
 		expect(evals).toContain("eval-v2-qualification-input");
 		expect(evals).toContain("if: always()");
 		expect(evals).toContain("schedule:");
+		expect(evals).toContain("github.run_attempt == 1");
+		expect(evals).toContain("vars.FLOW_EVAL_AUTHORIZE_SCHEDULE == 'true'");
+		expect(evals).toContain('--max-dispatches "$MAX_DISPATCHES"');
+		expect(evals).toContain("FLOW_EVAL_AUTHORIZATION:");
+
 		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);
 		const qualification = await readFile(
 			"docs/release-qualification.md",

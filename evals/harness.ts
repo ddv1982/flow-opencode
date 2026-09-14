@@ -24,6 +24,7 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { consumePaidDispatch } from "../scripts/paid-budget.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import { CampaignCancelled } from "./campaign-stop.js";
 import {
@@ -1406,6 +1407,7 @@ export class EvalHost {
 				GIT_CONFIG_NOSYSTEM: "1",
 				GIT_CONFIG_GLOBAL: gitConfig,
 			};
+			delete environment.FLOW_EVAL_AUTHORIZATION;
 			if (options.ambientConfig === "disabled") {
 				for (const name of [
 					"OPENCODE_CONFIG",
@@ -1663,6 +1665,7 @@ export class EvalHost {
 		let usage = normalizeStudyUsage({ tokens: {}, costUsd: null });
 		try {
 			checkCancellation(this.signal);
+			await consumePaidDispatch({ model, kind: "probe" });
 			options?.onDispatch?.();
 			const reply = (await this.post(
 				`${this.baseUrl}/session/${sessionId}/message`,
@@ -1742,6 +1745,8 @@ export class EvalHost {
 			variant?: string;
 		} = {},
 	): Promise<CommandEnd> {
+		checkCancellation(this.signal);
+		await consumePaidDispatch({ model, kind: "command" });
 		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
 			signal: this.signal,
@@ -1778,6 +1783,8 @@ export class EvalHost {
 			variant?: string;
 		} = {},
 	): Promise<CommandEnd> {
+		checkCancellation(this.signal);
+		await consumePaidDispatch({ model, kind: "prompt" });
 		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
 			signal: this.signal,

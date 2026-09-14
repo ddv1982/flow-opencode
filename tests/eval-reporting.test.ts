@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
 import { ChildProcess, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import {
@@ -49,6 +49,7 @@ import {
 	reviewerActivity,
 } from "../evals/metrics.js";
 import { bestEffortEvaluation } from "../evals/run.js";
+import { authorizePaidRun } from "../scripts/paid-budget.js";
 
 function processExists(pid: number): boolean {
 	try {
@@ -2383,4 +2384,25 @@ describe("eval credential sync-back", () => {
 			await rm(dir, { recursive: true, force: true });
 		});
 	});
+});
+
+let authorizationDirectory: string;
+let previousAuthorization: string | undefined;
+beforeAll(async () => {
+	previousAuthorization = process.env.FLOW_EVAL_AUTHORIZATION;
+	authorizationDirectory = await mkdtemp(join(tmpdir(), "flow-fake-budget-"));
+	await authorizePaidRun(authorizationDirectory, {
+		schemaVersion: 1,
+		purpose: "Fake transport tests only",
+		models: ["fixture/model", "fixture/manager"],
+		maxDispatches: 100,
+		expiresAt: new Date(Date.now() + 3600000).toISOString(),
+	});
+	process.env.FLOW_EVAL_AUTHORIZATION = authorizationDirectory;
+});
+afterAll(async () => {
+	if (previousAuthorization === undefined)
+		delete process.env.FLOW_EVAL_AUTHORIZATION;
+	else process.env.FLOW_EVAL_AUTHORIZATION = previousAuthorization;
+	await rm(authorizationDirectory, { recursive: true, force: true });
 });

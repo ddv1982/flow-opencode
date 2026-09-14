@@ -24,6 +24,11 @@ on:
         required: false
         type: string
 
+      max_dispatches:
+        description: Explicit maximum top-level model dispatches, including probes
+        required: true
+        type: string
+
 permissions:
   contents: read
 
@@ -33,6 +38,7 @@ concurrency:
 
 jobs:
   matrix-evals:
+    if: github.run_attempt == 1 && (github.event_name == 'workflow_dispatch' || vars.FLOW_EVAL_AUTHORIZE_SCHEDULE == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 360
     steps:
@@ -77,6 +83,18 @@ jobs:
             echo "models=$models" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Authorize the configured dispatch budget
+        if: steps.matrix.outputs.models != ''
+        env:
+          MODELS: ${{ steps.matrix.outputs.models }}
+          MAX_DISPATCHES: ${{ inputs.max_dispatches || vars.FLOW_EVAL_MAX_DISPATCHES }}
+        run: |
+          set -euo pipefail
+          expires="$(date -u -d '+6 hours' +%Y-%m-%dT%H:%M:%SZ)"
+          bun run scripts/paid-budget.ts authorize .paid-budget \
+            --models "$MODELS" --max-dispatches "$MAX_DISPATCHES" \
+            --purpose "GitHub eval run ${GITHUB_RUN_ID}" --expires "$expires"
+
       - name: Run the eval matrix
         id: run
         if: steps.matrix.outputs.models != ''
@@ -85,6 +103,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           FLOW_EVAL_MODEL: ${{ steps.matrix.outputs.models }}
           FLOW_EVAL_NO_AUTH_COPY: "1"
+          FLOW_EVAL_AUTHORIZATION: ${{ github.workspace }}/.paid-budget
         # A failing scenario must still publish its report: the durable documents are
         # the only way to read why, and paying for the pass twice is the alternative.
         continue-on-error: true
@@ -130,6 +149,8 @@ jobs:
             ${{ steps.run.outputs.report }}
             ${{ steps.run.outputs.campaign }}
             eval-v2.log
+            .paid-budget/
+          include-hidden-files: true
           retention-days: 90
 
       - name: Record sealed-bundle prerequisite

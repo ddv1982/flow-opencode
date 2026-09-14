@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
+
 import { randomBytes } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { requirePaidAuthorization } from "../scripts/paid-budget.js";
 import type { BenchmarkCase } from "./benchmark.js";
 import type {
 	RetainedBenchmarkEvidence,
@@ -353,6 +355,7 @@ async function main(): Promise<void> {
 		throw new Error("Every requested benchmark case must exist.");
 	}
 	const requested = model(options.model);
+	await requirePaidAuthorization();
 	const root = join(import.meta.dir, "..");
 	const opencodeVersion = packageJson.devDependencies["@opencode-ai/plugin"];
 	const runtimeSha256 = evidenceSha256(
