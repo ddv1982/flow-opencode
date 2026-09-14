@@ -44,3 +44,27 @@ instruction and missing facts remain explicit. No wording-matching test was adde
 This is instruction alignment supported by an observed handoff failure. Reduced
 retry frequency, cost savings, and reviewer accuracy remain unmeasured. No paid
 eval or canary is required or authorized by this change.
+
+## Review correction: capture before edits
+
+PR review comment 4003475276 identified that a post-implementation inventory
+cannot establish which dirty changes predated the feature. The guide now captures
+the Git base, tracked/untracked content changes, file types and modes before the
+first feature edit, retaining observations in the conversation. On resume it
+recovers retained observations and never substitutes the current dirty state for
+the original baseline. Missing history stays an explicit evidence gap. No sidecar
+or new persistence mechanism is introduced; recovery of unavailable history is
+not claimed.
+
+Offline walkthroughs against the revised instructions:
+
+- Fresh run with a dirty README: capture its existing content delta and metadata
+  before changing feature files; compare current state to that capture at review.
+- Resume with retained observations: recover the original capture, preserving
+  attribution even when user and feature changes share a file.
+- Resume without observations: identify the unknown attribution, preserve existing
+  work, and report the evidence gap. Do not infer a clean initial tree or label
+  current changes as all pre-existing. A reviewer may still block missing evidence.
+
+These are assistant walkthroughs, not live model tests. The fix prevents requesting
+the baseline for the first time after edits; it cannot reconstruct lost history.
