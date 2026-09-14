@@ -2,7 +2,7 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
-## [8.5.0] - 2026-09-14
+## [8.5.0] - 2026-09-15
 
 Choose an optional planning specialist while keeping the coding model unchanged.
 

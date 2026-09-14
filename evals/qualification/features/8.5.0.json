@@ -16,8 +16,8 @@
 	},
 	"artifact": {
 		"packageVersion": "8.5.0",
-		"tarballSha256": "sha256:c52f4c462e06b659f08d0667cea018cc5e256480b770fb0e5ae311234a390288",
-		"unpackedManifestSha256": "sha256:73c916b2cf9446c77c4426910750f502de70972b270e0d98b02322a22a9bacbd"
+		"tarballSha256": "sha256:6d2ef244e73a44ebb8a0c2ddf66851758f4b3ae1a78e4ad4a4a54098499dfa3e",
+		"unpackedManifestSha256": "sha256:29de05288e9601d7ad4ba424a7c2be8e416d1969f14a063f3ea99e5f4f5aab27"
 	},
 	"guidance": [
 		{
