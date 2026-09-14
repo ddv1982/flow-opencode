@@ -236,7 +236,6 @@ describe("Flow documentation contract", () => {
 		const exactPackage = `opencode-plugin-flow@${packageVersion}`;
 
 		expect(JSON.parse(block ?? "null")).toEqual({
-			$schema: "https://opencode.ai/config.json",
 			plugin: [exactPackage],
 		});
 		expect(install).toContain(

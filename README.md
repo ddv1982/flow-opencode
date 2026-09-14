@@ -46,11 +46,10 @@ opencode plugin opencode-plugin-flow@8.4.0 --global --force
 Omit `--global` for project scope. Version pins are exact and never update on
 their own; to update, rerun the command with the new version.
 
-The equivalent manual project configuration is:
+Manual setup needs this entry in both `opencode.json` and `tui.json`:
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
   "plugin": ["opencode-plugin-flow@8.4.0"]
 }
 ```
@@ -59,7 +58,7 @@ Run `/flow-reviewer` for the global reviewer picker. Saving reloads the server;
 finish other projects' work first. Project picker preferences take precedence.
 “Use default” restores plugin/environment settings. No model call.
 
-Manual configuration:
+`opencode.json` reviewer options:
 
 ```json
 {
