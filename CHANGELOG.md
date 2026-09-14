@@ -2,6 +2,21 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.4.0] - 2026-09-14
+
+Choose Flow's global reviewer model from OpenCode's terminal UI.
+
+- `/flow-reviewer` opens a searchable picker of connected text/tool-capable models.
+  “Use default” restores plugin/environment settings. Selection makes no model call.
+- Confirm before saving global settings and reloading OpenCode. Active work in the
+  current project blocks saving; finish work in other projects first. Project-level
+  preferences override the global choice. Picker selections use default reasoning;
+  resetting restores saved plugin/environment options without rewriting them.
+- Add the optional `./tui` package entry point. Reinstall with
+  `opencode plugin opencode-plugin-flow@8.4.0 --global --force` to register it.
+- Session v5 schema and Flow lifecycle tools are unchanged. This feature requires
+  its own release qualification; the previous patch declaration does not apply.
+
 ## [8.3.1] - 2026-09-14
 
 Clarify review handoffs and make release operations recoverable.
