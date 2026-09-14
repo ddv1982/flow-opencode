@@ -1,0 +1,1535 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Descriptive retained-evidence audit; not human calibration",
+  "campaign": "2026-09-13T15-40-34-840Z.v2",
+  "sampleRule": "repetition == 1 for every case/model cell",
+  "counts": {
+    "attempts": 76,
+    "attemptsWithReviews": 23,
+    "failed": 1,
+    "passed": 23
+  },
+  "attempts": [
+    {
+      "caseId": "continuation-accepted",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-6e6b983f8f4c1c00562ee71930fd203f57df36bc8f5a5555462fd2b92b791a97",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTZlNmI5ODNmOGY0YzFjMDA1NjJlZTcxOTMwZmQyMDNmNTdkZjM2YmM4ZjVhNTU1NTQ2MmZkMmI5MmI3OTFhOTc.json",
+      "sha256": "dca2633e59474046dfda902d8c71d726f6230f2f4647976764ad138519fddec5",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_2f73473d7e073cc0",
+          "sourceDigest": "sha256:db8d36830a05f4d9fa250fec1e1e3076663efb57b666da4e01a3cd0b2b01e191",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "continuation-accepted",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-1a3ebc08b080a5f03643f2ba9f68efc0898f3bc1fdbdd5f218ae760523c95e6d",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTFhM2ViYzA4YjA4MGE1ZjAzNjQzZjJiYTlmNjhlZmMwODk4ZjNiYzFmZGJkZDVmMjE4YWU3NjA1MjNjOTVlNmQ.json",
+      "sha256": "2b17f69128dff48dca21275ed2e3f7f2d3c788f41491392019af676059e973ae",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_8e3e00eb105d64df",
+          "sourceDigest": "sha256:03ebed36c29b3edae131fc3bae21fc385e372254d50ecf3b2d70219b7edb4488",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "gpt-5.6-sol",
+              "providerID": "openai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 24,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/greet.ts"
+                },
+                {
+                  "path": "src/greet.test.ts"
+                }
+              ],
+              "expectedRevision": 4,
+              "featureId": "farewell-function",
+              "operationId": "review-farewell-20260913-01",
+              "packet": {
+                "riskLenses": [
+                  "Does the new exported function expose the approved `farewell(name: string): string` contract while preserving existing callers and their behavior?",
+                  "Does the focused test directly prove the exact required output without weakening existing coverage?"
+                ],
+                "summary": "Added the exported typed `farewell` function beside `greet` and a focused Bun test named `says goodbye by name`. The exact broad gate passed both tests and recorded the named assertion; the scoped diff has no whitespace errors, deletions, renames, or mode changes."
+              }
+            }
+          }
+        },
+        {
+          "index": 33,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_8e3e00eb105d64df",
+              "expectedRevision": 5,
+              "featureId": "farewell-function",
+              "operationId": "review-submit:ee2a3374-20260913-01",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Passed final review. Verified farewell-function and all approved requirements: typed exported farewell contract, exact personalized output, focused direct test, and unchanged existing greet behavior. Broad Bun gate passed; changed scope is limited to the two approved targets with no reported deletion, rename, or mode drift."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "continuation-accepted",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-a605fb4dc00940720754f2a3b81166bc1c05c25bc48f46e8549cc2cb6a0f408e",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWE2MDVmYjRkYzAwOTQwNzIwNzU0ZjJhM2I4MTE2NmJjMWMwNWMyNWJjNDhmNDZlODU0OWNjMmNiNmEwZjQwOGU.json",
+      "sha256": "ed836cdfbfc62ffc130d4caa4f223cbf442591d6aeea2d1ef16cf11c379c1c70",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_448b79c7234322f8",
+          "sourceDigest": "sha256:03ebed36c29b3edae131fc3bae21fc385e372254d50ecf3b2d70219b7edb4488",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "continuation-accepted",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-458b26aa17c64d0a64b82510ed575c1e3bd0e4264bb6eb2de6340d4a36cd4b16",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTQ1OGIyNmFhMTdjNjRkMGE2NGI4MjUxMGVkNTc1YzFlM2JkMGU0MjY0YmI2ZWIyZGU2MzQwZDRhMzZjZDRiMTY.json",
+      "sha256": "1c90f09c8da3a0f537d02ccb2d777f119d4fd0e6f935505a2d834728ece68203",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_da9a19f874fe588f",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "continuation-accepted",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-bb91ba3a226986eb608bdbd4aa8396970ac663a90260c1b8293033f294d77321",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWJiOTFiYTNhMjI2OTg2ZWI2MDhiZGJkNGFhODM5Njk3MGFjNjYzYTkwMjYwYzFiODI5MzAzM2YyOTRkNzczMjE.json",
+      "sha256": "f3e9546ea9c24ed1e267b7f95f887b25048e33bc66acf8e78f859772d28c3d9d",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_971f85800ec69d1e",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "grok-4.6",
+              "providerID": "xai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 24,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/greet.ts"
+                },
+                {
+                  "path": "src/greet.test.ts"
+                }
+              ],
+              "expectedRevision": 4,
+              "featureId": "farewell-export",
+              "operationId": "review-start-farewell-1",
+              "packet": {
+                "riskLenses": [
+                  "whether existing callers keep their defaults",
+                  "whether invalid inputs fail at the boundary",
+                  "whether the packed artifact exposes the approved contract"
+                ],
+                "summary": "Added exported farewell(name) in src/greet.ts returning Goodbye, <name>! and test named farewells by name in src/greet.test.ts. greet unchanged. Broad bun JUnit gate passed at revision 4 with assertion farewells by name. Two ordinary source files modified; no deletions, renames, or mode changes."
+              }
+            }
+          }
+        },
+        {
+          "index": 35,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_971f85800ec69d1e",
+              "expectedRevision": 5,
+              "featureId": "farewell-export",
+              "operationId": "review-submit:farewell-export-r5-1",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Verified farewell-export and all approved requirements: Export farewell(name: string) from src/greet.ts; returns exactly Goodbye, <name>!; focused bun:test farewells by name asserts farewell(\"Ada\") === \"Goodbye, Ada!\"; greet and other modules unchanged; no extra variants/CLI/docs. Broad bun JUnit gate passed (exit 0, assertion farewells by name). Risk lenses: existing greet callers keep prior behavior; invalid inputs interpolate like greet (approved mirror, no runtime fail-at-boundary); named export is the public contract (no pack/exports map). No prior findings."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "continuation-accepted",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-0a0effbca723e27d5b808cf6885ee84656af504200a62b21486904a29b12bf27",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTBhMGVmZmJjYTcyM2UyN2Q1YjgwOGNmNjg4NWVlODQ2NTZhZjUwNDIwMGE2MmIyMTQ4NjkwNGEyOWIxMmJmMjc.json",
+      "sha256": "0f8496b75e638f09908e6cda913d82cf16b9e9af23ac7ec57ef03d23fe78ff81",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_7fecab060b79a92e",
+          "sourceDigest": "sha256:f1c5b5edd2f88abf66a7d208a21d0179fe6e1f3589cbcad08f6137d667aa9fc9",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-f4c364708b6bfafc27a895493a00068f7506fd1b9c5e397a7a9f9683861ff09a",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWY0YzM2NDcwOGI2YmZhZmMyN2E4OTU0OTNhMDAwNjhmNzUwNmZkMWI5YzVlMzk3YTdhOWY5NjgzODYxZmYwOWE.json",
+      "sha256": "c7031a51879c4f1a474b34b738d32931966b751a030fbe5bbbd65773ce30dea2",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-7ff43b42cf05e0cd60d5f75d8a7633fb96210634ae145a1a2c6c084f8229865a",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTdmZjQzYjQyY2YwNWUwY2Q2MGQ1Zjc1ZDhhNzYzM2ZiOTYyMTA2MzRhZTE0NWExYTJjNmMwODRmODIyOTg2NWE.json",
+      "sha256": "22754cb3984611d0ca74d3f4c9c6ba565b55c4cf109d3a5d96698706f3e5f22b",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-4087f1c4372b9f5b6f8e2f5aade891ff63b23bd523f15194789da3827b0e7d53",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTQwODdmMWM0MzcyYjlmNWI2ZjhlMmY1YWFkZTg5MWZmNjNiMjNiZDUyM2YxNTE5NDc4OWRhMzgyN2IwZTdkNTM.json",
+      "sha256": "8597869e838d3ddf10624fe9729f973f4319d75ad92f41f3a89d2628afa030f8",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 3,
+      "attemptId": "attempt-cell-6cbea161cd320766d3fa118b2389d564c3812ba1fa191222522c19e19cb0f3ff",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTZjYmVhMTYxY2QzMjA3NjZkM2ZhMTE4YjIzODlkNTY0YzM4MTJiYTFmYTE5MTIyMjUyMmMxOWUxOWNiMGYzZmY.json",
+      "sha256": "a28dfadd4b7cd79b45d8403e5bffdb29a409d14a97d3d575202710e299391011",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 4,
+      "attemptId": "attempt-cell-b7bb0bb0cfac48bd94ed281706855e97d06363eba791eb797cd849101c5b6b9f",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWI3YmIwYmIwY2ZhYzQ4YmQ5NGVkMjgxNzA2ODU1ZTk3ZDA2MzYzZWJhNzkxZWI3OTdjZDg0OTEwMWM1YjZiOWY.json",
+      "sha256": "611c80d239bee4041561fca80ced926367c8657bf7138e3405fb93164e34b2b3",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 5,
+      "attemptId": "attempt-cell-b089c88d77ffd4a1311546bf78902ddd70f756bc25cd1842f869893d61283322",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWIwODljODhkNzdmZmQ0YTEzMTE1NDZiZjc4OTAyZGRkNzBmNzU2YmMyNWNkMTg0MmY4Njk4OTNkNjEyODMzMjI.json",
+      "sha256": "dcc1fdd505d6ebb9fa84fa7e0869791e0f020b2c24618bc601a2f13ed287a694",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 6,
+      "attemptId": "attempt-cell-b32b1a25c6bd69b0ab1738e873325dd778286f4cdee245c7c0ec8130d8e55292",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWIzMmIxYTI1YzZiZDY5YjBhYjE3MzhlODczMzI1ZGQ3NzgyODZmNGNkZWUyNDVjN2MwZWM4MTMwZDhlNTUyOTI.json",
+      "sha256": "ac0d9ad818a1aa99599384e8b55dae317b2f67bd8d0b2e9a4f0d199600d51fbc",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 7,
+      "attemptId": "attempt-cell-1e8406adc2d60ab0c034470d33eb38a8ec813bf6238e321822d9d0a13f067077",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTFlODQwNmFkYzJkNjBhYjBjMDM0NDcwZDMzZWIzOGE4ZWM4MTNiZjYyMzhlMzIxODIyZDlkMGExM2YwNjcwNzc.json",
+      "sha256": "30c36d87b6f50b6de8477793ac29e4fdda5add4c9a26040daa4c69313bc04563",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 8,
+      "attemptId": "attempt-cell-19fc6f8b7694a607cd088b4ff85ded8d92bf7c56f32a64abf271173a2361dc68",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTE5ZmM2ZjhiNzY5NGE2MDdjZDA4OGI0ZmY4NWRlZDhkOTJiZjdjNTZmMzJhNjRhYmYyNzExNzNhMjM2MWRjNjg.json",
+      "sha256": "23e6f2e83b48a3bdc89d22f2ceebd358c2c5330ed88b4503fdd2f1d4be98fba8",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 9,
+      "attemptId": "attempt-cell-bb1101cb3bb0464197f6c59f5c02fda1911ea3fe2b491d09e3bb3a8fd2070f73",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWJiMTEwMWNiM2JiMDQ2NDE5N2Y2YzU5ZjVjMDJmZGExOTExZWEzZmUyYjQ5MWQwOWUzYmIzYThmZDIwNzBmNzM.json",
+      "sha256": "9d991e4d9db1f6e68dfd29ddd554ef42906de818f115a1814de2f3d2144c1e5f",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-8a6f2b47709d07127414062bd2cf22960a86e1d83cf019c16adb81080f7b1b57",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLThhNmYyYjQ3NzA5ZDA3MTI3NDE0MDYyYmQyY2YyMjk2MGE4NmUxZDgzY2YwMTljMTZhZGI4MTA4MGY3YjFiNTc.json",
+      "sha256": "5b743d18e83ec1e0561c330a396d74d826c4164032be53c554831be4a6d98c42",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-1500b65ac4d8139c4a386b098d3cc4fa9dffa4a0cbfc83ddc2face7badaf5af2",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTE1MDBiNjVhYzRkODEzOWM0YTM4NmIwOThkM2NjNGZhOWRmZmE0YTBjYmZjODNkZGMyZmFjZTdiYWRhZjVhZjI.json",
+      "sha256": "209e65bd09da011059ae1657b292662b3ae29e4aad79485056b5e81f922044a2",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-ee0b7da0224a6966ebf8f0d544d414d23afd7c67dd06b0df91a80e01b6be17db",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWVlMGI3ZGEwMjI0YTY5NjZlYmY4ZjBkNTQ0ZDQxNGQyM2FmZDdjNjdkZDA2YjBkZjkxYTgwZTAxYjZiZTE3ZGI.json",
+      "sha256": "59d70f9542b7219fd532524c61a71974c2508f87486b1ef02f8d1a8ffe55d92d",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 3,
+      "attemptId": "attempt-cell-7e31547b04aa331485a0e18bf3e9ca753f6a45448f5cba6ad5f8ee722002df73",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTdlMzE1NDdiMDRhYTMzMTQ4NWEwZTE4YmYzZTljYTc1M2Y2YTQ1NDQ4ZjVjYmE2YWQ1ZjhlZTcyMjAwMmRmNzM.json",
+      "sha256": "3c8c5195ff65bb1698e20fb9140bacb434be141edc5d36bf5ab82282c2fba5a2",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 4,
+      "attemptId": "attempt-cell-d22942679b8e70c4717aa51cc47d8dd1fbba350ee690ca9b9220874c3208cd64",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWQyMjk0MjY3OWI4ZTcwYzQ3MTdhYTUxY2M0N2Q4ZGQxZmJiYTM1MGVlNjkwY2E5YjkyMjA4NzRjMzIwOGNkNjQ.json",
+      "sha256": "c245b90c3232c17a0b71f078b227ae265ffa8f151b14ee78746a45408e214850",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 5,
+      "attemptId": "attempt-cell-2d84e7c81c069cd596d2260e9a0c1d64a0b1f93d79be3d105a8a070c4b34441c",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTJkODRlN2M4MWMwNjljZDU5NmQyMjYwZTlhMGMxZDY0YTBiMWY5M2Q3OWJlM2QxMDVhOGEwNzBjNGIzNDQ0MWM.json",
+      "sha256": "e05f4e0ce514113f56b38407c0279d8c4659cd4063400b51df5f62a0679be5fb",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 6,
+      "attemptId": "attempt-cell-b967ffaecf80ce5889ed13a71562a885ce29bc92f2671140992435f799b037fa",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWI5NjdmZmFlY2Y4MGNlNTg4OWVkMTNhNzE1NjJhODg1Y2UyOWJjOTJmMjY3MTE0MDk5MjQzNWY3OTliMDM3ZmE.json",
+      "sha256": "84978c1a541e65c7097e9e62cc887efb47bb584d60e4810c04b39ea11bd3b0fd",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 7,
+      "attemptId": "attempt-cell-cf6fd0fd59ed28e74b5eafab4d9e3dfd6b62ba347679abe68af3303e7f40dae5",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWNmNmZkMGZkNTllZDI4ZTc0YjVlYWZhYjRkOWUzZGZkNmI2MmJhMzQ3Njc5YWJlNjhhZjMzMDNlN2Y0MGRhZTU.json",
+      "sha256": "b336f51017234cdeeec043f386c8c79c7edd428df7b2aafb7fa8ea7fc04af21f",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 8,
+      "attemptId": "attempt-cell-9bc91b10e861011eed117881586f91b12bdf231378a30a8a135be3b0db686219",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTliYzkxYjEwZTg2MTAxMWVlZDExNzg4MTU4NmY5MWIxMmJkZjIzMTM3OGEzMGE4YTEzNWJlM2IwZGI2ODYyMTk.json",
+      "sha256": "a29bd042592202e7e2891fdad3f1a575e0fa520f06b2fbd862c2c88935591ac9",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "model": "xai/grok-4.6",
+      "repetition": 9,
+      "attemptId": "attempt-cell-7a4c0ad0dec29b602c50446981423686a634d90a062532adc6b6e6e57a8bc6fe",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTdhNGMwYWQwZGVjMjliNjAyYzUwNDQ2OTgxNDIzNjg2YTYzNGQ5MGEwNjI1MzJhZGM2YjZlNmU1N2E4YmM2ZmU.json",
+      "sha256": "637636e57dcb891029c0db51231ca027a0f0452591e5aeedfacea061e3f25d22",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "goal-change-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-872b25187544ccdf1be8e5508f21e7813d47a252b8774d8d97aa1da3d0da4d77",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTg3MmIyNTE4NzU0NGNjZGYxYmU4ZTU1MDhmMjFlNzgxM2Q0N2EyNTJiODc3NGQ4ZDk3YWExZGEzZDBkYTRkNzc.json",
+      "sha256": "cba190b66da316fe813db8c18b046b329fa7894a21792c4374e6cf1f7f101969",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "goal-change-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-a9bddfa16b3d1610826ec70decb1e252bffe32624ec741e7b496d37bbc148573",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWE5YmRkZmExNmIzZDE2MTA4MjZlYzcwZGVjYjFlMjUyYmZmZTMyNjI0ZWM3NDFlN2I0OTZkMzdiYmMxNDg1NzM.json",
+      "sha256": "d2c15c30097a089de336eb300161d7d4c0f8b9dfa6763fa08839f766c894b3c4",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "goal-change-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-c6d6a387189dc91501c5c436ab7fd371e916a941fcc3cc31543f8ea69023903e",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWM2ZDZhMzg3MTg5ZGM5MTUwMWM1YzQzNmFiN2ZkMzcxZTkxNmE5NDFmY2MzY2MzMTU0M2Y4ZWE2OTAyMzkwM2U.json",
+      "sha256": "d617e770c71ca12a83cdc2841976271729cdce3b7b2ce394836d88bb0bc12d02",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "goal-change-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-6692ed7bd97758fc5983f99bcd507c3d3927c7b6c8605221707c1aab21ee30d4",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTY2OTJlZDdiZDk3NzU4ZmM1OTgzZjk5YmNkNTA3YzNkMzkyN2M3YjZjODYwNTIyMTcwN2MxYWFiMjFlZTMwZDQ.json",
+      "sha256": "eb9719015d4a2a2c00bd15c889014912e59206d13061081f488c6d3285462947",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "goal-change-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-f83bb64035a9128fddb5175018031bc0037defe19a39c7685370227d8f41fd20",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWY4M2JiNjQwMzVhOTEyOGZkZGI1MTc1MDE4MDMxYmMwMDM3ZGVmZTE5YTM5Yzc2ODUzNzAyMjdkOGY0MWZkMjA.json",
+      "sha256": "191e6c042e75f7aac7bcdb3e3497da09d9bf596f5f7302488145feff8ff540ec",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "goal-change-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-a5ecb5968bce2da770396ef28c5f6d2a753078cf6bf3abd255897257bad12eb4",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWE1ZWNiNTk2OGJjZTJkYTc3MDM5NmVmMjhjNWY2ZDJhNzUzMDc4Y2Y2YmYzYWJkMjU1ODk3MjU3YmFkMTJlYjQ.json",
+      "sha256": "6f2301e533f12bdf811e8afdb98c54d9da4b693687af9afd698662354d6d297c",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "happy-path",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-a98653e97437edaaa224e30c09d88b36b908a8ab4bba0862139d19785208a215",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWE5ODY1M2U5NzQzN2VkYWFhMjI0ZTMwYzA5ZDg4YjM2YjkwOGE4YWI0YmJhMDg2MjEzOWQxOTc4NTIwOGEyMTU.json",
+      "sha256": "f2fa85c17b85040055e7df799816ff27c75423aef15970e25e7892deae509698",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_55b6dcc2f8d91f45",
+          "sourceDigest": "sha256:db8d36830a05f4d9fa250fec1e1e3076663efb57b666da4e01a3cd0b2b01e191",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "happy-path",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-1cfb0bef409d5de5c7f0276bcd22bb47443aa4e2f98836864643cdcefc74fe30",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTFjZmIwYmVmNDA5ZDVkZTVjN2YwMjc2YmNkMjJiYjQ3NDQzYWE0ZTJmOTg4MzY4NjQ2NDNjZGNlZmM3NGZlMzA.json",
+      "sha256": "dca4290e65b54e41da7c5d86f662806209542ce4cb792120f4679f2fa098cda8",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_48bf6424c39fc2e6",
+          "sourceDigest": "sha256:db8d36830a05f4d9fa250fec1e1e3076663efb57b666da4e01a3cd0b2b01e191",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "gpt-5.6-sol",
+              "providerID": "openai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 28,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/greet.ts"
+                },
+                {
+                  "path": "src/greet.test.ts"
+                }
+              ],
+              "expectedRevision": 4,
+              "featureId": "farewell-function",
+              "operationId": "review-farewell-20260913-01",
+              "packet": {
+                "riskLenses": [
+                  "Does the additive exported function preserve existing callers and behavior?",
+                  "Does the module expose the approved typed farewell contract?"
+                ],
+                "summary": "Added exported `farewell(name: string): string` returning the exact `Goodbye, ${name}!` contract and a focused `says farewell by name` Bun test. Broad gate passed both tests with the named case recorded in `.flow/results.xml`; `git diff --check` passed. Base diff contains only modifications to the two declared regular TypeScript files, with no deletions, renames, or executable-mode changes. The unrelated pre-existing untracked `opencode.json` was not touched."
+              }
+            }
+          }
+        },
+        {
+          "index": 38,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_48bf6424c39fc2e6",
+              "expectedRevision": 5,
+              "featureId": "farewell-function",
+              "operationId": "review-submit:farewell-function-20260913-01",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Passed final review. farewell-function verified: src/greet.ts exports typed farewell(name), exact Ada output is covered, and existing greet behavior remains passing. The source-bound broad Bun gate passed both named tests; declared scope and package/docs surfaces are consistent, with no prior findings."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "happy-path",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-aa06fe7cac4139c9e426ef20958f1e04ec4f6aa2529fa814b428612af9e77cfa",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWFhMDZmZTdjYWM0MTM5YzllNDI2ZWYyMDk1OGYxZTA0ZWM0ZjZhYTI1MjlmYTgxNGI0Mjg2MTJhZjllNzdjZmE.json",
+      "sha256": "661b8953bef4530a86869c0473c9cc836c239ae5ddeecf5bb2dded1d20405f97",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_90d3e088086a7b85",
+          "sourceDigest": "sha256:03ebed36c29b3edae131fc3bae21fc385e372254d50ecf3b2d70219b7edb4488",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "happy-path",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-4a19664cd1b31276a1229d7d37387cb27e3caf9861fb78f00e15782c230fb2de",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTRhMTk2NjRjZDFiMzEyNzZhMTIyOWQ3ZDM3Mzg3Y2IyN2UzY2FmOTg2MWZiNzhmMDBlMTU3ODJjMjMwZmIyZGU.json",
+      "sha256": "b5826d2f33fd4e02851d626cf89f01e870947b60204d9f15ad528ea7ef0dcba0",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_2ebb55898fba9b4e",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 7,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "happy-path",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-67d267c2587de261759070f89b2e925e5e3a60a81e065b1a7c43dcce8ca6973d",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTY3ZDI2N2MyNTg3ZGUyNjE3NTkwNzBmODliMmU5MjVlNWUzYTYwYTgxZTA2NWIxYTdjNDNkY2NlOGNhNjk3M2Q.json",
+      "sha256": "685e3c50d5d229e9e59acf6ba512f5f0e7bede68dfbfafcc6d97192be173ddc6",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_be0618e539771683",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 7,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "grok-4.6",
+              "providerID": "xai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 22,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/greet.ts"
+                },
+                {
+                  "path": "src/greet.test.ts"
+                }
+              ],
+              "expectedRevision": 5,
+              "featureId": "farewell-fn",
+              "operationId": "review-start-farewell-001",
+              "packet": {
+                "riskLenses": [],
+                "summary": "Added exported farewell(name) returning Goodbye, ${name}! in src/greet.ts and test named farewells by name in src/greet.test.ts. greet unchanged. Two TypeScript files, no deletions/renames/mode changes. Focused and broad bun test JUnit both passed including farewells by name."
+              }
+            }
+          }
+        },
+        {
+          "index": 35,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_be0618e539771683",
+              "expectedRevision": 6,
+              "featureId": "farewell-fn",
+              "operationId": "review-submit:farewell-fn-r6",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Final review passed. farewell-fn verified: exported farewell(name) returns Goodbye, ${name}!; focused bun:test farewells by name; greet unchanged. Requirements verified: export farewell(name: string): string; Goodbye interpolation matching greet; test farewells by name; no unrelated changes. No prior findings. Focused and broad bun test gates passed."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "happy-path",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-2a5cefffa21b40d35ff84dcc2267545c49979a44e451b6c51debb3e5bd215913",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTJhNWNlZmZmYTIxYjQwZDM1ZmY4NGRjYzIyNjc1NDVjNDk5NzlhNDRlNDUxYjZjNTFkZWJiM2U1YmQyMTU5MTM.json",
+      "sha256": "8f84d40743cb276a9e109166cad10af3dced937937527317b4014dd23c56cd76",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_89a3938a1b39ccc9",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 7,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "plan-only-stops",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-ac15a201986614c81896cb5b3b9205cfccb259c4230023bcfb1949f781fdcc80",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWFjMTVhMjAxOTg2NjE0YzgxODk2Y2I1YjNiOTIwNWNmY2NiMjU5YzQyMzAwMjNiY2ZiMTk0OWY3ODFmZGNjODA.json",
+      "sha256": "8d36a3e4677b1207560d2c2431260c73893883b866d1cbd22294823f0086ae09",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "plan-only-stops",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-00195b68b8b0ea3686c3e72513e6fd0b7911c0aae278a42f5a8e0fd73057895f",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTAwMTk1YjY4YjhiMGVhMzY4NmMzZTcyNTEzZTZmZDBiNzkxMWMwYWFlMjc4YTQyZjVhOGUwZmQ3MzA1Nzg5NWY.json",
+      "sha256": "7934589e91f92a447b303cb918ebc8f2a42719dd0ba723f54e899a9c18965229",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "plan-only-stops",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-570c4276fa4b9a873bff9f8f50d7aacd062a1d52d7246ad80ec78fb358f5719f",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTU3MGM0Mjc2ZmE0YjlhODczYmZmOWY4ZjUwZDdhYWNkMDYyYTFkNTJkNzI0NmFkODBlYzc4ZmIzNThmNTcxOWY.json",
+      "sha256": "e8b4029d8d5dc808239757e2708ff5c2c620fd5f8585efbaa0dbb028d4429b67",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "plan-only-stops",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-5c89c58581ebc1aa2eadd6c410787828a6f92be0fb3b8e50ffa9b246315638b1",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTVjODljNTg1ODFlYmMxYWEyZWFkZDZjNDEwNzg3ODI4YTZmOTJiZTBmYjNiOGU1MGZmYTliMjQ2MzE1NjM4YjE.json",
+      "sha256": "3a57d2461d2c00a7800f62b63147c8741e06d5a9c0e8e514c550fa9cc10dd04c",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "plan-only-stops",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-e3cd5944a7e91887534439eb986a92f00d86f7fb5a8709d67aa3cb895dffa205",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWUzY2Q1OTQ0YTdlOTE4ODc1MzQ0MzllYjk4NmE5MmYwMGQ4NmY3ZmI1YTg3MDlkNjdhYTNjYjg5NWRmZmEyMDU.json",
+      "sha256": "e35d963185dafd0f2f9fbc5b3bc6eb6cfc98895af3b4847bfb33f45e52166a00",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "plan-only-stops",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-e77af73aa8f84086be78e2fcab9f65c44c4579416581ff855647a4a9129f748d",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWU3N2FmNzNhYThmODQwODZiZTc4ZTJmY2FiOWY2NWM0NGM0NTc5NDE2NTgxZmY4NTU2NDdhNGE5MTI5Zjc0OGQ.json",
+      "sha256": "3eeec8de3f7d3e73420a50e21c06caa51487e492fc5999470deeb0e3afcace40",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-f3225930eef651fc9eef211418c38c0254741cfe22332ab1b4ecf39eb12b6486",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWYzMjI1OTMwZWVmNjUxZmM5ZWVmMjExNDE4YzM4YzAyNTQ3NDFjZmUyMjMzMmFiMWI0ZWNmMzllYjEyYjY0ODY.json",
+      "sha256": "a55957191aa31a635137d56612c8d7fae9c31ed8e3672617d32cf92424d1239a",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_1dcb90c23a67f21f",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-d7d0201660c9265a9bb678a9d51d6bfcead1cc4343c72a6ff001a17025cd67e1",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWQ3ZDAyMDE2NjBjOTI2NWE5YmI2NzhhOWQ1MWQ2YmZjZWFkMWNjNDM0M2M3MmE2ZmYwMDFhMTcwMjVjZDY3ZTE.json",
+      "sha256": "0ec1cb7f10bc7cf19c5e25c24d7ddad5eabd1f04aa801bde2be966619bc5eba5",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_b274e4d11234ccfd",
+          "sourceDigest": "sha256:db8d36830a05f4d9fa250fec1e1e3076663efb57b666da4e01a3cd0b2b01e191",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "gpt-5.6-sol",
+              "providerID": "openai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 35,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/greet.ts"
+                },
+                {
+                  "path": "src/greet.test.ts"
+                }
+              ],
+              "expectedRevision": 4,
+              "featureId": "farewell-function",
+              "operationId": "review-farewell-20260913-01",
+              "packet": {
+                "riskLenses": [
+                  "Do existing greet callers retain unchanged behavior?",
+                  "Does the exported module expose the approved farewell contract?"
+                ],
+                "summary": "Added the exported typed farewell function and focused Bun test. The exact broad gate passed both tests, including the named farewell case; the base diff has no deletions, renames, mode changes, or whitespace errors."
+              }
+            }
+          }
+        },
+        {
+          "index": 44,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_b274e4d11234ccfd",
+              "expectedRevision": 5,
+              "featureId": "farewell-function",
+              "operationId": "review-submit:c75dcf3f-3e66-4838-ab05-5ad4faaf4380:20260913",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Verified farewell-function: typed farewell export, exact Ada output, focused named Bun test, unchanged greet behavior, and the complete two-test suite all pass. Targets, package surface, README gate, and supplied base-diff inventory are consistent with completion."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-f733d9d11a521603acc90fed0f63799e2085660743af31348da3efcda5067654",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWY3MzNkOWQxMWE1MjE2MDNhY2M5MGZlZDBmNjM3OTllMjA4NTY2MDc0M2FmMzEzNDhkYTNlZmNkYTUwNjc2NTQ.json",
+      "sha256": "f83c6389dc1ba96ac7583f62c63e51a4292249edf4cc38ab07d7ed3231751fd0",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_1a3a91673381ee58",
+          "sourceDigest": "sha256:03ebed36c29b3edae131fc3bae21fc385e372254d50ecf3b2d70219b7edb4488",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-8144de47e943ee0a47b8a3a45a8c11a14e86cf960fe972170abc54e864feb0ae",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTgxNDRkZTQ3ZTk0M2VlMGE0N2I4YTNhNDVhOGMxMWExNGU4NmNmOTYwZmU5NzIxNzBhYmM1NGU4NjRmZWIwYWU.json",
+      "sha256": "f0c376115fe4d303e7051ed7a652cad17e2e343f3428b1aa417cce989b6f0edc",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_38e630464a1598e9",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-bdd492a46417dd83c3d2967b450b30f1fa11f2a470a39ddaf39d36b3450d838c",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWJkZDQ5MmE0NjQxN2RkODNjM2QyOTY3YjQ1MGIzMGYxZmExMWYyYTQ3MGEzOWRkYWYzOWQzNmIzNDUwZDgzOGM.json",
+      "sha256": "1c95de6da565f3049dd054fbaf27761dcefdc4b3ed4e878c573ad62da99435fb",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_9c0d28259dc2c198",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "grok-4.6",
+              "providerID": "xai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 29,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/greet.ts"
+                },
+                {
+                  "path": "src/greet.test.ts"
+                }
+              ],
+              "expectedRevision": 4,
+              "featureId": "farewell-fn",
+              "operationId": "review-farewell-1",
+              "packet": {
+                "riskLenses": [],
+                "summary": "Exported farewell(name) from src/greet.ts returning Goodbye, ${name}! beside unchanged greet. Added bun:test farewells by name asserting farewell(\"Ada\") === \"Goodbye, Ada!\". Broad gate bun test --reporter=junit --reporter-outfile=.flow/results.xml passed at revision 4 with assertion farewells by name. Base-diff: only those two regular 644 files modified; no deletions, renames, or mode changes."
+              }
+            }
+          }
+        },
+        {
+          "index": 41,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_9c0d28259dc2c198",
+              "expectedRevision": 5,
+              "featureId": "farewell-fn",
+              "operationId": "review-submit:farewell-fn-r5-pass",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Verified farewell-fn and all approved requirements: export farewell(name: string) in src/greet.ts returns Goodbye, <name>!; focused bun:test farewells by name asserts farewell(\"Ada\") === \"Goodbye, Ada!\"; greet() unchanged; no CLI/docs surfaces added. Broad bun test gate exit 0 with named assertion passed. No prior findings."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-56e71c4f8dc9c2fdea1f690df87a310d3a05f0f9a463b165466fef89b354c44c",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTU2ZTcxYzRmOGRjOWMyZmRlYTFmNjkwZGY4N2EzMTBkM2EwNWYwZjlhNDYzYjE2NTQ2NmZlZjg5YjM1NGM0NGM.json",
+      "sha256": "6f9e5ec8acfaf52dee6f9f6929f84820c9726f084b3aa050769fdb509976a1c5",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_8e36495dc08baee8",
+          "sourceDigest": "sha256:ea7084c166de4bd4fcf42c2153e0af84004b12a991292cc6823ce958697c3df2",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-04c297d78896604a5358d2d8d2444c30ff999ce5db296b5964a283d340eaea16",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTA0YzI5N2Q3ODg5NjYwNGE1MzU4ZDJkOGQyNDQ0YzMwZmY5OTljZTVkYjI5NmI1OTY0YTI4M2QzNDBlYWVhMTY.json",
+      "sha256": "32a7ed5aedd13d83a53ea87efa2100c8a39eb8148baad94a01f0411fe0f6af8f",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_8a9339875f4f0cec",
+          "sourceDigest": "sha256:61b6348004ff427143525eff067b46683b08107cd3ddd11a0cdd782f2cda0d80",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-a369e1d7d282a7988c9139d3b396342df350ed092d40ee8ad3589258e76aa832",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWEzNjllMWQ3ZDI4MmE3OTg4YzkxMzlkM2IzOTYzNDJkZjM1MGVkMDkyZDQwZWU4YWQzNTg5MjU4ZTc2YWE4MzI.json",
+      "sha256": "27e16438a9a3389542f99ce92fc564e2114b42642409c555113bfc781744362b",
+      "sampled": true,
+      "reviews": [
+        {
+          "assignmentId": "id_f095b06b4ddea224",
+          "sourceDigest": "sha256:f55eb9782a83d555736263d2aec409a7c8a5710d424d54f35c0f70f7778e9bae",
+          "result": {
+            "findings": [
+              {
+                "evidence": "The reviewer projection lists src/platform.ts and src/platform.test.ts as changed but supplies no baseline inventory establishing additions/modifications versus deletions or renames, file types, generated artifacts, or executable/mode changes. Provide the manager-owned baseline inventory showing the complete base diff and expected observable result that only the approved source/test content changed with no unexplained metadata changes.",
+                "findingId": "reserved-windows-device-filenames.R5-01",
+                "severity": "blocking",
+                "summary": "Required baseline inventory is missing, so the actual base diff and scope integrity cannot be verified."
+              }
+            ],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "failed"
+          }
+        },
+        {
+          "assignmentId": "id_58fd875f9291b501",
+          "sourceDigest": "sha256:f55eb9782a83d555736263d2aec409a7c8a5710d424d54f35c0f70f7778e9bae",
+          "result": {
+            "findings": [],
+            "recordedRevision": 10,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ],
+      "reviewerObservations": [
+        {
+          "model": {
+            "kind": "observed",
+            "value": {
+              "modelID": "gpt-5.6-sol",
+              "providerID": "openai"
+            }
+          },
+          "variant": {
+            "kind": "unobserved",
+            "reason": "field-unavailable"
+          }
+        }
+      ],
+      "reviewCalls": [
+        {
+          "index": 24,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/platform.ts"
+                },
+                {
+                  "path": "src/platform.test.ts"
+                }
+              ],
+              "expectedRevision": 4,
+              "featureId": "reserved-windows-device-filenames",
+              "operationId": "review-safe-windows-device-names-1",
+              "packet": {
+                "riskLenses": [
+                  "Do existing callers retain unchanged output for non-reserved filenames?",
+                  "Does matching correctly cover reserved device stems with extensions without overmatching ordinary names?"
+                ],
+                "summary": "Review the reserved Windows device filename sanitization and Linux-runnable filesystem acceptance observation. Broad Bun suite passed on current source with the exact named case recorded in JUnit."
+              }
+            }
+          }
+        },
+        {
+          "index": 36,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_f095b06b4ddea224",
+              "expectedRevision": 5,
+              "featureId": "reserved-windows-device-filenames",
+              "operationId": "review-submit:9ce1ef50-49e1-44cb-b8f3-f5d381e180a7",
+              "result": {
+                "findings": [
+                  {
+                    "evidence": "The reviewer projection lists src/platform.ts and src/platform.test.ts as changed but supplies no baseline inventory establishing additions/modifications versus deletions or renames, file types, generated artifacts, or executable/mode changes. Provide the manager-owned baseline inventory showing the complete base diff and expected observable result that only the approved source/test content changed with no unexplained metadata changes.",
+                    "severity": "blocking",
+                    "summary": "Required baseline inventory is missing, so the actual base diff and scope integrity cannot be verified."
+                  }
+                ],
+                "terminalDisposition": "submitted",
+                "verdict": "failed"
+              },
+              "summary": "Final review: reserved-windows-device-filenames behavior, unchanged ordinary-name handling, Linux creatability observation, and broad JUnit suite are verified; base-diff/scope metadata is incomplete."
+            }
+          }
+        },
+        {
+          "index": 46,
+          "tool": "flow_review_start",
+          "input": {
+            "request": {
+              "artifactsChanged": [
+                {
+                  "path": "src/platform.ts"
+                },
+                {
+                  "path": "src/platform.test.ts"
+                }
+              ],
+              "expectedRevision": 8,
+              "featureId": "reserved-windows-device-filenames",
+              "operationId": "review-safe-windows-device-names-2",
+              "packet": {
+                "riskLenses": [
+                  "Verify prior finding reserved-windows-device-filenames.R5-01 is resolved by the explicit complete base-diff, file-type, and mode inventory.",
+                  "Do existing callers retain unchanged output for non-reserved filenames?",
+                  "Does matching cover reserved device stems with extensions without overmatching ordinary names?"
+                ],
+                "summary": "Review the reserved-device sanitization and Linux filesystem observation. Manager-owned baseline inventory against HEAD: exactly two tracked files are modified, `src/platform.ts` (1 insertion, 1 deletion) and `src/platform.test.ts` (21 insertions, 4 deletions); both are regular tracked files and remain mode 100644. `git diff --raw` reports M for both with 100644 before/after; there are no additions, deletions, renames, copies, executable-bit changes, binary files, or generated artifacts in the feature diff. The complete feature base diff changes only the regex and focused tests. Untracked `opencode.json` pre-existed this work and is unrelated/not an artifact. Broad JUnit validation passed on current Linux source, including exact case `linux-skipped observation`. This inventory directly addresses prior finding reserved-windows-device-filenames.R5-01."
+              }
+            }
+          }
+        },
+        {
+          "index": 54,
+          "tool": "flow_feature_complete",
+          "input": {
+            "request": {
+              "assignmentId": "id_58fd875f9291b501",
+              "expectedRevision": 9,
+              "featureId": "reserved-windows-device-filenames",
+              "operationId": "review-submit:3c68bcc7-a372-4b12-b456-e24e6af0e496",
+              "result": {
+                "findings": [],
+                "terminalDisposition": "submitted",
+                "verdict": "passed"
+              },
+              "summary": "Passed final review. Verified feature reserved-windows-device-filenames and all approved requirements: case-insensitive reserved stems (including extension-bearing forms) are prefixed, ordinary names remain unchanged, the exact Linux filesystem observation creates/reads/cleans up the replacement, and the complete Bun suite has passing JUnit evidence. Prior blocking finding reserved-windows-device-filenames.R5-01 is proven fixed by the manager-owned complete base-diff inventory: only the two approved regular tracked files changed, both retained mode 100644, with no additions, deletions, renames, generated/binary artifacts, or mode changes."
+            }
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-42e287be0bb9d1bf669ea0948c6ed3550e79a304be366b1975fb5a981d89a82a",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTQyZTI4N2JlMGJiOWQxYmY2NjllYTA5NDhjNmVkMzU1MGU3OWEzMDRiZTM2NmIxOTc1ZmI1YTk4MWQ4OWE4MmE.json",
+      "sha256": "09298d359b2abcd8d37e6e0c8cf4700e6a34d06593c08b5c8d266cc8bac682a3",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_674d7bd1982f74ba",
+          "sourceDigest": "sha256:344db3bc73e41d97890aa4bec18bb24cae93a91394f6ddedce7474a474d985d6",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-1be1d32a8709a3a7bb6f00b37cabee98a0de07ce626132d6fe7af487379e6e2e",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTFiZTFkMzJhODcwOWEzYTdiYjZmMDBiMzdjYWJlZTk4YTBkZTA3Y2U2MjYxMzJkNmZlN2FmNDg3Mzc5ZTZlMmU.json",
+      "sha256": "a8343727e8838e02f18b07cadad0d06e218f5af14fd910a99f660faa6cc4f12a",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_a699faf5dcb67322",
+          "sourceDigest": "sha256:219dc62c4ba4fec2878e70125ea46a37cd84ad64a7e3b65afd73cf4e3fc9665b",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-1330630539d9e9ba6591ff3df1113c1acdf3933d9add97349868e38216bf773a",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTEzMzA2MzA1MzlkOWU5YmE2NTkxZmYzZGYxMTEzYzFhY2RmMzkzM2Q5YWRkOTczNDk4NjhlMzgyMTZiZjc3M2E.json",
+      "sha256": "cc7bdf63d2cf6129d2f0c2a88e572caa5d3e8269152f1df98a66bf90b8a05fa8",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-c80cb29fa30f0799ea8135a6f7947b4f66b16773918535d5709883a765d1d15e",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWM4MGNiMjlmYTMwZjA3OTllYTgxMzVhNmY3OTQ3YjRmNjZiMTY3NzM5MTg1MzVkNTcwOTg4M2E3NjVkMWQxNWU.json",
+      "sha256": "e34c054813656816d2d1106eac309d172b244b9c532b95f4489450ad82ee8678",
+      "sampled": false,
+      "reviews": [
+        {
+          "assignmentId": "id_35a0dbbfeb94c9ee",
+          "sourceDigest": "sha256:2afaac226646cf4640a5dd55e16b235bc163c104bb4b9a3ff63516374fd577c0",
+          "result": {
+            "findings": [],
+            "recordedRevision": 6,
+            "terminalDisposition": "submitted",
+            "verdict": "passed"
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 0,
+      "attemptId": "attempt-cell-8afac631d4e02a6bae2bbb8469853a78170f2b4de4737d6edef62a3f7b366aa8",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLThhZmFjNjMxZDRlMDJhNmJhZTJiYmI4NDY5ODUzYTc4MTcwZjJiNGRlNDczN2Q2ZWRlZjYyYTNmN2IzNjZhYTg.json",
+      "sha256": "0254be2b279c2ab6fd846e15bbfda95decc91d3b46312ab10a1f90634d56a4ac",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 1,
+      "attemptId": "attempt-cell-8dedaf5e1e02304cba5d9e3ad3b7bd3f7b393bd40d46951d94689250ad9e3b1d",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLThkZWRhZjVlMWUwMjMwNGNiYTVkOWUzYWQzYjdiZDNmN2IzOTNiZDQwZDQ2OTUxZDk0Njg5MjUwYWQ5ZTNiMWQ.json",
+      "sha256": "a0d245bfda13cfba5865ff8d43b2d5e3ca924f44370f2e445340220587aa7bbe",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 2,
+      "attemptId": "attempt-cell-df7f8d868b47d37992f95035c5880ed55da03c7aaf509a8bde55ad5d731b4ac4",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWRmN2Y4ZDg2OGI0N2QzNzk5MmY5NTAzNWM1ODgwZWQ1NWRhMDNjN2FhZjUwOWE4YmRlNTVhZDVkNzMxYjRhYzQ.json",
+      "sha256": "0d455f5cfbbb4da2e9cf6a20e4ebae8c730c5f58a3cd220ddbd57037d7cd97f0",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 3,
+      "attemptId": "attempt-cell-89e9760e582dc6b129be024d7ea4acf857cc0775ae27ce0f7b18fbb5b4a269ef",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTg5ZTk3NjBlNTgyZGM2YjEyOWJlMDI0ZDdlYTRhY2Y4NTdjYzA3NzVhZTI3Y2UwZjdiMThmYmI1YjRhMjY5ZWY.json",
+      "sha256": "4eca66fef58d8284bef5257dc5514b533e79a57b934a89bb44ace8ace44c6614",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 4,
+      "attemptId": "attempt-cell-4512417ddc10d6077b451f7ea3b094c3b52963b3a109b92430ed4675ed3a2482",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTQ1MTI0MTdkZGMxMGQ2MDc3YjQ1MWY3ZWEzYjA5NGMzYjUyOTYzYjNhMTA5YjkyNDMwZWQ0Njc1ZWQzYTI0ODI.json",
+      "sha256": "c6791f7a2eb4f9276b5bbf39267d6d9ffd9fb9f2d0837c8b86d9be1155000829",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 5,
+      "attemptId": "attempt-cell-868a7e877aac3980db6f7b7293bda5a9cba70b93c115629cca1978567d5388b7",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTg2OGE3ZTg3N2FhYzM5ODBkYjZmN2I3MjkzYmRhNWE5Y2JhNzBiOTNjMTE1NjI5Y2NhMTk3ODU2N2Q1Mzg4Yjc.json",
+      "sha256": "a9dc57d6c4179ead71ef5824e1ba46b0a65e1d6b258fe7dbd74844986e54152c",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 6,
+      "attemptId": "attempt-cell-1dee9b61218d7c2a96ca6eec324e4486604900b2c8bac8cf0ba8b8f7ef642ca3",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTFkZWU5YjYxMjE4ZDdjMmE5NmNhNmVlYzMyNGU0NDg2NjA0OTAwYjJjOGJhYzhjZjBiYThiOGY3ZWY2NDJjYTM.json",
+      "sha256": "e94879adf9a256fe90bc6fd63b14dc326b011faa430eac2169798835a8816a8a",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 7,
+      "attemptId": "attempt-cell-4e877721af21d59ae2d0a4ab4b9d6ed6888c720c257763036d3ef5b628ad8d1d",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTRlODc3NzIxYWYyMWQ1OWFlMmQwYTRhYjRiOWQ2ZWQ2ODg4YzcyMGMyNTc3NjMwMzZkM2VmNWI2MjhhZDhkMWQ.json",
+      "sha256": "7b9e6d3165824aab857169b835c1f95621c46249fe18b0138af7aefe2956824d",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 8,
+      "attemptId": "attempt-cell-bd79ff6db92f0f8b77dd8d4dfc4d32a64a8dfa97ecdc18ffd8a3ffbe5b382d26",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWJkNzlmZjZkYjkyZjBmOGI3N2RkOGQ0ZGZjNGQzMmE2NGE4ZGZhOTdlY2RjMThmZmQ4YTNmZmJlNWIzODJkMjY.json",
+      "sha256": "1af28b24f5e694c5a8499ddb53cd0b97c0248523b74eb500e1144bc55169f288",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "openai/gpt-5.6-sol",
+      "repetition": 9,
+      "attemptId": "attempt-cell-902035f3e46e64ed6806f315183bc35a8def91444cbfa459c8a7546a6c2c9e5a",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTkwMjAzNWYzZTQ2ZTY0ZWQ2ODA2ZjMxNTE4M2JjMzVhOGRlZjkxNDQ0Y2JmYTQ1OWM4YTc1NDZhNmMyYzllNWE.json",
+      "sha256": "3fa1492c6a2d2e279eafc963d1ebd7d5f118c3b7cc82e7931c20f88f44ba5943",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 0,
+      "attemptId": "attempt-cell-033c6f87a83e28c52862d3910fd3b5cb4f2cfa62aa6179943aa47723c3943a90",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTAzM2M2Zjg3YTgzZTI4YzUyODYyZDM5MTBmZDNiNWNiNGYyY2ZhNjJhYTYxNzk5NDNhYTQ3NzIzYzM5NDNhOTA.json",
+      "sha256": "625fb6187e679f263e1600f67ac3b350888d5db05bb0e2a35ad782c1f97cb667",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 1,
+      "attemptId": "attempt-cell-41c143ec717f81f9984227b20f050e47c38698ffe5165ef0634438164088564d",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTQxYzE0M2VjNzE3ZjgxZjk5ODQyMjdiMjBmMDUwZTQ3YzM4Njk4ZmZlNTE2NWVmMDYzNDQzODE2NDA4ODU2NGQ.json",
+      "sha256": "505d2bc40ac592a6d2e1ade6b05e7df0062fa917dcd5c55b4f9c5b4fcb634d21",
+      "sampled": true,
+      "reviews": [],
+      "reviewerObservations": [],
+      "reviewCalls": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 2,
+      "attemptId": "attempt-cell-0fdcee143ec6cadf8bcdd6a5fc0cf4fd54deb1f3f2717d1c1f8d57b5aee585a1",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTBmZGNlZTE0M2VjNmNhZGY4YmNkZDZhNWZjMGNmNGZkNTRkZWIxZjNmMjcxN2QxYzFmOGQ1N2I1YWVlNTg1YTE.json",
+      "sha256": "0c88615f105255449d6357da4260b0daf5cf3144e1521597be8fa4f0364ec66c",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 3,
+      "attemptId": "attempt-cell-feadc2b1fe49cbd98a56fc0f55225aa025c1c49d95de45bc47e2838e02910144",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWZlYWRjMmIxZmU0OWNiZDk4YTU2ZmMwZjU1MjI1YWEwMjVjMWM0OWQ5NWRlNDViYzQ3ZTI4MzhlMDI5MTAxNDQ.json",
+      "sha256": "79d1fadcdf45dfe53ce1b2261d1ff05f8c3f275ac78dccf663103945b1c5de54",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 4,
+      "attemptId": "attempt-cell-d4913dfaeb2ea41197e27b0f95b0c794a817e9251cd5652fb7d8762ee49abbdd",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWQ0OTEzZGZhZWIyZWE0MTE5N2UyN2IwZjk1YjBjNzk0YTgxN2U5MjUxY2Q1NjUyZmI3ZDg3NjJlZTQ5YWJiZGQ.json",
+      "sha256": "e5b1e5424a26822e470073959c381ec65703438471e328f7bbd3670ecb5748b8",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 5,
+      "attemptId": "attempt-cell-dbb2d6ae2c231e7080aeca163b536dcbcecdbc7c17b11af8094b8bdce8b6f84b",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWRiYjJkNmFlMmMyMzFlNzA4MGFlY2ExNjNiNTM2ZGNiY2VjZGJjN2MxN2IxMWFmODA5NGI4YmRjZThiNmY4NGI.json",
+      "sha256": "0d981e749db21ffb683ded529a266adc690ee5552801a3e6e0820ed69a726bc4",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 6,
+      "attemptId": "attempt-cell-21e4fb510fdb0ec8fc4886f9e9c1e58c6a52dccf301ead1d1f4f4fb7ea16faf5",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTIxZTRmYjUxMGZkYjBlYzhmYzQ4ODZmOWU5YzFlNThjNmE1MmRjY2YzMDFlYWQxZDFmNGY0ZmI3ZWExNmZhZjU.json",
+      "sha256": "4a6e0a7eba30252072717d87c7154a241d2c3137944b9a464bd179ab5d303f4d",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 7,
+      "attemptId": "attempt-cell-5664a3310683db276b68a19d9835af0062bdfc49f583b6d4d930d87e5bd990af",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTU2NjRhMzMxMDY4M2RiMjc2YjY4YTE5ZDk4MzVhZjAwNjJiZGZjNDlmNTgzYjZkNGQ5MzBkODdlNWJkOTkwYWY.json",
+      "sha256": "843d061d32240125bb7d47d65e47aed0bcf99eda3750b66708273beab2d30314",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 8,
+      "attemptId": "attempt-cell-5c71d55a0ed564d7fe38e8bc78bf2b5b844233653f0d17bef713450449b2cc75",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLTVjNzFkNTVhMGVkNTY0ZDdmZTM4ZThiYzc4YmYyYjViODQ0MjMzNjUzZjBkMTdiZWY3MTM0NTA0NDliMmNjNzU.json",
+      "sha256": "aefffe0c9b987f15a900a4547b638c606b4147e0aa7580757df412079d8808f7",
+      "sampled": false,
+      "reviews": []
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "model": "xai/grok-4.6",
+      "repetition": 9,
+      "attemptId": "attempt-cell-fe94eec6113e726e2962c65046f05847dfdeca5afe7da3f5a0fca396e1d689a8",
+      "transcript": "transcripts/YXR0ZW1wdC1jZWxsLWZlOTRlZWM2MTEzZTcyNmUyOTYyYzY1MDQ2ZjA1ODQ3ZGZkZWNhNWFmZTdkYTNmNWEwZmNhMzk2ZTFkNjg5YTg.json",
+      "sha256": "75d537c9b09616540259ac395a861dd40b59129ae8ee8e9cd5b1332a28934c69",
+      "sampled": false,
+      "reviews": []
+    }
+  ]
+}
