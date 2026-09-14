@@ -14,7 +14,8 @@ Runtime source, lockfiles, dependencies, package exports, package scripts,
 engines, build configuration, and all guides other than flow-run must remain
 unchanged. Package metadata may change only its version. Only enumerated release
 scripts/workflows, offline evals, tests, plan records, documentation, and .gitignore
-may otherwise differ. Unknown paths fail. The build and packaging helpers are
+may otherwise differ. Unknown paths fail. Only adding the sealed patch-baseline directory to formatter exclusions is
+allowed in biome.json; all other settings must match. The build and packaging helpers are
 outside the allowlist. A new category requires an explicit reviewed policy change.
 
 The only shipped guide exception is a reviewed flow-run clarification. Its exact

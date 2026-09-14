@@ -88,6 +88,7 @@ export function assertPatchScope(input: {
 		if (
 			[
 				"package.json",
+				"biome.json",
 				"README.md",
 				"CHANGELOG.md",
 				".gitignore",
@@ -191,6 +192,24 @@ export async function assertPatchReleaseEvidence(
 		changedPaths,
 		guidance: record.guidance,
 	});
+	if (changedPaths.includes("biome.json")) {
+		const oldConfig = JSON.parse(
+			await git(root, [
+				"show",
+				`${record.baseline.artifact.sourceCommit}:biome.json`,
+			]),
+		);
+		const newConfig = JSON.parse(
+			await readFile(resolve(root, "biome.json"), "utf8"),
+		);
+		newConfig.files.includes = newConfig.files.includes.filter(
+			(path: string) => path !== "!evals/qualification/patch-baselines",
+		);
+		if (canonicalJson(oldConfig) !== canonicalJson(newConfig))
+			throw new Error(
+				"Only the sealed patch baseline formatter exclusion may change.",
+			);
+	}
 	for (const entry of record.guidance) {
 		for (const revision of [record.baseline.artifact.sourceCommit, "HEAD"]) {
 			if (

@@ -83,6 +83,10 @@ async function fixture() {
 	await mkdir(join(root, "src"));
 	await mkdir(join(root, "skills/flow-run"), { recursive: true });
 	await writeFile(join(root, "package.json"), JSON.stringify(metadata));
+	await writeFile(
+		join(root, "biome.json"),
+		JSON.stringify({ files: { includes: ["**"] } }),
+	);
 	await writeFile(join(root, "src/index.ts"), "export const fixed = true;\n");
 	await writeFile(join(root, "skills/flow-run/SKILL.md"), "original");
 	await git(root, "add", ".");
@@ -218,5 +222,27 @@ test("expired or invalid baseline evidence and changed seals remain fatal", asyn
 	await f.writeRecord();
 	await expect(assertPatchReleaseEvidence(f.input, f.verify)).rejects.toThrow(
 		"bundle changed",
+	);
+});
+
+test("permits only the exact sealed-data formatter exclusion", async () => {
+	const f = await fixture();
+	await writeFile(
+		join(f.root, "biome.json"),
+		JSON.stringify({
+			files: { includes: ["**", "!evals/qualification/patch-baselines"] },
+		}),
+	);
+	await git(f.root, "add", ".");
+	await git(f.root, "commit", "-m", "exclude sealed bytes");
+	await assertPatchReleaseEvidence(f.input, f.verify);
+	await writeFile(
+		join(f.root, "biome.json"),
+		JSON.stringify({ files: { includes: ["**", "!src"] } }),
+	);
+	await git(f.root, "add", ".");
+	await git(f.root, "commit", "-m", "alter lint coverage");
+	await expect(assertPatchReleaseEvidence(f.input, f.verify)).rejects.toThrow(
+		"formatter exclusion",
 	);
 });
