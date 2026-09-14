@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import { inspectArtifact } from "../evals/provenance.js";
 import packageJson from "../package.json" with { type: "json" };
+import { assertReviewerPickerReleaseEvidence } from "./feature-release.js";
 import { writeBytesExclusive, writeExclusive } from "./lib/exclusive-json.js";
 import { assertPatchReleaseEvidence } from "./patch-release.js";
 import {
@@ -39,6 +40,7 @@ export const ReleaseRecordSchema = z
 		notes: File,
 		canary: z.string().min(1),
 		patch: z.string().min(1).optional(),
+		feature: z.string().min(1).optional(),
 		bundles: z.string().min(1),
 		bundleSha256: Hash,
 		creationOwner: z.string().min(1),
@@ -153,6 +155,7 @@ export async function resumeRelease(
 		});
 		const result = await verifyReleaseEvidence({
 			...(record.patch ? { patch: record.patch } : {}),
+			...(record.feature ? { feature: record.feature } : {}),
 			version: record.version,
 			tag: record.tag,
 			canaryPath: record.canary,
@@ -209,8 +212,21 @@ export async function resumeRelease(
 }
 
 export async function verifyReleaseEvidence(
-	input: Parameters<typeof assertStrictReleaseEvidence>[0] & { patch?: string },
+	input: Parameters<typeof assertStrictReleaseEvidence>[0] & {
+		patch?: string;
+		feature?: string;
+	},
 ) {
+	if (input.patch && input.feature)
+		throw new Error("Conflicting qualification modes.");
+	if (input.feature)
+		return assertReviewerPickerReleaseEvidence({
+			path: input.feature,
+			expectedArtifact: input.expectedArtifact,
+			bundlesDirectory:
+				input.bundlesDirectory ??
+				".agents/plans/08-reviewer-picker-release/baselines",
+		});
 	if (input.patch)
 		return assertPatchReleaseEvidence({
 			path: input.patch,
@@ -235,16 +251,23 @@ async function initialize(directory: string, options: Map<string, string>) {
 	const commit = required("--commit");
 	const artifactPath = required("--artifact");
 	const patch = options.get("--patch");
-	if (patch && options.has("--canary"))
-		throw new Error("Choose full or patch qualification, not both.");
-	const canary = patch
-		? "not-run:baseline-qualified-patch"
-		: required("--canary");
+	const feature = options.get("--feature");
+	if ([patch, feature, options.get("--canary")].filter(Boolean).length !== 1)
+		throw new Error(
+			"Choose exactly one qualification mode: canary, patch, or feature.",
+		);
+	const canary = feature
+		? "not-run:reviewed-offline-feature"
+		: patch
+			? "not-run:baseline-qualified-patch"
+			: required("--canary");
 	const bundles =
 		options.get("--bundles") ??
-		(patch
-			? "evals/qualification/patch-baselines"
-			: "evals/qualification/bundles");
+		(feature
+			? ".agents/plans/08-reviewer-picker-release/baselines"
+			: patch
+				? "evals/qualification/patch-baselines"
+				: "evals/qualification/bundles");
 	const metadata = JSON.parse(await readFile("package.json", "utf8"));
 	const tag = `v${metadata.version}`;
 	const artifact = await inspectArtifact({
@@ -253,6 +276,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 	});
 	const evidence = await verifyReleaseEvidence({
 		...(patch ? { patch } : {}),
+		...(feature ? { feature } : {}),
 		version: metadata.version,
 		tag,
 		canaryPath: canary,
@@ -270,6 +294,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 			record.bundleSha256 !== evidence.bundleSha256 ||
 			record.canary !== canary ||
 			record.patch !== patch ||
+			record.feature !== feature ||
 			record.bundles !== bundles
 		)
 			throw new Error(
@@ -325,6 +350,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 		notes: await file("release-notes.md"),
 		canary,
 		...(patch ? { patch } : {}),
+		...(feature ? { feature } : {}),
 		bundles,
 		bundleSha256: evidence.bundleSha256,
 		creationOwner: owner(),
@@ -336,7 +362,7 @@ async function main(args: string[]) {
 	const [command, path, ...rest] = args;
 	if (!command || command === "--help") {
 		console.log(
-			"release init <directory> --artifact <tgz> (--canary <json> | --patch <json>) --commit <sha> [--bundles <directory>] | status <directory> | resume <directory>",
+			"release init <directory> --artifact <tgz> (--canary <json> | --patch <json> | --feature <json>) --commit <sha> [--bundles <directory>] | status <directory> | resume <directory>",
 		);
 		return;
 	}
@@ -353,6 +379,7 @@ async function main(args: string[]) {
 					"--artifact",
 					"--canary",
 					"--patch",
+					"--feature",
 					"--commit",
 					"--bundles",
 				].includes(key) ||

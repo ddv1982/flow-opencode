@@ -14,8 +14,10 @@ Choose Flow's global reviewer model from OpenCode's terminal UI.
   resetting restores saved plugin/environment options without rewriting them.
 - Add the optional `./tui` package entry point. Reinstall with
   `opencode plugin opencode-plugin-flow@8.4.0 --global --force` to register it.
-- Session v5 schema and Flow lifecycle tools are unchanged. This feature requires
-  its own release qualification; the previous patch declaration does not apply.
+- Session v5 schema and Flow lifecycle tools are unchanged.
+- Qualification uses a specifically reviewed offline path for the frozen picker.
+  No live model eval or canary ran for 8.4.0. Prior 8.3.0 results remain baseline
+  evidence only; reviewed code and provider-free checks support this release.
 
 ## [8.3.1] - 2026-09-14
 
