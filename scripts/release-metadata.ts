@@ -96,7 +96,9 @@ export function releaseEvidenceSummary(input: {
 	};
 }
 
-function releaseEvidenceMarkdown(summary: ReleaseEvidenceSummary): string {
+export function releaseEvidenceMarkdown(
+	summary: ReleaseEvidenceSummary,
+): string {
 	return [
 		"## Qualification evidence",
 		"",

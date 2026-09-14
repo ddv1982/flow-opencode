@@ -92,6 +92,7 @@ jobs:
       cancel-in-progress: false
     permissions:
       contents: write
+      actions: read
       id-token: write
     steps:
       - name: Check out repository
@@ -122,10 +123,6 @@ jobs:
         timeout-minutes: 5
         run: bun install --frozen-lockfile
 
-      - name: Validate release tag and changelog
-        timeout-minutes: 2
-        run: bun run release:metadata -- --tag "${{ needs.decide.outputs.tag }}" --notes-file release-notes.md
-
       - name: Run checks
         timeout-minutes: 10
         run: bun run check
@@ -141,6 +138,25 @@ jobs:
           set -euo pipefail
           bun pm pack --destination .
 
+      - name: Restore release record from this workflow run
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          count="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" --jq 'if .total_count > 100 then error("Artifact inventory exceeds limit") else [.artifacts[] | select(.name == "release-state" and .expired == false)] | length end')"
+          if [ "$count" = 1 ]; then
+            gh run download "$GITHUB_RUN_ID" --name release-state --dir .release-state
+            echo "restored=true" >> "$GITHUB_OUTPUT"
+          elif [ "$count" != 0 ]; then
+            echo "::error::Ambiguous release-state artifact."
+            exit 1
+          elif [ "$GITHUB_RUN_ATTEMPT" != 1 ]; then
+            echo "::error::Prior release record is unavailable. Inspect the previous attempt before creating a new record."
+            exit 1
+          fi
+
       - name: Verify independently regraded qualification bundle and fresh canary
         timeout-minutes: 5
         shell: bash
@@ -148,51 +164,27 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
-          bun run release:metadata -- \
-            --tag "${{ needs.decide.outputs.tag }}" \
-            --notes-file release-notes.md \
+          bun run scripts/release.ts init .release-state \
             --artifact "$tarball" \
-            --canary "evals/canary/${version}.json"
-          shasum -a 256 "$tarball" > "${tarball}.sha256"
+            --canary "evals/canary/${version}.json" \
+            --commit "${GITHUB_SHA}"
 
-      - name: Prepare exact GitHub release draft
-        timeout-minutes: 15
+      - name: Persist release record before publication
+        if: steps.restore.outputs.restored != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-state
+          path: .release-state/
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Resume verified publication
+        timeout-minutes: 20
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ needs.decide.outputs.tag }}"
-          tarball="$(ls opencode-plugin-flow-*.tgz)"
-          bun run scripts/release-publish.ts github-prepare \
-            --tag "$tag" \
-            --commit "${GITHUB_SHA}" \
-            --notes release-notes.md \
-            --asset "$tarball" \
-            --asset "${tarball}.sha256"
+        run: bun run scripts/release.ts resume .release-state
 
-      - name: Publish to npm after a current-main proof
-        timeout-minutes: 10
-        shell: bash
-        run: |
-          set -euo pipefail
-          tarball="$(ls opencode-plugin-flow-*.tgz)"
-          bun run scripts/release-publish.ts npm \
-            --artifact "$tarball" \
-            --tag "${{ needs.decide.outputs.tag }}"
-
-      - name: Publish the exact GitHub release draft
-        timeout-minutes: 15
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          tag="${{ needs.decide.outputs.tag }}"
-          tarball="$(ls opencode-plugin-flow-*.tgz)"
-          bun run scripts/release-publish.ts github-publish \
-            --tag "$tag" \
-            --commit "${GITHUB_SHA}" \
-            --notes release-notes.md \
-            --asset "$tarball" \
-            --asset "${tarball}.sha256"
+      - name: Report release state
+        if: always()
+        run: bun run scripts/release.ts status .release-state

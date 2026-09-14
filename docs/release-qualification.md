@@ -94,10 +94,8 @@ on the canonical Linux host. Run a fresh canary against its exact `artifact.tgz`
 seal/regrade the bundle, and commit only evidence without changing measured inputs.
 Recheck final main CI and exact artifact identity before tagging `v<package-version>`.
 
-For 8.2.1, strict exact-artifact qualification remains in force. A dev-only manifest
-change still changes the packed artifact; evidence reuse needs a separate policy
-decision. Stop for fixes rather than silently restarting paid runs. Operator or
-budget-stopped campaigns cannot qualify, even if retained scores meet the target.
+Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
+Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
 
 ```bash
 bun run eval -- --release --model openai/gpt-5.6-sol --model xai/grok-4.6
@@ -114,7 +112,6 @@ they do not replace the full matrix. `bun run triage` identifies runs worth read
 `bun run benchmark -- --model <id> --repeat 3 --seed <text>` compares Flow with
 ordinary OpenCode on hidden-graded tasks. It is not a qualification input.
 
-The scheduled workflow runs the paid campaign weekly and publishes its complete
-campaign directory. Sealing waits for the exact-artifact canary, so the workflow
-reports qualification as inconclusive rather than manufacturing a partial bundle.
-It skips itself when no model matrix or provider credentials are configured.
+Scheduled campaigns require explicit authorization and a dispatch budget.
+They retain the ledger and complete campaign directory. Sealing still requires
+the exact-artifact canary. Workflow retries never start another paid campaign.
