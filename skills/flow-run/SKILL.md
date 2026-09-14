@@ -113,7 +113,13 @@ last relevant edit.
 
 After successful applicable validation, call `flow_review_start` with a fresh
 operation id, current revision, feature id, `artifactsChanged`, and a bounded
-packet. For persistence, schema, migration, replay, or recovery work, add only
+packet. In its summary, supply the manager-owned baseline inventory for the
+complete feature base diff: additions, modifications, deletions, renames, file
+types, generated artifacts, and mode changes. Identify unrelated pre-existing
+work. Report observed facts and any missing or conflicting evidence explicitly;
+do not imply Flow attests inventory completeness.
+
+For persistence, schema, migration, replay, or recovery work, add only
 the relevant full questions to `riskLenses`: can interruption leave partial
 state; are retry and replay idempotent; can older state or readers fail visibly;
 does rollback preserve data? For public API, config, command, package, or
