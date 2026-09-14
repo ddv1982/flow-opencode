@@ -4,7 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { z } from "zod";
 import { inspectArtifact } from "../evals/provenance.js";
 import packageJson from "../package.json" with { type: "json" };
-import { assertReviewerPickerReleaseEvidence } from "./feature-release.js";
+import { assertOfflineFeatureReleaseEvidence } from "./feature-release.js";
 import { writeBytesExclusive, writeExclusive } from "./lib/exclusive-json.js";
 import { assertPatchReleaseEvidence } from "./patch-release.js";
 import {
@@ -220,7 +220,7 @@ export async function verifyReleaseEvidence(
 	if (input.patch && input.feature)
 		throw new Error("Conflicting qualification modes.");
 	if (input.feature)
-		return assertReviewerPickerReleaseEvidence({
+		return assertOfflineFeatureReleaseEvidence({
 			path: input.feature,
 			expectedArtifact: input.expectedArtifact,
 			bundlesDirectory:

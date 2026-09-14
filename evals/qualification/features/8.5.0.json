@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"kind": "reviewed-offline-feature",
+	"version": "8.5.0",
+	"baseline": {
+		"commit": "3edd7034f9ce94a911132e4ae4e21ad893a7e53a",
+		"artifact": {
+			"packageVersion": "8.3.0",
+			"sourceCommit": "ac4fdb8ca6d9f4315c11c3d1fb142a6b15c9067f",
+			"sourceTreeSha256": "sha256:f4659b8c7cd20afd31de3bb5edfff216b020b2c7ca8fc4c375493d4662a7fc34",
+			"tarballSha256": "sha256:f2cad40877d616a25df9f675ddbd4aeb0e0a6a342ef246e5d109a3978c891563",
+			"unpackedManifestSha256": "sha256:28564da328dee6369ef1befccfb4977efe7b4fc010908800dec0de695f99a5d0"
+		},
+		"canary": "evals/canary/8.3.0.json",
+		"bundleSha256": "sha256:af18b890822b62b28fed6d6228818df42125d0daa37a3d0c2e9de35539dc9e3b"
+	},
+	"artifact": {
+		"packageVersion": "8.5.0",
+		"tarballSha256": "sha256:c52f4c462e06b659f08d0667cea018cc5e256480b770fb0e5ae311234a390288",
+		"unpackedManifestSha256": "sha256:73c916b2cf9446c77c4426910750f502de70972b270e0d98b02322a22a9bacbd"
+	},
+	"guidance": [
+		{
+			"path": "skills/flow-plan/SKILL.md",
+			"sha256": "sha256:b3f0151a38cf40091486a89d14ce77bf7773d96df48776ed76a6961f39ecb2e6",
+			"rationale": "PR #80 documents the optional read-only planning specialist and the approval handoff. The manager still checks the draft, saves the plan and keeps approval and implementation authority; gates and evidence obligations are unchanged."
+		},
+		{
+			"path": "skills/flow-run/SKILL.md",
+			"sha256": "sha256:80e8a41f9a81c39ea1ba4dba1fe35dcef5927e41c7238039598fe48e08fad427",
+			"rationale": "Unchanged since the reviewed 8.4.0 clarification of the independent reviewer inventory obligation. It is restated here because this record measures against the 8.3.0 baseline, where that clarification is part of the diff."
+		}
+	],
+	"approvedBy": "Operator approval in this Claude Code session, 2026-09-15",
+	"rationale": "Explicitly authorized offline qualification for the reviewed 8.5.0 planning-model selector. Candidate code and packaging are frozen to PR #80 as reviewed and fixed at c0064dc. The last live-measured release remains 8.3.0; 8.4.0 was also qualified offline and is not treated as a baseline. No new live model eval or canary was authorized or run.",
+	"feature": "planning-models-v1",
+	"reviewedCommit": "c0064dc68cb7f8424ed4d5673b3faad9580d1dac"
+}

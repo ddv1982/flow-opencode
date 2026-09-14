@@ -12,7 +12,14 @@ import {
 } from "./patch-release.js";
 import { assertStrictReleaseEvidence } from "./release-metadata.js";
 
-// This one reviewed feature is authorized; this is not a configurable allowlist.
+/**
+ * Every offline feature release is measured against this baseline, the last
+ * release with a live multi-provider campaign and canary. Offline releases do
+ * not become baselines: chaining one onto another would let the newest measured
+ * evidence silently recede while each record still claimed a qualified parent.
+ */
+export const OFFLINE_FEATURE_BASELINE = "8.3.0";
+
 export const REVIEWER_PICKER_COMMIT =
 	"ff605d9bb7e814cddd4d22f7e55ca251f8de60bc";
 export const REVIEWER_PICKER_FILES = [
@@ -28,27 +35,112 @@ export const REVIEWER_PICKER_FILES = [
 	"src/platform/opencode/reviewer-picker.ts",
 	"src/tui.ts",
 ] as const;
-export const ReviewerPickerReleaseSchema = PatchReleaseSchema.extend({
-	kind: z.literal("reviewed-offline-feature"),
-	feature: z.literal("reviewer-picker-v1"),
-	version: z.literal("8.4.0"),
-	reviewedCommit: z.literal(REVIEWER_PICKER_COMMIT),
-});
 
-export function assertReviewerPickerScope(input: {
+export const PLANNING_MODELS_COMMIT =
+	"c0064dc68cb7f8424ed4d5673b3faad9580d1dac";
+export const PLANNING_MODELS_FILES = [
+	"skills/flow-plan/SKILL.md",
+	"skills/flow-run/SKILL.md",
+	"package.json",
+	"tsconfig.types.json",
+	"scripts/lib/package-surface.ts",
+	"src/config-shared.ts",
+	"src/prompt-surfaces.ts",
+	"src/platform/opencode/config.ts",
+	"src/platform/opencode/model-picker.ts",
+	"src/platform/opencode/plugin.ts",
+	"src/platform/opencode/sdk.ts",
+	"src/platform/opencode/tools.ts",
+	"src/tui.ts",
+] as const;
+
+export type OfflineFeature = Readonly<{
+	version: string;
+	feature: string;
+	reviewedCommit: string;
+	files: readonly string[];
+	guidance: readonly string[];
+}>;
+
+/**
+ * The individually reviewed features authorized to release offline. Each entry
+ * names one version, one reviewed commit and the exact code frozen to it.
+ * Adding an entry is a source change that needs review and merge; this is not a
+ * configurable allowlist, and a record naming anything absent here is refused.
+ */
+export const OFFLINE_FEATURES: readonly OfflineFeature[] = [
+	{
+		version: "8.4.0",
+		feature: "reviewer-picker-v1",
+		reviewedCommit: REVIEWER_PICKER_COMMIT,
+		files: REVIEWER_PICKER_FILES,
+		guidance: ["skills/flow-run/SKILL.md"],
+	},
+	{
+		version: "8.5.0",
+		feature: "planning-models-v1",
+		reviewedCommit: PLANNING_MODELS_COMMIT,
+		files: PLANNING_MODELS_FILES,
+		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
+	},
+];
+
+/** The authorized feature for this record, or a refusal when none exists. */
+export function offlineFeature(input: {
+	version: unknown;
+	feature: unknown;
+}): OfflineFeature {
+	const entry = OFFLINE_FEATURES.find(
+		(candidate) =>
+			candidate.version === input.version &&
+			candidate.feature === input.feature,
+	);
+	if (!entry)
+		throw new Error(
+			"No reviewed offline feature authorizes this release version.",
+		);
+	return entry;
+}
+
+const Hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const Text = z.string().trim().min(1).max(4096);
+
+export function offlineFeatureSchema(entry: OfflineFeature) {
+	const paths = entry.guidance as readonly [string, ...string[]];
+	return PatchReleaseSchema.extend({
+		kind: z.literal("reviewed-offline-feature"),
+		feature: z.literal(entry.feature),
+		version: z.literal(entry.version),
+		reviewedCommit: z.literal(entry.reviewedCommit),
+		guidance: z
+			.array(
+				z
+					.object({
+						path: z.enum(paths),
+						sha256: Hash,
+						rationale: Text,
+					})
+					.strict(),
+			)
+			.max(entry.guidance.length),
+	});
+}
+
+export function assertOfflineFeatureScope(input: {
+	entry: OfflineFeature;
 	changedPaths: readonly string[];
-	guidance: z.infer<typeof ReviewerPickerReleaseSchema>["guidance"];
+	guidance: readonly { readonly path: string }[];
 	baselinePackage: Record<string, unknown>;
 	package: Record<string, unknown>;
 	reviewedEntries: Readonly<Record<string, string>>;
 	candidateEntries: Readonly<Record<string, string>>;
 }) {
 	if (
-		input.baselinePackage.version !== "8.3.0" ||
-		input.package.version !== "8.4.0"
+		input.baselinePackage.version !== OFFLINE_FEATURE_BASELINE ||
+		input.package.version !== input.entry.version
 	)
 		throw new Error(
-			"This feature exception only covers 8.4.0 from the fully qualified 8.3.0 baseline.",
+			`This feature exception only covers ${input.entry.version} from the fully qualified ${OFFLINE_FEATURE_BASELINE} baseline.`,
 		);
 	for (const key of [
 		"name",
@@ -65,24 +157,25 @@ export function assertReviewerPickerScope(input: {
 		)
 			throw new Error(`Feature exception cannot change ${key}.`);
 	}
-	for (const path of REVIEWER_PICKER_FILES) {
+	for (const path of input.entry.files) {
 		const reviewed = input.reviewedEntries[path];
 		if (
 			!reviewed?.startsWith("100644 blob ") ||
 			reviewed !== input.candidateEntries[path]
 		)
-			throw new Error(`Candidate differs from reviewed picker code: ${path}`);
+			throw new Error(`Candidate differs from reviewed feature code: ${path}`);
 	}
-	const approved = new Set<string>(REVIEWER_PICKER_FILES);
+	const approved = new Set<string>(input.entry.files);
+	const guides = new Set<string>(input.entry.guidance);
 	assertPatchPaths({
 		changedPaths: input.changedPaths.filter(
-			(path) => !approved.has(path) || path === "skills/flow-run/SKILL.md",
+			(path) => !approved.has(path) || guides.has(path),
 		),
 		guidance: input.guidance,
 	});
 }
 
-export async function assertReviewerPickerReleaseEvidence(input: {
+export async function assertOfflineFeatureReleaseEvidence(input: {
 	path: string;
 	expectedArtifact: ArtifactIdentity;
 	bundlesDirectory: string;
@@ -90,9 +183,15 @@ export async function assertReviewerPickerReleaseEvidence(input: {
 }) {
 	const root = resolve(input.repositoryRoot ?? process.cwd());
 	const bytes = await readFile(input.path);
-	const record = ReviewerPickerReleaseSchema.parse(
-		JSON.parse(bytes.toString("utf8")),
-	);
+	const parsed = JSON.parse(bytes.toString("utf8")) as {
+		version?: unknown;
+		feature?: unknown;
+	};
+	const entry = offlineFeature({
+		version: parsed.version,
+		feature: parsed.feature,
+	});
+	const record = offlineFeatureSchema(entry).parse(parsed);
 	if (
 		record.artifact.packageVersion !== record.version ||
 		!samePackedArtifact(record.artifact, input.expectedArtifact)
@@ -105,11 +204,16 @@ export async function assertReviewerPickerReleaseEvidence(input: {
 	)
 		throw new Error("Feature qualification requires a clean checkout.");
 	const base = record.baseline.artifact;
-	if (base.packageVersion !== "8.3.0")
-		throw new Error("Feature requires the fully qualified 8.3.0 baseline.");
+	if (base.packageVersion !== OFFLINE_FEATURE_BASELINE)
+		throw new Error(
+			`Feature requires the fully qualified ${OFFLINE_FEATURE_BASELINE} baseline.`,
+		);
 	if (
 		(
-			await releaseGit(root, ["rev-parse", "refs/tags/v8.3.0^{commit}"])
+			await releaseGit(root, [
+				"rev-parse",
+				`refs/tags/v${OFFLINE_FEATURE_BASELINE}^{commit}`,
+			])
 		).trim() !== record.baseline.commit
 	)
 		throw new Error("Baseline tag/commit mismatch.");
@@ -123,12 +227,12 @@ export async function assertReviewerPickerReleaseEvidence(input: {
 		"merge-base",
 		"--is-ancestor",
 		record.baseline.commit,
-		REVIEWER_PICKER_COMMIT,
+		entry.reviewedCommit,
 	]);
 	await releaseGit(root, [
 		"merge-base",
 		"--is-ancestor",
-		REVIEWER_PICKER_COMMIT,
+		entry.reviewedCommit,
 		"HEAD",
 	]);
 	const changedPaths = (
@@ -146,20 +250,21 @@ export async function assertReviewerPickerReleaseEvidence(input: {
 	const entries = async (revision: string) =>
 		Object.fromEntries(
 			await Promise.all(
-				REVIEWER_PICKER_FILES.map(async (path) => [
+				entry.files.map(async (path) => [
 					path,
 					await releaseGit(root, ["ls-tree", revision, "--", path]),
 				]),
 			),
 		);
-	assertReviewerPickerScope({
+	assertOfflineFeatureScope({
+		entry,
 		changedPaths,
 		guidance: record.guidance,
 		baselinePackage: JSON.parse(
 			await releaseGit(root, ["show", `${base.sourceCommit}:package.json`]),
 		),
 		package: JSON.parse(await readFile(resolve(root, "package.json"), "utf8")),
-		reviewedEntries: await entries(REVIEWER_PICKER_COMMIT),
+		reviewedEntries: await entries(entry.reviewedCommit),
 		candidateEntries: await entries("HEAD"),
 	});
 	// The formatter configuration was already reviewed with the 8.3.1 policy.
@@ -167,7 +272,7 @@ export async function assertReviewerPickerReleaseEvidence(input: {
 		(
 			await releaseGit(root, [
 				"diff",
-				REVIEWER_PICKER_COMMIT,
+				entry.reviewedCommit,
 				"HEAD",
 				"--",
 				"biome.json",
@@ -202,12 +307,12 @@ export async function assertReviewerPickerReleaseEvidence(input: {
 		notes: [
 			"## Reviewed offline feature qualification",
 			"",
-			`Policy: reviewer-picker-v1, for 8.4.0 only. Reviewed code: ${REVIEWER_PICKER_COMMIT}.`,
+			`Policy: ${entry.feature}, for ${entry.version} only. Reviewed code: ${entry.reviewedCommit}.`,
 			`Candidate artifact: ${record.artifact.tarballSha256}. Qualification record: ${recordHash}.`,
-			"No live model evals or canary were run for 8.4.0. Reviewed code, deterministic checks, replay and provider-free OpenCode UI/configuration checks support this feature release; they do not establish its live model behavior.",
-			`Prior measured artifact (8.3.0): ${base.tarballSha256}.`,
+			`No live model evals or canary were run for ${entry.version}. Reviewed code, deterministic checks, replay and provider-free OpenCode UI/configuration checks support this feature release; they do not establish its live model behavior.`,
+			`Prior measured artifact (${OFFLINE_FEATURE_BASELINE}): ${base.tarballSha256}.`,
 			`Prior bundle: ${baseline.bundleSha256}. Prior canary: ${baseline.summary.canarySha256}.`,
-			`Prior results only: ${baseline.summary.totals.passed}/${baseline.summary.totals.scored}. These are not measurements of 8.4.0.`,
+			`Prior results only: ${baseline.summary.totals.passed}/${baseline.summary.totals.scored}. These are not measurements of ${entry.version}, and no release after ${OFFLINE_FEATURE_BASELINE} has been measured live.`,
 			`Scope approval: ${record.approvedBy}. ${record.rationale}`,
 		].join("\n"),
 	};

@@ -84,13 +84,13 @@ export function assertPatchScope(input: {
 
 export function assertPatchPaths(input: {
 	changedPaths: readonly string[];
-	guidance: PatchRelease["guidance"];
+	guidance: readonly { readonly path: string }[];
 }) {
-	const guides = new Set(input.guidance.map((entry) => entry.path));
+	const guides = new Set<string>(input.guidance.map((entry) => entry.path));
 	if (guides.size !== input.guidance.length)
 		throw new Error("Duplicate guidance approval.");
 	for (const path of input.changedPaths) {
-		if (guides.has(path as "skills/flow-run/SKILL.md")) continue;
+		if (guides.has(path)) continue;
 		if (/^(?:docs\/|tests\/|evals\/|\.agents\/plans\/)/.test(path)) continue;
 		if (
 			[
