@@ -60,6 +60,14 @@ export type OfflineFeature = Readonly<{
 	reviewedCommit: string;
 	files: readonly string[];
 	guidance: readonly string[];
+	/**
+	 * The baseline seal retained for this release. The grader closure covers
+	 * prompt surfaces and guides, so a feature that edits them invalidates every
+	 * earlier seal. Each entry therefore keeps its own regrade of the same
+	 * original 8.3.0 evidence, and the directory is code-owned so no record or
+	 * command-line override can redirect a release to another seal.
+	 */
+	baselines: string;
 }>;
 
 /**
@@ -75,6 +83,7 @@ export const OFFLINE_FEATURES: readonly OfflineFeature[] = [
 		reviewedCommit: REVIEWER_PICKER_COMMIT,
 		files: REVIEWER_PICKER_FILES,
 		guidance: ["skills/flow-run/SKILL.md"],
+		baselines: ".agents/plans/08-reviewer-picker-release/baselines",
 	},
 	{
 		version: "8.5.0",
@@ -82,6 +91,7 @@ export const OFFLINE_FEATURES: readonly OfflineFeature[] = [
 		reviewedCommit: PLANNING_MODELS_COMMIT,
 		files: PLANNING_MODELS_FILES,
 		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
+		baselines: ".agents/plans/09-planning-models/baselines",
 	},
 ];
 
@@ -297,7 +307,7 @@ export async function assertOfflineFeatureReleaseEvidence(input: {
 		version: base.packageVersion,
 		expectedArtifact: base,
 		canaryPath: record.baseline.canary,
-		bundlesDirectory: input.bundlesDirectory,
+		bundlesDirectory: resolve(root, entry.baselines),
 	});
 	if (baseline.bundleSha256 !== record.baseline.bundleSha256)
 		throw new Error("Baseline seal mismatch.");
@@ -316,4 +326,16 @@ export async function assertOfflineFeatureReleaseEvidence(input: {
 			`Scope approval: ${record.approvedBy}. ${record.rationale}`,
 		].join("\n"),
 	};
+}
+
+/** The code-owned baseline seal directory this record's feature must use. */
+export async function offlineFeatureBaselines(path: string): Promise<string> {
+	const parsed = JSON.parse(await readFile(path, "utf8")) as {
+		version?: unknown;
+		feature?: unknown;
+	};
+	return offlineFeature({
+		version: parsed.version,
+		feature: parsed.feature,
+	}).baselines;
 }
