@@ -1,16 +1,25 @@
 import { expect, test } from "bun:test";
-import { resolveFlowReviewerConfiguration } from "../src/config-shared.js";
+import {
+	createFlowCoreConfigEntries,
+	resolveFlowReviewerConfiguration,
+} from "../src/config-shared.js";
 import { createConfigHook } from "../src/platform/opencode/config.js";
 import {
 	applyReviewerPreference,
-	reviewerChoices,
-	reviewerPreference,
-	reviewerPreferencePatch,
-} from "../src/platform/opencode/reviewer-picker.js";
+	modelChoices,
+	modelPreference,
+	modelPreferencePatch,
+} from "../src/platform/opencode/model-picker.js";
 import type { HostConfig, Provider } from "../src/platform/opencode/sdk.js";
 import picker from "../src/tui.js";
 
+const reviewPreferencePatch = (model: string) =>
+	modelPreferencePatch("review", model);
+const reviewPreference = (config: { agent?: Record<string, unknown> }) =>
+	modelPreference(config, "review");
+
 const config: HostConfig = {
+	model: "test/coding",
 	plugin: [
 		"other-plugin",
 		[
@@ -50,16 +59,16 @@ const provider = {
 } as unknown as Provider;
 
 test("lists connected coding models without requiring a paid probe", () => {
-	expect(
-		reviewerChoices([provider], ["test"]).map((item) => item.value),
-	).toEqual(["test/luna"]);
-	expect(reviewerChoices([provider], [])).toEqual([]);
+	expect(modelChoices([provider], ["test"]).map((item) => item.value)).toEqual([
+		"test/luna",
+	]);
+	expect(modelChoices([provider], [])).toEqual([]);
 });
 test("writes one preference without copying plugins or credentials", () => {
-	expect(reviewerPreferencePatch("test/luna")).toEqual({
+	expect(reviewPreferencePatch("test/luna")).toEqual({
 		agent: { "flow-reviewer": { options: { flowReviewerModel: "test/luna" } } },
 	});
-	expect(reviewerPreferencePatch("")).toEqual({
+	expect(reviewPreferencePatch("")).toEqual({
 		agent: { "flow-reviewer": { options: { flowReviewerModel: "" } } },
 	});
 	const base = {
@@ -81,14 +90,14 @@ test("writes one preference without copying plugins or credentials", () => {
 	});
 	expect(applyReviewerPreference(base, "")).toBe(base);
 	expect(
-		reviewerPreference({
+		reviewPreference({
 			agent: {
 				"flow-reviewer": { options: { flowReviewerModel: "test/luna" } },
 			},
 		}),
 	).toBe("test/luna");
 	expect(() =>
-		reviewerPreference({
+		reviewPreference({
 			agent: { "flow-reviewer": { options: { flowReviewerModel: 42 } } },
 		}),
 	).toThrow();
@@ -96,11 +105,12 @@ test("writes one preference without copying plugins or credentials", () => {
 
 async function host(preference?: string) {
 	let current = structuredClone(config);
-	if (preference) current.agent = reviewerPreferencePatch(preference).agent;
+	if (preference) current.agent = reviewPreferencePatch(preference).agent;
 	let connected = ["test"];
 	let busy = false;
 	let writes = 0;
-	let command: { slashName: string; run(): Promise<void> } | undefined;
+	const commands: Array<{ slashName: string; run(): void | Promise<void> }> =
+		[];
 	let select:
 		| {
 				options: Array<{ value: string }>;
@@ -113,8 +123,8 @@ async function host(preference?: string) {
 		lifecycle: { signal: new AbortController().signal },
 		state: { ready: true, path: { directory: "/fixture" } },
 		keymap: {
-			registerLayer: ({ commands }: { commands: [typeof command] }) => {
-				command = commands[0];
+			registerLayer: (layer: { commands: typeof commands }) => {
+				commands.splice(0, commands.length, ...layer.commands);
 			},
 		},
 		ui: {
@@ -135,7 +145,11 @@ async function host(preference?: string) {
 					get: async () => ({ data: structuredClone(current) }),
 					update: async ({ config: next }: { config: HostConfig }) => {
 						writes++;
-						current = { ...current, ...next };
+						current = {
+							...current,
+							...next,
+							agent: { ...current.agent, ...next.agent },
+						};
 						return { data: current };
 					},
 				},
@@ -157,10 +171,21 @@ async function host(preference?: string) {
 	);
 	return {
 		open: async () => {
-			expect(command?.slashName).toBe("flow-reviewer");
-			await command?.run();
+			await commands
+				.find((command) => command.slashName === "flow-reviewer")
+				?.run();
 		},
-		choose: () => select?.onSelect({ value: "test/luna" }),
+		openModels: async () => {
+			await commands
+				.find((command) => command.slashName === "flow-models")
+				?.run();
+		},
+		chooseRole: async (value: string) => {
+			select?.onSelect({ value });
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		},
+		config: () => structuredClone(current),
+		choose: (value = "test/luna") => select?.onSelect({ value }),
 		cancel: () => confirm?.onCancel(),
 		confirm: async () => {
 			confirm?.onConfirm();
@@ -223,7 +248,7 @@ test("server config applies the picker preference and restores original defaults
 			},
 		},
 	);
-	const config = reviewerPreferencePatch("test/luna") as {
+	const config = reviewPreferencePatch("test/luna") as {
 		agent: Record<string, unknown>;
 	};
 	await hook(config);
@@ -233,7 +258,7 @@ test("server config applies the picker preference and restores original defaults
 	expect(config.agent["flow-reviewer"]).not.toHaveProperty("options");
 	await hook(config);
 	expect(current.model).toMatchObject({ value: "test/luna" });
-	await hook(reviewerPreferencePatch(""));
+	await hook(reviewPreferencePatch(""));
 	expect(current).toBe(base);
 });
 
@@ -244,4 +269,81 @@ test("shows an unavailable saved preference explicitly", async () => {
 		expect.objectContaining({ value: "disconnected/model", disabled: true }),
 	);
 	expect(h.writes()).toBe(0);
+});
+
+test("shared menu saves and resets planning independently of review and coding", async () => {
+	const h = await host("test/review");
+	await h.openModels();
+	expect(h.choices()?.map((choice) => choice.value)).toEqual([
+		"planning",
+		"review",
+	]);
+	await h.chooseRole("planning");
+	h.choose();
+	await h.confirm();
+	expect(modelPreference(h.config(), "planning")).toBe("test/luna");
+	expect(modelPreference(h.config(), "review")).toBe("test/review");
+	expect(h.config().model).toBe("test/coding");
+	await h.openModels();
+	await h.chooseRole("planning");
+	h.choose("");
+	await h.confirm();
+	expect(modelPreference(h.config(), "planning")).toBe("");
+	expect(modelPreference(h.config(), "review")).toBe("test/review");
+	expect(h.config().model).toBe("test/coding");
+});
+
+test("planning config survives repeated hooks and resets to direct manager planning", async () => {
+	let requested: string | undefined;
+	const hook = createConfigHook(
+		{},
+		{
+			onPlanningModel: (model) => {
+				requested = model;
+			},
+		},
+	);
+	const config = modelPreferencePatch("planning", "test/planner");
+	await hook(config);
+	await hook(config);
+	expect(requested).toBe("test/planner");
+	expect(config.agent["flow-planner"]).toMatchObject({
+		model: "test/planner",
+		permission: {
+			edit: "deny",
+			bash: "deny",
+			"flow_*": "deny",
+			task: { "*": "deny" },
+		},
+	});
+	const reset = modelPreferencePatch("planning", "");
+	await hook(reset);
+	expect(requested).toBeUndefined();
+	expect(reset.agent["flow-planner"]).not.toHaveProperty("model");
+	expect(reset.agent["flow-planner"]).toHaveProperty("disable", true);
+	expect(() =>
+		modelPreference(
+			{ agent: { "flow-planner": { options: { flowPlanningModel: 42 } } } },
+			"planning",
+		),
+	).toThrow("must be a string");
+});
+
+test("no planning preference disables specialist discovery and leaves command models untouched", () => {
+	const configured = createFlowCoreConfigEntries({ env: {} });
+	expect(configured.agent["flow-planner"].disable).toBe(true);
+	for (const command of Object.values(configured.command))
+		expect(command).not.toHaveProperty("model");
+	const enabled = createFlowCoreConfigEntries({
+		env: {},
+		planningModel: "test/planner",
+	});
+	expect(enabled.agent["flow-planner"]).toMatchObject({
+		disable: false,
+		model: "test/planner",
+	});
+	expect(enabled.command).toEqual(configured.command);
+	expect(enabled.agent["flow-reviewer"]).toEqual(
+		configured.agent["flow-reviewer"],
+	);
 });

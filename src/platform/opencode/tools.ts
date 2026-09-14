@@ -13,7 +13,9 @@ import {
 } from "../../application/schema.js";
 import { statusReport } from "../../application/session-projection.js";
 import {
+	type FlowCodingModel,
 	type FlowReviewerConfiguration,
+	flowModelStatus,
 	flowReviewerStatus,
 } from "../../config-shared.js";
 import { requestAuthority } from "../../domain/request-evidence.js";
@@ -54,6 +56,8 @@ type ToolOptions = Readonly<{
 		| undefined;
 	reviewerConfiguration?: FlowReviewerConfiguration | undefined;
 	readReviewerConfiguration?: () => FlowReviewerConfiguration;
+	readPlanningModel?: () => string | undefined;
+	readCodingModel?: (sessionID: string) => FlowCodingModel | undefined;
 	runtimeIdentity?:
 		| Readonly<{ packageVersion: string; pluginEntrySha256: string }>
 		| undefined;
@@ -89,6 +93,7 @@ function withAutoContext(
 	response: FlowToolResponse,
 	options: ToolOptions,
 	view?: string,
+	sessionID?: string,
 ): FlowToolResponse {
 	let workflowData = response.workflowData;
 	const reviewer =
@@ -99,6 +104,14 @@ function withAutoContext(
 			reviewerConfiguration: flowReviewerStatus(reviewer),
 		};
 	}
+	workflowData = {
+		...workflowData,
+		modelConfiguration: flowModelStatus(
+			options.readPlanningModel?.(),
+			sessionID ? options.readCodingModel?.(sessionID) : undefined,
+			reviewer,
+		),
+	};
 	if (options.runtimeIdentity)
 		workflowData = {
 			...workflowData,
@@ -193,6 +206,7 @@ export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
 						},
 						options,
 						args.request.view,
+						context.sessionID,
 					);
 				}),
 		}),

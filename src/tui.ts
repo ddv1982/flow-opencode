@@ -1,8 +1,10 @@
 import {
-	reviewerChoices,
-	reviewerPreference,
-	reviewerPreferencePatch,
-} from "./platform/opencode/reviewer-picker.js";
+	FLOW_MODEL_ROLES,
+	type FlowModelRole,
+	modelChoices,
+	modelPreference,
+	modelPreferencePatch,
+} from "./platform/opencode/model-picker.js";
 import type { TuiPlugin, TuiPluginModule } from "./platform/opencode/sdk.js";
 
 const tui: TuiPlugin = async (api) => {
@@ -10,13 +12,14 @@ const tui: TuiPlugin = async (api) => {
 	const error = (cause: unknown) =>
 		api.ui.toast({
 			variant: "error",
-			title: "Flow reviewer",
+			title: "Flow models",
 			message:
 				cause instanceof Error
 					? cause.message
-					: "Could not update reviewer settings.",
+					: "Could not update Flow model settings.",
 		});
-	const open = async () => {
+	const open = async (role: FlowModelRole) => {
+		const setting = FLOW_MODEL_ROLES[role];
 		if (saving || api.lifecycle.signal.aborted) return;
 		try {
 			if (!api.state.ready)
@@ -31,18 +34,17 @@ const tui: TuiPlugin = async (api) => {
 					"OpenCode configuration or model catalog is unavailable.",
 				);
 			const config = global.data;
-			reviewerPreference(config);
+			modelPreference(config, role);
 			const choices = [
 				{
 					title: "Use default",
 					value: "",
 					category: "Default",
-					description:
-						"Existing plugin/environment settings, otherwise the coding model",
+					description: setting.defaultDescription,
 				},
-				...reviewerChoices(providers.data.all, providers.data.connected),
+				...modelChoices(providers.data.all, providers.data.connected),
 			];
-			const current = reviewerPreference(config) ?? "";
+			const current = modelPreference(config, role) ?? "";
 			if (current && !choices.some((choice) => choice.value === current)) {
 				const unavailable = {
 					title: current,
@@ -55,20 +57,20 @@ const tui: TuiPlugin = async (api) => {
 			}
 			api.ui.dialog.replace(() =>
 				api.ui.DialogSelect({
-					title: "Flow reviewer · global default",
+					title: `Flow ${setting.title} · global default`,
 					placeholder: "Search connected models",
 					current,
 					options: choices,
 					onSelect: ({ value }) => {
 						if (saving || api.lifecycle.signal.aborted) return;
-						if (value === (reviewerPreference(config) ?? "")) {
+						if (value === (modelPreference(config, role) ?? "")) {
 							api.ui.dialog.clear();
 							return;
 						}
 						api.ui.dialog.replace(() =>
 							api.ui.DialogConfirm({
-								title: "Save Flow reviewer?",
-								message: `${value || "Use configured default"}\n\nChanges the global Flow reviewer and reloads OpenCode server instances. Finish work in other projects first. Project picker preferences take precedence. Picker selections use the model’s default reasoning. Use default to restore plugin/environment settings.`,
+								title: `Save Flow ${setting.title}?`,
+								message: `${value || "Use configured default"}\n\nChanges the global Flow ${setting.title} and reloads OpenCode server instances. Finish work in other projects first. Project picker preferences take precedence. Picker selections use the model’s default reasoning. Use default to restore this role’s default behavior. The coding model stays under OpenCode’s normal model selection.`,
 								onCancel: () => api.ui.dialog.clear(),
 								onConfirm: () => {
 									if (saving || api.lifecycle.signal.aborted) return;
@@ -96,18 +98,18 @@ const tui: TuiPlugin = async (api) => {
 												)
 											)
 												throw new Error(
-													"Wait for this project's active work to finish before changing the reviewer.",
+													"Wait for this project's active work to finish before changing Flow models.",
 												);
 											if (
-												reviewerPreference(latest.data) !==
-												reviewerPreference(config)
+												modelPreference(latest.data, role) !==
+												modelPreference(config, role)
 											)
 												throw new Error(
-													"Reviewer preference changed while the picker was open. Open it again.",
+													"Model preference changed while the picker was open. Open it again.",
 												);
 											if (
 												value &&
-												!reviewerChoices(
+												!modelChoices(
 													catalog.data.all,
 													catalog.data.connected,
 												).some((choice) => choice.value === value)
@@ -120,17 +122,17 @@ const tui: TuiPlugin = async (api) => {
 												throw new Error(
 													"Project changed while the picker was open. Open it again.",
 												);
-											if (value !== (reviewerPreference(latest.data) ?? ""))
+											if (value !== (modelPreference(latest.data, role) ?? ""))
 												await api.client.global.config.update(
-													{ config: reviewerPreferencePatch(value) },
+													{ config: modelPreferencePatch(role, value) },
 													{ throwOnError: true },
 												);
 											api.ui.dialog.clear();
 											api.ui.toast({
 												variant: "success",
-												title: "Flow reviewer saved",
+												title: `Flow ${setting.title} saved`,
 												message:
-													"Global preference saved. Use /flow-status after reload to check the effective reviewer.",
+													"Global preference saved. Use /flow-status after reload to check the effective models.",
 											});
 										} catch (cause) {
 											error(cause);
@@ -151,12 +153,38 @@ const tui: TuiPlugin = async (api) => {
 	api.keymap.registerLayer({
 		commands: [
 			{
+				name: "flow.models.select",
+				title: "Flow: Model settings",
+				category: "Flow",
+				namespace: "palette",
+				slashName: "flow-models",
+				run: () => {
+					if (saving || api.lifecycle.signal.aborted) return;
+					api.ui.dialog.replace(() =>
+						api.ui.DialogSelect({
+							title: "Flow model settings",
+							options: (Object.keys(FLOW_MODEL_ROLES) as FlowModelRole[]).map(
+								(role) => ({
+									title:
+										role === "planning" ? "Planning specialist" : "Reviewer",
+									value: role,
+									description: FLOW_MODEL_ROLES[role].defaultDescription,
+								}),
+							),
+							onSelect: ({ value }) => {
+								void open(value);
+							},
+						}),
+					);
+				},
+			},
+			{
 				name: "flow.reviewer.select",
 				title: "Flow: Choose reviewer model",
 				category: "Flow",
 				namespace: "palette",
 				slashName: "flow-reviewer",
-				run: open,
+				run: () => open("review"),
 			},
 		],
 	});

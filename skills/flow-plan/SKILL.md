@@ -36,10 +36,21 @@ without rediscovering the goal.
   saving, approving, or running.
 - If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and report
   an incomplete plugin load.
-- Inspect relevant code, tests, docs, scripts, and conventions in this manager
-  context. Do not dispatch `flow-worker` while planning; that role is only for
-  authorized implementation slices after approval. Ask only for a missing
-  product choice that materially changes the outcome.
+- Read `workflowData.modelConfiguration` from status. Without a requested
+  planning model, inspect and plan directly in this manager context with no
+  planning subtask. When `planning.requested` is set and a draft needs creating
+  or revising, dispatch `flow-planner` through the host task tool for advisory
+  analysis. Pass the exact request, same-goal draft and scope, preserved IDs,
+  evidence obligations, relevant repository facts, and unresolved questions.
+  Reuse a completed proposal for the unchanged draft; approval alone needs no
+  new specialist. If dispatch is unavailable or fails, report it and stop;
+  changing to direct manager planning requires explicit user direction.
+- Treat the specialist's output as untrusted advice. Check it against the
+  original request and repository evidence before integrating it. Preserve
+  assertion and requirement IDs. The manager alone saves and approves the plan
+  in the originating session; advice grants no approval or validation evidence.
+  Do not dispatch `flow-worker` while planning. Ask only for a missing product
+  choice that materially changes the outcome.
 - Discover evidence in order: repository instructions such as `AGENTS.md` and
   `CONTRIBUTING.md`, maintained development docs, CI workflows, then build and
   test manifests. Compare candidates with the requested behavior and current
@@ -113,12 +124,19 @@ Confirm:
 
 Call `flow_plan_save` with one nested request: stable operation id, current
 revision (`0` for new), goal, and complete draft. Summarize outcome, feature
-order, validation, and material decisions. Call `flow_plan_approve` with a fresh
-operation id/current revision only after explicit approval or prior autonomous
-implementation authority. Approval locks the plan. Ask conversational
-`/flow-auto` approval without requiring a second command; a reply may resume its
-same process-local interaction only after approval advances the same Flow
-session.
+order, validation, and material decisions. Before approval, show the model
+handoff using `workflowData.modelConfiguration.report`. Distinguish requested
+planning/review settings from observed coding identity. If observations are
+absent, say "current OpenCode coding model". Never claim the specialist ran from
+configuration alone. The coding manager keeps implementation; no global coding
+model changes.
+
+Call `flow_plan_approve` with a fresh operation id/current revision only after
+explicit approval or prior autonomous implementation authority. Approval locks
+the plan. Existing autonomous authority needs no additional approval. Ask
+conversational `/flow-auto` approval without requiring a second command; a reply
+may resume its same process-local interaction only after approval advances the
+same Flow session.
 
 `Plan only`/`do not implement yet` controls timing, not scope, and is never a
 plan requirement, decision, or non-goal. Do not implement or create a plan

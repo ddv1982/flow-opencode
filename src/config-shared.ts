@@ -13,6 +13,7 @@ type FlowAgentConfig = {
 	description: string;
 	prompt: string;
 	hidden?: boolean;
+	disable?: boolean;
 	model?: string;
 	variant?: string;
 	steps?: number;
@@ -91,6 +92,25 @@ type FlowReviewerStatus = Readonly<{
 }>;
 
 export const FLOW_CORE_AGENTS = {
+	"flow-planner": {
+		mode: "subagent",
+		hidden: true,
+		description:
+			"Optional read-only planning specialist. Returns advisory draft analysis to the manager.",
+		prompt: compileFlowPromptSurface("flow-planner"),
+		permission: {
+			"*": "deny",
+			read: "allow",
+			glob: "allow",
+			grep: "allow",
+			edit: "deny",
+			bash: "deny",
+			external_directory: "deny",
+			skill: "deny",
+			task: { "*": "deny" },
+			"flow_*": "deny",
+		},
+	},
 	"flow-reviewer": {
 		mode: "subagent",
 		hidden: true,
@@ -353,6 +373,7 @@ export function createFlowCoreConfigEntries(options?: {
 	env?: FlowEnvironment;
 	pluginOptions?: FlowPluginOptions | undefined;
 	reviewerConfiguration?: FlowReviewerConfiguration | undefined;
+	planningModel?: string | undefined;
 	onWarning?: (warning: string) => void;
 	onNotice?: (notice: string) => void;
 }) {
@@ -365,6 +386,14 @@ export function createFlowCoreConfigEntries(options?: {
 		reviewer.steps.kind === "explicit" ? reviewer.steps.value : undefined;
 	return {
 		agent: {
+			"flow-planner": {
+				...FLOW_CORE_AGENTS["flow-planner"],
+				disable: !options?.planningModel,
+				...(options?.planningModel ? { model: options.planningModel } : {}),
+				permission: structuredClone(
+					FLOW_CORE_AGENTS["flow-planner"].permission,
+				),
+			},
 			"flow-reviewer": {
 				...FLOW_CORE_AGENTS["flow-reviewer"],
 				...(model ? { model } : {}),
@@ -393,12 +422,14 @@ export function applyFlowConfig(
 	options?: {
 		pluginOptions?: FlowPluginOptions | undefined;
 		reviewerConfiguration?: FlowReviewerConfiguration | undefined;
+		planningModel?: string | undefined;
 		onCollision?: (kind: "agent" | "command", name: string) => void;
 		onWarning?: (warning: string) => void;
 		onNotice?: (notice: string) => void;
 	},
 ): void {
 	const entries = createFlowCoreConfigEntries({
+		planningModel: options?.planningModel,
 		...(options?.onWarning ? { onWarning: options.onWarning } : {}),
 		...(options?.onNotice ? { onNotice: options.onNotice } : {}),
 		...(options?.pluginOptions ? { pluginOptions: options.pluginOptions } : {}),
@@ -416,4 +447,48 @@ export function applyFlowConfig(
 	}
 	config.agent = { ...(config.agent ?? {}), ...entries.agent };
 	config.command = { ...(config.command ?? {}), ...entries.command };
+}
+
+export type FlowCodingModel = Readonly<{
+	providerID: string;
+	modelID: string;
+	variant?: string;
+}>;
+
+export function flowModelStatus(
+	planningModel: string | undefined,
+	codingModel: FlowCodingModel | undefined,
+	reviewer: FlowReviewerConfiguration | undefined,
+) {
+	const reviewModel =
+		reviewer?.model.kind === "explicit" ? reviewer.model.value : null;
+	const coding = codingModel
+		? `${codingModel.providerID}/${codingModel.modelID}`
+		: "the current OpenCode coding model";
+	return {
+		scope: "current-plugin-process" as const,
+		authoritative: false,
+		planning: {
+			requested: planningModel ?? null,
+			mode: planningModel ? "specialist-advice" : "manager-direct",
+			availability: "unverified",
+		},
+		implementation: {
+			observed: codingModel ?? null,
+			source: codingModel ? "latest-manager-user-message" : "unavailable",
+		},
+		review: { requested: reviewModel, availability: "unverified" },
+		report: [
+			planningModel
+				? `Requested planning specialist: ${planningModel}. Configuration does not confirm execution.`
+				: "Planning uses the coding manager directly; no specialist is requested.",
+			`After plan approval, implementation stays with ${coding}.` +
+				(codingModel
+					? " This is the latest observed manager message model, not a guarantee for future turns."
+					: " The host has not supplied a model observation."),
+			reviewModel
+				? `Requested review model: ${reviewModel}. Availability is unverified.`
+				: "Review inherits the implementing manager model.",
+		],
+	};
 }

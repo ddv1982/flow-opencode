@@ -1,7 +1,7 @@
 import type { FlowReviewerConfiguration } from "../../config-shared.js";
 import type { Provider } from "./sdk.js";
 
-export function reviewerChoices(
+export function modelChoices(
 	providers: readonly Provider[],
 	connected: readonly string[],
 ) {
@@ -32,28 +32,44 @@ export function reviewerChoices(
 		);
 }
 
-export function reviewerPreference(config: {
-	agent?: Record<string, unknown>;
-}): string | undefined {
-	const agent = config.agent?.["flow-reviewer"];
+export const FLOW_MODEL_ROLES = {
+	planning: {
+		agent: "flow-planner",
+		key: "flowPlanningModel",
+		title: "planning specialist",
+		defaultDescription:
+			"The coding manager plans directly, without a specialist",
+	},
+	review: {
+		agent: "flow-reviewer",
+		key: "flowReviewerModel",
+		title: "reviewer",
+		defaultDescription:
+			"Existing plugin/environment settings, otherwise the coding model",
+	},
+} as const;
+export type FlowModelRole = keyof typeof FLOW_MODEL_ROLES;
+
+export function modelPreference(
+	config: { agent?: Record<string, unknown> },
+	role: FlowModelRole,
+): string | undefined {
+	const setting = FLOW_MODEL_ROLES[role];
+	const agent = config.agent?.[setting.agent];
 	if (!agent || typeof agent !== "object" || !("options" in agent))
 		return undefined;
 	const options = agent.options;
-	if (
-		!options ||
-		typeof options !== "object" ||
-		!("flowReviewerModel" in options)
-	)
+	if (!options || typeof options !== "object" || !(setting.key in options))
 		return undefined;
-	if (typeof options.flowReviewerModel !== "string")
-		throw new Error("Flow reviewer preference must be a string.");
-	return options.flowReviewerModel.trim();
+	const value = (options as Record<string, unknown>)[setting.key];
+	if (typeof value !== "string")
+		throw new Error(`Flow ${setting.title} preference must be a string.`);
+	return value.trim();
 }
 
-export function reviewerPreferencePatch(model: string) {
-	return {
-		agent: { "flow-reviewer": { options: { flowReviewerModel: model } } },
-	};
+export function modelPreferencePatch(role: FlowModelRole, model: string) {
+	const setting = FLOW_MODEL_ROLES[role];
+	return { agent: { [setting.agent]: { options: { [setting.key]: model } } } };
 }
 
 export function applyReviewerPreference(

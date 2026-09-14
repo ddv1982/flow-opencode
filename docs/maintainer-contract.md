@@ -19,8 +19,8 @@ Do not add another evidence field to close a measured cheat.
 Flow owns a serial durable lifecycle with planning, one active run, observed
 validation, one independent review, reset, and closure. Implementation may use a
 bounded, ephemeral host-native worker wave. Flow exposes ten tools, five commands,
-four guides, and two hidden subagents. Active work uses only the root manager,
-`flow-worker`, and `flow-reviewer`, never generic agents.
+four guides, and three hidden subagents. `flow-planner` is disabled unless selected.
+Active work uses the manager and reserved planner, worker, and reviewer roles.
 
 An active Flow session is authoritative for its goal until an explicit close
 records completed, deferred, or abandoned disposition. The manager must not
@@ -310,14 +310,14 @@ mutations. `flow_session_close` additionally returns derived delivery under
 
 | Agent | Boundary |
 | --- | --- |
+| `flow-planner` | Draft advice using read, glob, and grep. The manager saves and approves. |
 | `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Bash, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
 | `flow-reviewer` | Independent workspace-read-only inspection; only `flow_status` and its exact `flow_feature_complete` lifecycle submission are allowed among Flow tools. |
 
-Reviewer options `{ reviewer: { model, variant, steps } }` override environment
-fallbacks. A native variant requires an explicit reviewer model. Status reports
-requested settings and unsupported combinations without persisting them to v5.
-Continuation sends the resolved manager variant at the native prompt boundary.
-Configuration acceptance does not prove provider application or availability.
+Picker preferences take priority over reviewer tuple/environment settings.
+Status reports requested roles and the latest observed coding model. These are
+process-local observations. Manager variants survive continuation. Configuration
+does not confirm provider execution.
 
 Duplicate plugin instances for the same canonical project fail closed through a
 small process-global guard. Instances for different projects do not conflict.
@@ -351,5 +351,5 @@ See [Model-driven wave evidence](development.md#model-driven-wave-evidence) for
 the manual canary policy.
 
 
-The optional `./tui` export adds native `/flow-reviewer` selection of the global
-reviewer. Saving requires confirmation. No server command or lifecycle tool is added.
+The optional `./tui` export provides `/flow-models` and `/flow-reviewer`. Both save
+role preferences after confirmation. Neither adds a lifecycle tool.

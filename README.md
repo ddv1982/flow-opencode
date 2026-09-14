@@ -40,7 +40,7 @@ expensive, and it is overhead when it is not.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@8.4.0 --global --force
+opencode plugin opencode-plugin-flow@8.5.0 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -50,19 +50,22 @@ Manual setup needs this entry in both `opencode.json` and `tui.json`:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@8.4.0"]
+  "plugin": ["opencode-plugin-flow@8.5.0"]
 }
 ```
 
-Run `/flow-reviewer` for the global reviewer picker. Saving reloads the server;
-finish other projects' work first. Project picker preferences take precedence.
-“Use default” restores plugin/environment settings. No model call.
+`/flow-models` selects planning and review. `/flow-reviewer` opens review directly. Saving reloads the server; finish other projects first.
+Project preferences take precedence. Selection makes no model call.
+
+Planning defaults to the manager. A selected read-only specialist drafts advice.
+The manager checks and saves the plan, shows the model handoff, and owns approval
+and implementation. `/models` selects the coding model.
 
 `opencode.json` reviewer options:
 
 ```json
 {
-  "plugin": [["opencode-plugin-flow@8.4.0", {
+  "plugin": [["opencode-plugin-flow@8.5.0", {
     "reviewer": { "model": "provider/model", "steps": 80 }
   }]]
 }
@@ -165,12 +168,10 @@ then inspect and integrate the result, with at most one follow-up wave for a
 concrete gap. Once implementation is authorized, a qualifying wave needs no
 separate approval.
 
-Workers cannot delegate, call Flow lifecycle tools, or approve their own work,
-and general-purpose agents are never used for active Flow work: implementation
-uses `flow-worker`, independent review uses `flow-reviewer`. Flow persists no
-wave state, so the manager stays responsible for the combined diff, the
-authoritative validation, and the one independent review. Small or
-integration-heavy features stay serial.
+Reserved roles are `flow-planner` for optional advice, `flow-worker` for
+implementation, and `flow-reviewer` for review. Planners and workers cannot
+approve work. The manager owns combined validation and review. No wave state
+is persisted. Small or integration-heavy features stay serial.
 
 ## Commands
 

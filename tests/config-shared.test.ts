@@ -283,7 +283,11 @@ describe("Flow configuration", () => {
 		const first = createFlowCoreConfigEntries({ env: {} });
 		const second = createFlowCoreConfigEntries({ env: {} });
 
-		for (const name of ["flow-reviewer", "flow-worker"] as const) {
+		for (const name of [
+			"flow-planner",
+			"flow-reviewer",
+			"flow-worker",
+		] as const) {
 			const permission = first.agent[name].permission;
 			const constant = FLOW_CORE_AGENTS[name].permission;
 			expect(permission, name).not.toBe(constant);

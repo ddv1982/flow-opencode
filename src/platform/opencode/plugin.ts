@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dataNote } from "../../application/flow-response.js";
 import {
 	FLOW_CORE_COMMANDS,
+	type FlowCodingModel,
 	resolveFlowReviewerConfiguration,
 } from "../../config-shared.js";
 import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
@@ -233,6 +234,13 @@ function guardTools(
 			{
 				...definition,
 				execute: async (...args: Parameters<typeof definition.execute>) => {
+					if (args[1].agent === "flow-planner")
+						return JSON.stringify({
+							status: "error",
+							summary:
+								"The planning specialist supplies advice only; the manager owns all Flow tools.",
+							workflowData: {},
+						});
 					const status = runtimeGuard.query();
 					if (!status.operational) return guardRejection(name, status);
 					const output = await definition.execute(...args);
@@ -261,6 +269,8 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		pluginOptions,
 		onWarning: (warning) => log("warn", warning),
 	});
+	let planningModel: string | undefined;
+	const codingModels = new Map<string, FlowCodingModel>();
 	const version = resolveFlowPluginVersion();
 	const pluginEntrySha256 = `sha256:${createHash("sha256")
 		.update(await readFile(fileURLToPath(import.meta.url)))
@@ -321,12 +331,17 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
 		autoContinuationSupport: () => autoDrive.continuationSupport(),
 		readReviewerConfiguration: () => reviewerConfiguration,
+		readPlanningModel: () => planningModel,
+		readCodingModel: (sessionID) => codingModels.get(sessionID),
 		runtimeIdentity: { packageVersion: version, pluginEntrySha256 },
 	});
 	return {
 		config: createConfigHook(ctx, {
 			assertOperational: (action) => runtimeGuard.assertOperational(action),
 			reviewerConfiguration,
+			onPlanningModel: (model) => {
+				planningModel = model;
+			},
 			onReviewerConfiguration: (configuration) => {
 				reviewerConfiguration = configuration;
 			},
@@ -338,6 +353,23 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 			workspace,
 		),
 		"chat.message": async (input, output) => {
+			if (
+				!["flow-planner", "flow-reviewer", "flow-worker"].includes(
+					output.message.agent,
+				)
+			) {
+				const delivery = autoDriveDelivery(output.message, input.variant);
+				codingModels.delete(input.sessionID);
+				codingModels.set(input.sessionID, {
+					...delivery.model,
+					...(delivery.variant ? { variant: delivery.variant } : {}),
+				});
+				if (codingModels.size > 128) {
+					const oldest = codingModels.keys().next().value;
+					if (oldest) codingModels.delete(oldest);
+				}
+			}
+
 			const observed = await autoDrive.observeMessage(
 				input.sessionID,
 				autoDriveDelivery(output.message, input.variant),
@@ -353,6 +385,8 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		},
 		event: async (input) => {
 			const event = input.event;
+			if (event.type === "session.deleted")
+				codingModels.delete(event.properties.info.id);
 			if (event.type === "message.updated")
 				return autoDrive.observeHostMessage(
 					event.properties.info.sessionID,
@@ -393,6 +427,7 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 			}
 		},
 		dispose: async () => {
+			codingModels.clear();
 			autoDrive.clear();
 			runtimeGuard.release();
 		},

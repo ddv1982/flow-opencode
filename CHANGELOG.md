@@ -2,6 +2,25 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.5.0] - 2026-09-14
+
+Choose an optional planning specialist while keeping the coding model unchanged.
+
+- `/flow-models` selects planning and review preferences. `/flow-reviewer` remains
+  a direct review shortcut. Existing reviewer settings stay compatible.
+- A configured read-only `flow-planner` drafts advisory analysis for new or revised
+  plans. The manager checks it, preserves request IDs and evidence obligations,
+  saves the plan, and retains approval and implementation authority.
+- Planning remains in the manager by default. The specialist is disabled until
+  selected. Planner failure is reported instead of silently changing models.
+- The approval handoff shows requested planning/review settings and the latest
+  observed coding model. Configuration does not prove model execution. Existing
+  autonomous authority needs no extra approval.
+- Session v5 schema, validation gates, reviewer authority, and continuation routing
+  are unchanged. No live model eval or paid canary was run for this candidate.
+
+Upgrade with `opencode plugin opencode-plugin-flow@8.5.0 --global --force`.
+
 ## [8.4.0] - 2026-09-14
 
 Choose Flow's global reviewer model from OpenCode's terminal UI.

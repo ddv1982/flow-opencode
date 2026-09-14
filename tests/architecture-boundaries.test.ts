@@ -64,6 +64,9 @@ const FROZEN_TYPESCRIPT_SOURCE_BYTES = 249 * 1024;
 const PROCESS_LOCAL_CONFIG_AND_STATUS_BYTES = 15 * 1024;
 const MAX_TYPESCRIPT_SOURCE_BYTES =
 	FROZEN_TYPESCRIPT_SOURCE_BYTES + PROCESS_LOCAL_CONFIG_AND_STATUS_BYTES + 1024; // Reviewer preference resolution; no Session fields.
+const PLANNING_SPECIALIST_ADAPTER_BYTES = 5 * 1024;
+const FROZEN_PICKER_SOURCE_BYTES = 8 * 1024;
+const SHARED_MODEL_MENU_BYTES = 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
 const allowedTargets = {
@@ -174,24 +177,24 @@ describe("v6 architecture boundaries", () => {
 
 		// Reported because a budget that only speaks up once it is exceeded blocks
 		// the change that discovered the problem rather than the one that caused it.
-		const headroom = MAX_TYPESCRIPT_SOURCE_BYTES + 8 * 1024 - totalBytes;
+		const serverBudget =
+			MAX_TYPESCRIPT_SOURCE_BYTES + PLANNING_SPECIALIST_ADAPTER_BYTES;
+		const pickerBudget = FROZEN_PICKER_SOURCE_BYTES + SHARED_MODEL_MENU_BYTES;
+		const headroom = serverBudget + pickerBudget - totalBytes;
 		console.info(
-			`src TypeScript: ${totalBytes} bytes, ${headroom} of ${MAX_TYPESCRIPT_SOURCE_BYTES + 8 * 1024} remaining (including optional TUI).`,
+			`src TypeScript: ${totalBytes} bytes, ${headroom} of ${serverBudget + pickerBudget} remaining (including optional TUI).`,
 		);
 
-		// The optional TUI picker ships separately; retain the server source ceiling.
 		const pickerPaths = new Set([
 			"src/tui.ts",
-			"src/platform/opencode/reviewer-picker.ts",
+			"src/platform/opencode/model-picker.ts",
 		]);
 		let pickerBytes = 0;
 		for (const file of await sourceFiles())
 			if (pickerPaths.has(repositoryPath(file)))
 				pickerBytes += (await readFile(file)).byteLength;
-		expect(pickerBytes).toBeLessThanOrEqual(8 * 1024);
-		expect(totalBytes - pickerBytes).toBeLessThanOrEqual(
-			MAX_TYPESCRIPT_SOURCE_BYTES,
-		);
+		expect(pickerBytes).toBeLessThanOrEqual(pickerBudget);
+		expect(totalBytes - pickerBytes).toBeLessThanOrEqual(serverBudget);
 		expect(oversized).toEqual([]);
 	});
 

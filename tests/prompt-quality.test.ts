@@ -31,6 +31,7 @@ const SURFACES: readonly FlowPromptSurfaceName[] = [
 	"flow-status",
 	"flow-reviewer",
 	"flow-worker",
+	"flow-planner",
 ];
 
 const MANAGER_GUIDANCE = [
@@ -86,6 +87,7 @@ const MAX_ABSOLUTE_RULES: Readonly<Record<FlowPromptSurfaceName, number>> = {
 	"flow-status": 7,
 	"flow-reviewer": 25,
 	"flow-worker": 12,
+	"flow-planner": 3,
 };
 
 /**
@@ -161,7 +163,7 @@ function expectOnce(text: string, fragment: string): void {
 }
 
 describe("Flow prompt structure", () => {
-	test("compiles seven runtime surfaces from four canonical guides", () => {
+	test("compiles eight runtime surfaces from four canonical guides", () => {
 		expect(FLOW_GUIDANCE_IDS).toEqual([
 			"flow",
 			"flow-plan",
