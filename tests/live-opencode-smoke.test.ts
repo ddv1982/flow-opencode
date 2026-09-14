@@ -23,6 +23,7 @@ import {
 	type EndpointAttempt,
 	HOST_METADATA_CONTRACT,
 } from "../scripts/probe-opencode-eval-metadata.js";
+import { FLOW_CORE_AGENTS } from "../src/config-shared.js";
 
 // This test deliberately proves only the host boundary. Domain and persistence
 // behavior belongs in fast deterministic tests; the live smoke verifies that a
@@ -817,6 +818,60 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 						"{env:FLOW_PICKER_FIXTURE}",
 					);
 				}
+				for (const selected of ["flow-probe/planning", ""]) {
+					const response = await fetch(`${baseUrl}/global/config`, {
+						method: "PATCH",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({
+							agent: {
+								"flow-planner": { options: { flowPlanningModel: selected } },
+							},
+						}),
+						signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+					});
+					expect(response.ok).toBe(true);
+					let planner: ResolvedAgent | undefined;
+					const deadline = Date.now() + 5000;
+					do {
+						planner = (
+							(await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[]
+						).find((agent) => agent.name === "flow-planner");
+						if (selected ? planner?.model?.modelID === "planning" : !planner)
+							break;
+						await Bun.sleep(50);
+					} while (Date.now() < deadline);
+					expect(planner?.model ?? null).toEqual(
+						selected ? { providerID: "flow-probe", modelID: "planning" } : null,
+					);
+					if (!selected) expect(planner).toBeUndefined();
+					if (planner) {
+						for (const permission of [
+							"edit",
+							"bash",
+							"task",
+							"skill",
+							"mcp_workspace_delete",
+							"custom_deploy",
+							"external_directory",
+							...EXPECTED_TOOLS,
+						])
+							expect(permissionFor(planner?.permission ?? [], permission)).toBe(
+								"deny",
+							);
+						for (const permission of ["read", "glob", "grep"])
+							expect(permissionFor(planner.permission ?? [], permission)).toBe(
+								"allow",
+							);
+					}
+					const reviewer = (
+						(await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[]
+					).find((agent) => agent.name === "flow-reviewer");
+					expect(reviewer?.model).toEqual({
+						providerID: "flow-probe",
+						modelID: "model",
+					});
+				}
+
 				await expect(lstat(join(project, ".flow"))).rejects.toMatchObject({
 					code: "ENOENT",
 				});
@@ -827,4 +882,36 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 		},
 		STARTUP_TIMEOUT_MS + 2 * REQUEST_TIMEOUT_MS,
 	);
+});
+
+test("planning policy denies arbitrary custom mutations and allows only workspace readers", () => {
+	const rules: PermissionRule[] = Object.entries(
+		FLOW_CORE_AGENTS["flow-planner"].permission,
+	).flatMap(([permission, value]) =>
+		typeof value === "string"
+			? [
+					{
+						permission,
+						pattern: "*",
+						action: value as PermissionRule["action"],
+					},
+				]
+			: Object.entries(value).map(([pattern, action]) => ({
+					permission,
+					pattern,
+					action: action as PermissionRule["action"],
+				})),
+	);
+	for (const permission of [
+		"mcp_workspace_delete",
+		"custom_deploy",
+		"edit",
+		"bash",
+		"task",
+		"flow_plan_save",
+		"external_directory",
+	])
+		expect(permissionFor(rules, permission)).toBe("deny");
+	for (const permission of ["read", "glob", "grep"])
+		expect(permissionFor(rules, permission)).toBe("allow");
 });

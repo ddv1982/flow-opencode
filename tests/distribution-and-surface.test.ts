@@ -226,14 +226,18 @@ afterEach(async () => {
 });
 
 describe("Flow distribution surface", () => {
-	test("ships ten tools, five commands, two hidden agents, and four guides", async () => {
+	test("ships ten tools, five commands, three hidden agent configs, and four guides", async () => {
 		expect(new Set(Object.keys(createRegisteredTools()))).toEqual(
 			new Set(TOOL_NAMES),
 		);
 
 		const config = createFlowCoreConfigEntries();
 		expect(Object.keys(config.command).sort()).toEqual([...COMMAND_NAMES]);
-		expect(Object.keys(config.agent)).toEqual(["flow-reviewer", "flow-worker"]);
+		expect(Object.keys(config.agent)).toEqual([
+			"flow-planner",
+			"flow-reviewer",
+			"flow-worker",
+		]);
 		for (const agent of Object.values(config.agent)) {
 			expect(agent.hidden).toBe(true);
 		}
@@ -1248,6 +1252,11 @@ describe("flow-auto host continuation", () => {
 		const workspace = await createTestWorkspace("flow-auto-");
 		const promptCalls: unknown[] = [];
 		const hooks = await loadPlugin(workspace, workspace, promptCalls);
+		await hooks.config?.({
+			agent: {
+				"flow-planner": { options: { flowPlanningModel: "test/planning" } },
+			},
+		});
 		const context = toolContext(workspace);
 		const planSave = hooks.tool?.flow_plan_save;
 		const planApprove = hooks.tool?.flow_plan_approve;
@@ -1635,4 +1644,88 @@ describe("duplicate runtime guard", () => {
 			expect(output.split(FLOW_MANAGER_KERNEL)).toHaveLength(2);
 		}
 	});
+});
+
+test("planner cannot mutate manager-owned Flow state even through a direct tool call", async () => {
+	const workspace = await createTestWorkspace("flow-planner-authority-");
+	const hooks = await loadPlugin(workspace);
+	for (const definition of Object.values(hooks.tool ?? {})) {
+		const result = JSON.parse(
+			String(
+				await definition.execute(
+					{},
+					{ ...toolContext(workspace), agent: "flow-planner" },
+				),
+			),
+		);
+		expect(result.status).toBe("error");
+		expect(result.summary).toContain("manager owns all Flow tools");
+	}
+	await expect(
+		readFile(join(workspace, ".flow", "session.json")),
+	).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("model handoff distinguishes requested roles from bounded session observations", async () => {
+	const workspace = await createTestWorkspace("flow-model-observation-");
+	const hooks = await loadPlugin(workspace);
+	await hooks.config?.({
+		agent: {
+			"flow-planner": { options: { flowPlanningModel: "test/planner" } },
+			"flow-reviewer": { options: { flowReviewerModel: "test/reviewer" } },
+		},
+	});
+	const read = async (sessionID: string) =>
+		JSON.parse(
+			String(
+				await hooks.tool?.flow_status?.execute(
+					{ request: { view: "compact" } },
+					toolContext(workspace, sessionID),
+				),
+			),
+		).workflowData.modelConfiguration;
+	expect((await read("manager")).implementation.observed).toBeNull();
+	const chat = hooks["chat.message"];
+	if (!chat) throw new Error("Missing chat hook");
+	const output = {
+		message: {
+			id: "request",
+			agent: "build",
+			model: { providerID: "test", modelID: "coding", variant: "high" },
+		},
+		parts: [{ type: "text", text: "Plan only" }],
+	} as unknown as Parameters<typeof chat>[1];
+	await chat({ sessionID: "manager" }, output);
+	expect(output.message.model).toMatchObject({
+		providerID: "test",
+		modelID: "coding",
+		variant: "high",
+	});
+	const status = await read("manager");
+	expect(status.planning).toMatchObject({
+		requested: "test/planner",
+		mode: "specialist-advice",
+		availability: "unverified",
+	});
+	expect(status.review).toMatchObject({
+		requested: "test/reviewer",
+		availability: "unverified",
+	});
+	expect(status.implementation.observed).toEqual({
+		providerID: "test",
+		modelID: "coding",
+		variant: "high",
+	});
+	expect((await read("other")).implementation.observed).toBeNull();
+	output.message.agent = "flow-planner";
+	output.message.model.modelID = "planner";
+	await chat({ sessionID: "manager" }, output);
+	expect((await read("manager")).implementation.observed.modelID).toBe(
+		"coding",
+	);
+	for (let index = 0; index < 128; index++) {
+		output.message.agent = "build";
+		await chat({ sessionID: `other-${index}` }, output);
+	}
+	expect((await read("manager")).implementation.observed).toBeNull();
 });
