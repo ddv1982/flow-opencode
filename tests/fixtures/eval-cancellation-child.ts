@@ -6,12 +6,23 @@ import { join } from "node:path";
 import { withCampaignSignals } from "../../evals/campaign-stop.js";
 import { providerFailure } from "../../evals/failure-origin.js";
 import type { CommandEnd, EvalHost, Outcome } from "../../evals/harness.js";
+import { authorizePaidRun } from "../../scripts/paid-budget.js";
 
 const [root, mode] = process.argv.slice(2);
 if (!root || !mode)
 	throw new Error("Expected temporary root and fixture mode.");
 const repositoryRoot = root;
 const models = ["fixture/model-a", "fixture/model-b"];
+const authorization = join(root, "fake-paid-budget");
+await authorizePaidRun(authorization, {
+	schemaVersion: 1,
+	purpose: "Fake cancellation transport",
+	models,
+	maxDispatches: 100,
+	expiresAt: new Date(Date.now() + 3600000).toISOString(),
+});
+process.env.FLOW_EVAL_AUTHORIZATION = authorization;
+
 let elapsedOffset = 0;
 if (mode === "budget-stop") {
 	const RealDate = Date;

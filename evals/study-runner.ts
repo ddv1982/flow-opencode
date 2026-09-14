@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import packageJson from "../package.json" with { type: "json" };
+import { requirePaidAuthorization } from "../scripts/paid-budget.js";
 import type { BenchmarkCase } from "./benchmark.js";
 import type { RetainedBenchmarkInputs } from "./benchmark-evidence.js";
 import {
@@ -826,6 +827,7 @@ export async function runStudyCommand(argv: readonly string[]): Promise<void> {
 		process.stdout.write(`${JSON.stringify(study.summary, null, 2)}\n`);
 		return;
 	}
+	await requirePaidAuthorization();
 	process.exitCode = await withCampaignSignals(
 		async (signal, beginFinalization) => {
 			const directory = join(

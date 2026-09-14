@@ -1,6 +1,10 @@
-import { describe, expect, spyOn, test } from "bun:test";
+import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { EvalHost } from "../evals/harness.js";
 import type { StudyUsage } from "../evals/study-usage.js";
+import { authorizePaidRun } from "../scripts/paid-budget.js";
 
 type HostTokens = {
 	input: number;
@@ -451,4 +455,25 @@ describe("EvalHost outcome usage collection", () => {
 			expect(outcome.usageAvailability).toBe("observed");
 		},
 	);
+});
+
+let authorizationDirectory: string;
+let previousAuthorization: string | undefined;
+beforeAll(async () => {
+	previousAuthorization = process.env.FLOW_EVAL_AUTHORIZATION;
+	authorizationDirectory = await mkdtemp(join(tmpdir(), "flow-fake-budget-"));
+	await authorizePaidRun(authorizationDirectory, {
+		schemaVersion: 1,
+		purpose: "Fake transport tests only",
+		models: ["fixture/model", "fixture/manager"],
+		maxDispatches: 100,
+		expiresAt: new Date(Date.now() + 3600000).toISOString(),
+	});
+	process.env.FLOW_EVAL_AUTHORIZATION = authorizationDirectory;
+});
+afterAll(async () => {
+	if (previousAuthorization === undefined)
+		delete process.env.FLOW_EVAL_AUTHORIZATION;
+	else process.env.FLOW_EVAL_AUTHORIZATION = previousAuthorization;
+	await rm(authorizationDirectory, { recursive: true, force: true });
 });

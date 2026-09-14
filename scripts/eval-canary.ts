@@ -697,7 +697,7 @@ export function preparedCanarySha256(
 	return canonicalSha256("flow-canary-preparation-v1", prepared);
 }
 
-function parsePreparedCanary(input: unknown): PreparedCanary {
+export function parsePreparedCanary(input: unknown): PreparedCanary {
 	const prepared = PreparedCanarySchema.parse(input);
 	const { sha256: _sha256, ...withoutHash } = prepared;
 	if (

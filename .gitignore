@@ -7,3 +7,6 @@ node_modules/
 .release-artifacts/
 evals/results/
 *.tgz
+
+.release-state/
+.paid-budget/
