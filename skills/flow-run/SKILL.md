@@ -70,6 +70,11 @@ design instead of layering retries.
 
 ## Implement
 
+Before the feature's first edit, capture the Git base, tracked/untracked content
+changes, file types and modes in the conversation. On resume, recover those observations
+from retained history; never rebaseline existing edits. If unavailable, state the
+gap rather than guessing which work predated the feature. Preserve unrelated work.
+
 Make the smallest change that satisfies the approved outcome. Create no
 lifecycle or handoff sidecars. Do not stage, commit, push, publish, or mutate
 releases unless asked separately.
@@ -113,7 +118,13 @@ last relevant edit.
 
 After successful applicable validation, call `flow_review_start` with a fresh
 operation id, current revision, feature id, `artifactsChanged`, and a bounded
-packet. For persistence, schema, migration, replay, or recovery work, add only
+packet. Compare current state with the captured baseline for the complete feature
+diff. In its summary, report additions, modifications, deletions, renames, types,
+generated artifacts, modes,
+and unrelated pre-existing work. Name missing/conflicting facts; Flow does not
+attest inventory completeness.
+
+For persistence, schema, migration, replay, or recovery work, add only
 the relevant full questions to `riskLenses`: can interruption leave partial
 state; are retry and replay idempotent; can older state or readers fail visibly;
 does rollback preserve data? For public API, config, command, package, or
