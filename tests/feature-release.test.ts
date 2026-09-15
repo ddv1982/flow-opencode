@@ -142,7 +142,11 @@ for (const entry of OFFLINE_FEATURES) {
 				package: { ...f.package, dependencies: { test: "2" } },
 			}),
 		).toThrow("dependencies");
-		for (const version of ["8.4.1", "9.0.0", "8.6.0"])
+		// Each authorized version is skipped for its own entry; the point is that no
+		// entry accepts a version other than the one it names.
+		for (const version of ["8.4.1", "9.0.0", "8.6.0", "8.7.0"].filter(
+			(candidate) => candidate !== entry.version,
+		))
 			expect(() =>
 				assertOfflineFeatureScope({ ...f, package: { ...f.package, version } }),
 			).toThrow(`only covers ${entry.version}`);
