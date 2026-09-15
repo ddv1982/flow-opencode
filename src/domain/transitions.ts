@@ -16,6 +16,8 @@ import {
 	droppedFindingIds,
 	findingIdPrefix,
 } from "./review-findings.js";
+import type { ReviewReadiness } from "./review-readiness.js";
+import { reviewReadiness } from "./review-readiness.js";
 import type {
 	Artifact,
 	FeatureId,
@@ -40,18 +42,11 @@ import { assertTerminalHeadroom } from "./session-capacity.js";
 import {
 	activeRun,
 	isFeatureComplete,
-	isFinalFeatureRun,
 	nextRunnableFeature,
 	sessionStatus,
 } from "./session-queries.js";
 import { FlowTransitionError } from "./transition-error.js";
-import {
-	evidenceRefusal,
-	isValidationEligible,
-	isValidationFresh,
-	unresolvedVetoedCommands,
-	unsatisfiedEvidence,
-} from "./validation.js";
+import { evidenceRefusal, unsatisfiedEvidence } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
 export { recordValidation } from "./validation.js";
@@ -498,41 +493,34 @@ export function startReview(
 	if (run.reviews.length > 0) {
 		fail("Reset the feature before starting another full review.");
 	}
-	const unresolved = unresolvedVetoedCommands(session, run, input.sourceDigest);
-	if (unresolved.length > 0) {
+	const readiness: ReviewReadiness = reviewReadiness(
+		session,
+		run,
+		input.sourceDigest,
+	);
+	if (readiness.kind === "vetoed") {
 		fail(
-			`Review requires passing these exact commands for the current workspace content: ${unresolved.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
+			`Review requires passing these exact commands for the current workspace content: ${readiness.commands.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
 		);
 	}
-	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
-	const applicable = run.validations.filter(
-		(validation) =>
-			isValidationEligible(validation, input.sourceDigest) &&
-			isValidationFresh(session, run, validation),
-	);
-	const hasRequiredValidation =
-		kind === "feature"
-			? applicable.length > 0
-			: applicable.some((validation) => validation.scope === "broad");
-	if (!hasRequiredValidation) {
+	if (readiness.kind === "needs-validation") {
 		fail(
-			kind === "final"
+			readiness.reviewKind === "final"
 				? "Final review requires passing broad validation for the current workspace content."
 				: "Review requires passing validation for the current workspace content.",
 		);
 	}
-	if (kind === "final") {
-		const unsatisfied = unsatisfiedEvidence(session, input.sourceDigest);
-		if (unsatisfied.length > 0) {
-			fail(
-				`Final review requires the plan's declared evidence to pass for the current workspace content: ${unsatisfied
-					.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
-					.join(
-						", ",
-					)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
-			);
-		}
+	if (readiness.kind === "evidence-unsatisfied") {
+		fail(
+			`Final review requires the plan's declared evidence to pass for the current workspace content: ${readiness.entries
+				.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
+				.join(
+					", ",
+				)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
+		);
 	}
+	const kind = readiness.reviewKind;
+	const applicable = readiness.applicable;
 	const assignmentId = environment.newId("review");
 	let created: ReviewAssignment | null = null;
 	const next = commit(

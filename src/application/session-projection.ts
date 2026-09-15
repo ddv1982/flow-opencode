@@ -7,6 +7,7 @@ import {
 	type LivePriorFinding,
 	livePriorFindings,
 } from "../domain/review-findings.js";
+import { reviewReadiness } from "../domain/review-readiness.js";
 import type {
 	FeatureRun,
 	OperationRecord,
@@ -25,12 +26,6 @@ import {
 	nextRunnableFeature,
 	sessionStatus,
 } from "../domain/session-queries.js";
-import {
-	isValidationEligible,
-	isValidationFresh,
-	unresolvedVetoedCommands,
-	unsatisfiedEvidence,
-} from "../domain/validation.js";
 import {
 	digestReportLines,
 	type FindingsDigest,
@@ -360,27 +355,16 @@ function nextAction(
 			? "flow_feature_reset"
 			: "dispatch-flow-reviewer";
 	}
-	const finalRun =
-		session.plan?.features.every(
-			(feature) =>
-				feature.id === run.featureId || isFeatureComplete(session, feature.id),
-		) ?? false;
-	const passingValidation = run.validations.findLast(
-		(validation) =>
-			isValidationEligible(validation) &&
-			isValidationFresh(session, run, validation) &&
-			(!finalRun || validation.scope === "broad"),
-	);
-	if (!passingValidation) return "flow_validation_start";
-	if (unresolvedVetoedCommands(session, run).length > 0) {
-		return "flow_validation_start";
+	const readiness = reviewReadiness(session, run);
+	switch (readiness.kind) {
+		case "needs-validation":
+		case "vetoed":
+			return "flow_validation_start";
+		case "evidence-unsatisfied":
+			return "await-user-direction";
+		case "ready":
+			return "flow_review_start";
 	}
-	if (
-		finalRun &&
-		unsatisfiedEvidence(session, passingValidation.sourceDigest).length > 0
-	)
-		return "await-user-direction";
-	return "flow_review_start";
 }
 
 export function compactProjection(
