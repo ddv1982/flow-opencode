@@ -2062,7 +2062,7 @@ describe("Session v5 domain state machine", () => {
 		).toThrow(PLANNED_GATE);
 	});
 
-	test("commit refuses a draft that violates a whole-document invariant", () => {
+	test("an existing guard still owns its message when an invariant would also fire", () => {
 		const environment: TransitionEnvironment = {
 			newId: (kind) => `${kind}-invariant`,
 		};

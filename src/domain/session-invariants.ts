@@ -183,6 +183,13 @@ export function sessionInvariantIssues(session: Session): string[] {
 			) {
 				issues.push(`Review '${review.id}' references later validation.`);
 			}
+			// `featureSettledBefore` (an earlier passing review, or an inspect
+			// feature) and `isFinalFeatureRun` in session-queries.ts (current run
+			// state is `completed`) are two definitions of "every other feature is
+			// done". They agree because `completeFeature` marks `completed` only on
+			// `passed` or `inspect`, and `resetFeature` cannot supersede a completed
+			// dependent. Since `commit()` now runs these invariants at write time,
+			// a future change to either rule must keep them aligned.
 			const expectedKind = session.plan.features.every(
 				(feature) =>
 					feature.id === run.featureId ||

@@ -352,6 +352,13 @@ export function evidenceStatus(
 	return { kind: "missing" };
 }
 
+/**
+ * Explains why one declared evidence entry is unmet.
+ *
+ * Meant for entries `unsatisfiedEvidence` returned with the same
+ * `sourceDigest`; for an entry that is already satisfied, this falls back to
+ * the generic `needs …` wording.
+ */
 export function evidenceRefusal(
 	session: Session,
 	entry: EvidenceEntry,

@@ -19,7 +19,10 @@ type ReviewKind = "feature" | "final";
  * Whether the active run can open its review right now, and if not, why.
  *
  * `startReview` refuses on anything but `ready`, and the status projection
- * routes `nextAction` from the same result, so the two can never disagree.
+ * routes `nextAction` from the same result, so both callers apply the same
+ * rules. The projection is digest-blind, though: it has no live workspace
+ * digest to pass in, so it pins to the latest applicable broad validation's
+ * digest, while the guard uses the live digest.
  */
 export type ReviewReadiness =
 	| Readonly<{
