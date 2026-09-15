@@ -671,6 +671,18 @@ function signalProcessTree(child: ChildProcess, signal: NodeJS.Signals): void {
 	}
 }
 
+/**
+ * Enumerating a process table is inherently racy: a member can exit between the
+ * readdir and the read of its entry. Linux reports that as ENOENT when the
+ * directory is already gone and ESRCH when the process is mid-reap, and both
+ * mean the same thing here. Signalling already treats ESRCH as gone; teardown
+ * enumeration once did not, so a host that exited promptly failed its own stop.
+ */
+export function processVanished(error: unknown): boolean {
+	const code = (error as NodeJS.ErrnoException).code;
+	return code === "ENOENT" || code === "ESRCH";
+}
+
 async function processGroupMembers(groupPid: number): Promise<number[]> {
 	if (process.platform === "linux") {
 		const entries = await readdir("/proc", { withFileTypes: true });
@@ -683,7 +695,7 @@ async function processGroupMembers(groupPid: number): Promise<number[]> {
 						const fields = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
 						return Number(fields[2]) === groupPid ? Number(entry.name) : null;
 					} catch (error) {
-						if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+						if (processVanished(error)) return null;
 						throw error;
 					}
 				}),
