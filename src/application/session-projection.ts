@@ -24,7 +24,7 @@ import {
 	isFeatureComplete,
 	nextRunnableFeature,
 	sessionStatus,
-} from "../domain/transitions.js";
+} from "../domain/session-queries.js";
 import {
 	isValidationEligible,
 	isValidationFresh,

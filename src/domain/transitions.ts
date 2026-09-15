@@ -27,7 +27,6 @@ import type {
 	ReviewResult,
 	Session,
 	SessionClosure,
-	SessionStatus,
 	SourceDigest,
 } from "./session.js";
 import {
@@ -38,6 +37,13 @@ import {
 	reviewResultSemanticIssues,
 } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
+import {
+	activeRun,
+	isFeatureComplete,
+	isFinalFeatureRun,
+	nextRunnableFeature,
+	sessionStatus,
+} from "./session-queries.js";
 import { FlowTransitionError } from "./transition-error.js";
 import {
 	evidenceRefusal,
@@ -230,38 +236,6 @@ function assertArtifacts(artifacts: readonly Artifact[]): void {
 	if (issue) fail(issue);
 }
 
-export function activeRun(session: Session): FeatureRun | null {
-	return session.runs.find((run) => run.state === "active") ?? null;
-}
-
-export function isFeatureComplete(
-	session: Session,
-	featureId: string,
-): boolean {
-	return currentRun(session, featureId)?.state === "completed";
-}
-
-export function sessionStatus(session: Session): SessionStatus {
-	if (session.closure) return "closed";
-	if (!session.plan || session.approval === "pending") return "planning";
-	if (activeRun(session)) return "running";
-	if (
-		session.plan.features.some(
-			(feature) => currentRun(session, feature.id)?.state === "blocked",
-		)
-	) {
-		return "blocked";
-	}
-	if (
-		session.plan.features.every((feature) =>
-			isFeatureComplete(session, feature.id),
-		)
-	) {
-		return "completed";
-	}
-	return "ready";
-}
-
 export function savePlan(
 	session: Session | null,
 	input: PlanSaveInput,
@@ -413,30 +387,6 @@ export function anchorRequest(
 	return created;
 }
 
-function requiresExplicitRetry(
-	session: Session,
-	featureId: FeatureId,
-): boolean {
-	const reviewed = session.runs.findLast(
-		(run) => run.featureId === featureId && run.reviews.at(-1)?.result,
-	);
-	return reviewed?.reviews.at(-1)?.result?.verdict === "failed";
-}
-
-export function nextRunnableFeature(session: Session): FeatureId | null {
-	if (!session.plan) return null;
-	for (const feature of session.plan.features) {
-		const state = currentRun(session, feature.id)?.state;
-		if (state === "completed") continue;
-		if (state === "blocked") continue;
-		if (requiresExplicitRetry(session, feature.id)) continue;
-		if (feature.dependsOn.every((id) => isFeatureComplete(session, id))) {
-			return feature.id;
-		}
-	}
-	return null;
-}
-
 function assertFeatureRunnable(session: Session, featureId: FeatureId): void {
 	const feature = session.plan?.features.find((item) => item.id === featureId);
 	if (!feature) fail(`Unknown feature '${featureId}'.`);
@@ -515,14 +465,6 @@ export function startRun(
 		created.id,
 	);
 	return { session: next, value: created, replayed: false };
-}
-
-function isFinalFeatureRun(session: Session, run: FeatureRun): boolean {
-	if (!session.plan) return false;
-	return session.plan.features.every(
-		(feature) =>
-			feature.id === run.featureId || isFeatureComplete(session, feature.id),
-	);
 }
 
 export function startReview(

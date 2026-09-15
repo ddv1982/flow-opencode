@@ -5,8 +5,8 @@ import type {
 } from "../domain/request-evidence.js";
 import type { FeatureRun, Session } from "../domain/session.js";
 import { featureKind } from "../domain/session.js";
+import { activeRun } from "../domain/session-queries.js";
 import {
-	activeRun,
 	anchorRequest,
 	approvePlan,
 	completeFeature,

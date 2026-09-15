@@ -20,6 +20,7 @@ import type {
 } from "../src/domain/session.js";
 import { firstBlockedRun, planGate } from "../src/domain/session.js";
 import { sessionInvariantIssues } from "../src/domain/session-invariants.js";
+import { sessionStatus } from "../src/domain/session-queries.js";
 import {
 	approvePlan,
 	closeSession,
@@ -28,7 +29,6 @@ import {
 	recordValidation,
 	resetFeature,
 	savePlan,
-	sessionStatus,
 	startReview,
 	startRun,
 	type TransitionEnvironment,

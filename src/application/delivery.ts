@@ -5,7 +5,7 @@ import type {
 	SessionClosure,
 } from "../domain/session.js";
 import { currentRun, planGate } from "../domain/session.js";
-import { isFeatureComplete } from "../domain/transitions.js";
+import { isFeatureComplete } from "../domain/session-queries.js";
 import {
 	isValidationEligible,
 	unsatisfiedEvidence,

@@ -9,7 +9,8 @@ import type {
 	ValidationObservation,
 	ValidationScope,
 } from "../domain/session.js";
-import { activeRun, recordValidation } from "../domain/transitions.js";
+import { activeRun } from "../domain/session-queries.js";
+import { recordValidation } from "../domain/transitions.js";
 import {
 	declaredAssertions,
 	declaredResultsPath,

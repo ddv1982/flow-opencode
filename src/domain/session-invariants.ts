@@ -5,7 +5,7 @@ import { planIssue } from "./plan.js";
 import { missingRequestAssertions } from "./request-evidence.js";
 import type { Session } from "./session.js";
 import { featureKind, reviewResultSemanticIssues } from "./session.js";
-import { isFeatureComplete } from "./transitions.js";
+import { isFeatureComplete } from "./session-queries.js";
 import { isValidationEligible } from "./validation.js";
 
 function featureSettledBefore(
