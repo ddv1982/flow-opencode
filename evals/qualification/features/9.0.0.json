@@ -12,7 +12,7 @@
 			"unpackedManifestSha256": "sha256:28564da328dee6369ef1befccfb4977efe7b4fc010908800dec0de695f99a5d0"
 		},
 		"canary": "evals/canary/8.3.0.json",
-		"bundleSha256": "sha256:26f58d9f068669dfe2c145318115fe66878580502f93aae9e3b62052ac9fcae5"
+		"bundleSha256": "sha256:5583ec12a99fc9052b7d4d69f6cbf8d597c6ac1a60536e03c696a44791895631"
 	},
 	"artifact": {
 		"packageVersion": "9.0.0",

@@ -41,6 +41,11 @@ not be reused because the grader closure covers `package.json`, so the version
 bump alone invalidated it; the same original 8.3.0 campaign and canary were
 regraded offline, with no model calls.
 
+The seal was regraded a second time after a teardown fix in `evals/harness.ts`,
+which the grader closure also covers. Neither regrade executed a model, and the
+candidate artifact was unaffected: the packed file list does not include the
+evaluation harness, so the tarball hash held across both.
+
 **Five releases now sit between this candidate and the last live measurement.**
 Nothing in this record narrows that gap, and each offline release widens it.
 Candidate assurance is reviewed frozen code, full deterministic checks, all
