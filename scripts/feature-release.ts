@@ -63,6 +63,14 @@ export const PLANNING_MODELS_FILES = [
 export const REVIEWER_DEPRECATION_COMMIT =
 	"4c59cdd3d6a0065f3fc79fabc5e19df3f9004c80";
 
+/**
+ * 9.0.0 removes `/flow-reviewer`, which 8.6.0 announced as deprecated. The
+ * frozen surface is again the same picker code, so this entry reuses that list
+ * and only advances the reviewed commit.
+ */
+export const REVIEWER_REMOVAL_COMMIT =
+	"f2d92b80f9caab422646235e3d3eb7e7e319c361";
+
 export type OfflineFeature = Readonly<{
 	version: string;
 	feature: string;
@@ -109,6 +117,14 @@ export const OFFLINE_FEATURES: readonly OfflineFeature[] = [
 		files: PLANNING_MODELS_FILES,
 		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
 		baselines: ".agents/plans/11-reviewer-deprecation-release/baselines",
+	},
+	{
+		version: "9.0.0",
+		feature: "reviewer-command-removal-v1",
+		reviewedCommit: REVIEWER_REMOVAL_COMMIT,
+		files: PLANNING_MODELS_FILES,
+		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
+		baselines: ".agents/plans/12-reviewer-removal-release/baselines",
 	},
 ];
 
