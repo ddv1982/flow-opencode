@@ -252,6 +252,20 @@ describe("Flow documentation contract", () => {
 		expect(install).not.toMatch(/\bnpx\b|activation-check/);
 	});
 
+	// docs/troubleshooting.md pinned 8.1.3 through four releases without anything
+	// noticing, because only the README pins are asserted against package.json.
+	// Every other maintained document must therefore point at the README instead
+	// of repeating a version that nothing keeps current.
+	test("keeps the published version pinned only where it is asserted", async () => {
+		const documents = ["CONTEXT.md", ...(await markdownFiles("docs"))];
+		const pinned: string[] = [];
+		for (const document of documents) {
+			const text = await readFile(document, "utf8");
+			if (text.includes("opencode-plugin-flow@")) pinned.push(document);
+		}
+		expect(pinned).toEqual([]);
+	});
+
 	test("derives the README command table from source", async () => {
 		const readme = await readFile("README.md", "utf8");
 		const commandsSection = section(readme, "Commands");

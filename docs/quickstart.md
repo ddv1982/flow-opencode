@@ -8,16 +8,13 @@ consequential change. Read the plan and the review before accepting the result.
 Install the exact release shown in the [README installation section](../README.md#install).
 Restart OpenCode after installation.
 
-## Select a reviewer model
+## Select Flow models
 
-Skip this step if structural separation with the manager's model is sufficient.
-To use another model, list the model IDs that OpenCode knows:
+Skip this if structural separation from the manager's model is enough.
+`/flow-models` lists connected providers and saves the review and optional
+planning models globally. Planning stays with the manager until one is chosen.
 
-```bash
-opencode models
-```
-
-Add the selected ID to the existing Flow plugin entry:
+Without the terminal UI, name the reviewer in the Flow plugin entry and restart:
 
 ```json
 {
@@ -31,7 +28,7 @@ Add the selected ID to the existing Flow plugin entry:
 }
 ```
 
-Restart OpenCode. Tuple settings take precedence over the
+Picker preferences win, then tuple settings, then the
 `OPENCODE_FLOW_REVIEWER_MODEL` and `OPENCODE_FLOW_REVIEWER_STEPS` fallbacks.
 
 ## Verify the installation
