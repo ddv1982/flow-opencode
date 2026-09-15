@@ -39,6 +39,7 @@ import {
 	reviewResultSemanticIssues,
 } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
+import { sessionInvariantIssues } from "./session-invariants.js";
 import {
 	activeRun,
 	isFeatureComplete,
@@ -162,6 +163,9 @@ function commit(
 		],
 	};
 	if (kind !== "session-close") assertTerminalHeadroom(next);
+	const issues = sessionInvariantIssues(next);
+	if (issues.length > 0)
+		fail(`Flow refused an inconsistent session: ${issues.join(" ")}`);
 	return next;
 }
 

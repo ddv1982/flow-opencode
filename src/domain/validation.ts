@@ -14,6 +14,7 @@ import type {
 } from "./session.js";
 import { planEvidence, planGate } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
+import { sessionInvariantIssues } from "./session-invariants.js";
 import { assertionsSatisfied, unmetAssertions } from "./test-results.js";
 import { FlowTransitionError } from "./transition-error.js";
 
@@ -261,6 +262,11 @@ export function recordValidation(
 		),
 	};
 	assertTerminalHeadroom(next);
+	const issues = sessionInvariantIssues(next);
+	if (issues.length > 0)
+		throw new FlowTransitionError(
+			`Flow refused an inconsistent session: ${issues.join(" ")}`,
+		);
 	return {
 		session: next,
 		value: observation,

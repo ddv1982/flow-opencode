@@ -2061,4 +2061,115 @@ describe("Session v5 domain state machine", () => {
 			}),
 		).toThrow(PLANNED_GATE);
 	});
+
+	test("commit refuses a draft that violates a whole-document invariant", () => {
+		const environment: TransitionEnvironment = {
+			newId: (kind) => `${kind}-invariant`,
+		};
+		const saved = savePlan(
+			null,
+			{
+				operationId: "plan-save-invariant",
+				expectedRevision: 0,
+				goal: "Exercise the commit backstop",
+				plan: {
+					summary: "s",
+					overview: "o",
+					requirements: [],
+					decisions: [],
+					features: [
+						{
+							id: FOUNDATION,
+							title: "t",
+							summary: "s",
+							targets: [],
+							validation: [],
+							dependsOn: [],
+						},
+					],
+					evidence: repositoryEvidence(PLANNED_GATE),
+				},
+			},
+			environment,
+		).session;
+		const approved = approvePlan(saved, {
+			operationId: "plan-approve-invariant",
+			expectedRevision: saved.revision,
+		}).session;
+		// Forge an active run so a second start would produce two. The existing
+		// guard still owns this message; the backstop must not pre-empt it.
+		const forged: Session = {
+			...approved,
+			runs: [
+				{
+					id: "run-forged",
+					featureId: FOUNDATION,
+					attempt: 1,
+					state: "active",
+					startedRevision: approved.revision,
+					summary: null,
+					artifactsChanged: [],
+					validations: [],
+					reviews: [],
+				},
+			],
+		};
+		expect(() =>
+			startRun(
+				forged,
+				{
+					operationId: "run-start-invariant",
+					expectedRevision: forged.revision,
+				},
+				environment,
+			),
+		).toThrow("Only one feature run may be active.");
+	});
+
+	test("commit names the invariant it refused", () => {
+		const environment: TransitionEnvironment = {
+			newId: (kind) => `${kind}-backstop`,
+		};
+		const saved = savePlan(
+			null,
+			{
+				operationId: "plan-save-backstop",
+				expectedRevision: 0,
+				goal: "Exercise the backstop message",
+				plan: {
+					summary: "s",
+					overview: "o",
+					requirements: [],
+					decisions: [],
+					features: [
+						{
+							id: FOUNDATION,
+							title: "t",
+							summary: "s",
+							targets: [],
+							validation: [],
+							dependsOn: [],
+						},
+					],
+					evidence: repositoryEvidence(PLANNED_GATE),
+				},
+			},
+			environment,
+		).session;
+		// A revision that jumps backwards is something no guard checks but the
+		// invariants do: operations must not claim a revision above the session's.
+		const forged: Session = {
+			...saved,
+			operations: saved.operations.map((operation) => ({
+				...operation,
+				committedRevision: 99,
+			})),
+		};
+		expect(() =>
+			approvePlan(forged, {
+				operationId: "plan-approve-backstop",
+				expectedRevision: forged.revision,
+			}),
+		).toThrow("Flow refused an inconsistent session:");
+	});
 });
