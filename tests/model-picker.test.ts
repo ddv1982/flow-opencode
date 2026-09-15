@@ -180,17 +180,12 @@ async function host(preference?: string) {
 		await new Promise((resolve) => setTimeout(resolve, 0));
 	};
 	return {
-		// `/flow-reviewer` is deprecated and removed at 9.0.0, so the shared helper
-		// reaches review through the menu that outlives it. Only the alias test
-		// below still runs the alias itself.
 		open: async () => {
 			await run("flow-models");
 			await chooseRole("review");
 		},
 		openModels: () => run("flow-models"),
-		reviewerAlias: () => run("flow-reviewer"),
-		command: (slashName: string) =>
-			commands.find((command) => command.slashName === slashName),
+		slashNames: () => commands.map((command) => command.slashName).sort(),
 		chooseRole,
 		config: () => structuredClone(current),
 		choose: (value = "test/luna") => select?.onSelect({ value }),
@@ -227,17 +222,11 @@ test("native command requires a confirmed selection before saving", async () => 
 	expect(h.writes()).toBe(1);
 	expect(h.toasts.at(-1)?.variant).toBe("success");
 });
-test("the deprecated reviewer alias still opens review and is labelled", async () => {
+test("exposes one model command now that the reviewer alias is gone", async () => {
 	const h = await host();
-	// Deprecated in 8.5.0's successor, removed at 9.0.0. Until then the alias must
-	// keep working, and the palette must say it is going away.
-	expect(h.command("flow-reviewer")?.title).toContain("deprecated");
-	expect(h.command("flow-models")?.title).not.toContain("deprecated");
-	await h.reviewerAlias();
-	h.choose();
-	await h.confirm();
-	expect(reviewPreference(h.config())).toBe("test/luna");
-	expect(h.writes()).toBe(1);
+	// 8.6.0 announced the deprecation; 9.0.0 removes it. Nothing should reintroduce
+	// a second entry point into the same picker.
+	expect(h.slashNames()).toEqual(["flow-models"]);
 });
 test("rechecks activity, concurrent edits and provider availability before saving", async () => {
 	for (const condition of ["busy", "change", "disconnect"] as const) {

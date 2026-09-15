@@ -65,7 +65,7 @@ const PROCESS_LOCAL_CONFIG_AND_STATUS_BYTES = 15 * 1024;
 const MAX_TYPESCRIPT_SOURCE_BYTES =
 	FROZEN_TYPESCRIPT_SOURCE_BYTES + PROCESS_LOCAL_CONFIG_AND_STATUS_BYTES + 1024; // Reviewer preference resolution; no Session fields.
 const PLANNING_SPECIALIST_ADAPTER_BYTES = 5 * 1024;
-const FROZEN_PICKER_SOURCE_BYTES = 8 * 1024;
+const FROZEN_MODEL_PICKER_SOURCE_BYTES = 8 * 1024;
 const SHARED_MODEL_MENU_BYTES = 1024;
 const MAX_TYPESCRIPT_FILE_LINES = 1_000;
 const inwardLayers = new Set(["domain", "application", "infrastructure"]);
@@ -179,7 +179,8 @@ describe("v6 architecture boundaries", () => {
 		// the change that discovered the problem rather than the one that caused it.
 		const serverBudget =
 			MAX_TYPESCRIPT_SOURCE_BYTES + PLANNING_SPECIALIST_ADAPTER_BYTES;
-		const pickerBudget = FROZEN_PICKER_SOURCE_BYTES + SHARED_MODEL_MENU_BYTES;
+		const pickerBudget =
+			FROZEN_MODEL_PICKER_SOURCE_BYTES + SHARED_MODEL_MENU_BYTES;
 		const headroom = serverBudget + pickerBudget - totalBytes;
 		console.info(
 			`src TypeScript: ${totalBytes} bytes, ${headroom} of ${serverBudget + pickerBudget} remaining (including optional TUI).`,
