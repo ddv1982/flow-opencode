@@ -109,8 +109,11 @@ async function host(preference?: string) {
 	let connected = ["test"];
 	let busy = false;
 	let writes = 0;
-	const commands: Array<{ slashName: string; run(): void | Promise<void> }> =
-		[];
+	const commands: Array<{
+		slashName: string;
+		title: string;
+		run(): void | Promise<void>;
+	}> = [];
 	let select:
 		| {
 				options: Array<{ value: string }>;
@@ -169,21 +172,26 @@ async function host(preference?: string) {
 		undefined,
 		{} as Parameters<typeof picker.tui>[2],
 	);
+	const run = async (slashName: string) => {
+		await commands.find((command) => command.slashName === slashName)?.run();
+	};
+	const chooseRole = async (value: string) => {
+		select?.onSelect({ value });
+		await new Promise((resolve) => setTimeout(resolve, 0));
+	};
 	return {
+		// `/flow-reviewer` is deprecated and removed at 9.0.0, so the shared helper
+		// reaches review through the menu that outlives it. Only the alias test
+		// below still runs the alias itself.
 		open: async () => {
-			await commands
-				.find((command) => command.slashName === "flow-reviewer")
-				?.run();
+			await run("flow-models");
+			await chooseRole("review");
 		},
-		openModels: async () => {
-			await commands
-				.find((command) => command.slashName === "flow-models")
-				?.run();
-		},
-		chooseRole: async (value: string) => {
-			select?.onSelect({ value });
-			await new Promise((resolve) => setTimeout(resolve, 0));
-		},
+		openModels: () => run("flow-models"),
+		reviewerAlias: () => run("flow-reviewer"),
+		command: (slashName: string) =>
+			commands.find((command) => command.slashName === slashName),
+		chooseRole,
 		config: () => structuredClone(current),
 		choose: (value = "test/luna") => select?.onSelect({ value }),
 		cancel: () => confirm?.onCancel(),
@@ -218,6 +226,18 @@ test("native command requires a confirmed selection before saving", async () => 
 	await h.confirm();
 	expect(h.writes()).toBe(1);
 	expect(h.toasts.at(-1)?.variant).toBe("success");
+});
+test("the deprecated reviewer alias still opens review and is labelled", async () => {
+	const h = await host();
+	// Deprecated in 8.5.0's successor, removed at 9.0.0. Until then the alias must
+	// keep working, and the palette must say it is going away.
+	expect(h.command("flow-reviewer")?.title).toContain("deprecated");
+	expect(h.command("flow-models")?.title).not.toContain("deprecated");
+	await h.reviewerAlias();
+	h.choose();
+	await h.confirm();
+	expect(reviewPreference(h.config())).toBe("test/luna");
+	expect(h.writes()).toBe(1);
 });
 test("rechecks activity, concurrent edits and provider availability before saving", async () => {
 	for (const condition of ["busy", "change", "disconnect"] as const) {

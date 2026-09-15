@@ -54,7 +54,7 @@ Manual setup needs this entry in both `opencode.json` and `tui.json`:
 }
 ```
 
-`/flow-models` selects planning and review. `/flow-reviewer` opens review directly. Saving reloads the server; finish other projects first.
+`/flow-models` selects planning and review. `/flow-reviewer` is a deprecated alias for review, removed in 9.0.0. Saving reloads the server; finish other projects first.
 Project preferences take precedence. Selection makes no model call.
 
 Planning defaults to the manager. A selected read-only specialist drafts advice.

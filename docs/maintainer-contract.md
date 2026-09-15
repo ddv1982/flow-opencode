@@ -351,5 +351,6 @@ See [Model-driven wave evidence](development.md#model-driven-wave-evidence) for
 the manual canary policy.
 
 
-The optional `./tui` export provides `/flow-models` and `/flow-reviewer`. Both save
-role preferences after confirmation. Neither adds a lifecycle tool.
+The optional `./tui` export provides `/flow-models`, with `/flow-reviewer` a
+deprecated alias removed at 9.0.0. Both save role preferences after
+confirmation. Neither adds a lifecycle tool.

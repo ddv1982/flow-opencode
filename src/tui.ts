@@ -180,7 +180,7 @@ const tui: TuiPlugin = async (api) => {
 			},
 			{
 				name: "flow.reviewer.select",
-				title: "Flow: Choose reviewer model",
+				title: "Flow: Choose reviewer model (deprecated, use /flow-models)",
 				category: "Flow",
 				namespace: "palette",
 				slashName: "flow-reviewer",
