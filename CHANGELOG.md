@@ -2,6 +2,24 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [8.6.0] - 2026-09-15
+
+Deprecate `/flow-reviewer`; `/flow-models` is the one model picker.
+
+- `/flow-reviewer` still opens the review picker and now says it is deprecated in
+  the command palette. It is removed no earlier than 9.0.0. `/flow-models` reaches
+  the same picker and also selects the optional planning specialist.
+- Quickstart leads with `/flow-models` and states the real precedence order:
+  picker preferences, then plugin tuple settings, then environment fallbacks. It
+  previously documented only the tuple route and contradicted the README.
+- Troubleshooting no longer pins its own plugin version, which had been stale at
+  8.1.3 for four releases. It refers to the README, whose pins are asserted.
+- Session v5 schema, validation gates, reviewer authority, and continuation
+  routing are unchanged. No live model eval or paid canary was run for this
+  candidate.
+
+Upgrade with `opencode plugin opencode-plugin-flow@8.6.0 --global --force`.
+
 ## [8.5.0] - 2026-09-15
 
 Choose an optional planning specialist while keeping the coding model unchanged.
