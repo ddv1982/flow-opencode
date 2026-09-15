@@ -325,7 +325,7 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		persistObservation: persistWorkspaceValidation,
 		readReport: readWorkspaceTestReport,
 	});
-	const tools = createTools(ctx, {
+	const tools = createTools({
 		validation,
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),

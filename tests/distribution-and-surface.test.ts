@@ -44,17 +44,12 @@ const COMMAND_NAMES = [
 ] as const;
 
 function createRegisteredTools() {
-	return createTools(
-		{},
-		{
-			validation: {} as never,
-			prepareValidation: async () => {
-				throw new Error(
-					"Validation execution is outside this structural test.",
-				);
-			},
+	return createTools({
+		validation: {} as never,
+		prepareValidation: async () => {
+			throw new Error("Validation execution is outside this structural test.");
 		},
-	);
+	});
 }
 
 function pluginContext(
