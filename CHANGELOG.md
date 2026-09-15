@@ -2,6 +2,25 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.0.0] - 2026-09-15
+
+Removes `/flow-reviewer`. `/flow-models` is the only model picker.
+
+- **Breaking.** `/flow-reviewer` no longer exists. Use `/flow-models`, which opens
+  the same review picker and also selects the optional planning specialist. The
+  command was deprecated in 8.6.0.
+- **Breaking.** The optional TUI module id changes from
+  `opencode-plugin-flow.reviewer-picker` to `opencode-plugin-flow.model-picker`.
+  Installations that register the plugin normally are unaffected; only tooling
+  that referenced the module id directly needs updating.
+- Saved reviewer and planning preferences are untouched. Both are still read from
+  the same agent options, so no reselection is needed after upgrading.
+- Session v5 schema, validation gates, reviewer authority, and continuation
+  routing are unchanged. No live model eval or paid canary was run for this
+  candidate.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.0.0 --global --force`.
+
 ## [8.6.0] - 2026-09-15
 
 Deprecate `/flow-reviewer`; `/flow-models` is the one model picker.
