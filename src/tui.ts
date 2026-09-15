@@ -178,19 +178,11 @@ const tui: TuiPlugin = async (api) => {
 					);
 				},
 			},
-			{
-				name: "flow.reviewer.select",
-				title: "Flow: Choose reviewer model (deprecated, use /flow-models)",
-				category: "Flow",
-				namespace: "palette",
-				slashName: "flow-reviewer",
-				run: () => open("review"),
-			},
 		],
 	});
 };
 
 export default {
-	id: "opencode-plugin-flow.reviewer-picker",
+	id: "opencode-plugin-flow.model-picker",
 	tui,
 } satisfies TuiPluginModule;
