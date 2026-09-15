@@ -16,6 +16,8 @@ import {
 	droppedFindingIds,
 	findingIdPrefix,
 } from "./review-findings.js";
+import type { ReviewReadiness } from "./review-readiness.js";
+import { reviewReadiness } from "./review-readiness.js";
 import type {
 	Artifact,
 	FeatureId,
@@ -27,7 +29,6 @@ import type {
 	ReviewResult,
 	Session,
 	SessionClosure,
-	SessionStatus,
 	SourceDigest,
 } from "./session.js";
 import {
@@ -38,14 +39,15 @@ import {
 	reviewResultSemanticIssues,
 } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
-import { FlowTransitionError } from "./transition-error.js";
+import { sessionInvariantIssues } from "./session-invariants.js";
 import {
-	evidenceRefusal,
-	isValidationEligible,
-	isValidationFresh,
-	unresolvedVetoedCommands,
-	unsatisfiedEvidence,
-} from "./validation.js";
+	activeRun,
+	isFeatureComplete,
+	nextRunnableFeature,
+	sessionStatus,
+} from "./session-queries.js";
+import { FlowTransitionError } from "./transition-error.js";
+import { evidenceRefusal, unsatisfiedEvidence } from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
 export { recordValidation } from "./validation.js";
@@ -161,6 +163,9 @@ function commit(
 		],
 	};
 	if (kind !== "session-close") assertTerminalHeadroom(next);
+	const issues = sessionInvariantIssues(next);
+	if (issues.length > 0)
+		fail(`Flow refused an inconsistent session: ${issues.join(" ")}`);
 	return next;
 }
 
@@ -228,38 +233,6 @@ function assertDeclaredEvidence(plan: Plan): void {
 function assertArtifacts(artifacts: readonly Artifact[]): void {
 	const issue = artifactIssues(artifacts)[0];
 	if (issue) fail(issue);
-}
-
-export function activeRun(session: Session): FeatureRun | null {
-	return session.runs.find((run) => run.state === "active") ?? null;
-}
-
-export function isFeatureComplete(
-	session: Session,
-	featureId: string,
-): boolean {
-	return currentRun(session, featureId)?.state === "completed";
-}
-
-export function sessionStatus(session: Session): SessionStatus {
-	if (session.closure) return "closed";
-	if (!session.plan || session.approval === "pending") return "planning";
-	if (activeRun(session)) return "running";
-	if (
-		session.plan.features.some(
-			(feature) => currentRun(session, feature.id)?.state === "blocked",
-		)
-	) {
-		return "blocked";
-	}
-	if (
-		session.plan.features.every((feature) =>
-			isFeatureComplete(session, feature.id),
-		)
-	) {
-		return "completed";
-	}
-	return "ready";
 }
 
 export function savePlan(
@@ -413,30 +386,6 @@ export function anchorRequest(
 	return created;
 }
 
-function requiresExplicitRetry(
-	session: Session,
-	featureId: FeatureId,
-): boolean {
-	const reviewed = session.runs.findLast(
-		(run) => run.featureId === featureId && run.reviews.at(-1)?.result,
-	);
-	return reviewed?.reviews.at(-1)?.result?.verdict === "failed";
-}
-
-export function nextRunnableFeature(session: Session): FeatureId | null {
-	if (!session.plan) return null;
-	for (const feature of session.plan.features) {
-		const state = currentRun(session, feature.id)?.state;
-		if (state === "completed") continue;
-		if (state === "blocked") continue;
-		if (requiresExplicitRetry(session, feature.id)) continue;
-		if (feature.dependsOn.every((id) => isFeatureComplete(session, id))) {
-			return feature.id;
-		}
-	}
-	return null;
-}
-
 function assertFeatureRunnable(session: Session, featureId: FeatureId): void {
 	const feature = session.plan?.features.find((item) => item.id === featureId);
 	if (!feature) fail(`Unknown feature '${featureId}'.`);
@@ -517,14 +466,6 @@ export function startRun(
 	return { session: next, value: created, replayed: false };
 }
 
-function isFinalFeatureRun(session: Session, run: FeatureRun): boolean {
-	if (!session.plan) return false;
-	return session.plan.features.every(
-		(feature) =>
-			feature.id === run.featureId || isFeatureComplete(session, feature.id),
-	);
-}
-
 export function startReview(
 	session: Session,
 	input: ReviewStartInput,
@@ -556,41 +497,34 @@ export function startReview(
 	if (run.reviews.length > 0) {
 		fail("Reset the feature before starting another full review.");
 	}
-	const unresolved = unresolvedVetoedCommands(session, run, input.sourceDigest);
-	if (unresolved.length > 0) {
+	const readiness: ReviewReadiness = reviewReadiness(
+		session,
+		run,
+		input.sourceDigest,
+	);
+	if (readiness.kind === "vetoed") {
 		fail(
-			`Review requires passing these exact commands for the current workspace content: ${unresolved.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
+			`Review requires passing these exact commands for the current workspace content: ${readiness.commands.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
 		);
 	}
-	const kind = isFinalFeatureRun(session, run) ? "final" : "feature";
-	const applicable = run.validations.filter(
-		(validation) =>
-			isValidationEligible(validation, input.sourceDigest) &&
-			isValidationFresh(session, run, validation),
-	);
-	const hasRequiredValidation =
-		kind === "feature"
-			? applicable.length > 0
-			: applicable.some((validation) => validation.scope === "broad");
-	if (!hasRequiredValidation) {
+	if (readiness.kind === "needs-validation") {
 		fail(
-			kind === "final"
+			readiness.reviewKind === "final"
 				? "Final review requires passing broad validation for the current workspace content."
 				: "Review requires passing validation for the current workspace content.",
 		);
 	}
-	if (kind === "final") {
-		const unsatisfied = unsatisfiedEvidence(session, input.sourceDigest);
-		if (unsatisfied.length > 0) {
-			fail(
-				`Final review requires the plan's declared evidence to pass for the current workspace content: ${unsatisfied
-					.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
-					.join(
-						", ",
-					)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
-			);
-		}
+	if (readiness.kind === "evidence-unsatisfied") {
+		fail(
+			`Final review requires the plan's declared evidence to pass for the current workspace content: ${readiness.entries
+				.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
+				.join(
+					", ",
+				)}. A substitute observation cannot discharge it. If the environment is unavailable, ask the user to choose deferred or abandoned closure.`,
+		);
 	}
+	const kind = readiness.reviewKind;
+	const applicable = readiness.applicable;
 	const assignmentId = environment.newId("review");
 	let created: ReviewAssignment | null = null;
 	const next = commit(
