@@ -24,7 +24,10 @@ import {
 	ok,
 	operationResult,
 } from "./flow-response.js";
-import type { SessionRepository } from "./ports/session-repository.js";
+import type {
+	SessionRepository,
+	SessionTransaction,
+} from "./ports/session-repository.js";
 import {
 	FeatureCompleteInputSchema,
 	type FeatureCompleteRequest,
@@ -141,6 +144,55 @@ function exactFeatureCompleteReplay(
 		throw new Error("Expected an exact feature-completion replay.");
 	}
 	return { session: result.session, run: result.value };
+}
+
+type Loaded = Readonly<{ session: Session; transaction: SessionTransaction }>;
+
+/**
+ * The shared spine of every guarded mutation: parse, lock, load, transition,
+ * save, project. Anything not on that path stays in the caller.
+ */
+async function mutate<
+	Request,
+	Value,
+	Projection extends ActiveSessionProjection,
+>(
+	repository: SessionRepository,
+	schema: { parse(input: unknown): { request: Request } },
+	input: unknown,
+	step: (
+		loaded: Loaded,
+		request: Request,
+	) => Promise<Readonly<{ session: Session; value: Value; replayed: boolean }>>,
+	respond: (
+		result: Readonly<{ session: Session; value: Value; replayed: boolean }>,
+		request: Request,
+	) => Readonly<{ summary: string; projection: Projection }>,
+	operationId: (request: Request) => string,
+): Promise<FlowResponse<MutationWorkflowData<Projection>>> {
+	try {
+		const request = schema.parse(input).request;
+		return await repository.transact(async (transaction) => {
+			const session = await transaction.load();
+			if (!session) throw new Error("No active Flow session exists.");
+			const result = await step({ session, transaction }, request);
+			await transaction.save(result.session);
+			const shaped = respond(result, request);
+			return ok(shaped.summary, {
+				operation: operationResult(
+					result.session,
+					operationId(request),
+					result.replayed,
+					// `approvePlan` yields `null`; the old code passed nothing, and
+					// `operationResult` only omits `entity` for `undefined`.
+					result.value === null ? undefined : result.value,
+				),
+				projection: shaped.projection,
+			});
+		});
+	} catch (error) {
+		return errorResponse(error);
+	}
 }
 
 export function createFlowService(
@@ -260,57 +312,42 @@ export function createFlowService(
 			}
 		},
 
-		async planApprove(input, authority) {
-			try {
-				const request = PlanApproveInputSchema.parse(input).request;
-				return await repository.transact(async (transaction) => {
-					const session = await transaction.load();
-					if (!session) throw new Error("No active Flow session exists.");
-					const result = approvePlan(session, request, authority);
-					await transaction.save(result.session);
-					return ok("Plan approved.", {
-						operation: operationResult(
-							result.session,
-							request.operationId,
-							result.replayed,
-						),
-						projection: compactProjection(result.session),
-					});
-				});
-			} catch (error) {
-				return errorResponse(error);
-			}
+		planApprove(input, authority) {
+			return mutate(
+				repository,
+				PlanApproveInputSchema,
+				input,
+				({ session }, request) =>
+					Promise.resolve(approvePlan(session, request, authority)),
+				(result) => ({
+					summary: "Plan approved.",
+					projection: compactProjection(result.session),
+				}),
+				(request) => request.operationId,
+			);
 		},
 
-		async runStart(input) {
-			try {
-				const request = RunStartInputSchema.parse(input).request;
-				return await repository.transact(async (transaction) => {
-					const session = await transaction.load();
-					if (!session) throw new Error("No active Flow session exists.");
-					const result = startRun(session, request, environment);
-					await transaction.save(result.session);
-					return ok("Feature run ready.", {
-						operation: operationResult(
-							result.session,
-							request.operationId,
-							result.replayed,
-							result.value,
-						),
-						projection: executionProjection(result.session),
-					});
-				});
-			} catch (error) {
-				return errorResponse(error);
-			}
+		runStart(input) {
+			return mutate(
+				repository,
+				RunStartInputSchema,
+				input,
+				({ session }, request) =>
+					Promise.resolve(startRun(session, request, environment)),
+				(result) => ({
+					summary: "Feature run ready.",
+					projection: executionProjection(result.session),
+				}),
+				(request) => request.operationId,
+			);
 		},
 
-		async reviewStart(input) {
-			try {
-				const request = ReviewStartInputSchema.parse(input).request;
-				return await repository.transact(async (transaction) => {
-					const session = await transaction.load();
-					if (!session) throw new Error("No active Flow session exists.");
+		reviewStart(input) {
+			return mutate(
+				repository,
+				ReviewStartInputSchema,
+				input,
+				async ({ session, transaction }, request) => {
 					const priorOperation = session.operations.find(
 						(operation) => operation.id === request.operationId,
 					);
@@ -320,7 +357,7 @@ export function createFlowService(
 									.flatMap((run) => run.reviews)
 									.find((review) => review.id === priorOperation.entityId)
 							: undefined;
-					const result = startReview(
+					return startReview(
 						session,
 						{
 							...request,
@@ -330,30 +367,23 @@ export function createFlowService(
 						},
 						environment,
 					);
-					await transaction.save(result.session);
+				},
+				(result) => {
 					const actionable =
 						activeRun(result.session)?.id === result.value.runId &&
 						result.value.result === null;
-					return ok(
-						result.replayed && !actionable
-							? "Review assignment replayed; its current state is no longer actionable."
-							: "Independent review assignment created.",
-						{
-							operation: operationResult(
-								result.session,
-								request.operationId,
-								result.replayed,
-								result.value,
-							),
-							projection: actionable
-								? reviewerProjection(result.session, result.value.id)
-								: compactProjection(result.session),
-						},
-					);
-				});
-			} catch (error) {
-				return errorResponse(error);
-			}
+					return {
+						summary:
+							result.replayed && !actionable
+								? "Review assignment replayed; its current state is no longer actionable."
+								: "Independent review assignment created.",
+						projection: actionable
+							? reviewerProjection(result.session, result.value.id)
+							: compactProjection(result.session),
+					};
+				},
+				(request) => request.operationId,
+			);
 		},
 
 		async featureComplete(input) {
@@ -437,27 +467,19 @@ export function createFlowService(
 			}
 		},
 
-		async featureReset(input) {
-			try {
-				const request = FeatureResetInputSchema.parse(input).request;
-				return await repository.transact(async (transaction) => {
-					const session = await transaction.load();
-					if (!session) throw new Error("No active Flow session exists.");
-					const result = resetFeature(session, request, environment);
-					await transaction.save(result.session);
-					return ok("Feature reset committed.", {
-						operation: operationResult(
-							result.session,
-							request.operationId,
-							result.replayed,
-							result.value,
-						),
-						projection: compactProjection(result.session),
-					});
-				});
-			} catch (error) {
-				return errorResponse(error);
-			}
+		featureReset(input) {
+			return mutate(
+				repository,
+				FeatureResetInputSchema,
+				input,
+				({ session }, request) =>
+					Promise.resolve(resetFeature(session, request, environment)),
+				(result) => ({
+					summary: "Feature reset committed.",
+					projection: compactProjection(result.session),
+				}),
+				(request) => request.operationId,
+			);
 		},
 
 		async sessionClose(input) {
