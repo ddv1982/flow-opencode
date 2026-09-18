@@ -39,7 +39,14 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 	const pluginEntrySha256 = `sha256:${createHash("sha256")
 		.update(await readFile(fileURLToPath(import.meta.url)))
 		.digest("hex")}`;
-	const workspace = resolveWorkspaceRoot(ctx);
+	let workspace: string;
+	try {
+		workspace = resolveWorkspaceRoot(ctx);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		log("error", `Flow ${version} cannot start here: ${message}`);
+		throw error;
+	}
 	const runtimeGuard = registerFlowPluginInstance(workspace, {
 		packageName: "opencode-plugin-flow",
 		version,

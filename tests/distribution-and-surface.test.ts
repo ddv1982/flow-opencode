@@ -8,7 +8,7 @@ import {
 	unlink,
 	writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ToolContext } from "@opencode-ai/plugin";
 import { createFlowCoreConfigEntries } from "../src/config-shared.js";
@@ -56,10 +56,15 @@ function pluginContext(
 	workspace: string,
 	directory = workspace,
 	promptCalls?: unknown[],
+	logCalls?: unknown[],
 ) {
 	return {
 		client: {
-			app: { log() {} },
+			app: {
+				log(input: unknown) {
+					logCalls?.push(input);
+				},
+			},
 			session: {
 				promptAsync(input: unknown) {
 					promptCalls?.push(input);
@@ -386,6 +391,20 @@ describe("Flow distribution surface", () => {
 				(entry) => "agent" in entry && entry.agent === "flow-worker",
 			),
 		).toBe(false);
+	});
+
+	test("refuses to load from the home directory and says so", async () => {
+		const home = homedir();
+		const logCalls: unknown[] = [];
+		await expect(
+			FlowPlugin(pluginContext(home, home, undefined, logCalls)),
+		).rejects.toThrow(
+			"Flow refuses to use the home directory itself as mutable state.",
+		);
+		expect(logCalls).toHaveLength(1);
+		expect(
+			String((logCalls[0] as { body: { message: string } }).body.message),
+		).toContain("cannot start here");
 	});
 });
 
