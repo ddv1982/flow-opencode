@@ -2,6 +2,25 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.0.1] - 2026-09-18
+
+Internal runtime refactor. No new commands, tools, or settings.
+
+- Flow now checks its workspace when the plugin loads instead of on the first
+  `flow_*` call. Starting OpenCode with the filesystem root or your home
+  directory as the project refuses to load Flow and logs the reason, where it
+  previously loaded and then failed the first tool call.
+- Sending an identical `flow_feature_complete` request twice returns the same
+  response as before; the replay now takes the session lock once.
+- The application, persistence, and auto-drive code is split into smaller
+  modules with one source of truth for session validation and review
+  readiness. Persisted `.flow/session.json` files from 9.0.0 load unchanged.
+- Session v5 schema, validation gates, reviewer authority, and continuation
+  routing are unchanged. No live model eval or paid canary was run for this
+  candidate.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.0.1 --global --force`.
+
 ## [9.0.0] - 2026-09-15
 
 Removes `/flow-reviewer`. `/flow-models` is the only model picker.

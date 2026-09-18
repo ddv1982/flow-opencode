@@ -40,7 +40,7 @@ expensive, and it is overhead when it is not.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@9.0.0 --global --force
+opencode plugin opencode-plugin-flow@9.0.1 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -50,7 +50,7 @@ Manual setup needs this entry in both `opencode.json` and `tui.json`:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@9.0.0"]
+  "plugin": ["opencode-plugin-flow@9.0.1"]
 }
 ```
 
@@ -65,7 +65,7 @@ and implementation. `/models` selects the coding model.
 
 ```json
 {
-  "plugin": [["opencode-plugin-flow@9.0.0", {
+  "plugin": [["opencode-plugin-flow@9.0.1", {
     "reviewer": { "model": "provider/model", "steps": 80 }
   }]]
 }
