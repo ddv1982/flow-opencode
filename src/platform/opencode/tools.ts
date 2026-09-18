@@ -179,7 +179,7 @@ function executeReviewerMutation<T extends FlowToolResponse>(
 	return execute(context, handler);
 }
 
-export function createTools(_ctx: unknown, options: ToolOptions): FlowTools {
+export function createTools(options: ToolOptions): FlowTools {
 	return {
 		flow_guidance: tool({
 			description: "Load one concise package-owned Flow guide.",

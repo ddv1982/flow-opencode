@@ -190,20 +190,17 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			},
 		};
 		let completionCancellations = 0;
-		const completionTool = createTools(
-			{},
-			{
-				validation: {
-					cancel() {
-						completionCancellations += 1;
-						return true;
-					},
-				} as never,
-				prepareValidation: async () => {
-					throw new Error("Validation preparation is not used here.");
+		const completionTool = createTools({
+			validation: {
+				cancel() {
+					completionCancellations += 1;
+					return true;
 				},
+			} as never,
+			prepareValidation: async () => {
+				throw new Error("Validation preparation is not used here.");
 			},
-		).flow_feature_complete;
+		}).flow_feature_complete;
 		if (!completionTool) throw new Error("Missing completion tool.");
 
 		const completionCancellationsBeforeManager = completionCancellations;

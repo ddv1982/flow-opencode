@@ -39,15 +39,12 @@ type SafeSchema = {
 };
 
 function createRegisteredTools() {
-	return createTools(
-		{},
-		{
-			validation: {} as never,
-			prepareValidation: async () => {
-				throw new Error("Validation execution is outside this schema test.");
-			},
+	return createTools({
+		validation: {} as never,
+		prepareValidation: async () => {
+			throw new Error("Validation execution is outside this schema test.");
 		},
-	);
+	});
 }
 
 const registeredTools = createRegisteredTools();
@@ -479,20 +476,17 @@ describe("Flow OpenCode host schemas", () => {
 	test("keeps completion authorization separate from validation cancellation", async () => {
 		const workspace = await mkdtemp(join(tmpdir(), "flow-schema-contract-"));
 		const cancelled: string[] = [];
-		const tools = createTools(
-			{},
-			{
-				validation: {
-					cancel(sessionID: string) {
-						cancelled.push(sessionID);
-						return true;
-					},
-				} as never,
-				prepareValidation: async () => {
-					throw new Error("Not used by mutation tools.");
+		const tools = createTools({
+			validation: {
+				cancel(sessionID: string) {
+					cancelled.push(sessionID);
+					return true;
 				},
+			} as never,
+			prepareValidation: async () => {
+				throw new Error("Not used by mutation tools.");
 			},
-		);
+		});
 		const context = {
 			sessionID: "schema-contract-session",
 			agent: "build",

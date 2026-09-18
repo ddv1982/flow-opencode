@@ -338,7 +338,7 @@ export async function replayCassette(
 					observation,
 				),
 		});
-		const tools = createTools(null, {
+		const tools = createTools({
 			validation,
 			prepareValidation: (root: string, request: ValidationStartRequest) =>
 				prepareValidation(

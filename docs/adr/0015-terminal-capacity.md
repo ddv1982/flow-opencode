@@ -1,4 +1,4 @@
-# ADR 0014: Terminal capacity
+# ADR 0015: Terminal capacity
 
 Date: 2026-09-13
 
