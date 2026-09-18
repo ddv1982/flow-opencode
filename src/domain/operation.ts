@@ -23,6 +23,11 @@ export function operationInputDigest(value: unknown): SourceDigest {
 	return `sha256:${createHash("sha256").update(stableJson(value)).digest("hex")}`;
 }
 
+/** Structural equality by canonical JSON, independent of key order. */
+export function sameSession(left: Session, right: Session): boolean {
+	return operationInputDigest(left) === operationInputDigest(right);
+}
+
 function reconstructedClosureRequest(session: Session): ClosureRetryRequest {
 	const closure = session.closure;
 	if (!closure) throw new Error("Session has no closure.");

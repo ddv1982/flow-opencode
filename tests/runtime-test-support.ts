@@ -12,6 +12,7 @@ import {
 	persistObservedValidation,
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
+import { sameSession } from "../src/domain/operation.js";
 import type {
 	EvidenceEntry,
 	EvidencePlatform,
@@ -96,7 +97,7 @@ export class MemorySessionRepository implements SessionRepository {
 			if (this.confirmActiveFailure) {
 				return Promise.reject(this.confirmActiveFailure);
 			}
-			if (JSON.stringify(this.session) !== JSON.stringify(session)) {
+			if (!this.session || !sameSession(this.session, session)) {
 				return Promise.reject(
 					new ArchiveCollisionError(
 						"Active state changed before durability confirmation.",
@@ -131,11 +132,18 @@ export class MemorySessionRepository implements SessionRepository {
 		return Promise.resolve(this.session);
 	}
 
+	private transactionTail: Promise<void> = Promise.resolve();
+
 	transact<T>(
 		task: (transaction: SessionTransaction) => Promise<T>,
 	): Promise<T> {
 		this.transactionCount += 1;
-		return task(this.transaction);
+		const result = this.transactionTail.then(() => task(this.transaction));
+		this.transactionTail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
 	}
 }
 export function deterministicEnvironment(): TransitionEnvironment {

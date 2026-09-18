@@ -1,4 +1,4 @@
-import { operationInputDigest } from "../domain/operation.js";
+import { operationInputDigest, sameSession } from "../domain/operation.js";
 import type { Session } from "../domain/session.js";
 import { closeSession } from "../domain/transitions.js";
 import { type DeliveryProjection, deliveryProjection } from "./delivery.js";
@@ -23,34 +23,20 @@ import {
 	project,
 } from "./session-projection.js";
 
-type ArchivePendingCloseState = Readonly<{
-	durableAccepted: true;
-	archiveConfirmed: false;
-	retryExactRequest: true;
-	retryRequest: SessionCloseRequest;
-}>;
-
-type ManualRecoveryCloseState<DurableAccepted extends boolean> = Readonly<{
-	durableAccepted: DurableAccepted;
-	archiveConfirmed: false;
-	retryExactRequest: false;
-	manualRecoveryRequired: true;
-}>;
-
-type ManualRecoveryProjection<T extends object> = Readonly<
-	T & {
-		nextAction: "await-user-direction";
-		archiveRetry: null;
-	}
+type CloseState = Readonly<
+	| {
+			durableAccepted: true;
+			archiveConfirmed: false;
+			retryExactRequest: true;
+			retryRequest: SessionCloseRequest;
+	  }
+	| {
+			durableAccepted: boolean;
+			archiveConfirmed: false;
+			retryExactRequest: false;
+			manualRecoveryRequired: true;
+	  }
 >;
-
-type ArchiveLookupProjection = Readonly<{
-	view: "compact";
-	sessionId: string;
-	status: "unknown";
-	nextAction: "await-user-direction";
-	archiveRetry: null;
-}>;
 
 type SuccessfulCloseWorkflowData = Readonly<{
 	operation: OperationResult;
@@ -58,49 +44,37 @@ type SuccessfulCloseWorkflowData = Readonly<{
 	delivery: DeliveryProjection;
 }>;
 
-type ArchivePendingCloseWorkflowData = FailureWorkflowData &
+type CloseRecoveryWorkflowData = FailureWorkflowData &
 	Readonly<{
-		operation: OperationResult;
-		closeState: ArchivePendingCloseState;
-		projection: CompactProjection;
-		delivery: DeliveryProjection;
+		operation?: OperationResult;
+		closeState: CloseState;
+		projection:
+			| CompactProjection
+			| Readonly<{
+					view: "compact";
+					sessionId: string;
+					status: "unknown";
+					nextAction: "await-user-direction";
+					archiveRetry: null;
+			  }>;
+		delivery?: DeliveryProjection;
 	}>;
-
-type AcceptedManualRecoveryWorkflowData = FailureWorkflowData &
-	Readonly<{
-		operation: OperationResult;
-		closeState: ManualRecoveryCloseState<true>;
-		projection: ManualRecoveryProjection<CompactProjection>;
-		delivery: DeliveryProjection;
-	}>;
-
-type UnconfirmedManualRecoveryWorkflowData = FailureWorkflowData &
-	Readonly<{
-		operation: OperationResult;
-		closeState: ManualRecoveryCloseState<false>;
-		projection: ManualRecoveryProjection<CompactProjection>;
-		delivery?: never;
-	}>;
-
-type ArchiveLookupRecoveryWorkflowData = FailureWorkflowData &
-	Readonly<{
-		operation?: never;
-		closeState: ManualRecoveryCloseState<false>;
-		projection: ArchiveLookupProjection;
-		delivery?: never;
-	}>;
-
-type CloseRecoveryWorkflowData =
-	| ArchivePendingCloseWorkflowData
-	| AcceptedManualRecoveryWorkflowData
-	| UnconfirmedManualRecoveryWorkflowData
-	| ArchiveLookupRecoveryWorkflowData;
 
 type StatusRecoveryWorkflowData = FailureWorkflowData &
 	Readonly<{
 		operation?: never;
-		closeState: ManualRecoveryCloseState<true>;
-		projection: ManualRecoveryProjection<ActiveSessionProjection>;
+		closeState: Readonly<{
+			durableAccepted: true;
+			archiveConfirmed: false;
+			retryExactRequest: false;
+			manualRecoveryRequired: true;
+		}>;
+		projection: Readonly<
+			ActiveSessionProjection & {
+				nextAction: "await-user-direction";
+				archiveRetry: null;
+			}
+		>;
 		delivery: DeliveryProjection;
 	}>;
 
@@ -141,7 +115,7 @@ async function archivedStateCollision(
 		if (error instanceof ArchiveCollisionError) return error;
 		throw error;
 	}
-	if (!archived || JSON.stringify(archived) === JSON.stringify(session)) {
+	if (!archived || sameSession(archived, session)) {
 		return null;
 	}
 	return new ArchiveCollisionError(
@@ -167,162 +141,97 @@ function successfulCloseResponse(
 	});
 }
 
-function archivePendingResponse(
+const MANUAL_RECOVERY =
+	"Preserve both active and archived state, inspect the collision, and do not overwrite or delete either document automatically.";
+
+function recoveryResponse(
+	summary: string,
+	data: CloseRecoveryWorkflowData,
+): FlowErrorResponse<CloseRecoveryWorkflowData> {
+	return {
+		status: "error",
+		summary,
+		workflowData: { dataNote: dataNote(), ...data },
+	};
+}
+
+function closeFailure(
 	error: unknown,
 	session: Session,
 	request: SessionCloseRequest,
 	replayed: boolean,
-): FlowErrorResponse<ArchivePendingCloseWorkflowData> {
-	const failure = error instanceof Error ? error.message : String(error);
-	const closeState: ArchivePendingCloseState = {
-		durableAccepted: true,
-		archiveConfirmed: false,
-		retryExactRequest: true,
-		retryRequest: request,
-	};
-	return {
-		status: "error",
-		summary:
-			"Session close was durably accepted, but archive publication was not confirmed.",
-		workflowData: {
-			dataNote: dataNote(),
-			operation: operationResult(
-				session,
-				request.operationId,
-				replayed,
-				session.closure,
-			),
-			closeState,
-			projection: compactProjection(session),
-			delivery: deliveryProjection(session),
-			failure: {
-				summary: failure,
-				recovery:
-					"Retry this exact flow_session_close request with the same operation ID and payload.",
-			},
-		},
-	};
-}
-
-function manualRecoveryCloseState<DurableAccepted extends boolean>(
-	durableAccepted: DurableAccepted,
-): ManualRecoveryCloseState<DurableAccepted> {
-	return {
-		durableAccepted,
-		archiveConfirmed: false,
-		retryExactRequest: false,
-		manualRecoveryRequired: true,
-	};
-}
-
-function manualRecoveryProjection<T extends object>(
-	projection: T,
-): ManualRecoveryProjection<T> {
-	return {
-		...projection,
-		nextAction: "await-user-direction",
-		archiveRetry: null,
-	};
-}
-
-function archiveCollisionResponse(
-	error: ArchiveCollisionError,
-	session: Session,
-	request: SessionCloseRequest,
-	replayed: boolean,
-	durableAccepted?: true,
-): FlowErrorResponse<AcceptedManualRecoveryWorkflowData>;
-function archiveCollisionResponse(
-	error: ArchiveCollisionError,
-	session: Session,
-	request: SessionCloseRequest,
-	replayed: boolean,
-	durableAccepted: false,
-): FlowErrorResponse<UnconfirmedManualRecoveryWorkflowData>;
-function archiveCollisionResponse(
-	error: ArchiveCollisionError,
-	session: Session,
-	request: SessionCloseRequest,
-	replayed: boolean,
 	durableAccepted = true,
-): FlowErrorResponse<
-	AcceptedManualRecoveryWorkflowData | UnconfirmedManualRecoveryWorkflowData
-> {
+): FlowErrorResponse<CloseRecoveryWorkflowData> {
 	const operation = operationResult(
 		session,
 		request.operationId,
 		replayed,
 		session.closure,
 	);
-	const projection = manualRecoveryProjection(compactProjection(session));
-	const failure = {
-		summary: error.message,
-		recovery:
-			"Preserve both active and archived state, inspect the collision, and do not overwrite or delete either document automatically.",
-	};
-	if (durableAccepted) {
-		return {
-			status: "error",
-			summary:
-				"Session close was durably accepted, but conflicting Flow state requires manual recovery.",
-			workflowData: {
-				dataNote: dataNote(),
+	const message = error instanceof Error ? error.message : String(error);
+	if (!(error instanceof ArchiveCollisionError)) {
+		return recoveryResponse(
+			"Session close was durably accepted, but archive publication was not confirmed.",
+			{
 				operation,
-				closeState: manualRecoveryCloseState(true),
-				projection,
+				closeState: {
+					durableAccepted: true,
+					archiveConfirmed: false,
+					retryExactRequest: true,
+					retryRequest: request,
+				},
+				projection: compactProjection(session),
 				delivery: deliveryProjection(session),
-				failure,
+				failure: {
+					summary: message,
+					recovery:
+						"Retry this exact flow_session_close request with the same operation ID and payload.",
+				},
 			},
-		};
+		);
 	}
-	return {
-		status: "error",
-		summary:
-			"Session close replay could not confirm durable active state; manual recovery is required.",
-		workflowData: {
-			dataNote: dataNote(),
-			operation,
-			closeState: manualRecoveryCloseState(false),
-			projection,
-			failure,
-		},
+	const projection = {
+		...compactProjection(session),
+		nextAction: "await-user-direction" as const,
+		archiveRetry: null,
 	};
+	const closeState = {
+		durableAccepted,
+		archiveConfirmed: false as const,
+		retryExactRequest: false as const,
+		manualRecoveryRequired: true as const,
+	};
+	const failure = { summary: message, recovery: MANUAL_RECOVERY };
+	return durableAccepted
+		? recoveryResponse(
+				"Session close was durably accepted, but conflicting Flow state requires manual recovery.",
+				{
+					operation,
+					closeState,
+					projection,
+					delivery: deliveryProjection(session),
+					failure,
+				},
+			)
+		: recoveryResponse(
+				"Session close replay could not confirm durable active state; manual recovery is required.",
+				{ operation, closeState, projection, failure },
+			);
 }
 
-function archiveCollisionStatusResponse(
-	error: ArchiveCollisionError,
-	session: Session,
-	request: StatusRequest,
-): FlowErrorResponse<StatusRecoveryWorkflowData> {
-	return {
-		status: "error",
-		summary:
-			"The closed Flow session has conflicting archive state and requires manual recovery.",
-		workflowData: {
-			dataNote: dataNote(),
-			closeState: manualRecoveryCloseState(true),
-			projection: manualRecoveryProjection(project(session, request)),
-			delivery: deliveryProjection(session),
-			failure: {
-				summary: error.message,
-				recovery:
-					"Preserve both active and archived state, inspect the collision, and do not overwrite or delete either document automatically.",
-			},
-		},
-	};
-}
-
-function archiveLookupCollisionResponse(
+function archiveLookupFailure(
 	error: ArchiveCollisionError,
 	request: SessionCloseRequest,
-): FlowErrorResponse<ArchiveLookupRecoveryWorkflowData> {
-	return {
-		status: "error",
-		summary:
-			"Flow could not verify the archived close; manual recovery is required.",
-		workflowData: {
-			dataNote: dataNote(),
-			closeState: manualRecoveryCloseState(false),
+): FlowErrorResponse<CloseRecoveryWorkflowData> {
+	return recoveryResponse(
+		"Flow could not verify the archived close; manual recovery is required.",
+		{
+			closeState: {
+				durableAccepted: false,
+				archiveConfirmed: false,
+				retryExactRequest: false,
+				manualRecoveryRequired: true,
+			},
 			projection: {
 				view: "compact",
 				sessionId: request.sessionId,
@@ -336,20 +245,38 @@ function archiveLookupCollisionResponse(
 					"Preserve active and archived state, inspect the requested archive, and do not overwrite or delete either document automatically.",
 			},
 		},
-	};
+	);
 }
 
-function archiveFailureResponse(
-	error: unknown,
+function archiveCollisionStatusResponse(
+	error: ArchiveCollisionError,
 	session: Session,
-	request: SessionCloseRequest,
-	replayed: boolean,
-): FlowErrorResponse<
-	ArchivePendingCloseWorkflowData | AcceptedManualRecoveryWorkflowData
-> {
-	return error instanceof ArchiveCollisionError
-		? archiveCollisionResponse(error, session, request, replayed)
-		: archivePendingResponse(error, session, request, replayed);
+	request: StatusRequest,
+): FlowErrorResponse<StatusRecoveryWorkflowData> {
+	return {
+		status: "error",
+		summary:
+			"The closed Flow session has conflicting archive state and requires manual recovery.",
+		workflowData: {
+			dataNote: dataNote(),
+			closeState: {
+				durableAccepted: true,
+				archiveConfirmed: false,
+				retryExactRequest: false,
+				manualRecoveryRequired: true,
+			},
+			projection: {
+				...project(session, request),
+				nextAction: "await-user-direction",
+				archiveRetry: null,
+			},
+			delivery: deliveryProjection(session),
+			failure: {
+				summary: error.message,
+				recovery: MANUAL_RECOVERY,
+			},
+		},
+	};
 }
 
 export async function closedArchiveCollisionStatus(
@@ -374,7 +301,7 @@ export async function closeSessionTransaction(
 			archived = await loadExactArchivedClose(transaction, request);
 		} catch (error) {
 			if (error instanceof ArchiveCollisionError) {
-				return archiveLookupCollisionResponse(error, request);
+				return archiveLookupFailure(error, request);
 			}
 			throw error;
 		}
@@ -383,7 +310,7 @@ export async function closeSessionTransaction(
 				try {
 					await transaction.archiveAndClear(archived);
 				} catch (error) {
-					return archiveFailureResponse(error, archived, request, true);
+					return closeFailure(error, archived, request, true);
 				}
 			}
 			return successfulCloseResponse(
@@ -404,13 +331,7 @@ export async function closeSessionTransaction(
 			await transaction.confirmActiveDurability(result.session);
 		} catch (error) {
 			if (error instanceof ArchiveCollisionError) {
-				return archiveCollisionResponse(
-					error,
-					result.session,
-					request,
-					true,
-					false,
-				);
+				return closeFailure(error, result.session, request, true, false);
 			}
 			throw error;
 		}
@@ -420,12 +341,7 @@ export async function closeSessionTransaction(
 	try {
 		await transaction.archiveAndClear(result.session);
 	} catch (error) {
-		return archiveFailureResponse(
-			error,
-			result.session,
-			request,
-			result.replayed,
-		);
+		return closeFailure(error, result.session, request, result.replayed);
 	}
 	return successfulCloseResponse(
 		result.session,
