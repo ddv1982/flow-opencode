@@ -1,14 +1,12 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { dataNote } from "../../application/flow-response.js";
 import {
-	FLOW_CORE_COMMANDS,
 	type FlowCodingModel,
 	resolveFlowReviewerConfiguration,
 } from "../../config-shared.js";
-import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
+import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
@@ -16,252 +14,18 @@ import {
 } from "../../infrastructure/fs/workspace-validation.js";
 import { resolveFlowPluginVersion } from "../../version.js";
 import { AutoDriveCoordinator, autoDriveDelivery } from "./auto-drive.js";
+import { createCommandHook, textPart } from "./command-hook.js";
 import { createConfigHook } from "./config.js";
 import {
 	createFlowPluginInstanceId,
 	FLOW_LEADERSHIP_PROTOCOL_VERSION,
-	type FlowLeadershipHandle,
-	type FlowLeadershipReason,
-	type FlowLeadershipStatus,
 	registerFlowPluginInstance,
 } from "./leadership.js";
 import { createFlowLog } from "./logging.js";
 import type { Hooks, Plugin } from "./sdk.js";
+import { guardTools } from "./tool-guard.js";
 import { createTools } from "./tools.js";
 import { ValidationCaptureCoordinator } from "./validation-capture.js";
-
-type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
-type CommandHook = NonNullable<Hooks["command.execute.before"]>;
-type CommandOutput = Parameters<CommandHook>[1];
-type Part = CommandOutput["parts"][number];
-type TextPart = Extract<Part, { type: "text" }>;
-// Host assigns id, sessionID and messageID after the command hook returns.
-type DraftTextPart = Omit<TextPart, "id" | "sessionID" | "messageID">;
-const MUTATION =
-	/^flow_(?:plan_save|plan_approve|run_start|review_start|feature_complete|feature_reset|session_close)$/;
-const AUTO_STOPPED = "Flow auto stopped.";
-function isFlowCommand(command: string): command is FlowCommandName {
-	return Object.hasOwn(FLOW_CORE_COMMANDS, command);
-}
-function acceptedMutation(tool: string, output: string) {
-	if (!MUTATION.test(tool)) return null;
-	try {
-		const response = JSON.parse(output);
-		const data = response.workflowData;
-		const closeAccepted =
-			tool === "flow_session_close" &&
-			response.status === "error" &&
-			data?.closeState?.durableAccepted === true;
-		const revision = data?.projection?.revision;
-		if (
-			data?.operation?.replayed !== false ||
-			(response.status !== "ok" && !closeAccepted) ||
-			typeof revision !== "number" ||
-			!Number.isSafeInteger(revision)
-		)
-			return null;
-		const sessionId = data.projection?.sessionId;
-		return {
-			revision,
-			sessionId: typeof sessionId === "string" ? sessionId : undefined,
-		};
-	} catch {
-		return null;
-	}
-}
-function textPart(
-	text: string,
-	synthetic = false,
-	metadata?: Readonly<Record<string, unknown>>,
-): DraftTextPart {
-	return {
-		type: "text",
-		text,
-		...(synthetic ? { synthetic: true } : {}),
-		...(metadata ? { metadata } : {}),
-	};
-}
-/**
- * The command hook's parts are typed with the identity the host assigns after
- * the hook returns, so a part written here is a draft at runtime. This is the
- * one place a draft crosses into the host's array.
- */
-function asHostTextPart(part: DraftTextPart): TextPart {
-	return part as TextPart;
-}
-function rewriteCommand(
-	command: FlowCommandName,
-	args: string,
-	output: CommandOutput,
-): void {
-	const config = FLOW_CORE_COMMANDS[command];
-	const promptArgs = config.subtask
-		? args
-		: "the preceding non-synthetic Flow request";
-	const prompt = config.template.split("$ARGUMENTS").join(promptArgs);
-	if (!config.subtask) {
-		if (output.parts.some((part) => part.type === "subtask"))
-			throw new Error("Flow manager commands cannot contain subtask parts.");
-		const preserved = output.parts.filter((part) => part.type !== "text");
-		output.parts.splice(
-			0,
-			output.parts.length,
-			asHostTextPart(
-				textPart(args.trim() ? `Flow ${command}: ${args}` : `Flow ${command}`),
-			),
-			asHostTextPart(textPart(prompt, true)),
-			...preserved,
-		);
-		return;
-	}
-	const part = output.parts[0];
-	if (output.parts.length !== 1 || part?.type !== "subtask")
-		throw new Error(`/${command} requires exactly one reviewer subtask.`);
-	if (part.agent !== config.agent)
-		throw new Error(`/${command} must dispatch to '${config.agent}'.`);
-	// The host's subtask type does not declare `command`, but a command-dispatched
-	// subtask carries it at runtime, so its presence is checked, not asserted.
-	const declared = "command" in part ? part.command : undefined;
-	if (typeof declared !== "string" || declared.replace(/^\/+/, "") !== command)
-		throw new Error(`/${command} subtask identity did not match.`);
-	part.prompt = prompt;
-}
-function createCommandHook(
-	assertOperational: (action: string) => void,
-	autoDrive: AutoDriveCoordinator,
-	workspace: string,
-): CommandHook {
-	return async (input, output) => {
-		const command = input.command.replace(/^\/+/, "");
-		if (!isFlowCommand(command)) return;
-		const action = input.arguments.trim();
-		if (command === "flow-auto" && /^(?:stop|cancel)$/i.test(action)) {
-			const confirmed = output.parts.some(
-				(part) => part.type === "text" && part.text === AUTO_STOPPED,
-			);
-			const response =
-				autoDrive.deactivate(input.sessionID) || confirmed
-					? AUTO_STOPPED
-					: "No Flow auto lease was active in this OpenCode session.";
-			output.parts[0] = asHostTextPart(textPart(response));
-			output.parts.length = 1;
-			return;
-		}
-		assertOperational(`execute /${command}`);
-		if (command === "flow-auto" || command === "flow-plan") {
-			const evidence = requestEvidenceAnchor(input.arguments, input.sessionID);
-			if (evidence) {
-				const flow = createWorkspaceFlowService(workspace);
-				await flow.status({ request: { view: "compact" } });
-				await flow.requestAnchor({ goal: input.arguments, evidence });
-			}
-		}
-		rewriteCommand(command, input.arguments, output);
-		if (command !== "flow-auto")
-			return void autoDrive.deactivate(input.sessionID);
-		const metadata = await autoDrive.activate(input.sessionID);
-		// Preflight, not a gate. The lifecycle works either way; what changes is
-		// whether the user is told up front that this host cannot carry the
-		// continuation, instead of watching Flow stop after every feature and
-		// guessing which of the two it is.
-		if (autoDrive.continuationSupport() === "unsupported") {
-			output.parts.unshift(
-				asHostTextPart(
-					textPart(
-						"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
-					),
-				),
-			);
-		}
-		const instruction = output.parts.find(
-			(part): part is TextPart =>
-				part.type === "text" && part.synthetic === true,
-		);
-		if (!instruction) {
-			autoDrive.deactivate(input.sessionID);
-			throw new Error("/flow-auto is missing its synthetic instruction.");
-		}
-		instruction.metadata = { ...instruction.metadata, ...metadata };
-	};
-}
-type FlowTools = NonNullable<Hooks["tool"]>;
-
-/**
- * Tools whose successful output is markdown prose rather than a Flow response
- * envelope. A guard rejection must stay in the same shape the caller is reading,
- * so these get a markdown failure instead of a JSON blob.
- */
-const MARKDOWN_TOOLS = new Set(["flow_guidance"]);
-
-/** Actionable recovery for each non-operational leadership reason. */
-function guardRecovery(reason: FlowLeadershipReason): string {
-	switch (reason) {
-		case "duplicate-instances":
-			return "Two Flow plugin instances are registered for this project. Remove the duplicate installation so exactly one remains, then restart OpenCode.";
-		case "incompatible-registry":
-			return "Another Flow build owns an incompatible runtime registry. Align the installed Flow versions, then restart OpenCode.";
-		default:
-			return "Flow is not registered for this project. Restart OpenCode to re-register, then retry.";
-	}
-}
-
-function guardRejection(name: string, status: FlowLeadershipStatus): string {
-	const recovery = guardRecovery(status.reason);
-	if (MARKDOWN_TOOLS.has(name)) {
-		return `${status.message}\n\nRecovery: ${recovery}`;
-	}
-	// The same envelope every other Flow failure uses, so a caller told to read
-	// `workflowData.failure.recovery` finds it here too.
-	return JSON.stringify({
-		status: "error",
-		summary: status.message,
-		workflowData: {
-			dataNote: dataNote(),
-			failure: { summary: status.message, recovery },
-			runtimeGuard: status,
-		},
-	});
-}
-
-function guardTools(
-	tools: FlowTools,
-	runtimeGuard: FlowLeadershipHandle,
-	autoDrive: AutoDriveCoordinator,
-): FlowTools {
-	return Object.fromEntries(
-		Object.entries(tools).map(([name, definition]) => [
-			name,
-			{
-				...definition,
-				execute: async (...args: Parameters<typeof definition.execute>) => {
-					if (args[1].agent === "flow-planner")
-						return JSON.stringify({
-							status: "error",
-							summary:
-								"The planning specialist supplies advice only; the manager owns all Flow tools.",
-							workflowData: {},
-						});
-					const status = runtimeGuard.query();
-					if (!status.operational) return guardRejection(name, status);
-					const output = await definition.execute(...args);
-					const mutation = acceptedMutation(name, String(output));
-					const context = args[1];
-					if (mutation)
-						autoDrive.observeMutation(
-							context.sessionID,
-							mutation.revision,
-							name === "flow_plan_save" && mutation.revision === 1
-								? mutation.sessionId
-								: undefined,
-							context.messageID,
-							name === "flow_review_start",
-						);
-					return output;
-				},
-			},
-		]),
-	) as FlowTools;
-}
 
 const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 	const log = createFlowLog(ctx);
@@ -275,24 +39,27 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 	const pluginEntrySha256 = `sha256:${createHash("sha256")
 		.update(await readFile(fileURLToPath(import.meta.url)))
 		.digest("hex")}`;
-	const runtimeGuard = registerFlowPluginInstance(
-		ctx.worktree ?? ctx.directory,
-		{
-			packageName: "opencode-plugin-flow",
-			version,
-			protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
-			instanceId: createFlowPluginInstanceId(),
-		},
-	);
+	let workspace: string;
+	try {
+		workspace = resolveWorkspaceRoot(ctx);
+	} catch (error) {
+		const message = error instanceof Error ? error.message : String(error);
+		log("error", `Flow ${version} cannot start here: ${message}`);
+		throw error;
+	}
+	const runtimeGuard = registerFlowPluginInstance(workspace, {
+		packageName: "opencode-plugin-flow",
+		version,
+		protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
+		instanceId: createFlowPluginInstanceId(),
+	});
 	const initial = runtimeGuard.query();
 	const level = initial.operational ? "info" : "error";
 	log(level, `Flow ${version}: ${initial.message}`);
-	const workspace = ctx.worktree ?? ctx.directory;
+	const flow = createWorkspaceFlowService(workspace);
 	const autoDrive = new AutoDriveCoordinator({
 		readProjection: async () => {
-			const response = await createWorkspaceFlowService(workspace).status({
-				request: { view: "compact" },
-			});
+			const response = await flow.status({ request: { view: "compact" } });
 			if (response.status !== "ok") throw new Error(response.summary);
 			const projection = response.workflowData.projection;
 			if (projection.view !== "compact")
@@ -347,11 +114,11 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 			},
 		}),
 		tool: guardTools(tools, runtimeGuard, autoDrive),
-		"command.execute.before": createCommandHook(
-			(action) => runtimeGuard.assertOperational(action),
+		"command.execute.before": createCommandHook({
+			assertOperational: (action) => runtimeGuard.assertOperational(action),
 			autoDrive,
-			workspace,
-		),
+			flow,
+		}),
 		"chat.message": async (input, output) => {
 			if (
 				!["flow-planner", "flow-reviewer", "flow-worker"].includes(
@@ -385,8 +152,6 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		},
 		event: async (input) => {
 			const event = input.event;
-			if (event.type === "session.deleted")
-				codingModels.delete(event.properties.info.id);
 			if (event.type === "message.updated")
 				return autoDrive.observeHostMessage(
 					event.properties.info.sessionID,
@@ -402,6 +167,8 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 					event.type === "session.deleted"
 						? event.properties.info.id
 						: event.properties.sessionID;
+				if (event.type === "session.deleted")
+					codingModels.delete(event.properties.info.id);
 				if (!sessionID) return autoDrive.clear();
 				validation.cancel(sessionID);
 				return void autoDrive.deactivate(sessionID);

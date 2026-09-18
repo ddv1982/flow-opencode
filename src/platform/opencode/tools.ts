@@ -21,8 +21,8 @@ import {
 import { requestAuthority } from "../../domain/request-evidence.js";
 import type { EvidencePlatform } from "../../domain/session.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
-import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
+import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
 import type {
 	AutoTimingSnapshot,
 	ProcessLocalAutoContinuationSupport,

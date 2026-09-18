@@ -22,27 +22,31 @@ import {
 } from "../src/application/errors.js";
 import type { Session } from "../src/domain/session.js";
 import { closeSession } from "../src/domain/transitions.js";
+import { UnsafeFlowWorkspaceLayoutError } from "../src/infrastructure/fs/managed-fs.js";
+import {
+	reclaimOrphanedLock,
+	withSessionLock,
+} from "../src/infrastructure/fs/session-lock.js";
 import {
 	ArchiveCollisionError,
 	archiveAndClearSession,
-	archivedSessionPath,
-	assertMutableWorkspaceRoot,
 	confirmActiveSessionDurability,
-	flowDir,
-	historyDir,
 	loadArchivedSession,
 	loadSession,
 	quarantineUnreadableSession,
-	reclaimOrphanedLock,
 	saveSession,
-	sessionPath,
-	UnsafeFlowWorkspaceLayoutError,
-	withSessionLock,
 } from "../src/infrastructure/fs/workspace.js";
+import {
+	archivedSessionPath,
+	assertMutableWorkspaceRoot,
+	flowDir,
+	historyDir,
+	sessionPath,
+} from "../src/infrastructure/fs/workspace-paths.js";
 
 const temporaryRoots: string[] = [];
-const workspaceModuleUrl = new URL(
-	"../src/infrastructure/fs/workspace.ts",
+const sessionLockModuleUrl = new URL(
+	"../src/infrastructure/fs/session-lock.ts",
 	import.meta.url,
 ).href;
 
@@ -566,7 +570,7 @@ describe("session locks", () => {
 
 		const script = `
 			import { writeFile } from "node:fs/promises";
-			import { withSessionLock } from ${JSON.stringify(workspaceModuleUrl)};
+			import { withSessionLock } from ${JSON.stringify(sessionLockModuleUrl)};
 			await withSessionLock(process.env.FLOW_TEST_WORKSPACE, async () => {
 				await writeFile(process.env.FLOW_TEST_CHILD_ENTERED, "yes");
 			});
