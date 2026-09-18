@@ -20,8 +20,8 @@ import {
 	loadArchivedSession,
 	loadSession,
 	saveSession,
-	sessionPath,
 } from "../src/infrastructure/fs/workspace.js";
+import { sessionPath } from "../src/infrastructure/fs/workspace-paths.js";
 import {
 	deterministicEnvironment,
 	FEATURE,

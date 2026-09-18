@@ -1,15 +1,15 @@
 import type { SessionRepository } from "../../application/ports/session-repository.js";
+import { withSessionLock } from "./session-lock.js";
 import { createFileSourceIdentityProvider } from "./source-identity.js";
 import {
 	archiveAndClearSession,
-	assertMutableWorkspaceRoot,
 	confirmActiveSessionDurability,
 	loadArchivedSession,
 	loadSession,
 	quarantineUnreadableSession,
 	saveSession,
-	withSessionLock,
 } from "./workspace.js";
+import { assertMutableWorkspaceRoot } from "./workspace-paths.js";
 
 export function createFileSessionRepository(
 	workspace: string,

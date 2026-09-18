@@ -8,12 +8,14 @@ import type { ToolContext } from "@opencode-ai/plugin";
 import type { FlowService } from "../src/application/flow-service.js";
 import type { SourceDigest } from "../src/domain/session.js";
 import {
-	archivedSessionPath,
 	loadArchivedSession,
 	loadSession,
-	sessionPath,
 } from "../src/infrastructure/fs/workspace.js";
 import { createWorkspaceFlowService } from "../src/infrastructure/fs/workspace-flow-service.js";
+import {
+	archivedSessionPath,
+	sessionPath,
+} from "../src/infrastructure/fs/workspace-paths.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,

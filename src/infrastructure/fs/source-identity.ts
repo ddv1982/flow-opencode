@@ -10,7 +10,7 @@ import {
 	MAX_SOURCE_TOTAL_BYTES,
 } from "../../domain/limits.js";
 import type { SourceDigest } from "../../domain/session.js";
-import { assertMutableWorkspaceRoot } from "./workspace.js";
+import { assertMutableWorkspaceRoot } from "./workspace-paths.js";
 
 export class SourceIdentityError extends Error {
 	readonly code = "FLOW_SOURCE_IDENTITY";
