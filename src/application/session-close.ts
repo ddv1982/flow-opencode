@@ -1,4 +1,4 @@
-import { operationInputDigest } from "../domain/operation.js";
+import { operationInputDigest, sameSession } from "../domain/operation.js";
 import type { Session } from "../domain/session.js";
 import { closeSession } from "../domain/transitions.js";
 import { type DeliveryProjection, deliveryProjection } from "./delivery.js";
@@ -121,7 +121,7 @@ async function archivedStateCollision(
 		if (error instanceof ArchiveCollisionError) return error;
 		throw error;
 	}
-	if (!archived || JSON.stringify(archived) === JSON.stringify(session)) {
+	if (!archived || sameSession(archived, session)) {
 		return null;
 	}
 	return new ArchiveCollisionError(
