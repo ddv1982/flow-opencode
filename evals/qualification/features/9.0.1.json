@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"kind": "reviewed-offline-feature",
+	"version": "9.0.1",
+	"feature": "runtime-refactor-v1",
+	"reviewedCommit": "8d275b7b02708e1a2a9cde65c03029a0f074f373",
+	"baseline": {
+		"commit": "3edd7034f9ce94a911132e4ae4e21ad893a7e53a",
+		"artifact": {
+			"packageVersion": "8.3.0",
+			"sourceCommit": "ac4fdb8ca6d9f4315c11c3d1fb142a6b15c9067f",
+			"sourceTreeSha256": "sha256:f4659b8c7cd20afd31de3bb5edfff216b020b2c7ca8fc4c375493d4662a7fc34",
+			"tarballSha256": "sha256:f2cad40877d616a25df9f675ddbd4aeb0e0a6a342ef246e5d109a3978c891563",
+			"unpackedManifestSha256": "sha256:28564da328dee6369ef1befccfb4977efe7b4fc010908800dec0de695f99a5d0"
+		},
+		"canary": "evals/canary/8.3.0.json",
+		"bundleSha256": "sha256:80df0f91aa3d8be2742383ca42c6b1a6b15e5450eaca7a9c2bc422f3ec75782a"
+	},
+	"artifact": {
+		"packageVersion": "9.0.1",
+		"tarballSha256": "sha256:96f90ae380ed9dd155b4973be850ecc42205d180bdda4e3c2049c5bbe3ac7478",
+		"unpackedManifestSha256": "sha256:ec7f871553d4ead55df56438daa2e3c6306cd00d77294ee2ad5f82be42124000"
+	},
+	"guidance": [
+		{
+			"path": "skills/flow-plan/SKILL.md",
+			"sha256": "sha256:b3f0151a38cf40091486a89d14ce77bf7773d96df48776ed76a6961f39ecb2e6",
+			"rationale": "Unchanged since the reviewed 8.5.0 planning specialist documentation, and untouched by the runtime refactor. It is restated here because this record measures against the 8.3.0 baseline, where that change is part of the diff."
+		},
+		{
+			"path": "skills/flow-run/SKILL.md",
+			"sha256": "sha256:80e8a41f9a81c39ea1ba4dba1fe35dcef5927e41c7238039598fe48e08fad427",
+			"rationale": "Unchanged since the reviewed 8.4.0 clarification of the independent reviewer inventory obligation, and untouched by the runtime refactor. It is restated here because this record measures against the 8.3.0 baseline, where that clarification is part of the diff."
+		}
+	],
+	"approvedBy": "Operator approval in this Claude Code session, 2026-09-18",
+	"rationale": "Explicitly authorized offline qualification for the 9.0.1 runtime refactor, after being told a funded live campaign was the alternative and that this entry freezes most of the runtime rather than one reviewed feature, which is the widest claim any release has made on an exception written for individually reviewed features. The candidate splits the application, persistence and auto-drive layers with no new tool, command or setting; the two behavior changes are workspace validation moving to plugin load and an identical feature-completion replay taking the session lock once. The operator also authorized reading a cited baseline canary as retained evidence, which is what made this release possible at all: the 8.3.0 canary expired on 2026-09-16 and the wall-clock rule had already made every published offline release unverifiable. The last live-measured release remains 8.3.0; 8.4.0, 8.5.0, 8.6.0 and 9.0.0 were also qualified offline and are not treated as baselines. No new live model eval or canary was authorized or run."
+}

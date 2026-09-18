@@ -237,6 +237,10 @@ export async function assertPatchReleaseEvidence(
 		expectedArtifact: record.baseline.artifact,
 		canaryPath: record.baseline.canary,
 		bundlesDirectory: input.bundlesDirectory,
+		// Retained: this seal is prior evidence the patch cites, never a
+		// measurement of the candidate, so its canary window has already served
+		// its purpose for the release that recorded it.
+		freshness: "retained",
 	});
 	if (baseline.bundleSha256 !== record.baseline.bundleSha256)
 		throw new Error("Baseline qualification bundle changed.");

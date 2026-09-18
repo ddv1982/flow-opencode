@@ -37,7 +37,11 @@ Canary retries must retain consistent manager/reviewer identity.
 Reviewed offline exceptions: [narrow patches](../.agents/plans/06-patch-release/README.md)
 and [frozen features](../.agents/plans/09-planning-models/README.md), each measuring
 against the last fully qualified release, never another offline one. Their notes
-distinguish prior evidence from candidate measurements.
+distinguish prior evidence from candidate measurements. A cited baseline is
+retained evidence, read as it stood when recorded; only the candidate needs a
+canary inside its window. The wall clock decided this until 9.0.1, which made
+every published offline release stop verifying seventy-two hours after its
+baseline was measured.
 
 A new scenario needs an explicit release-policy decision. Any required canonical
 case missing from the report fails qualification.

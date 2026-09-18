@@ -595,6 +595,75 @@ describe("release metadata", () => {
 		}
 	});
 
+	test("reads a stale baseline canary as retained evidence", () => {
+		const expected = artifact("8.1.1");
+		const stale = canaryRecord("8.1.1", {
+			recordedAt: "2026-08-20T00:00:00.000Z",
+			expiresAt: "2026-08-23T00:00:00.000Z",
+		});
+		expect(
+			canaryRecordIssue("8.1.1", stale, expected, "v8.1.1", CANARY_NOW),
+		).toMatch(/stale/);
+		expect(
+			canaryRecordIssue(
+				"8.1.1",
+				stale,
+				expected,
+				"v8.1.1",
+				CANARY_NOW,
+				"retained",
+			),
+		).toBeNull();
+		// Retention relaxes the clock and nothing else.
+		for (const rotten of [
+			canaryRecord("8.1.1", { status: "failed" }),
+			canaryRecord("8.1.1", { artifact: artifact("8.1.2") }),
+			canaryRecord("8.1.1", {
+				recordedAt: "2026-09-20T00:00:00.000Z",
+				expiresAt: "2026-09-23T00:00:00.000Z",
+			}),
+			canaryRecord("8.1.1", { checklistSha256: digest("0") }),
+		]) {
+			expect(
+				canaryRecordIssue(
+					"8.1.1",
+					rotten,
+					expected,
+					"v8.1.1",
+					CANARY_NOW,
+					"retained",
+				),
+			).not.toBeNull();
+		}
+	});
+
+	test("verifies a stale baseline canary when the caller retains it", async () => {
+		const decisions = await recordDirectory();
+		const canaries = await recordDirectory();
+		const version = "8.1.1";
+		const expected = artifact(version);
+		const stale = canaryRecord(version, {
+			recordedAt: "2026-08-20T00:00:00.000Z",
+			expiresAt: "2026-08-23T00:00:00.000Z",
+		});
+		await writeCanaryEvidence(canaries, version);
+		await writeFile(join(canaries, `${version}.json`), JSON.stringify(stale));
+		const verify = (freshness?: "required" | "retained") =>
+			assertStrictReleaseEvidence({
+				version,
+				bundlesDirectory: decisions,
+				canaryPath: join(canaries, `${version}.json`),
+				expectedArtifact: expected,
+				now: CANARY_NOW,
+				...(freshness ? { freshness } : {}),
+			});
+		await expect(verify()).rejects.toThrow(/stale/);
+		// Past the clock, into the seal check that owns the rest of the decision.
+		await expect(verify("retained")).rejects.toThrow(
+			/no sealed qualification bundle/,
+		);
+	});
+
 	test("rejects the historical caller-attested canary format", () => {
 		const legacy = { ...canaryRecord("8.1.2"), derivationVersion: undefined };
 		expect(

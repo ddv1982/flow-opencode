@@ -132,8 +132,26 @@ const packageVersion = packageJson.version;
  */
 const PRIOR_MAINTAINED_DOC_BYTES = 91_000;
 const FIRST_USE_AND_PILOT_DOC_BYTES = 8_000;
+/**
+ * Raised for 9.0.1, which changed when a cited baseline's canary is read.
+ *
+ * This is the second raise where the bytes are the deliverable rather than the
+ * cost of one: a release rule that lives only in `scripts/` is a rule nobody can
+ * find, and the rule it replaced had already made every published offline
+ * release stop verifying. The budget had four bytes left, so the alternative was
+ * deleting an unrelated normative sentence to pay for a normative sentence,
+ * which is the trade the comment above calls a tax on prose.
+ *
+ * 130 bytes stay spare on purpose, and they are spoken for: three qualifiers a
+ * byte-neutral trim removed in 9.0.0 are still missing from
+ * `docs/development.md`. Ordinary growth still has to be paid for by deleting
+ * prose that stopped earning its place.
+ */
+const RETAINED_BASELINE_RULE_BYTES = 400;
 const MAX_MAINTAINED_DOC_BYTES =
-	PRIOR_MAINTAINED_DOC_BYTES + FIRST_USE_AND_PILOT_DOC_BYTES;
+	PRIOR_MAINTAINED_DOC_BYTES +
+	FIRST_USE_AND_PILOT_DOC_BYTES +
+	RETAINED_BASELINE_RULE_BYTES;
 
 /**
  * Decision records under `docs/adr/`, budgeted apart from maintained prose.
