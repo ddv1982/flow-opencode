@@ -71,6 +71,52 @@ export const REVIEWER_DEPRECATION_COMMIT =
 export const REVIEWER_REMOVAL_COMMIT =
 	"f2d92b80f9caab422646235e3d3eb7e7e319c361";
 
+/**
+ * 9.0.1 ships the runtime refactor (#88-#92): the application, persistence
+ * and auto-drive layers split by responsibility with no new surface. It cannot
+ * reuse an earlier list because the refactor touched most of the runtime, so
+ * this entry freezes every `src/` file that differs from the 8.3.0 baseline.
+ * That is the widest frozen scope any offline release has claimed.
+ */
+export const RUNTIME_REFACTOR_COMMIT =
+	"8d275b7b02708e1a2a9cde65c03029a0f074f373";
+export const RUNTIME_REFACTOR_FILES = [
+	"skills/flow-plan/SKILL.md",
+	"skills/flow-run/SKILL.md",
+	"package.json",
+	"tsconfig.types.json",
+	"scripts/lib/package-surface.ts",
+	"src/application/delivery.ts",
+	"src/application/flow-service.ts",
+	"src/application/prepare-validation.ts",
+	"src/application/session-close.ts",
+	"src/application/session-projection.ts",
+	"src/config-shared.ts",
+	"src/domain/operation.ts",
+	"src/domain/review-readiness.ts",
+	"src/domain/session-invariants.ts",
+	"src/domain/session-queries.ts",
+	"src/domain/transitions.ts",
+	"src/domain/validation.ts",
+	"src/infrastructure/fs/managed-fs.ts",
+	"src/infrastructure/fs/session-lock.ts",
+	"src/infrastructure/fs/session-repository.ts",
+	"src/infrastructure/fs/source-identity.ts",
+	"src/infrastructure/fs/workspace-paths.ts",
+	"src/infrastructure/fs/workspace.ts",
+	"src/platform/opencode/auto-drive-decision.ts",
+	"src/platform/opencode/auto-drive.ts",
+	"src/platform/opencode/command-hook.ts",
+	"src/platform/opencode/config.ts",
+	"src/platform/opencode/model-picker.ts",
+	"src/platform/opencode/plugin.ts",
+	"src/platform/opencode/sdk.ts",
+	"src/platform/opencode/tool-guard.ts",
+	"src/platform/opencode/tools.ts",
+	"src/prompt-surfaces.ts",
+	"src/tui.ts",
+] as const;
+
 export type OfflineFeature = Readonly<{
 	version: string;
 	feature: string;
@@ -125,6 +171,14 @@ export const OFFLINE_FEATURES: readonly OfflineFeature[] = [
 		files: PLANNING_MODELS_FILES,
 		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
 		baselines: ".agents/plans/12-reviewer-removal-release/baselines",
+	},
+	{
+		version: "9.0.1",
+		feature: "runtime-refactor-v1",
+		reviewedCommit: RUNTIME_REFACTOR_COMMIT,
+		files: RUNTIME_REFACTOR_FILES,
+		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
+		baselines: ".agents/plans/14-runtime-refactor-release/baselines",
 	},
 ];
 
