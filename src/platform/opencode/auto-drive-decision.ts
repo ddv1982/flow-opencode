@@ -39,7 +39,7 @@ export type LeaseView = Readonly<{
 
 export type IdleDecision =
 	| Readonly<{ kind: "deactivate" }>
-	| Readonly<{ kind: "stop"; warning?: string }>
+	| Readonly<{ kind: "stop"; warning: string }>
 	| Readonly<{ kind: "prompt-initial" }>
 	| Readonly<{ kind: "handback-and-wait" }>
 	| Readonly<{ kind: "answered" }>
@@ -50,6 +50,18 @@ export type IdleDecision =
 /**
  * Pure routing for one idle event. Mirrors the branch order of the previous
  * inline `onIdle` exactly; the executor applies side effects.
+ *
+ * Evaluation order (first match wins):
+ *  1. idle workspace            → deactivate | prompt-initial
+ *  2. no next action            → deactivate
+ *  3. unowned session           → stop
+ *  4. pending reply             → handback-and-wait | deactivate | answered
+ *  5. checkpoint boundary       → deactivate | handback-and-wait
+ *  6. non-mechanical action     → handback-or-deactivate
+ *  7. stale/unadvanced checkpoint → deactivate (else clear it)
+ *  8. same revision re-prompted → pause
+ *  9. no progress / no delivery → stop
+ * 10. otherwise                 → continue
  */
 export function decideOnIdle(
 	lease: LeaseView,

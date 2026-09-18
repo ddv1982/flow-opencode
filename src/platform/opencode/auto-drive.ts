@@ -455,6 +455,7 @@ export class AutoDriveCoordinator {
 				case "prompt-initial": {
 					lease.lastPromptedRevision = 0;
 					lease.inFlight = "prompt";
+					// Narrowing only: decideOnIdle already required hasDelivery.
 					if (!lease.delivery) return;
 					await this.#options
 						.prompt(
@@ -496,6 +497,7 @@ export class AutoDriveCoordinator {
 					return this.#warn(decision.warning);
 				case "continue": {
 					if (decision.clearCheckpoint) lease.checkpoint = null;
+					// Narrowing only: decideOnIdle already required hasDelivery.
 					if (!lease.delivery) return;
 					lease.lastPromptedRevision = projection.revision;
 					lease.messageId = null;
@@ -518,6 +520,12 @@ export class AutoDriveCoordinator {
 						this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
 					}
 					return;
+				}
+				default: {
+					const unhandled: never = decision;
+					throw new Error(
+						`Unhandled auto-drive decision: ${String(unhandled)}`,
+					);
 				}
 			}
 		} finally {

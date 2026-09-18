@@ -140,14 +140,14 @@ describe("decideOnIdle", () => {
 		});
 	});
 
-	test("stops on no progress when the lease was never anchored", () => {
+	test("stops on no progress once the checkpoint has been cleared", () => {
 		const ready: AutoDriveProjection = {
 			sessionId: "s1",
 			status: "ready",
 			revision: 6,
 			nextAction: "flow_run_start",
 		};
-		expect(decideOnIdle(lease(), ready)).toEqual({
+		expect(decideOnIdle(lease({ lastPromptedRevision: 5 }), ready)).toEqual({
 			kind: "stop",
 			warning: "Flow auto-drive stopped: no progress.",
 		});
