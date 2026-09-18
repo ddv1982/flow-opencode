@@ -970,7 +970,7 @@ describe("Flow application runtime gates", () => {
 		expect(repository.session?.revision).toBe(1);
 	});
 
-	test("replays an exact feature completion that loses the serialized transaction race", async () => {
+	test("replays the second of two concurrent identical feature completions", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());
 		const prepared = await prepareValidation(

@@ -50,12 +50,6 @@ type CloseRecoveryWorkflowData = FailureWorkflowData &
 		closeState: CloseState;
 		projection:
 			| CompactProjection
-			| Readonly<
-					CompactProjection & {
-						nextAction: "await-user-direction";
-						archiveRetry: null;
-					}
-			  >
 			| Readonly<{
 					view: "compact";
 					sessionId: string;
