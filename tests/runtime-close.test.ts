@@ -141,7 +141,10 @@ describe("Flow reviewed feature outcomes", () => {
 			}
 			expect(repository.session).toBe(active);
 			expect(repository.saveCount).toBe(saves);
-			expect(repository.transactionCount).toBe(transactions);
+			// The exact-replay check now runs inside the lock, so replaying via
+			// featureComplete still opens one transaction even though it saves
+			// nothing; featureCompleteReplay does not open a transaction at all.
+			expect(repository.transactionCount).toBe(transactions + 1);
 			repository.sourceDigestFailure = null;
 
 			const closeRequest = {

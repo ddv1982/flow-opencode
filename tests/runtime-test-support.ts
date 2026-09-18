@@ -131,11 +131,18 @@ export class MemorySessionRepository implements SessionRepository {
 		return Promise.resolve(this.session);
 	}
 
+	private transactionTail: Promise<void> = Promise.resolve();
+
 	transact<T>(
 		task: (transaction: SessionTransaction) => Promise<T>,
 	): Promise<T> {
 		this.transactionCount += 1;
-		return task(this.transaction);
+		const result = this.transactionTail.then(() => task(this.transaction));
+		this.transactionTail = result.then(
+			() => undefined,
+			() => undefined,
+		);
+		return result;
 	}
 }
 export function deterministicEnvironment(): TransitionEnvironment {

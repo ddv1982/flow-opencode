@@ -1,14 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import { UnreadableFlowSessionError } from "../src/application/errors.js";
 import { createFlowService } from "../src/application/flow-service.js";
-import type { SessionTransaction } from "../src/application/ports/session-repository.js";
 import {
 	persistObservedValidation,
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
 import type { ReviewerProjection } from "../src/application/session-projection.js";
 import { liveFindingIds } from "../src/domain/review-findings.js";
-import type { Plan, Session } from "../src/domain/session.js";
+import type { Plan } from "../src/domain/session.js";
 import {
 	activeReview,
 	approveSession,
@@ -30,41 +29,6 @@ import {
 	startSession,
 	submitReview,
 } from "./runtime-test-support.js";
-
-class CompletionRaceRepository extends MemorySessionRepository {
-	private completionReadReleases: Array<() => void> | null = null;
-	private transactionTail: Promise<void> = Promise.resolve();
-	completionOuterReadCount = 0;
-
-	holdCompletionReadsUntilBothArrive(): void {
-		this.completionReadReleases = [];
-	}
-
-	override read(): Promise<Session | null> {
-		const releases = this.completionReadReleases;
-		if (!releases) return super.read();
-		const snapshot = this.session;
-		this.completionOuterReadCount += 1;
-		return new Promise((resolve) => {
-			releases.push(() => resolve(snapshot));
-			if (releases.length !== 2) return;
-			this.completionReadReleases = null;
-			for (const release of releases) release();
-		});
-	}
-
-	override transact<T>(
-		task: (transaction: SessionTransaction) => Promise<T>,
-	): Promise<T> {
-		this.transactionCount += 1;
-		const result = this.transactionTail.then(() => task(this.transaction));
-		this.transactionTail = result.then(
-			() => undefined,
-			() => undefined,
-		);
-		return result;
-	}
-}
 
 describe("Flow application runtime gates", () => {
 	test("keeps the active goal visible in the compact projection", async () => {
@@ -1007,7 +971,7 @@ describe("Flow application runtime gates", () => {
 	});
 
 	test("replays an exact feature completion that loses the serialized transaction race", async () => {
-		const repository = new CompletionRaceRepository();
+		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());
 		const prepared = await prepareValidation(
 			repository,
@@ -1057,12 +1021,11 @@ describe("Flow application runtime gates", () => {
 		} as const;
 		const revisionBeforeCompletion = revision(repository);
 		const setupSaveCount = repository.saveCount;
-		expect(setupSaveCount).toBe(5);
-		repository.holdCompletionReadsUntilBothArrive();
 
-		const firstCompletion = flow.featureComplete(completeRequest);
-		const secondCompletion = flow.featureComplete(completeRequest);
-		const responses = await Promise.all([firstCompletion, secondCompletion]);
+		const responses = await Promise.all([
+			flow.featureComplete(completeRequest),
+			flow.featureComplete(completeRequest),
+		]);
 
 		const replayFlags = responses
 			.map((response) => {
@@ -1071,7 +1034,6 @@ describe("Flow application runtime gates", () => {
 			})
 			.sort((left, right) => Number(left) - Number(right));
 		expect(replayFlags).toEqual([false, true]);
-		expect(repository.completionOuterReadCount).toBe(2);
 		expect(revision(repository)).toBe(revisionBeforeCompletion + 1);
 		expect(repository.saveCount).toBe(setupSaveCount + 1);
 		expect(
@@ -1433,7 +1395,10 @@ describe("Flow application runtime gates", () => {
 			replayed: true,
 		});
 		expect(repository.saveCount).toBe(savesBeforeReplay);
-		expect(repository.transactionCount).toBe(transactionsBeforeReplay);
+		// The exact-replay check now runs inside the lock, so replaying via
+		// featureComplete still opens one transaction even though it saves
+		// nothing; featureCompleteReplay does not open a transaction at all.
+		expect(repository.transactionCount).toBe(transactionsBeforeReplay + 1);
 		const readOnlyReplay = await flow.featureCompleteReplay(completeRequest);
 		expectOk(readOnlyReplay);
 		expect(readOnlyReplay.workflowData.operation).toMatchObject({
@@ -1441,7 +1406,7 @@ describe("Flow application runtime gates", () => {
 			replayed: true,
 		});
 		expect(repository.saveCount).toBe(savesBeforeReplay);
-		expect(repository.transactionCount).toBe(transactionsBeforeReplay);
+		expect(repository.transactionCount).toBe(transactionsBeforeReplay + 1);
 
 		const sessionId = repository.session?.id;
 		if (!sessionId) throw new Error("Expected a session id.");

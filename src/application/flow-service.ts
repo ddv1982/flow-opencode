@@ -389,27 +389,15 @@ export function createFlowService(
 		async featureComplete(input) {
 			try {
 				const request = FeatureCompleteInputSchema.parse(input).request;
-				const current = await repository.read();
-				if (current) {
-					const replay = exactFeatureCompleteReplay(current, request);
+				return await repository.transact(async (transaction) => {
+					const session = await transaction.load();
+					if (!session) throw new Error("No active Flow session exists.");
+					const replay = exactFeatureCompleteReplay(session, request);
 					if (replay) {
 						return featureCompleteResponse(
 							replay.session,
 							request,
 							replay.run,
-							true,
-						);
-					}
-				}
-				return await repository.transact(async (transaction) => {
-					const session = await transaction.load();
-					if (!session) throw new Error("No active Flow session exists.");
-					const racedReplay = exactFeatureCompleteReplay(session, request);
-					if (racedReplay) {
-						return featureCompleteResponse(
-							racedReplay.session,
-							request,
-							racedReplay.run,
 							true,
 						);
 					}
