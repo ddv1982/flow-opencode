@@ -1,4 +1,10 @@
 import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
+import {
+	decideOnIdle,
+	type IdleDecision,
+	isHandback,
+	isPendingReviewer,
+} from "./auto-drive-decision.js";
 export const FLOW_AUTO_METADATA_KEY = "opencode-plugin-flow/auto";
 export interface AutoDriveProjection {
 	readonly sessionId?: string | undefined;
@@ -121,30 +127,6 @@ function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
 		}
 	}
 	return { token, user, text: text.trim().replace(/\s+/g, " ") };
-}
-function isMechanical(projection: AutoDriveProjection): boolean {
-	return projection.nextAction === "flow_run_start"
-		? projection.status === "ready"
-		: projection.nextAction === "flow_session_close" &&
-				(projection.status === "completed" || projection.status === "closed");
-}
-function isCheckpoint(projection: AutoDriveProjection): boolean {
-	return ["flow_plan_approve", "await-user-direction"].includes(
-		projection.nextAction ?? "",
-	);
-}
-function isPendingReviewer(projection: AutoDriveProjection): boolean {
-	return (
-		projection.status === "running" &&
-		projection.nextAction === "dispatch-flow-reviewer"
-	);
-}
-function isHandback(projection: AutoDriveProjection): boolean {
-	return (
-		projection.status === "blocked" ||
-		projection.nextAction === "flow_feature_reset" ||
-		projection.nextAction === "dispatch-flow-reviewer"
-	);
 }
 export class AutoDriveCoordinator {
 	#lease: Lease | null = null;
@@ -453,115 +435,98 @@ export class AutoDriveCoordinator {
 			if (this.#lease !== lease) return;
 			const baseline = lease.baseline;
 			if (!baseline) return this.#stop(lease);
-			const anchored = lease.checkpoint !== null;
-			if (projection.status === "idle") {
-				if (
-					baseline.status !== "idle" ||
-					baseline.sessionId ||
-					lease.lastPromptedRevision === 0 ||
-					!lease.delivery
-				)
-					return void this.deactivate(hostSessionId);
-				lease.lastPromptedRevision = 0;
-				lease.inFlight = "prompt";
-				await this.#options
-					.prompt(
-						hostSessionId,
-						`${INITIAL_ROUTE}\n\n${FLOW_MANAGER_KERNEL}`,
-						lease.delivery,
-						{ [FLOW_AUTO_METADATA_KEY]: lease.token },
-					)
-					.catch((error) =>
-						this.#stop(lease, `Flow auto prompt failed: ${String(error)}`),
-					);
-				return;
-			}
-			if (projection.nextAction === null)
-				return void this.deactivate(hostSessionId);
-			if (projection.sessionId !== baseline.sessionId)
-				return this.#stop(lease, "Flow auto-drive stopped: unowned session.");
-			const checkpoint = lease.checkpoint;
-			const boundary = isCheckpoint(projection);
-			const advance = checkpoint?.advance;
-			const mutationAdvanced =
-				advance !== undefined &&
-				projection.revision === advance &&
-				isMechanical(projection);
-			if (lease.pendingReply) {
+			const decision: IdleDecision = decideOnIdle(
+				{
+					baseline,
+					checkpoint: lease.checkpoint,
+					pendingReply: lease.pendingReply,
+					lastPromptedRevision: lease.lastPromptedRevision,
+					hasDelivery: lease.delivery !== null,
+				},
+				projection,
+			);
+			if (lease.pendingReply && projection.status !== "idle")
 				lease.pendingReply = false;
-				if (
-					boundary &&
-					(!checkpoint || projection.revision > checkpoint.revision)
-				) {
+			switch (decision.kind) {
+				case "deactivate":
+					return void this.deactivate(hostSessionId);
+				case "stop":
+					return this.#stop(lease, decision.warning);
+				case "prompt-initial": {
+					lease.lastPromptedRevision = 0;
+					lease.inFlight = "prompt";
+					// Narrowing only: decideOnIdle already required hasDelivery.
+					if (!lease.delivery) return;
+					await this.#options
+						.prompt(
+							hostSessionId,
+							`${INITIAL_ROUTE}\n\n${FLOW_MANAGER_KERNEL}`,
+							lease.delivery,
+							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+						)
+						.catch((error) =>
+							this.#stop(lease, `Flow auto prompt failed: ${String(error)}`),
+						);
+					return;
+				}
+				case "handback-and-wait":
 					await this.#promptHandback(lease, projection);
 					if (this.#lease !== lease) return;
 					return void this.#waitAt(lease, projection.revision);
+				case "answered":
+					if (lease.checkpoint) lease.checkpoint.answered = true;
+					this.#setTiming("active");
+					return;
+				case "handback-or-deactivate": {
+					const already =
+						lease.handbackPromptedRevision === projection.revision;
+					await this.#promptHandback(lease, projection);
+					if (this.#lease !== lease) return;
+					if (
+						!already &&
+						lease.handbackPromptedRevision === projection.revision
+					) {
+						this.#setTiming("paused");
+						return;
+					}
+					return void this.deactivate(hostSessionId);
 				}
-				if (!checkpoint || (!boundary && !mutationAdvanced))
-					return void this.deactivate(hostSessionId);
-				checkpoint.answered = true;
-				this.#setTiming("active");
-				return;
-			}
-			if (boundary) {
-				if (checkpoint && projection.revision < checkpoint.revision)
-					return void this.deactivate(hostSessionId);
-				await this.#promptHandback(lease, projection);
-				if (this.#lease !== lease) return;
-				return void this.#waitAt(lease, projection.revision);
-			}
-			if (!isMechanical(projection)) {
-				const already = lease.handbackPromptedRevision === projection.revision;
-				await this.#promptHandback(lease, projection);
-				if (this.#lease !== lease) return;
-				if (
-					!already &&
-					lease.handbackPromptedRevision === projection.revision
-				) {
+				case "pause":
+					if (decision.clearCheckpoint) lease.checkpoint = null;
 					this.#setTiming("paused");
+					return this.#warn(decision.warning);
+				case "continue": {
+					if (decision.clearCheckpoint) lease.checkpoint = null;
+					// Narrowing only: decideOnIdle already required hasDelivery.
+					if (!lease.delivery) return;
+					lease.lastPromptedRevision = projection.revision;
+					lease.messageId = null;
+					this.#setTiming("active");
+					lease.inFlight = "prompt";
+					try {
+						const continuation = [
+							`Continue the same user-authorized /flow-auto lifecycle from compact revision ${projection.revision}.`,
+							"Call flow_status with the compact view first.",
+							CONTINUATION_ROUTE,
+							`Then follow ${projection.nextAction} without expanding the approved goal.`,
+						].join(" ");
+						await this.#options.prompt(
+							hostSessionId,
+							`${continuation}\n\n${FLOW_MANAGER_KERNEL}`,
+							lease.delivery,
+							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+						);
+					} catch (error) {
+						this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
+					}
 					return;
 				}
-				return void this.deactivate(hostSessionId);
-			}
-			if (checkpoint) {
-				if (projection.revision <= checkpoint.revision || !mutationAdvanced)
-					return void this.deactivate(hostSessionId);
-				lease.checkpoint = null;
-			}
-			if (lease.lastPromptedRevision === projection.revision) {
-				this.#setTiming("paused");
-				return this.#warn(
-					`Flow auto-drive paused after revision ${projection.revision} made no lifecycle progress.`,
-				);
-			}
-			if (
-				baseline.sessionId
-					? projection.revision <= baseline.revision ||
-						(!anchored && !isPendingReviewer(baseline))
-					: projection.sessionId === undefined
-			)
-				return this.#stop(lease, "Flow auto-drive stopped: no progress.");
-			if (!lease.delivery)
-				return this.#stop(lease, "Flow auto-drive stopped: no delivery.");
-			lease.lastPromptedRevision = projection.revision;
-			lease.messageId = null;
-			this.#setTiming("active");
-			lease.inFlight = "prompt";
-			try {
-				const continuation = [
-					`Continue the same user-authorized /flow-auto lifecycle from compact revision ${projection.revision}.`,
-					"Call flow_status with the compact view first.",
-					CONTINUATION_ROUTE,
-					`Then follow ${projection.nextAction} without expanding the approved goal.`,
-				].join(" ");
-				await this.#options.prompt(
-					hostSessionId,
-					`${continuation}\n\n${FLOW_MANAGER_KERNEL}`,
-					lease.delivery,
-					{ [FLOW_AUTO_METADATA_KEY]: lease.token },
-				);
-			} catch (error) {
-				this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
+				default: {
+					const unhandled: never = decision;
+					throw new Error(
+						`Unhandled auto-drive decision: ${String(unhandled)}`,
+					);
+				}
 			}
 		} finally {
 			if (this.#lease === lease) {

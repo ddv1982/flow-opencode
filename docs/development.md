@@ -24,7 +24,7 @@ bun run package:smoke
 ```
 
 The opt-in real-host check launches the pinned `opencode-ai` package through
-`bunx`. It requires registry access or a populated Bun cache rather than a
+`bunx`. It requires registry access or a populated Bun cache, not a
 separately installed OpenCode binary:
 
 ```bash
@@ -37,7 +37,7 @@ bun run smoke:live
 so they are raised by hand. The plugin pin is also the host version
 `smoke:live` launches, so bumping it puts a new host under test:
 
-1. Move the `devDependencies` pin, and `peerDependencies` too if the new version
+1. Move the `devDependencies` pin, and `peerDependencies` if the new version
    falls outside the declared range.
 2. Run `bun run check`, then `bun run smoke:live` for the real host.
 
@@ -56,23 +56,24 @@ compatibility claim no check has run.
 - `src/platform/opencode/` owns OpenCode hooks, host schemas, commands, tools,
   validation capture, and the duplicate-runtime guard: `command-hook.ts`
   (slash-command hook), `tool-guard.ts` (leadership and auto-drive guard
-  around the tools), `plugin.ts` (wiring only).
+  around the tools), `auto-drive-decision.ts` (pure idle-routing decision,
+  `decideOnIdle`, run by `auto-drive.ts`), `plugin.ts` (wiring only).
 - `src/guidance/`, `skills/`, and prompt surfaces own concise workflow judgment.
 - `tests/` prove state-machine, persistence, platform, package, and host
   contracts.
 
 Dependencies point inward. Domain code does not import filesystem or host APIs;
 application code depends on domain; infrastructure implements application
-ports; the OpenCode platform composes the outer layers.
+ports; the OpenCode platform composes outer layers.
 
 There is no distribution/activation subsystem, cache inventory, repair
 journal, or Flow-owned installer: OpenCode installs and loads the npm package
-from its native plugin command and normal configuration.
+from its native plugin command and configuration.
 
 ## Change discipline
 
-- Keep Session v5 as one canonical run aggregate: derive status and progress
-  instead of parallel ledgers or cached counters.
+- Keep Session v5 as one canonical run aggregate: derive status and progress,
+  not parallel ledgers or cached counters.
 - Every mutation needs a revision guard and stable operation ID. Exact replay is
   safe; conflicting reuse fails.
 - Only the reserved reviewer may create a new completion; while the Session v5
@@ -84,7 +85,8 @@ from its native plugin command and normal configuration.
 - Treat validation scope as a coverage claim: `broad` means the canonical
   repository gate, byte for byte, not a narrow command relabeled.
 - Validation commands are persisted, never with inline secrets. Raw output is
-  reduced to completeness and a digest rather than stored or projected.
+  intentionally reduced to completeness and a digest rather than stored or
+  projected.
 - Keep one review per run. A final review requires broad validation and is not a
   second pass. The reviewer submits through `flow_feature_complete`; the
   manager never proxies its verdict.
@@ -96,14 +98,14 @@ from its native plugin command and normal configuration.
 ## Documentation
 
 Update the README, maintainer contract, ADR, and changelog when a public
-lifecycle or installation contract changes; documentation describes only the
-current product, and Git history owns superseded plans and experiments.
+lifecycle or installation contract changes. Documentation must describe only
+the current product; Git history owns superseded plans and experiments.
 
 ## Model-driven wave evidence
 
 Deterministic CI validates schemas, permissions, prompts, and host integration
 without provider credentials. It does not claim a model overlaps workers, so
-changes to wave behavior should be exercised manually with a real provider
+wave-behavior changes need manual exercise with a real provider
 when available, with sanitized evidence of:
 
 - worker start/end times with a positive common overlap;
@@ -115,13 +117,13 @@ Every wave-behavior change needs this evidence when marked verified, but it is
 not a deterministic release gate. Without a provider, mark the behavior
 unverified, record the review risk, and avoid performance or
 reliability claims. Do not persist prompts, secrets, raw provider payloads, or a
-wave ledger, and do not add provider credentials, a scheduler, or telemetry to
+wave ledger, or add provider credentials, a scheduler, or telemetry to
 CI.
 
 ## Model-driven auto-continuation evidence
 
 Deterministic tests exercise the coordinator through the real plugin hooks and
-the `promptAsync` client boundary, but do not prove how a configured model
+the `promptAsync` client boundary, but not how a configured model
 behaves after delivery. When auto-continuation behavior changes and a provider
 is available, run one packed-plugin canary recording sanitized evidence of:
 
@@ -159,14 +161,14 @@ cross-version active-session gate; v6 is an explicit hard cutover.
 
 Publication accepts both annotated and lightweight tags, but the freshly fetched
 tag, workflow event, checkout, and current remote `main` tip must identify the
-same commit before npm publication. Network calls have explicit deadlines. npm
-publication reconciles the immutable package integrity after every result,
-including timeouts. GitHub publication first builds an exact draft under the
-same ref proof. That draft recovers if npm succeeds and `main` then advances.
-Finalization rechecks the remote tag, refuses conflicting metadata
-or assets, and publishes only after every asset digest matches. Reruns converge
-after partial success without replacing published bytes.
+same commit immediately before npm publication. Network calls have explicit
+deadlines. npm publication reconciles the immutable package integrity after
+every result, including timeouts. GitHub publication builds an exact draft under
+the same ref proof. That draft recovers if npm succeeds and `main` advances.
+Finalization rechecks the remote tag, refuses conflicting metadata or assets,
+and publishes only after every asset digest matches. Reruns converge after
+partial success without replacing published bytes.
 
 Preparing an already-published release is read-only and requires exact assets.
 Missing or pending assets fail preparation; use the `github-publish` recovery
-path with the original inputs and tag proof to restore a missing asset.
+path with original inputs and tag proof to restore a missing asset.
