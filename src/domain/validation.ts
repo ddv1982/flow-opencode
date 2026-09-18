@@ -14,6 +14,7 @@ import type {
 } from "./session.js";
 import { planEvidence, planGate } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
+import { sessionInvariantIssues } from "./session-invariants.js";
 import { assertionsSatisfied, unmetAssertions } from "./test-results.js";
 import { FlowTransitionError } from "./transition-error.js";
 
@@ -261,6 +262,11 @@ export function recordValidation(
 		),
 	};
 	assertTerminalHeadroom(next);
+	const issues = sessionInvariantIssues(next);
+	if (issues.length > 0)
+		throw new FlowTransitionError(
+			`Flow refused an inconsistent session: ${issues.join(" ")}`,
+		);
 	return {
 		session: next,
 		value: observation,
@@ -288,11 +294,22 @@ function isObservedAtDeclaredPath(
 	);
 }
 
-export function evidenceRefusal(
+export type EvidenceStatus =
+	| Readonly<{ kind: "satisfied" }>
+	| Readonly<{ kind: "wrong-host"; hosts: string[] }>
+	| Readonly<{ kind: "unmet-cases"; cases: string[] }>
+	| Readonly<{ kind: "missing" }>;
+
+/**
+ * How one declared evidence entry stands against the recorded observations.
+ * The boolean (`unsatisfiedEvidence`) and the message (`evidenceRefusal`) both
+ * derive from this, so they cannot disagree about why an entry is unmet.
+ */
+export function evidenceStatus(
 	session: Session,
 	entry: EvidenceEntry,
 	sourceDigest?: SourceDigest,
-): string {
+): EvidenceStatus {
 	const eligible = session.runs
 		.flatMap((run) => run.validations)
 		.filter(
@@ -301,6 +318,26 @@ export function evidenceRefusal(
 				isObservedAtDeclaredPath(entry, observation) &&
 				isValidationEligible(observation, sourceDigest),
 		);
+	const onHost = eligible.filter((observation) =>
+		isObservedOnDeclaredPlatform(entry, observation),
+	);
+	if (
+		onHost.some((observation) =>
+			assertionsSatisfied(
+				entry.assertions ?? [],
+				observation.observedAssertions,
+			),
+		)
+	)
+		return { kind: "satisfied" };
+	// Latest right-host result determines which declared cases remain unmet.
+	const unmet = onHost
+		.toSorted((left, right) => left.recordedRevision - right.recordedRevision)
+		.map((observation) =>
+			unmetAssertions(entry.assertions ?? [], observation.observedAssertions),
+		)
+		.filter((names) => names.length > 0)
+		.at(-1);
 	const wrongHosts = [
 		...new Set(
 			eligible
@@ -310,24 +347,33 @@ export function evidenceRefusal(
 				.map((observation) => observation.hostPlatform ?? "an unrecorded host"),
 		),
 	];
-	// Latest right-host result determines which declared cases remain unmet.
-	const unmet = eligible
-		.filter((observation) => isObservedOnDeclaredPlatform(entry, observation))
-		.toSorted((left, right) => left.recordedRevision - right.recordedRevision)
-		.map((observation) =>
-			unmetAssertions(entry.assertions ?? [], observation.observedAssertions),
-		)
-		.filter((names) => names.length > 0)
-		.at(-1);
+	if (wrongHosts.length > 0) return { kind: "wrong-host", hosts: wrongHosts };
+	if (unmet) return { kind: "unmet-cases", cases: unmet };
+	return { kind: "missing" };
+}
+
+/**
+ * Explains why one declared evidence entry is unmet.
+ *
+ * Meant for entries `unsatisfiedEvidence` returned with the same
+ * `sourceDigest`; for an entry that is already satisfied, this falls back to
+ * the generic `needs …` wording.
+ */
+export function evidenceRefusal(
+	session: Session,
+	entry: EvidenceEntry,
+	sourceDigest?: SourceDigest,
+): string {
+	const status = evidenceStatus(session, entry, sourceDigest);
 	const needs =
 		entry.platform === undefined || entry.platform === "other"
 			? entry.environment
 			: `${entry.environment} on ${entry.platform}`;
 	const detail =
-		wrongHosts.length > 0
-			? `passed on ${wrongHosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
-			: unmet
-				? `passed on ${entry.platform ?? "the declared host"} but reported no passing result for ${unmet.join(", ")}; rerun the exact approved command so ${commandUsesManagedJUnitPath(entry.command) ? MANAGED_JUNIT_PATH : "a fresh resultsPath"} reports those cases passing`
+		status.kind === "wrong-host"
+			? `passed on ${status.hosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
+			: status.kind === "unmet-cases"
+				? `passed on ${entry.platform ?? "the declared host"} but reported no passing result for ${status.cases.join(", ")}; rerun the exact approved command so ${commandUsesManagedJUnitPath(entry.command) ? MANAGED_JUNIT_PATH : "a fresh resultsPath"} reports those cases passing`
 				: `needs ${needs}`;
 	return `${JSON.stringify(entry.command)} (${detail}, for ${entry.requirement})`;
 }
@@ -336,22 +382,9 @@ export function unsatisfiedEvidence(
 	session: Session,
 	sourceDigest?: SourceDigest,
 ): EvidenceEntry[] {
-	const declared = planEvidence(session.plan);
-	if (declared.length === 0) return [];
-	const observed = session.runs.flatMap((run) => run.validations);
-	return declared.filter(
+	return planEvidence(session.plan).filter(
 		(entry) =>
-			!observed.some(
-				(observation) =>
-					observation.command === entry.command &&
-					isObservedAtDeclaredPath(entry, observation) &&
-					isObservedOnDeclaredPlatform(entry, observation) &&
-					assertionsSatisfied(
-						entry.assertions ?? [],
-						observation.observedAssertions,
-					) &&
-					isValidationEligible(observation, sourceDigest),
-			),
+			evidenceStatus(session, entry, sourceDigest).kind !== "satisfied",
 	);
 }
 
