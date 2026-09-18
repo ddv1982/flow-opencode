@@ -340,6 +340,9 @@ export async function assertOfflineFeatureReleaseEvidence(input: {
 		expectedArtifact: base,
 		canaryPath: record.baseline.canary,
 		bundlesDirectory: resolve(root, entry.baselines),
+		// Retained: the same citation the patch path makes. The notes below say
+		// plainly that these are not measurements of this candidate.
+		freshness: "retained",
 	});
 	if (baseline.bundleSha256 !== record.baseline.bundleSha256)
 		throw new Error("Baseline seal mismatch.");

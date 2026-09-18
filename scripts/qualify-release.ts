@@ -386,7 +386,7 @@ export function decisionRecordFor(input: {
 }
 
 const USAGE =
-	"Usage: bun run qualify -- --campaign-dir <v2-campaign> --canary <canary.json> [--bundles-dir <dir>]";
+	"Usage: bun run qualify -- --campaign-dir <v2-campaign> --canary <canary.json> [--bundles-dir <dir>] [--freshness required|retained]";
 
 function requiredOption(
 	options: Readonly<Record<string, string>>,
@@ -400,7 +400,12 @@ function requiredOption(
 async function main(): Promise<void> {
 	const args = process.argv.slice(2);
 	const options: Record<string, string> = {};
-	const allowed = new Set(["--campaign-dir", "--canary", "--bundles-dir"]);
+	const allowed = new Set([
+		"--campaign-dir",
+		"--canary",
+		"--bundles-dir",
+		"--freshness",
+	]);
 	for (let index = 0; index < args.length; index += 2) {
 		const option = args[index];
 		const value = args[index + 1];
@@ -412,6 +417,12 @@ async function main(): Promise<void> {
 	}
 	const campaignDirectory = requiredOption(options, "--campaign-dir");
 	const canaryPath = requiredOption(options, "--canary");
+	// Sealing retained evidence is a regrade of bytes that already exist, so the
+	// operator states which of the two readings this is rather than letting the
+	// wall clock decide it silently.
+	const freshness = options["--freshness"] ?? "required";
+	if (freshness !== "required" && freshness !== "retained")
+		throw new Error(USAGE);
 	const repositoryRoot = join(import.meta.dir, "..");
 	const [reportBytes, catalogBytes, planBytes, completionBytes, artifactBytes] =
 		await Promise.all([
@@ -450,8 +461,13 @@ async function main(): Promise<void> {
 		record: canary,
 		expectedArtifact: artifact,
 		directory: canaryDirectory,
+		freshness,
 	});
 	if (canaryIssue) throw new Error(canaryIssue);
+	if (freshness === "retained")
+		process.stdout.write(
+			`Retained evidence: ${artifact.packageVersion} was regraded without enforcing its canary window, and this seal measures nothing new.\n`,
+		);
 	const result = qualifyV2({
 		reportInput: JSON.parse(reportBytes.toString("utf8")),
 		catalogInput: JSON.parse(catalogBytes.toString("utf8")),

@@ -715,6 +715,28 @@ describe("canary release verification", () => {
 		).toMatch(/does not match/);
 	});
 
+	test("reads an expired canary as retained evidence, but not a future one", async () => {
+		const valid = record();
+		const directory = await evidenceDirectory(valid);
+		const verify = (now: string, freshness?: "required" | "retained") =>
+			canaryRecordIssue({
+				version: "1.2.3",
+				record: valid,
+				expectedArtifact: artifact,
+				directory,
+				now: new Date(now),
+				...(freshness ? { freshness } : {}),
+			});
+		// Retained evidence is read exactly as it would have been read inside its
+		// window: the expiry stops applying, and nothing else does.
+		expect(await verify("2026-08-29T00:00:00.000Z", "retained")).toBe(
+			await verify("2026-08-25T01:00:00.000Z"),
+		);
+		expect(await verify("2026-08-24T00:00:00.000Z", "retained")).toMatch(
+			/future/,
+		);
+	});
+
 	test("checks sanitized evidence bytes, sizes, and digests", async () => {
 		const valid = record();
 		const directory = await evidenceDirectory(valid);

@@ -1103,12 +1103,31 @@ async function evidenceValue(
 	}
 }
 
+/**
+ * Whether a canary must still be inside its validity window.
+ *
+ * `required` is the rule for the release being published. A canary measures a
+ * host and a model that both move underneath it, so a candidate may not lean on
+ * one that has gone cold.
+ *
+ * `retained` is for evidence a later release only cites: the baseline seal a
+ * reviewed offline exception measures against and explicitly does not claim as
+ * its own measurement. That citation is a statement about the past, so it does
+ * not rot, and the record making it already says in its own notes that nothing
+ * after the baseline has been measured live. Under the wall-clock rule the same
+ * retained evidence stopped verifying seventy-two hours after it was recorded,
+ * which made every published offline release unreproducible: re-running its
+ * release workflow refused evidence that had not changed.
+ */
+export type CanaryFreshness = "required" | "retained";
+
 export async function canaryRecordIssue(input: {
 	readonly version: string;
 	readonly record: unknown;
 	readonly expectedArtifact: ArtifactIdentity;
 	readonly directory: string;
 	readonly now?: Date;
+	readonly freshness?: CanaryFreshness;
 }): Promise<string | null> {
 	const parsed = parseCanaryRecord(input.record);
 	if (!parsed.ok) return parsed.issues[0] ?? "Canary record is invalid.";
@@ -1120,7 +1139,11 @@ export async function canaryRecordIssue(input: {
 	if (record.status !== "passed") return `Canary status is ${record.status}.`;
 	const now = (input.now ?? new Date()).getTime();
 	if (Date.parse(record.recordedAt) > now) return "Canary is future-dated.";
-	if (Date.parse(record.expiresAt) <= now) return "Canary is expired.";
+	if (
+		(input.freshness ?? "required") === "required" &&
+		Date.parse(record.expiresAt) <= now
+	)
+		return "Canary is expired.";
 	const session = await evidenceValue(
 		input.directory,
 		record.artifacts.session,

@@ -25,6 +25,7 @@ import {
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
 	CANARY_DERIVATION_VERSION,
+	type CanaryFreshness,
 	type CanaryRecord,
 	canaryRecordSha256,
 	parseCanaryRecord,
@@ -123,6 +124,7 @@ export function canaryRecordIssue(
 	expectedArtifact: ArtifactIdentity,
 	expectedTag = `v${version}`,
 	now = new Date(),
+	freshness: CanaryFreshness = "required",
 ): string | null {
 	if (!record || typeof record !== "object" || Array.isArray(record))
 		return `no canary record exists for ${version}`;
@@ -167,7 +169,8 @@ export function canaryRecordIssue(
 		return `the canary timestamps for ${version} are invalid`;
 	if (recorded > now.getTime())
 		return `the canary for ${version} is future-dated`;
-	if (expires <= now.getTime()) return `the canary for ${version} is stale`;
+	if (freshness === "required" && expires <= now.getTime())
+		return `the canary for ${version} is stale`;
 	for (const artifact of [
 		entry.artifacts?.session,
 		entry.artifacts?.transcript,
@@ -453,6 +456,7 @@ export async function assertStrictReleaseEvidence(input: {
 	readonly expectedArtifact: ArtifactIdentity;
 	readonly tag?: string;
 	readonly now?: Date;
+	readonly freshness?: CanaryFreshness;
 }): Promise<{
 	readonly bundleSha256: string;
 	readonly summary: ReleaseEvidenceSummary;
@@ -467,6 +471,7 @@ export async function assertStrictReleaseEvidence(input: {
 		input.expectedArtifact,
 		tag,
 		input.now,
+		input.freshness,
 	);
 	if (canaryIssue) throw new Error(canaryIssue);
 	const evidenceIssue = await verifyCanaryRecord({
@@ -475,6 +480,7 @@ export async function assertStrictReleaseEvidence(input: {
 		expectedArtifact: input.expectedArtifact,
 		directory: dirname(input.canaryPath),
 		...(input.now ? { now: input.now } : {}),
+		...(input.freshness ? { freshness: input.freshness } : {}),
 	});
 	if (evidenceIssue) throw new Error(evidenceIssue);
 	const canaryHash = (canary as CanaryRecord).recordSha256;

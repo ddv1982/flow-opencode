@@ -171,6 +171,18 @@ test("eligible patch verifies baseline and discloses prior-only evidence", async
 	expect(result.notes).toContain("not measurements of this candidate");
 	expect(result.bundleSha256).toBe(hash(await readFile(f.input.path, "utf8")));
 });
+test("reads the baseline seal as retained evidence, not as a fresh measurement", async () => {
+	const f = await fixture();
+	let freshness: string | undefined;
+	// A patch cites a baseline it explicitly does not claim to have re-measured,
+	// so the baseline's canary window must not decide whether the patch ships.
+	await assertPatchReleaseEvidence(f.input, async (request) => {
+		freshness = request.freshness;
+		return f.verify();
+	});
+	expect(freshness).toBe("retained");
+});
+
 test("candidate substitution and stale guide approval fail before baseline verification", async () => {
 	const f = await fixture();
 	await expect(
