@@ -18,7 +18,7 @@
 	},
 	"artifact": {
 		"packageVersion": "9.0.2",
-		"tarballSha256": "sha256:3cbe08c1236bf6a8b9e51039de67a4bda9b6fea166884b2f8f42067fcd1bf6a4",
+		"tarballSha256": "sha256:9a94e39a9331b064283a7174a5f042d10b4f2d65236c25f0bc3d88eb4e960133",
 		"unpackedManifestSha256": "sha256:8df636e96ebd0ee9b5dbdb377d70d40ffb5cfacd688ae4061f43e255e7216ace"
 	},
 	"guidance": [
