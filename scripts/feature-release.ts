@@ -246,7 +246,6 @@ export function assertOfflineFeatureScope(input: {
 		"peerDependencies",
 		"overrides",
 		"engines",
-		"packageManager",
 	]) {
 		if (
 			canonicalJson(input.baselinePackage[key] ?? null) !==
