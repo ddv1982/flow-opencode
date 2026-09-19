@@ -46,6 +46,33 @@
 			"expectedChoice": "new-scope",
 			"category": "mixed-scope",
 			"rationale": "A continuation plus a new product outcome. Low same-goal must veto continue."
+		},
+		{
+			"id": "method-emphasis-narrowing",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev against the Flow plugin and eval harness, then produce an evidence-backed phased recommendation.",
+			"userRequest": "Keep the same investigation; emphasize prompt examples instead of a plugin hook.",
+			"expectedChoice": "continue",
+			"category": "continuation",
+			"rationale": "Same promised investigation, different method, no new product outcome."
+		},
+		{
+			"id": "research-then-save-plan",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev and produce a phased plan. No source edit.",
+			"userRequest": "Do the research now and save the plan.",
+			"expectedChoice": "continue",
+			"category": "continuation",
+			"rationale": "The goal already promises the investigation and the plan."
+		},
+		{
+			"id": "extra-evidence-request",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev against the Flow plugin and eval harness, then produce an evidence-backed phased recommendation.",
+			"userRequest": "Also run bun test tests/jev-alignment.test.ts before you conclude.",
+			"expectedChoice": "continue",
+			"category": "continuation",
+			"rationale": "Extra evidence for the same promised outcomes, no new product outcome."
 		}
 	]
 }

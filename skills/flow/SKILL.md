@@ -27,8 +27,12 @@ never silently fall back.
    call `flow_session_close` with compact session id/revision, fresh operation
    id, that kind, and optional summary; handle **Recovery**, follow a projected
    exact `archiveRetry`, and stop. Otherwise new or expanded work makes no
-   mutation: say it has not started and offer continue, defer, or abandon. Keep
-   alignment conversational. On revision conflict, refresh compact status and
+    mutation: say it has not started and offer continue, defer, or abandon. Keep
+   alignment conversational. Continue a method or emphasis narrowing, extra
+   evidence, or added authority over those same outcomes, including
+   "do the research and save the plan" when that plan is already promised. Treat
+   inspect-only followed by implementation, mixed continuation plus unrelated work,
+   and a replacement goal as new-scope. On revision conflict, refresh compact status and
    retry only after confirming the same session and goal and that status still
    permits the selected closure kind; never close a replacement.
 2. For a plan-only request with an approved same-goal session, read detail once,

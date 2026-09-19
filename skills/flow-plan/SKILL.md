@@ -22,12 +22,16 @@ without rediscovering the goal.
   while status permits that kind; never close a replacement.
 - Before mutation, align the projected goal with `/flow-plan`; continue only for
   the same goal or a method/emphasis narrowing that preserves every requested
-  outcome, and close completed work. For a non-completed session, an
+  outcome; authority the request adds over those same outcomes is continuation,
+  not expansion. Close completed work. For a non-completed session, an
   explicit deferred/abandoned choice calls
   `flow_session_close` with compact id/revision, fresh operation id, that kind,
   and optional summary; report delivery, follow exact `archiveRetry`, and stop.
   Other new scope makes no mutation; conversationally offer continue, defer, or
-  abandon.
+  abandon. Continue a method or emphasis narrowing, extra evidence, or added
+  authority over those same outcomes, including "do the research and save the plan"
+  when that plan is already promised. Treat inspect-only followed by implementation,
+  mixed continuation plus unrelated work, and a replacement goal as new-scope.
 - Delivery handoff: report `workflowData.delivery.report` verbatim and map IDs
   only from `outcomeSummary`/`terminalFindings`. Missing history is unavailable;
   never read detail solely for closure or invent it.

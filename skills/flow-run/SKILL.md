@@ -19,12 +19,16 @@ Work on exactly one approved feature.
    with the projected request byte-for-byte. Report delivery under the contract
    below. Refresh only if publication is unconfirmed. Stop after this cleanup
    either way; it grants no work.
-4. When the projection contains an active goal, align it with the current
+ 4. When the projection contains an active goal, align it with the current
    `/flow-run` request before another manager lifecycle mutation. Continue only
    for the same goal or a method/emphasis narrowing that preserves all outcomes;
-   close completed work. Unless the next step applies, new or expanded work
+   authority the request adds over those same outcomes is continuation, not
+   expansion. Close completed work. Unless the next step applies, new or expanded work
    makes no mutation: report that it has not started and offer continue, defer,
-   or abandon.
+   or abandon. Continue a method or emphasis narrowing, extra evidence, or added
+   authority over those same outcomes, including "do the research and save the plan"
+   when that plan is already promised. Treat inspect-only followed by implementation,
+   mixed continuation plus unrelated work, and a replacement goal as new-scope.
 5. If the aligned request explicitly chooses deferred or abandoned closure for
    a non-completed session, call `flow_session_close` with compact session id and
    revision, fresh operation id, that kind, and optional summary. Report delivery

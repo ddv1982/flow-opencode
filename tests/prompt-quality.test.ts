@@ -162,6 +162,41 @@ function expectOnce(text: string, fragment: string): void {
 	expect(text.split(fragment)).toHaveLength(2);
 }
 
+function sentenceWith(text: string, needle: string): string {
+	return (
+		text
+			.replace(/\s+/g, " ")
+			.split(/(?<=\.)\s+/)
+			.find((sentence) => sentence.includes(needle)) ?? ""
+	);
+}
+
+function pairedAlignment(text: string): {
+	readonly continueLocks: boolean;
+	readonly newScopeLocks: boolean;
+} {
+	const continueSentence = sentenceWith(
+		text,
+		"do the research and save the plan",
+	);
+	const newScopeSentence = sentenceWith(
+		text,
+		"inspect-only followed by implementation",
+	);
+	return {
+		continueLocks:
+			/continue/i.test(continueSentence) &&
+			continueSentence.includes("method or emphasis narrowing") &&
+			continueSentence.includes("extra evidence") &&
+			continueSentence.includes("authority over those same outcomes") &&
+			!continueSentence.includes("new-scope"),
+		newScopeLocks:
+			newScopeSentence.includes("mixed continuation plus unrelated work") &&
+			newScopeSentence.includes("new-scope") &&
+			!/continue a method/i.test(newScopeSentence),
+	};
+}
+
 describe("Flow prompt structure", () => {
 	test("compiles eight runtime surfaces from four canonical guides", () => {
 		expect(FLOW_GUIDANCE_IDS).toEqual([
@@ -297,6 +332,25 @@ describe("Flow prompt structure", () => {
 		expect(getFlowGuidance("flow-plan").content).toContain(
 			"controls timing, not scope",
 		);
+	});
+
+	test("gives manager guides paired continue vs new-scope examples", () => {
+		const swapped =
+			'Continue inspect-only followed by implementation and mixed continuation plus unrelated work. Treat method or emphasis narrowing, extra evidence, authority over those same outcomes, and "do the research and save the plan" as new-scope.';
+		expect(pairedAlignment(swapped)).toEqual({
+			continueLocks: false,
+			newScopeLocks: false,
+		});
+		for (const id of ["flow", "flow-plan", "flow-run"] as const) {
+			const text = getFlowGuidance(id).content;
+			expect(text).toContain(
+				"authority the request adds over those same outcomes",
+			);
+			expect(pairedAlignment(text)).toEqual({
+				continueLocks: true,
+				newScopeLocks: true,
+			});
+		}
 	});
 
 	test("continues a reviewer matrix only when the packet asked for one", () => {

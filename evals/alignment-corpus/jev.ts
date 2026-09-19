@@ -5,17 +5,17 @@ export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const JEV_MODEL = "jev-latest";
 export const SAME_GOAL_QUESTION_ID = "same_goal";
 export const SAME_GOAL_SCORE_MIN = 1.6;
-export const SAME_GOAL_CONFIDENCE_MIN = 0.8;
+export const SAME_GOAL_CONFIDENCE_MIN = 0.6;
 export const SAME_GOAL_TOP_LEVEL = 2;
 
 export const SAME_GOAL_CRITERIA = [
-	"Different product outcome; replacement or unrelated work",
-	"Overlaps the active goal but also adds or expands promised outcome (mixed scope)",
-	"Same promised outcome; continuation or compatible narrowing only",
+	"The request replaces the active goal or asks for a different product outcome, such as an unrelated feature.",
+	"The request keeps some active work but also adds a promised outcome the goal did not include, including implementation after an inspect-only or no-source-edit goal, or mixed extra scope.",
+	"The request only continues or narrows the same promised outcome: method or emphasis change, extra evidence, or approval to carry out the already promised plan. It does not add a new deliverable.",
 ] as const;
 
 export const SAME_GOAL_INSTRUCTIONS =
-	"How much does the user request continue the same promised outcome as the active goal?";
+	"How much does the user request continue the same promised outcome as the active goal? Judge promised outcome, not method. Implementation after an inspect-only or no-source-edit goal is not the same outcome.";
 
 const ScoreAnswerSchema = z.object({
 	type: z.literal("score"),

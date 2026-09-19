@@ -30,6 +30,26 @@ describe("alignment corpus", () => {
 		);
 	});
 
+	test("keeps inspect-to-implement and mixed-scope new-scope and adds over-stop continues", () => {
+		const parsed = parseAlignmentCorpus(v1);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+		const byId = Object.fromEntries(
+			parsed.value.cases.map((entry) => [entry.id, entry]),
+		);
+		expect(byId["inspect-vs-implement"]?.expectedChoice).toBe("new-scope");
+		expect(byId["keep-plan-and-add-tui"]?.expectedChoice).toBe("new-scope");
+		expect(byId["keep-plan-and-add-tui"]?.category).toBe("mixed-scope");
+		for (const id of [
+			"method-emphasis-narrowing",
+			"research-then-save-plan",
+			"extra-evidence-request",
+		]) {
+			expect(byId[id]?.expectedChoice).toBe("continue");
+			expect(byId[id]?.category).toBe("continuation");
+		}
+	});
+
 	test("rejects malformed versions, unknown fields, duplicates, and mixed-scope continue", () => {
 		const base = structuredClone(v1);
 		const first = base.cases[0];

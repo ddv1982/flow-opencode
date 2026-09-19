@@ -55,7 +55,10 @@ describe("jev alignment mapping", () => {
 		expect(
 			scoreAlignmentLabel(
 				"continue",
-				mapSameGoalScore({ score: 2, confidence: 0.79 }),
+				mapSameGoalScore({
+					score: 2,
+					confidence: SAME_GOAL_CONFIDENCE_MIN - 0.01,
+				}),
 			),
 		).toBe("unscored");
 	});
@@ -84,6 +87,20 @@ describe("jev alignment mapping", () => {
 				mapSameGoalScore({ score: 2, confidence: Number.NaN }),
 			),
 		).toBe("unscored");
+	});
+
+	test("inspect-to-implement corpus case cannot count as a correct continuation", () => {
+		const parsed = parseAlignmentCorpus(v1);
+		expect(parsed.ok).toBe(true);
+		if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
+		const inspect = parsed.value.cases.find(
+			(entry) => entry.id === "inspect-vs-implement",
+		);
+		if (!inspect) throw new Error("Expected inspect-vs-implement v1 case.");
+		expect(inspect.expectedChoice).toBe("new-scope");
+		expect(
+			scoreAlignmentLabel("new-scope", mapSameGoalResponse(scoreAnswer(2, 1))),
+		).toBe("mismatch");
 	});
 
 	test("mixed-scope corpus case cannot count as a correct continuation", () => {
