@@ -1,0 +1,43 @@
+{
+	"schemaVersion": 1,
+	"kind": "reviewed-offline-feature",
+	"version": "9.0.2",
+	"feature": "alignment-examples-v1",
+	"reviewedCommit": "206e3809c224173d67312e0d969870a4f032b8ee",
+	"baseline": {
+		"commit": "3edd7034f9ce94a911132e4ae4e21ad893a7e53a",
+		"artifact": {
+			"packageVersion": "8.3.0",
+			"sourceCommit": "ac4fdb8ca6d9f4315c11c3d1fb142a6b15c9067f",
+			"sourceTreeSha256": "sha256:f4659b8c7cd20afd31de3bb5edfff216b020b2c7ca8fc4c375493d4662a7fc34",
+			"tarballSha256": "sha256:f2cad40877d616a25df9f675ddbd4aeb0e0a6a342ef246e5d109a3978c891563",
+			"unpackedManifestSha256": "sha256:28564da328dee6369ef1befccfb4977efe7b4fc010908800dec0de695f99a5d0"
+		},
+		"canary": "evals/canary/8.3.0.json",
+		"bundleSha256": "sha256:61eac17e755f95216eed58a1361eceb72a6dcd59c94c8f325cd0bc8d1958075f"
+	},
+	"artifact": {
+		"packageVersion": "9.0.2",
+		"tarballSha256": "sha256:3cbe08c1236bf6a8b9e51039de67a4bda9b6fea166884b2f8f42067fcd1bf6a4",
+		"unpackedManifestSha256": "sha256:8df636e96ebd0ee9b5dbdb377d70d40ffb5cfacd688ae4061f43e255e7216ace"
+	},
+	"guidance": [
+		{
+			"path": "skills/flow/SKILL.md",
+			"sha256": "sha256:e2c2cab920bc2d77997f1e80ce6a1b809ca8ca3e96ecda9ce60d3186e2c9ca8c",
+			"rationale": "Reviewed same-goal continue examples: method narrowing, extra evidence, and research-then-save-the-plan continue; inspect-then-implement, mixed scope, and replacement stay new-scope. No permission, gate, validation, review, or closure change."
+		},
+		{
+			"path": "skills/flow-plan/SKILL.md",
+			"sha256": "sha256:cfd83160cd9641b7364c455e7cd234681f659d7a68ab4cf9108b102d964e26e5",
+			"rationale": "The same continue versus new-scope examples as the flow manager skill, at the planning alignment point. Added authority over unchanged outcomes remains continuation."
+		},
+		{
+			"path": "skills/flow-run/SKILL.md",
+			"sha256": "sha256:df81ef42d94d5f95b512855374826d93abd4095c658325780c8a3669c71ed1ae",
+			"rationale": "The same continue versus new-scope examples as the flow manager skill, at the run alignment point. Added authority over unchanged outcomes remains continuation."
+		}
+	],
+	"approvedBy": "Operator approval in this OpenCode session, 2026-09-19",
+	"rationale": "Explicitly authorized offline qualification for 9.0.2 alignment-examples-v1, after being told a funded live campaign was the alternative and that this path does not measure live model behavior. The candidate ships manager same-goal continue examples and an eval-only Jev corpus retune. Offline feature qualification may pin bun 1.4.0 while 8.3.0 remains the live baseline. No new tool, command, setting, or Session v5 field. The last live-measured release remains 8.3.0. No new live model eval or canary was authorized or run."
+}

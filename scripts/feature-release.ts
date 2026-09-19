@@ -117,6 +117,14 @@ export const RUNTIME_REFACTOR_FILES = [
 	"src/tui.ts",
 ] as const;
 
+export const ALIGNMENT_EXAMPLES_COMMIT =
+	"206e3809c224173d67312e0d969870a4f032b8ee";
+export const ALIGNMENT_EXAMPLES_FILES = [
+	"skills/flow/SKILL.md",
+	".github/workflows/opencode-compatibility.yml",
+	...RUNTIME_REFACTOR_FILES,
+] as const;
+
 export type OfflineFeature = Readonly<{
 	version: string;
 	feature: string;
@@ -179,6 +187,18 @@ export const OFFLINE_FEATURES: readonly OfflineFeature[] = [
 		files: RUNTIME_REFACTOR_FILES,
 		guidance: ["skills/flow-plan/SKILL.md", "skills/flow-run/SKILL.md"],
 		baselines: ".agents/plans/14-runtime-refactor-release/baselines",
+	},
+	{
+		version: "9.0.2",
+		feature: "alignment-examples-v1",
+		reviewedCommit: ALIGNMENT_EXAMPLES_COMMIT,
+		files: ALIGNMENT_EXAMPLES_FILES,
+		guidance: [
+			"skills/flow/SKILL.md",
+			"skills/flow-plan/SKILL.md",
+			"skills/flow-run/SKILL.md",
+		],
+		baselines: ".agents/plans/15-alignment-examples-release/baselines",
 	},
 ];
 
