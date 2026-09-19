@@ -151,9 +151,12 @@ jobs:
             echo "No offline qualification declared; full qualification remains required."
             exit 0
           fi
-          if [ -n "$BASE_SHA" ] && git diff --quiet "$BASE_SHA" HEAD -- "$record" package.json; then
-            echo "No new offline release declaration."
-            exit 0
+          if [ -n "$BASE_SHA" ]; then
+            old_version="$(git show "$BASE_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
+            if [ "$old_version" = "$version" ] && git diff --quiet "$BASE_SHA" HEAD -- "$record"; then
+              echo "No new offline release declaration."
+              exit 0
+            fi
           fi
           bun install --frozen-lockfile
           bun run build

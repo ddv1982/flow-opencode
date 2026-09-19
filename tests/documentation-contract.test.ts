@@ -643,6 +643,15 @@ describe("Flow documentation contract", () => {
 		}
 	});
 
+	test("offline qualification CI skip ignores script-only package.json edits", async () => {
+		const ci = await readFile(".github/workflows/ci.yml", "utf8");
+		expect(ci).not.toMatch(
+			/git diff --quiet "\$BASE_SHA" HEAD -- "\$record" package\.json/,
+		);
+		expect(ci).toContain("old_version");
+		expect(ci).toContain('git diff --quiet "$BASE_SHA" HEAD -- "$record"');
+	});
+
 	test("pins GitHub Actions Bun to package.json packageManager", async () => {
 		const expected = pinnedBunVersion(packageJson.packageManager);
 		const workflowNames = (await readdir(".github/workflows"))
