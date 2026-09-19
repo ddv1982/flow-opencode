@@ -2,6 +2,25 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.0.2] - 2026-09-19
+
+Same-goal follow-ups continue more often; inspect-then-implement still stops.
+
+- Manager skills now treat method or emphasis narrowing, extra evidence, and
+  "do the research and save the plan" as continuation of the active goal.
+  Inspect-only followed by implementation, mixed extra scope, and a replacement
+  goal still require an explicit continue, defer, or abandon choice.
+- The Jev alignment corpus adds those continue cases and retunes the same-goal
+  score so live measurement is 8/8. Jev remains eval-only and is not in the
+  plugin.
+- Offline feature qualification may pin a newer Bun than 8.3.0. Dependencies
+  and engines still must match the live baseline.
+- Session v5 schema, validation gates, reviewer authority, and continuation
+  routing are unchanged. No live model eval or paid canary was run for this
+  candidate.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.0.2 --global --force`.
+
 ## [9.0.1] - 2026-09-18
 
 Internal runtime refactor. No new commands, tools, or settings.
