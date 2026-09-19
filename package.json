@@ -43,6 +43,7 @@
 		"eval:smoke": "bun run evals/run.ts -- --repeat 1",
 		"eval:canary": "bun run scripts/eval-canary.ts",
 		"eval:jev": "bun run evals/alignment-corpus/jev-run.ts",
+		"eval:cheap": "bun run evals/eval-cheap.ts",
 		"benchmark": "bun run evals/benchmark-run.ts",
 		"lint": "bunx biome check biome.json src tests scripts evals --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"release:metadata": "bun run scripts/release-metadata.ts",
