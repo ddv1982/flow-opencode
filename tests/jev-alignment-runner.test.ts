@@ -47,6 +47,11 @@ describe("jev alignment runner", () => {
 			});
 			expect(calls).toBe(0);
 			expect(report.counts.error).toBe(v1.cases.length);
+			expect(report.veto.fired).toBe(0);
+			expect(report.veto.falseVeto).toBe(0);
+			expect(report.veto.missedVeto).toBe(
+				v1.cases.filter((entry) => entry.expectedChoice === "new-scope").length,
+			);
 			expect(report.counts.continue).toBe(0);
 			expect(
 				report.cases.every((entry) => entry.reason === "missing-key"),
@@ -80,7 +85,16 @@ describe("jev alignment runner", () => {
 			expect(written).not.toContain("Bearer ");
 			expect(JSON.stringify(report)).not.toContain(SECRET);
 			expect(report.counts["new-scope"]).toBe(v1.cases.length);
+			expect(report.veto.fired).toBe(v1.cases.length);
+			expect(report.veto.correctVeto).toBe(
+				v1.cases.filter((entry) => entry.expectedChoice === "new-scope").length,
+			);
+			expect(report.veto.falseVeto).toBe(
+				v1.cases.filter((entry) => entry.expectedChoice === "continue").length,
+			);
 			expect(report.mixedScope?.mapped).toBe("new-scope");
+			expect(report.mixedScope?.veto).toBe("veto");
+			expect(report.mixedScope?.vetoVerdict).toBe("correct-veto");
 			expect(report.mixedScope?.verdict).toBe("match");
 		});
 	});
@@ -123,6 +137,7 @@ describe("jev alignment runner", () => {
 			expect(byId["approve-same-plan"]?.reason).toBe("low-confidence");
 			expect(byId["compatible-narrowing"]?.mapped).toBe("error");
 			expect(report.counts.continue).toBe(0);
+			expect(report.veto.fired).toBe(0);
 			expect(report.counts.unscored).toBe(v1.cases.length);
 		});
 	});

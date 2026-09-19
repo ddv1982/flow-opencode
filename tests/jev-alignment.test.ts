@@ -7,6 +7,8 @@ import {
 	SAME_GOAL_SCORE_MIN,
 	sameGoalSystemOneBody,
 	scoreAlignmentLabel,
+	scoreVetoShadow,
+	shadowNewScopeVeto,
 } from "../evals/alignment-corpus/jev.js";
 import { parseAlignmentCorpus } from "../evals/alignment-corpus/schema.js";
 import v1 from "../evals/alignment-corpus/v1.json" with { type: "json" };
@@ -106,5 +108,33 @@ describe("jev alignment mapping", () => {
 				mapSameGoalResponse(scoreAnswer(1, 0.9)),
 			),
 		).toBe("match");
+	});
+
+	test("shadow veto fires only on mapped new-scope", () => {
+		expect(shadowNewScopeVeto("new-scope")).toBe("veto");
+		expect(shadowNewScopeVeto("continue")).toBe("pass");
+		expect(shadowNewScopeVeto("abstain")).toBe("pass");
+		expect(shadowNewScopeVeto("error")).toBe("pass");
+		expect(scoreVetoShadow("new-scope", "veto")).toBe("correct-veto");
+		expect(scoreVetoShadow("continue", "veto")).toBe("false-veto");
+		expect(scoreVetoShadow("new-scope", "pass")).toBe("missed-veto");
+		expect(scoreVetoShadow("continue", "pass")).toBe("correct-pass");
+		expect(
+			scoreVetoShadow(
+				"new-scope",
+				shadowNewScopeVeto(mapSameGoalResponse(scoreAnswer(1, 0.9))),
+			),
+		).toBe("correct-veto");
+		expect(
+			scoreVetoShadow(
+				"continue",
+				shadowNewScopeVeto(
+					mapSameGoalScore({
+						score: 2,
+						confidence: SAME_GOAL_CONFIDENCE_MIN - 0.01,
+					}),
+				),
+			),
+		).toBe("correct-pass");
 	});
 });

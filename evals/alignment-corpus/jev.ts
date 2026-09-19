@@ -44,6 +44,14 @@ export type AlignmentMappedOutcome =
 
 export type AlignmentLabelVerdict = "match" | "mismatch" | "unscored";
 
+export type AlignmentVetoDecision = "veto" | "pass";
+
+export type AlignmentVetoVerdict =
+	| "correct-veto"
+	| "false-veto"
+	| "missed-veto"
+	| "correct-pass";
+
 export type JevParseIssue = {
 	readonly path: string;
 	readonly message: string;
@@ -149,4 +157,19 @@ export function scoreAlignmentLabel(
 ): AlignmentLabelVerdict {
 	if (mapped === "abstain" || mapped === "error") return "unscored";
 	return mapped === expected ? "match" : "mismatch";
+}
+
+export function shadowNewScopeVeto(
+	mapped: AlignmentMappedOutcome,
+): AlignmentVetoDecision {
+	return mapped === "new-scope" ? "veto" : "pass";
+}
+
+export function scoreVetoShadow(
+	expected: "continue" | "new-scope",
+	veto: AlignmentVetoDecision,
+): AlignmentVetoVerdict {
+	if (veto === "veto")
+		return expected === "new-scope" ? "correct-veto" : "false-veto";
+	return expected === "new-scope" ? "missed-veto" : "correct-pass";
 }

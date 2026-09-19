@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import {
 	type AlignmentLabelVerdict,
 	type AlignmentMappedOutcome,
+	type AlignmentVetoDecision,
+	type AlignmentVetoVerdict,
 	JEV_ENDPOINT,
 	JEV_MODEL,
 	mapSameGoalResponse,
@@ -11,6 +13,8 @@ import {
 	SAME_GOAL_SCORE_MIN,
 	sameGoalSystemOneBody,
 	scoreAlignmentLabel,
+	scoreVetoShadow,
+	shadowNewScopeVeto,
 } from "./jev.js";
 import { parseAlignmentCorpus } from "./schema.js";
 import v1 from "./v1.json" with { type: "json" };
@@ -41,6 +45,8 @@ export type JevAlignmentCaseResult = {
 	readonly expectedChoice: "continue" | "new-scope";
 	readonly mapped: AlignmentMappedOutcome;
 	readonly verdict: AlignmentLabelVerdict;
+	readonly veto: AlignmentVetoDecision;
+	readonly vetoVerdict: AlignmentVetoVerdict;
 	readonly score?: number;
 	readonly confidence?: number;
 	readonly reason?: string;
@@ -66,6 +72,13 @@ export type JevAlignmentReport = {
 		readonly abstain: number;
 		readonly error: number;
 	};
+	readonly veto: {
+		readonly fired: number;
+		readonly correctVeto: number;
+		readonly falseVeto: number;
+		readonly missedVeto: number;
+		readonly correctPass: number;
+	};
 	readonly mixedScope: JevAlignmentCaseResult | null;
 };
 
@@ -75,6 +88,42 @@ export type RunJevAlignmentOptions = {
 	readonly resultsPath?: string;
 	readonly corpus?: unknown;
 };
+
+function withVeto<
+	T extends {
+		readonly expectedChoice: "continue" | "new-scope";
+		readonly mapped: AlignmentMappedOutcome;
+	},
+>(
+	entry: T,
+): T & {
+	readonly veto: AlignmentVetoDecision;
+	readonly vetoVerdict: AlignmentVetoVerdict;
+} {
+	const veto = shadowNewScopeVeto(entry.mapped);
+	return {
+		...entry,
+		veto,
+		vetoVerdict: scoreVetoShadow(entry.expectedChoice, veto),
+	};
+}
+
+function countVeto(
+	cases: readonly JevAlignmentCaseResult[],
+	key: keyof JevAlignmentReport["veto"],
+): number {
+	if (key === "fired")
+		return cases.filter((entry) => entry.veto === "veto").length;
+	const verdict =
+		key === "correctVeto"
+			? "correct-veto"
+			: key === "falseVeto"
+				? "false-veto"
+				: key === "missedVeto"
+					? "missed-veto"
+					: "correct-pass";
+	return cases.filter((entry) => entry.vetoVerdict === verdict).length;
+}
 
 function count(
 	cases: readonly JevAlignmentCaseResult[],
@@ -96,6 +145,11 @@ function reportContainsSecret(
 	);
 }
 
+type JevAlignmentCaseScored = Omit<
+	JevAlignmentCaseResult,
+	"veto" | "vetoVerdict"
+>;
+
 async function scoreCase(input: {
 	readonly id: string;
 	readonly version: number;
@@ -105,7 +159,7 @@ async function scoreCase(input: {
 	readonly userRequest: string;
 	readonly apiKey: string | undefined;
 	readonly fetchImpl: JevFetch | undefined;
-}): Promise<JevAlignmentCaseResult> {
+}): Promise<JevAlignmentCaseScored> {
 	const base = {
 		id: input.id,
 		version: input.version,
@@ -207,16 +261,18 @@ export async function runJevAlignment(
 	const cases: JevAlignmentCaseResult[] = [];
 	for (const entry of parsed.value.cases) {
 		cases.push(
-			await scoreCase({
-				id: entry.id,
-				version: entry.version,
-				category: entry.category,
-				expectedChoice: entry.expectedChoice,
-				activeGoal: entry.activeGoal,
-				userRequest: entry.userRequest,
-				apiKey,
-				fetchImpl,
-			}),
+			withVeto(
+				await scoreCase({
+					id: entry.id,
+					version: entry.version,
+					category: entry.category,
+					expectedChoice: entry.expectedChoice,
+					activeGoal: entry.activeGoal,
+					userRequest: entry.userRequest,
+					apiKey,
+					fetchImpl,
+				}),
+			),
 		);
 	}
 	const report: JevAlignmentReport = {
@@ -238,6 +294,13 @@ export async function runJevAlignment(
 			"new-scope": count(cases, "new-scope"),
 			abstain: count(cases, "abstain"),
 			error: count(cases, "error"),
+		},
+		veto: {
+			fired: countVeto(cases, "fired"),
+			correctVeto: countVeto(cases, "correctVeto"),
+			falseVeto: countVeto(cases, "falseVeto"),
+			missedVeto: countVeto(cases, "missedVeto"),
+			correctPass: countVeto(cases, "correctPass"),
 		},
 		mixedScope: cases.find((entry) => entry.category === "mixed-scope") ?? null,
 	};
@@ -284,6 +347,7 @@ if (import.meta.main) {
 			{
 				resultsPath,
 				counts: report.counts,
+				veto: report.veto,
 				mixedScope: report.mixedScope && {
 					id: report.mixedScope.id,
 					mapped: report.mixedScope.mapped,
