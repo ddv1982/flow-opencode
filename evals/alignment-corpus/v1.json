@@ -1,0 +1,51 @@
+{
+	"schemaVersion": 1,
+	"corpusId": "flow-alignment-v1",
+	"cases": [
+		{
+			"id": "compatible-narrowing",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev against the Flow plugin and eval harness, then produce an evidence-backed phased recommendation.",
+			"userRequest": "Re-check the same Jev plan against 9.0.1 and say whether it would also speed the plugin up.",
+			"expectedChoice": "continue",
+			"category": "continuation",
+			"rationale": "Same promised investigation, narrower method question, no new product outcome."
+		},
+		{
+			"id": "approve-same-plan",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev and produce a phased plan. No source edit.",
+			"userRequest": "Looks good, approve the inspect plan.",
+			"expectedChoice": "continue",
+			"category": "continuation",
+			"rationale": "Approves the current inspect plan without adding scope."
+		},
+		{
+			"id": "unrelated-replacement",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev and produce a phased plan for Flow plugin and eval improvements.",
+			"userRequest": "Add dark mode to the TUI and ship a patch release today.",
+			"expectedChoice": "new-scope",
+			"category": "replacement",
+			"rationale": "A different product outcome than the active investigation."
+		},
+		{
+			"id": "inspect-vs-implement",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev and produce a phased plan. No source edit.",
+			"userRequest": "Implement the Jev SDK into the plugin now.",
+			"expectedChoice": "new-scope",
+			"category": "additive",
+			"rationale": "Implementation of Jev is a new promised outcome the inspect goal withheld."
+		},
+		{
+			"id": "keep-plan-and-add-tui",
+			"version": 1,
+			"activeGoal": "Investigate TypeSafe Jev and produce a phased plan for Flow plugin and eval improvements.",
+			"userRequest": "Keep going on the Jev plan, and also add dark mode to the TUI while you are at it.",
+			"expectedChoice": "new-scope",
+			"category": "mixed-scope",
+			"rationale": "A continuation plus a new product outcome. Low same-goal must veto continue."
+		}
+	]
+}
