@@ -5,6 +5,7 @@ import {
 	pinnedBunVersion,
 	runPinnedBunSync,
 } from "../evals/bun-toolchain.js";
+import packageJson from "../package.json" with { type: "json" };
 
 describe("pinned Bun toolchain", () => {
 	test("parses one exact Bun version", () => {
@@ -74,7 +75,8 @@ describe("pinned Bun toolchain", () => {
 	});
 
 	test("release eval refuses the wrong Bun before host preflight", async () => {
-		if (Bun.version === "1.3.14") return;
+		const pinned = pinnedBunVersion(packageJson.packageManager);
+		if (Bun.version === pinned) return;
 		const child = Bun.spawn(
 			[
 				process.execPath,
@@ -98,7 +100,7 @@ describe("pinned Bun toolchain", () => {
 			new Response(child.stderr).text(),
 		]);
 		expect(exitCode).toBe(2);
-		expect(stderr).toContain("require bun@1.3.14");
+		expect(stderr).toContain(`require bun@${pinned}`);
 		expect(stdout).not.toContain("preflight");
 	});
 });
