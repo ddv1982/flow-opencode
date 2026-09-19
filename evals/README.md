@@ -13,6 +13,9 @@ hold.
 
 Needs provider credentials, so this is never part of `bun run check`.
 
+Opt-in Jev corpus scoring needs `TYPESAFE_API_KEY` and is also outside the
+gate: `bun run eval:jev` writes gitignored `evals/results/jev-alignment-v1.json`.
+
 ```bash
 bun run eval -- --model openai/gpt-5.6-sol
 bun run eval -- --model openai/gpt-5.6-sol --model opencode/claude-opus-5
