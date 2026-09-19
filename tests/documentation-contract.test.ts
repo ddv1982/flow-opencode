@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import { pinnedBunVersion } from "../evals/bun-toolchain.js";
 import packageJson from "../package.json" with { type: "json" };
 import { FLOW_CORE_AGENTS, FLOW_CORE_COMMANDS } from "../src/config-shared.js";
 import { FLOW_GUIDANCE_IDS } from "../src/guidance/ids.js";
@@ -638,6 +639,34 @@ describe("Flow documentation contract", () => {
 				gate,
 			).not.toMatch(
 				/harness|lifecycle-soak|cross-version|replay-report|prompt:model-eval|bun run eval(?:\s|$)/i,
+			);
+		}
+	});
+
+	test("pins GitHub Actions Bun to package.json packageManager", async () => {
+		const expected = pinnedBunVersion(packageJson.packageManager);
+		const workflowNames = (await readdir(".github/workflows"))
+			.filter((name) => name.endsWith(".yml"))
+			.sort();
+		for (const name of workflowNames) {
+			const text = await readFile(join(".github/workflows", name), "utf8");
+			const versions = [
+				...text.matchAll(/^[ \t]*bun-version:[ \t]*(.*)$/gm),
+			].map((match) => {
+				let value = (match[1] ?? "").trim();
+				const comment = value.search(/(?:^|\s)#/);
+				if (comment !== -1) value = value.slice(0, comment).trim();
+				if (
+					(value.startsWith("'") && value.endsWith("'")) ||
+					(value.startsWith('"') && value.endsWith('"'))
+				) {
+					value = value.slice(1, -1);
+				}
+				return value;
+			});
+			expect(versions.length, name).toBeGreaterThan(0);
+			expect(versions, name).toEqual(
+				Array.from({ length: versions.length }, () => expected),
 			);
 		}
 	});
