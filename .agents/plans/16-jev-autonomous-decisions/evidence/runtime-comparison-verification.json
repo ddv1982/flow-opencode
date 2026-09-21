@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "scope": "frozen-runtime-decision-comparison",
+  "origin": "offline-and-mocked-http-verification",
+  "qualification": "inconclusive",
+  "paidCalls": 0,
+  "checks": {
+    "typecheck": "pass",
+    "lint": "pass",
+    "diffCheck": "pass",
+    "focusedTests": {
+      "passed": 72,
+      "failed": 0,
+      "assertions": 577,
+      "logSha256": "a5a35efa269b3b9608f80f43e00524bcb7d1380a14fe9274e302809f863aa450"
+    },
+    "cli": {
+      "status": "pass",
+      "logSha256": "e572e482ae412f42e29f89daebdd85ff9cc61725753d83c97a8e606b1f0a7d0b",
+      "checks": [
+        "full-corpus registration and selected-split collection",
+        "stale registration rejected before dispatch consumption",
+        "collector import and primary paired report",
+        "immutable registration and report outputs"
+      ]
+    },
+    "commentReview": {
+      "findings": 0,
+      "edits": 0
+    }
+  },
+  "sourceDigests": {
+    "evals/recovery-decisions/campaign.ts": "f7b75a838095a7a952a89668259d9f22aa2f758e775a9ed16d0a3c15e5f93da1",
+    "evals/recovery-decisions/compare.ts": "3e0428cb2f3f0333f51dea5e0b3acac1d897c0d3bcf35cc2f33538c8a7d45da9",
+    "evals/recovery-decisions/sources.ts": "f5d7ccbfe2a0e53e595b373e9aafc2897fcfafbab4c849cafef2fbe6cd386c12",
+    "evals/recovery-decisions/collect.ts": "9b82db45c9aff0f1acbd9fc4a9568e95ee8662d054694fe34627524189d050ac",
+    "evals/recovery-decisions/run.ts": "60fafe18f9a6f40181092cf74356bcc7759353d07d340d6690d808c16ade5c37",
+    "tests/recovery-comparison.test.ts": "9e752d729d6d25fd7af64dc11f0e881311448a957f7f15b62f9d48aec593d47e"
+  },
+  "design": {
+    "base": "separate arm evidence and runtime advice replay",
+    "grafts": [
+      "embedded full corpus",
+      "explicit registered split",
+      "collector pre-dispatch registration checks"
+    ],
+    "isolation": "single code owner; parent documentation and verification; read-only design and review agents",
+    "model": "inherited, served model unverified"
+  },
+  "limitations": [
+    "no real reviewed corpus or manager observations supplied",
+    "origin and chronology are attestations",
+    "paired deltas descriptive; no uncertainty intervals",
+    "no episode completion, interruption or safety metrics",
+    "missing collector summary is unsupported",
+    "no production activation or qualification"
+  ]
+}

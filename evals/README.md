@@ -638,9 +638,10 @@ attempt and cost metadata. Do not invent missing metrics. Merge arms with
 `mergeEvidence(campaign, ...inputs)`. Conflicting observations reject.
 
 Live collection is opt-in and requires an approved dollar and attempt cap.
-The CLI refuses caps larger than the frozen campaign manifest. No live run was
-performed for this implementation. The `jev-1.13.0` pin follows the research
-reference and still needs a live availability check.
+The CLI refuses caps larger than the frozen campaign manifest. An initial
+[live probe](../.agents/plans/16-jev-autonomous-decisions/evidence/live-probe.md)
+confirmed `jev-1.13.0` availability and response compatibility. Its eight synthetic
+development cases do not establish recovery quality or qualify runtime use.
 
 ```bash
 TYPESAFE_API_KEY=... bun run eval:blockers collect-jev --max-calls 24 --max-usd 0.10 --out evals/results/blockers-live.json
@@ -674,3 +675,15 @@ independent differences in [-1,1]. Promotion requires that bound to exceed zero
 and meet the registered improvement requirement. Insufficient data or uncertainty
 returns `inconclusive`. A measured safety failure or nonpositive completed
 comparison returns `no-go`. Neither verdict authorizes runtime execution.
+
+### Runtime recovery evaluation
+
+`bun run eval:recovery prepare evals/recovery-decisions/development.json /tmp/recovery-preparation.json`
+prepares packets through the production shadow controller without provider calls.
+The `collect` subcommand adds opt-in production-adapter calls with explicit
+campaign limits, durable dispatch authorization, and incremental receipts.
+The [runtime evaluation guide](recovery-decisions/README.md) describes both
+commands, the eight synthetic cases, and the remaining live qualification work.
+The [episode outcome guide](recovery-decisions/run-episodes.md) covers offline
+registration and reporting for paired whole-task outcomes. It keeps active runtime
+separate from decision latency and reports exploratory uncertainty.

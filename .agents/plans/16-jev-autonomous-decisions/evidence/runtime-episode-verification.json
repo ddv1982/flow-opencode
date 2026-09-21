@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "createdAt": "2026-09-21T15:10:06.007953+00:00",
+  "origin": "offline-synthetic-verification",
+  "qualification": "inconclusive",
+  "paidCalls": 0,
+  "checks": {
+    "focusedTests": {
+      "passed": 80,
+      "failed": 0,
+      "assertions": 640,
+      "files": 9
+    },
+    "typecheck": "pass",
+    "lint": "pass",
+    "diffCheck": "pass",
+    "cli": "pass",
+    "independentPythonNumerics": {
+      "kind": "independent-python-numerical-check",
+      "passed": true,
+      "metrics": {
+        "interruptionReduction": {
+          "point": 0.5,
+          "lower": 0.4117647058823529,
+          "upper": 0.56
+        },
+        "completionDelta": {
+          "point": -0.16666666666666666,
+          "lower": -0.6666666666666666,
+          "upper": 0.3333333333333333
+        },
+        "activeRuntimeGrowth": {
+          "point": 0.11111111111111116,
+          "lower": -0.4,
+          "upper": 0.22222222222222232
+        }
+      }
+    }
+  },
+  "sourceDigests": {
+    "evals/recovery-decisions/episodes.ts": "bfb617472d8f41fbff2e0dd97a5fadc53c1e3bd6f1f832d54369dbe6395e1778",
+    "evals/recovery-decisions/run.ts": "2d972304cedff54a65cd5a9c815a786fcec7a24d21dc68a393d7ef08136eb795",
+    "evals/recovery-decisions/sources.ts": "ee754fa5d29f3dbd8c0d072f72aa14f5531fb6888ca3802dc9e80801d81190bb",
+    "tests/recovery-episodes.test.ts": "ff8205e83d159a6f9e8cded6743088d45d42ccf93e8f6ecc31230ca1838b56ef"
+  },
+  "logDigests": {
+    "/tmp/flow-episodes-tests.log": "e981f7a0b107f161fa9862442b7c90dd71e93f99fb2fb70b9a9b1d9e5e783c63",
+    "/tmp/flow-episodes-cli-check.log": "87ed0c99eb18f8ceefe24a01a45c6d0eb1deada5b35ecb76357cc809eca59f4c",
+    "/tmp/flow-episodes-numeric-check.log": "a819cd4235991cd482e401cbfd39e1c5a1f115a73bef441bb5ff0f7c3eefb982"
+  },
+  "design": {
+    "base": "dedicated whole-episode registration",
+    "alternative": "extend decision registration with episode roster",
+    "reason": "Whole tasks are a separate measurement unit and do not require a reviewed decision corpus.",
+    "grafts": [
+      "reset conditions and timeout",
+      "metric-specific exclusions",
+      "separately bound safety review"
+    ],
+    "reviewFix": "Require the same manager model and prompt in both arms."
+  },
+  "delegation": {
+    "roles": [
+      "read-only grounding",
+      "two isolated read-only design candidates",
+      "independent design judge",
+      "one exclusive implementation owner",
+      "read-only correctness reviewer",
+      "read-only comment reviewer"
+    ],
+    "isolation": "Separate temporary design artifacts; one owner for four code/test files; parent owns docs and final verification.",
+    "model": "inherited; served model unverified",
+    "missingLanes": [],
+    "commentReview": "clean; no comments or suppressions found"
+  },
+  "limits": [
+    "All verification inputs are synthetic. No live outcomes or independent real-world reviews were gathered.",
+    "Bootstrap intervals are exploratory, not calibrated coverage guarantees.",
+    "Source digests and imported attestations do not authenticate execution, identity, independence, or chronology.",
+    "Cross-protocol calibration/holdout task separation requires review of the retained rosters.",
+    "Live outcome instrumentation, reviewed datasets, actual calibration, and paid qualification campaigns remain outstanding.",
+    "Decision-level uncertainty and unsafe-versus-ineffective labels remain separate work.",
+    "Production qualification registry remains empty."
+  ]
+}

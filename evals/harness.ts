@@ -22,7 +22,8 @@ import {
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { consumePaidDispatch } from "../scripts/paid-budget.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
@@ -52,6 +53,7 @@ import {
 	packedPackageManifest,
 	tarballSha256,
 } from "./provenance.js";
+import { requestBudgetStatus } from "./recovery-decisions/request-budget.js";
 import { normalizeStudyUsage, type StudyUsage } from "./study-usage.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
@@ -1389,9 +1391,30 @@ export class EvalHost {
 		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
+		providerCredentials?: "inherit" | "disabled";
+		requestBudget?: {
+			directory: string;
+			authorizationDigest: string;
+			managerModel: "openai/gpt-5.6-terra" | "xai/grok-4.6";
+		};
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
 		checkCancellation(options.signal);
+		if (options.requestBudget) {
+			const budget = await requestBudgetStatus(options.requestBudget.directory);
+			if (
+				budget.authorizationDigest !==
+					options.requestBudget.authorizationDigest ||
+				budget.cancelled ||
+				Date.parse(budget.authorization.expiresAt) <= Date.now() ||
+				!budget.authorization.models.some(
+					(row) => row.model === options.requestBudget?.managerModel,
+				)
+			)
+				throw new Error("Invalid host request budget.");
+			if (options.opencodeVersion !== "1.18.31")
+				throw new Error("Request gate is verified only for OpenCode 1.18.31.");
+		}
 		const version = exactPackageVersion(
 			options.packageVersion ?? packageJson.version,
 		);
@@ -1420,7 +1443,12 @@ export class EvalHost {
 				GIT_CONFIG_GLOBAL: gitConfig,
 			};
 			delete environment.FLOW_EVAL_AUTHORIZATION;
-			if (options.ambientConfig === "disabled") {
+			if (options.requestBudget) {
+				environment.OPENCODE_EXPERIMENTAL_WEBSOCKETS = "false";
+				environment.OPENCODE_EXPERIMENTAL_NATIVE_LLM = "false";
+			}
+
+			if (options.ambientConfig === "disabled" || options.requestBudget) {
 				for (const name of [
 					"OPENCODE_CONFIG",
 					"OPENCODE_CONFIG_CONTENT",
@@ -1428,12 +1456,12 @@ export class EvalHost {
 				])
 					delete environment[name];
 			}
-			host.credentialPaths = await evaluationPhase(
-				"host",
-				"credential-copy-failed",
-				true,
-				() => carryProviderCredentials(childData),
-			);
+			host.credentialPaths =
+				options.providerCredentials === "disabled"
+					? null
+					: await evaluationPhase("host", "credential-copy-failed", true, () =>
+							carryProviderCredentials(childData),
+						);
 
 			// Flow derives source identity from git, so the fixture must be a repo.
 			for (const [relative, contents] of Object.entries(options.files)) {
@@ -1497,7 +1525,40 @@ export class EvalHost {
 			await writeFile(
 				join(project, "opencode.json"),
 				`${JSON.stringify(
-					options.withFlow === false ? {} : { plugin: [configuredPlugin] },
+					{
+						plugin: [
+							...(options.requestBudget
+								? [
+										[
+											pathToFileURL(
+												fileURLToPath(
+													new URL(
+														"./recovery-decisions/budget-plugin.ts",
+														import.meta.url,
+													),
+												),
+											).href,
+											{
+												directory: resolve(options.requestBudget.directory),
+												authorizationDigest:
+													options.requestBudget.authorizationDigest,
+												readyPath: join(scratch, "budget-ready.json"),
+											},
+										],
+									]
+								: []),
+							...(options.withFlow === false ? [] : [configuredPlugin]),
+						],
+						...(options.requestBudget
+							? {
+									model: options.requestBudget.managerModel,
+									small_model: options.requestBudget.managerModel,
+									enabled_providers: [
+										options.requestBudget.managerModel.split("/")[0],
+									],
+								}
+							: {}),
+					},
 					null,
 					2,
 				)}\n`,
@@ -1590,6 +1651,24 @@ export class EvalHost {
 						throw new Error("OpenCode readiness session had no id.");
 					}
 					await host.deleteSession(ready.id);
+					if (options.requestBudget) {
+						const receipt = JSON.parse(
+							await readFile(join(scratch, "budget-ready.json"), "utf8"),
+						);
+						if (
+							receipt.authorizationDigest !==
+								options.requestBudget.authorizationDigest ||
+							(receipt.pid !== host.server.pid &&
+								(!host.server.pid ||
+									process.platform === "win32" ||
+									!(await processGroupMembers(host.server.pid)).includes(
+										receipt.pid,
+									)))
+						)
+							throw new Error(
+								"Request gate did not initialize in the host process.",
+							);
+					}
 					checkCancellation(options.signal);
 					return host;
 				},
