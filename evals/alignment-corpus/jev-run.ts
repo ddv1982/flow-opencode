@@ -2,6 +2,11 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
+	createJevBudget,
+	type JevBudget,
+	requestJev,
+} from "../jev-transport.js";
+import {
 	type AlignmentLabelVerdict,
 	type AlignmentMappedOutcome,
 	type AlignmentVetoDecision,
@@ -9,6 +14,7 @@ import {
 	JEV_ENDPOINT,
 	JEV_MODEL,
 	mapSameGoalResponse,
+	parseAlignmentMetadata,
 	SAME_GOAL_CONFIDENCE_MIN,
 	SAME_GOAL_SCORE_MIN,
 	sameGoalSystemOneBody,
@@ -22,7 +28,7 @@ import v1 from "./v1.json" with { type: "json" };
 export const DEFAULT_JEV_RESULTS_PATH = join(
 	"evals",
 	"results",
-	"jev-alignment-v1.json",
+	"jev-alignment-v2.json",
 );
 
 export type JevFetch = (
@@ -50,10 +56,21 @@ export type JevAlignmentCaseResult = {
 	readonly score?: number;
 	readonly confidence?: number;
 	readonly reason?: string;
+	readonly requestedModel?: string;
+	readonly resolvedModel?: string | null;
+	readonly probabilities?: Readonly<Record<string, number>> | null;
+	readonly inputTokens?: number | null;
+	readonly outputTokens?: number | null;
+	readonly latencyMs?: number;
+	readonly attempts?: number;
+	readonly reservedUsd?: number;
+	readonly origin?: "live" | "simulation";
+	readonly metadataStatus?: "validated" | "unavailable";
 };
 
 export type JevAlignmentReport = {
-	readonly schemaVersion: 1;
+	readonly schemaVersion: 2;
+	readonly rubricVersion: "same-goal-v1";
 	readonly corpusId: string;
 	readonly corpusSchemaVersion: number;
 	readonly model: typeof JEV_MODEL;
@@ -87,6 +104,9 @@ export type RunJevAlignmentOptions = {
 	readonly fetch?: JevFetch;
 	readonly resultsPath?: string;
 	readonly corpus?: unknown;
+	readonly maxCalls?: number;
+	readonly maxUsd?: number;
+	readonly signal?: AbortSignal;
 };
 
 function withVeto<
@@ -159,6 +179,8 @@ async function scoreCase(input: {
 	readonly userRequest: string;
 	readonly apiKey: string | undefined;
 	readonly fetchImpl: JevFetch | undefined;
+	readonly budget: JevBudget;
+	readonly signal: AbortSignal | undefined;
 }): Promise<JevAlignmentCaseScored> {
 	const base = {
 		id: input.id,
@@ -174,34 +196,54 @@ async function scoreCase(input: {
 			reason: "missing-key",
 		};
 	}
-	if (!input.fetchImpl) {
-		return {
-			...base,
-			mapped: "error",
-			verdict: "unscored",
-			reason: "missing-fetch",
-		};
-	}
+	const fetchImpl = input.fetchImpl;
 	try {
-		const response = await input.fetchImpl(JEV_ENDPOINT, {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${input.apiKey}`,
-				"Content-Type": "application/json",
+		const response = await requestJev(
+			sameGoalSystemOneBody(input.activeGoal, input.userRequest),
+			{
+				apiKey: input.apiKey,
+				budget: input.budget,
+				...(input.signal ? { signal: input.signal } : {}),
+				...(fetchImpl
+					? {
+							transport: async (url: string, init: RequestInit) => {
+								const fake = await fetchImpl(url, {
+									method: "POST",
+									headers: {
+										Authorization: `Bearer ${input.apiKey}`,
+										"Content-Type": "application/json",
+									},
+									body: String(init.body),
+								});
+								return new Response(JSON.stringify(await fake.json()), {
+									status: fake.status,
+								});
+							},
+						}
+					: {}),
 			},
-			body: JSON.stringify(
-				sameGoalSystemOneBody(input.activeGoal, input.userRequest),
-			),
-		});
-		if (!response.ok) {
+		);
+		const measured = {
+			requestedModel: JEV_MODEL,
+			origin: input.fetchImpl ? ("simulation" as const) : ("live" as const),
+			latencyMs: response.latencyMs,
+			attempts: response.attempts,
+			reservedUsd: response.reservedUsd,
+		};
+		if (!response.ok)
 			return {
 				...base,
+				...measured,
 				mapped: "error",
 				verdict: "unscored",
-				reason: `http-${response.status}`,
+				reason:
+					response.reason === "http"
+						? `http-${response.status}`
+						: response.reason,
 			};
-		}
-		const payload = await response.json();
+		const payload = response.payload;
+		const metadata = parseAlignmentMetadata(payload);
+
 		const mapped = mapSameGoalResponse(payload);
 		const answers =
 			payload &&
@@ -224,6 +266,12 @@ async function scoreCase(input: {
 				: undefined;
 		return {
 			...base,
+			...measured,
+			resolvedModel: metadata?.resolvedModel ?? null,
+			probabilities: metadata?.probabilities ?? null,
+			inputTokens: metadata?.inputTokens ?? null,
+			outputTokens: metadata?.outputTokens ?? null,
+			metadataStatus: metadata ? "validated" : "unavailable",
 			mapped,
 			verdict: scoreAlignmentLabel(input.expectedChoice, mapped),
 			...(score === undefined ? {} : { score }),
@@ -257,7 +305,11 @@ export async function runJevAlignment(
 		);
 	}
 	const apiKey = options.apiKey;
-	const fetchImpl = apiKey ? (options.fetch ?? defaultFetch) : undefined;
+	const fetchImpl = options.fetch;
+	const budget = createJevBudget(
+		options.maxCalls ?? parsed.value.cases.length * 3,
+		options.maxUsd ?? 0.1,
+	);
 	const cases: JevAlignmentCaseResult[] = [];
 	for (const entry of parsed.value.cases) {
 		cases.push(
@@ -271,12 +323,15 @@ export async function runJevAlignment(
 					userRequest: entry.userRequest,
 					apiKey,
 					fetchImpl,
+					budget,
+					signal: options.signal,
 				}),
 			),
 		);
 	}
 	const report: JevAlignmentReport = {
-		schemaVersion: 1,
+		schemaVersion: 2,
+		rubricVersion: "same-goal-v1",
 		corpusId: parsed.value.corpusId,
 		corpusSchemaVersion: parsed.value.schemaVersion,
 		model: JEV_MODEL,
@@ -311,30 +366,6 @@ export async function runJevAlignment(
 	await mkdir(dirname(resultsPath), { recursive: true });
 	await writeFile(resultsPath, `${JSON.stringify(report, null, "\t")}\n`);
 	return { report, resultsPath };
-}
-
-async function defaultFetch(
-	url: string,
-	init: {
-		readonly method: string;
-		readonly headers: Readonly<Record<string, string>>;
-		readonly body: string;
-	},
-): Promise<{
-	readonly ok: boolean;
-	readonly status: number;
-	json(): Promise<unknown>;
-}> {
-	const response = await fetch(url, {
-		method: init.method,
-		headers: init.headers,
-		body: init.body,
-	});
-	return {
-		ok: response.ok,
-		status: response.status,
-		json: () => response.json() as Promise<unknown>,
-	};
 }
 
 if (import.meta.main) {

@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-09-21T10:07:08.436248+00:00",
+  "command": [
+    "npx",
+    "--yes",
+    "--package=bun@1.4.0",
+    "bun",
+    "run",
+    "eval:blockers",
+    "collect-jev",
+    "--max-calls",
+    "24",
+    "--max-usd",
+    "0.10",
+    "--out",
+    "evals/results/jev-implementation-final/missing-key.json"
+  ],
+  "environmentOverride": "TYPESAFE_API_KEY removed for this missing-credential probe",
+  "exitCode": 2,
+  "expected": "eight missing-key outcomes and no provider calls",
+  "verified": true,
+  "stdout": "{\"output\":\"evals/results/jev-implementation-final/missing-key.json\"}\n",
+  "stderr": "$ bun run evals/blocker-decisions/run.ts collect-jev --max-calls \"24\" --max-usd \"0.10\" --out evals/results/jev-implementation-final/missing-key.json\n"
+}

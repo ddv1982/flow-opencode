@@ -1,0 +1,87 @@
+bun test v1.3.14 (0d9b296a)
+
+tests/jev-alignment.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find package 'zod' from '/Users/vriesd/projects/flow-opencode/evals/alignment-corpus/schema.ts'
+-------------------------------
+
+
+tests/jev-alignment-runner.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+-------------------------------
+
+
+tests/auto-drive.test.ts:
+(pass) Flow auto-drive coordinator > reads the resolved native variant without leaking nested host fields [1.10ms]
+(pass) Flow auto-drive coordinator > keeps the resolved variant through authenticated compaction and continuation [2.98ms]
+(pass) Flow auto-drive coordinator > a checkpoint reply can clear the preceding variant [0.15ms]
+(pass) Flow auto-drive coordinator > continues ready work once and does not reprompt an unchanged revision [1.18ms]
+(pass) Flow auto-drive coordinator > reports continuation support before anything depends on it [0.06ms]
+(pass) Flow auto-drive coordinator > keeps a user message out of the parentage signal
+(pass) Flow auto-drive coordinator > names a host that reports no assistant message parentage [0.07ms]
+(pass) Flow auto-drive coordinator > separates an overnight checkpoint and resumes after durable progress [0.07ms]
+(pass) Flow auto-drive coordinator > keeps a checkpoint active through clarifications and resumes once after progress [0.11ms]
+(pass) Flow auto-drive coordinator > requires lifecycle progress after the checkpoint reply [0.23ms]
+(pass) Flow auto-drive coordinator > keeps initial command authority when its turn advances a checkpoint [0.03ms]
+(pass) Flow auto-drive coordinator > rejects unowned checkpoint progress before the first idle [0.04ms]
+(pass) Flow auto-drive coordinator > allows temporal progress only for an already-pending reviewer [0.03ms]
+(pass) Flow auto-drive coordinator > credits checkpoint mutations only to the replying user message [0.30ms]
+(pass) Flow auto-drive coordinator > transfers reply authority once across a host compaction continuation [0.04ms]
+(pass) Flow auto-drive coordinator > rejects a pre-compaction mutation after authenticated authority transfer [0.05ms]
+(pass) Flow auto-drive coordinator > rejects compaction triggered by an assistant from older authority [0.05ms]
+(pass) Flow auto-drive coordinator > rejects manual or unclassified compaction markers [0.12ms]
+(pass) Flow auto-drive coordinator > rejects a compaction summary with the wrong parent [0.07ms]
+(pass) Flow auto-drive coordinator > rejects compaction with a missing or non-adjacent successor [0.11ms]
+(pass) Flow auto-drive coordinator > ignores an unrelated compacted notification without consuming a candidate [0.46ms]
+(pass) Flow auto-drive coordinator > accepts a baseline checkpoint reply before the first idle [0.06ms]
+(pass) Flow auto-drive coordinator > does not carry a reply across a newer checkpoint [0.06ms]
+(pass) Flow auto-drive coordinator > requires an accepted mutation from the checkpoint replying host [0.12ms]
+(pass) Flow auto-drive coordinator > allows only one mechanical successor after reviewer dispatch [0.09ms]
+(pass) Flow auto-drive coordinator > excludes paused time and resets timing for a new invocation [0.04ms]
+(pass) Flow auto-drive coordinator > routes mechanical states plus one initial planning retry [0.16ms]
+(pass) Flow auto-drive coordinator > prompts one findings handback on a first failed review then stops looping [0.09ms]
+(pass) Flow auto-drive coordinator > prompts one findings handback when a reviewer is waiting to dispatch [0.04ms]
+(pass) Flow auto-drive coordinator > prompts once when initial inspection stops before planning [0.04ms]
+(pass) Flow auto-drive coordinator > requires initiating progress and rejects a replacement Flow session [0.10ms]
+(pass) Flow auto-drive coordinator > preserves a fast reply only when the pending read finds a checkpoint [0.13ms]
+(pass) Flow auto-drive coordinator > does not replay a queued pre-mutation idle through reply reconciliation [0.89ms]
+(pass) Flow auto-drive coordinator > replays a post-reply idle when an older status read is in flight [0.11ms]
+(pass) Flow auto-drive coordinator > preserves mutation authority through a stale pending checkpoint read [0.12ms]
+(pass) Flow auto-drive coordinator > preserves mutation authority when a pending read sees the mechanical result [0.09ms]
+(pass) Flow auto-drive coordinator > re-arms a newer checkpoint without stale mutation authority [0.08ms]
+(pass) Flow auto-drive coordinator > does not reuse an old baseline checkpoint for later interruptions [0.10ms]
+(pass) Flow auto-drive coordinator > a second user message interrupts a post-checkpoint status read [0.07ms]
+(pass) Flow auto-drive coordinator > a second user message interrupts the checkpoint reply read [0.08ms]
+(pass) Flow auto-drive coordinator > a second message interrupts an already-pending checkpoint reply [0.08ms]
+(pass) Flow auto-drive coordinator > explicit flow-auto stop and cancel deactivate at the same revision [0.17ms]
+(pass) Flow auto-drive coordinator > a real user message interrupts, including during a status read [0.10ms]
+(pass) Flow auto-drive coordinator > a user interruption during prompt enqueue cannot answer a future checkpoint [0.11ms]
+(pass) Flow auto-drive coordinator > an old rejected read cannot clear a newer same-host lease [0.72ms]
+(pass) Flow auto-drive coordinator > overlapping baseline reads cannot revive an older activation [0.13ms]
+(pass) Flow auto-drive coordinator > rejects stale internal messages and preserves a live lease through compaction [0.05ms]
+(pass) Flow auto-drive coordinator > fails closed on replacement state and status or prompt errors [0.13ms]
+
+tests/auto-drive-decision.test.ts:
+(pass) decideOnIdle > prompts the initial route from an idle workspace once [0.04ms]
+(pass) decideOnIdle > deactivates when the projection has no next action
+(pass) decideOnIdle > stops on an unowned session
+(pass) decideOnIdle > hands back and waits at a checkpoint boundary
+(pass) decideOnIdle > deactivates when a boundary appears below the recorded checkpoint [0.02ms]
+(pass) decideOnIdle > treats a non-mechanical projection as handback-or-deactivate
+(pass) decideOnIdle > continues on a mechanical advance past an answered checkpoint [0.01ms]
+(pass) decideOnIdle > pauses when the same revision was already prompted [0.02ms]
+(pass) decideOnIdle > stops without delivery once a checkpoint has been passed [0.01ms]
+(pass) decideOnIdle > stops on no progress once the checkpoint has been cleared
+(pass) decideOnIdle > marks a pending reply as answered when nothing moved [0.01ms]
+
+2 tests failed:
+
+ 59 pass
+ 2 fail
+ 2 errors
+ 189 expect() calls
+Ran 61 tests across 4 files. [127.00ms]

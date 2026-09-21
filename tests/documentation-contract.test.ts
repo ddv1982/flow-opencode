@@ -168,7 +168,8 @@ const MAX_MAINTAINED_DOC_BYTES =
  * Raised from 46,000 for ADR 0014, the evidence collapse the previous raises
  * borrowed against. Slack stays under one record.
  */
-const MAX_DECISION_RECORD_BYTES = 48_000;
+const DELEGATED_RECOVERY_RECORD_BYTES = 2_000;
+const MAX_DECISION_RECORD_BYTES = 48_000 + DELEGATED_RECOVERY_RECORD_BYTES;
 
 /**
  * No single maintained document should outgrow the operator-facing README.
