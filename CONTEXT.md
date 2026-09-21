@@ -98,7 +98,8 @@ review.
 **Blocked run**: A run whose review was observed but not submitted, or a change
 run whose submitted review failed. Retry uses a fresh full run. Only the first
 in-scope failed review may retry automatically. A scope blocker or second
-failure requires user direction. Recorded failed reviews determine the count.
+failure requires user direction. The default-off development preview also accepts
+an exact qualified host recovery request, never shadow advice. Counts remain historical.
 
 **Workspace-content digest**: A SHA-256 fingerprint of effective tracked and
 nonignored workspace content. It binds validation and review to source without

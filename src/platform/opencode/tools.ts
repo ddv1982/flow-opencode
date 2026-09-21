@@ -1,4 +1,5 @@
 import { errorResponse } from "../../application/flow-response.js";
+import type { RecoveryController } from "../../application/recovery-policy.js";
 import {
 	FeatureCompleteInputSchema,
 	FeatureResetInputSchema,
@@ -36,6 +37,7 @@ type FlowTools = NonNullable<Hooks["tool"]>;
 type WorkspaceFlowService = ReturnType<typeof createWorkspaceFlowService>;
 
 type ToolOptions = Readonly<{
+	recovery?: RecoveryController;
 	validation: ValidationCaptureCoordinator;
 	prepareValidation: (
 		workspace: string,
@@ -146,40 +148,49 @@ function withAutoContext(
 		: { ...response, workflowData };
 }
 
-async function execute<T extends FlowToolResponse>(
-	context: ToolContext,
-	handler: (flow: WorkspaceFlowService) => Promise<T>,
-): Promise<string> {
-	try {
-		return json(
-			await handler(createWorkspaceFlowService(resolveWorkspaceRoot(context))),
-		);
-	} catch (error) {
-		return toolError(error);
-	}
-}
-
-function executeMutation<T extends FlowToolResponse>(
-	context: ToolContext,
-	validation: ValidationCaptureCoordinator,
-	handler: (flow: WorkspaceFlowService) => Promise<T>,
-): Promise<string> {
-	validation.cancel(context.sessionID);
-	return execute(context, handler);
-}
-
-function executeReviewerMutation<T extends FlowToolResponse>(
-	context: ToolContext,
-	handler: (flow: WorkspaceFlowService) => Promise<T>,
-	replayHandler: (flow: WorkspaceFlowService) => Promise<T>,
-): Promise<string> {
-	if (context.agent !== "flow-reviewer") {
-		return execute(context, replayHandler);
-	}
-	return execute(context, handler);
-}
-
 export function createTools(options: ToolOptions): FlowTools {
+	async function execute<T extends FlowToolResponse>(
+		context: ToolContext,
+		handler: (flow: WorkspaceFlowService) => Promise<T>,
+	): Promise<string> {
+		try {
+			return json(
+				await handler(
+					createWorkspaceFlowService(
+						resolveWorkspaceRoot(context),
+						options.recovery?.guard({
+							hostSessionId: context.sessionID,
+							messageId: context.messageID,
+							agent: context.agent,
+						}),
+					),
+				),
+			);
+		} catch (error) {
+			return toolError(error);
+		}
+	}
+
+	function executeMutation<T extends FlowToolResponse>(
+		context: ToolContext,
+		validation: ValidationCaptureCoordinator,
+		handler: (flow: WorkspaceFlowService) => Promise<T>,
+	): Promise<string> {
+		validation.cancel(context.sessionID);
+		return execute(context, handler);
+	}
+
+	function executeReviewerMutation<T extends FlowToolResponse>(
+		context: ToolContext,
+		handler: (flow: WorkspaceFlowService) => Promise<T>,
+		replayHandler: (flow: WorkspaceFlowService) => Promise<T>,
+	): Promise<string> {
+		if (context.agent !== "flow-reviewer") {
+			return execute(context, replayHandler);
+		}
+		return execute(context, handler);
+	}
+
 	return {
 		flow_guidance: tool({
 			description: "Load one concise package-owned Flow guide.",
@@ -197,6 +208,14 @@ export function createTools(options: ToolOptions): FlowTools {
 							? {
 									...response.workflowData,
 									statusReport: statusReport(response.workflowData.projection),
+									...(options.recovery
+										? {
+												recovery: options.recovery.snapshot(),
+												...("recovery" in response.workflowData
+													? { recovery: response.workflowData.recovery }
+													: {}),
+											}
+										: {}),
 								}
 							: response.workflowData;
 					return withAutoContext(

@@ -219,6 +219,26 @@ Maintained documentation starts at [docs/index.md](docs/index.md):
 invariants, and [ADR 0006](docs/adr/0006-bounded-intra-feature-waves.md) for the
 bounded-wave rationale.
 
+## Recovery advice development preview
+
+These controls are in development, not the published release. Recovery is off
+for ordinary `/flow-auto`. Opt-in shadow advice requires
+`TYPESAFE_API_KEY` and explicit limits.
+
+```text
+/flow-auto --recovery=shadow --recovery-calls=6 --recovery-usd=0.02 <goal>
+```
+
+Shadow sends bounded goal, finding and candidate-remedy packets to TypeSafe.
+It reports advice without authorizing mutations. Bare `flow_status` never calls
+Jev. Calls count transport attempts, including retries. `/flow-auto stop`
+cancels advice and revokes pending authority. The lease expires after one hour
+and never survives restart.
+
+`--recovery=delegated` is unavailable until a reviewed release qualification is
+installed. No configuration flag can bypass that gate. Deterministic tests prove
+recovery mechanics, not live decision quality. See [ADR 0016](docs/adr/0016-delegated-recovery.md).
+
 ## License
 
 MIT

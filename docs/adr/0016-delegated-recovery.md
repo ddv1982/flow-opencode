@@ -40,3 +40,27 @@ permission. Validation and independent review remain mandatory.
 The planned record receives a 2 KB allocation in the decision-record budget.
 See the [plan](../../.agents/plans/16-jev-autonomous-decisions/README.md) and
 [research](../../.agents/plans/16-jev-autonomous-decisions/research.md) for details.
+
+
+## Default-off runtime construction
+
+The operator authorized implementation before live qualification. Build shadow
+advice and test delegated mechanics while production qualification remains an
+empty release-owned registry. This changes construction order, not the evidence
+gate. A plugin option, environment variable or provider answer cannot qualify it.
+
+Explicit command flags capture process-local call and dollar limits. A shared
+controller binds real host lineage, session, plan, revision and source. Status
+proposals call Jev outside transactions. Existing mutations recheck the binding
+under the lock; no new mutation tool or fake human message exists. A reserved
+operation identifier is not permission. Cancellation and restart invalidate it.
+Exact accepted replays survive revocation. Failed persistence keeps the same
+operation available for reconciliation. Validation and review stay mandatory.
+
+The first policy allows one additional retry and one independent selection per
+checkpoint. Historical scope findings and third failed reviews cannot be erased
+by a new invocation. Two changed semantic proposals per checkpoint share the
+explicit total attempt budget. Compaction preserves only the current process.
+
+Allocate 1.4 KB of maintained prose and 1.4 KB of decision history to document
+these new controls and authority boundaries. Live quality remains unmeasured.

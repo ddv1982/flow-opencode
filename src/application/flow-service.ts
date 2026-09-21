@@ -29,6 +29,11 @@ import type {
 	SessionTransaction,
 } from "./ports/session-repository.js";
 import {
+	isExactRecoveryReplay,
+	type RecoveryGuard,
+	type RecoveryMutation,
+} from "./recovery-policy.js";
+import {
 	FeatureCompleteInputSchema,
 	type FeatureCompleteRequest,
 	FeatureResetInputSchema,
@@ -62,7 +67,10 @@ import {
 
 export type { FlowResponse } from "./flow-response.js";
 
-type StatusWorkflowData = Readonly<{ projection: StatusProjection }>;
+type StatusWorkflowData = Readonly<{
+	projection: StatusProjection;
+	recovery?: unknown;
+}>;
 type StatusResponse =
 	| FlowResponse<StatusWorkflowData>
 	| ArchiveCollisionStatusResponse;
@@ -169,6 +177,7 @@ async function mutate<
 		request: Request,
 	) => Readonly<{ summary: string; projection: Projection }>,
 	operationId: (request: Request) => string,
+	afterSave?: (session: Session, request: Request, replayed: boolean) => void,
 ): Promise<FlowResponse<MutationWorkflowData<Projection>>> {
 	try {
 		const request = schema.parse(input).request;
@@ -176,7 +185,8 @@ async function mutate<
 			const session = await transaction.load();
 			if (!session) throw new Error("No active Flow session exists.");
 			const result = await step({ session, transaction }, request);
-			await transaction.save(result.session);
+			if (!result.replayed) await transaction.save(result.session);
+			afterSave?.(result.session, request, result.replayed);
 			const shaped = respond(result, request);
 			return ok(shaped.summary, {
 				operation: operationResult(
@@ -198,6 +208,7 @@ async function mutate<
 export function createFlowService(
 	repository: SessionRepository,
 	environment: TransitionEnvironment,
+	recovery?: RecoveryGuard,
 ): FlowService {
 	return {
 		async requestAnchor(input) {
@@ -210,7 +221,43 @@ export function createFlowService(
 		async status(input) {
 			let request: StatusRequest;
 			try {
-				request = StatusInputSchema.parse(input).request;
+				const parsed = StatusInputSchema.parse(input);
+				request = parsed.request;
+				if (parsed.recoveryProposal) {
+					if (!recovery)
+						throw new Error(
+							"Recovery advice requires an explicitly configured host.",
+						);
+					const snapshot = await repository.transact(async (transaction) => {
+						const session = await transaction.load();
+						if (!session) throw new Error("No active session");
+						return { session, source: await transaction.computeSourceDigest() };
+					});
+					const advice = await recovery.propose(
+						snapshot.session,
+						snapshot.source,
+						parsed.recoveryProposal,
+					);
+					const fresh = await repository.transact(async (transaction) => ({
+						session: await transaction.load(),
+						source: await transaction.computeSourceDigest(),
+					}));
+					if (
+						!fresh.session ||
+						fresh.session.id !== snapshot.session.id ||
+						fresh.session.revision !== snapshot.session.revision ||
+						fresh.source !== snapshot.source
+					) {
+						recovery.invalidate();
+						throw new Error(
+							"Recovery advice is stale. No action is authorized.",
+						);
+					}
+					return ok(
+						"Recovery advice does not replace validation or user authority.",
+						{ projection: compactProjection(fresh.session), recovery: advice },
+					);
+				}
 			} catch (error) {
 				return errorResponse(error);
 			}
@@ -332,13 +379,26 @@ export function createFlowService(
 				repository,
 				RunStartInputSchema,
 				input,
-				({ session }, request) =>
-					Promise.resolve(startRun(session, request, environment)),
+				async ({ session, transaction }, request) => {
+					const mutation: RecoveryMutation = { kind: "run-start", request };
+					if (recovery && !isExactRecoveryReplay(session, mutation))
+						recovery.check(
+							session,
+							recovery.requiresSource()
+								? await transaction.computeSourceDigest()
+								: null,
+							mutation,
+						);
+					const result = startRun(session, request, environment);
+					return result;
+				},
 				(result) => ({
 					summary: "Feature run ready.",
 					projection: executionProjection(result.session),
 				}),
 				(request) => request.operationId,
+				(session, request, replayed) =>
+					recovery?.accepted(session, { kind: "run-start", request }, replayed),
 			);
 		},
 
@@ -460,13 +520,30 @@ export function createFlowService(
 				repository,
 				FeatureResetInputSchema,
 				input,
-				({ session }, request) =>
-					Promise.resolve(resetFeature(session, request, environment)),
+				async ({ session, transaction }, request) => {
+					const mutation: RecoveryMutation = { kind: "feature-reset", request };
+					if (recovery && !isExactRecoveryReplay(session, mutation))
+						recovery.check(
+							session,
+							recovery.requiresSource()
+								? await transaction.computeSourceDigest()
+								: null,
+							mutation,
+						);
+					const result = resetFeature(session, request, environment);
+					return result;
+				},
 				(result) => ({
 					summary: "Feature reset committed.",
 					projection: compactProjection(result.session),
 				}),
 				(request) => request.operationId,
+				(session, request, replayed) =>
+					recovery?.accepted(
+						session,
+						{ kind: "feature-reset", request },
+						replayed,
+					),
 			);
 		},
 

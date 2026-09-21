@@ -667,7 +667,7 @@ export function completeFeature(
 	return { session: next, value: completed, replayed: false };
 }
 
-function dependentClosure(plan: Plan, featureId: string): Set<string> {
+export function dependentClosure(plan: Plan, featureId: string): Set<string> {
 	const affected = new Set([featureId]);
 	let changed = true;
 	while (changed) {

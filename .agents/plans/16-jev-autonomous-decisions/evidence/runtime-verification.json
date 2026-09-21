@@ -1,0 +1,67 @@
+{
+  "recordedAt": "2026-09-21T11:12:37.701263+00:00",
+  "worktree": "/Users/vriesd/projects/flow-jev-evaluation",
+  "branch": "feat/jev-recovery-runtime",
+  "baseRevision": "5db4e98",
+  "bun": "1.4.0",
+  "checks": [
+    {
+      "localLog": "runtime-check.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run check",
+      "result": "FAIL; qualification artifact scanner false positive on variable reference; corrected without scanner changes",
+      "sha256": "bece95b71772d4468b8c25b98a1c4cfd8aa89401be52e229d774453a472b8cb8"
+    },
+    {
+      "localLog": "runtime-verified-check.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run check",
+      "result": "PASS;1333 tests;1 opt-in smoke skipped;0 failures",
+      "sha256": "67b8e03e09d8f0dfe9f150dcc0a119c9dd21576b23e6981a7a1824a60c568fe8"
+    },
+    {
+      "localLog": "runtime-verified-replay.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run replay",
+      "result": "PASS;13 of13 gated cassettes matched",
+      "sha256": "71bd7366700a2af0f59fe8b4ebdaab639f25ecce796f587a2634fd15e5da9a14"
+    },
+    {
+      "localLog": "runtime-verified-host-smoke.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run smoke:live",
+      "result": "PASS;22 checks;real OpenCode1.18.6 packed-plugin host;no model calls",
+      "sha256": "2172fd05f9908545faa48fe7b98a6ecf55e9348103acf275d537ef708b7abf36"
+    }
+  ],
+  "verifiedFileHashes": {
+    "CONTEXT.md": "dd0d093179c6f289db12477ca44891c8d59473f22647db7f29ba23bac5638a03",
+    "README.md": "2e99935f1d7117d55f1882ef5ee744d7dfe4664e25f77f24cdd8210e7bcda6c7",
+    "docs/adr/0016-delegated-recovery.md": "45c861ace992d3025f0eb5735050f4898e0e1e4e7529fa357bd0087e07b425d2",
+    "docs/maintainer-contract.md": "bf39124fb760aeaa3f38278b39093e7cedf07f3a0cbb6d347b4c683e0706fa77",
+    "evals/alignment-corpus/jev-run.ts": "de359f03629c9d85d7b9abb0b976a3340cafe87f174b47066083e146481fd481",
+    "evals/alignment-corpus/jev.ts": "fe6804fe4f27fb4e6cdbc048b139f2037d60805e364df1a29bf268139b6129a3",
+    "evals/blocker-decisions/jev.ts": "464754070d8d17abb8bfcf5d1a47e3f54bf0588f50d1d4f9eafd447cd9789987",
+    "evals/jev-transport.ts": null,
+    "skills/flow-run/SKILL.md": "1249f1d29c7be0c6b61e5ccd8eb920982518e7e38181a684e2f4eb4710e7b620",
+    "src/application/flow-service.ts": "8433a61a5f5cff56d58518a0498cf8f9d06a1c685202453d7c65ff32ef4e0d1a",
+    "src/application/ports/decision-provider.ts": "2c8eae7ebcc509beca0b2a277b7eaecf1cb13ccd84d845b2ef02f63ce109422c",
+    "src/application/recovery-policy.ts": "cc34bb453f72fe7469fa0c15903d45e0005b952ee05c56bfcf81a4de2dbb0fe2",
+    "src/application/schema.ts": "5719bd9feb0c599a02b2920d20002ab58d57e0a50244ae20f933527cb358e5b7",
+    "src/domain/transitions.ts": "1807b3e5eeef23b81344c6f9156897e054355dac38e54c8499edbf94e03ed298",
+    "src/guidance/catalog.ts": "12f2699a46c129c062b12cd7dcfaa797ad546862481d73844220a1354acb2869",
+    "src/infrastructure/fs/workspace-flow-service.ts": "e9cca50b0c40bece5f82ac6e99d0c30d28404b6066d445fb0e426e60730330b8",
+    "src/infrastructure/jev-decision-provider.ts": "2ca9f1732e0b97bc9866852983321290b1983f6b93bea4a46fed91673fe8cb31",
+    "src/infrastructure/jev-transport.ts": "1f29658a8b382ecde8734f66fef2a2109c9876b1363b150db6241ea62dce2cd2",
+    "src/platform/opencode/auto-drive.ts": "c64a8d9a7363500b8ecd895185ec73355cad8114d792069b53e73ff58e081ce4",
+    "src/platform/opencode/command-hook.ts": "67590361330b94b744d6b73fb69fcc8f1da1dacbecafb4fedca4cc3a0b6c50c8",
+    "src/platform/opencode/plugin.ts": "16b507ed39be9b8491374698b5c8019216effa4125a22f0742369ae8c229a1a8",
+    "src/platform/opencode/tool-guard.ts": "7053ce7608d2670518d613fd9985c0a3dceaae6782fcc09c4806671d260b6cfc",
+    "src/platform/opencode/tools.ts": "8bbe3773845da0afef934bba765d0bca5c0bf366474233bfa832f8bb824213f0",
+    "tests/documentation-contract.test.ts": "e799927a304a81249e4f3117fc1e738af75dc857770736420ce9fda78e298481",
+    "tests/jev-decision-provider.test.ts": "7ff8aac50738f036cc960f60c616ed151d7aafcecf38a10616c6c6393867b894",
+    "tests/jev-transport.test.ts": "28385e10f7bbcbb5cfd550ff886f93c26b3564dfed323b2cf53a828615ea5a6e",
+    "tests/opencode-schema-contract.test.ts": "d07af3d54437b5ca00ca4349c92b7aa980d3d1c1ad1187cabfcc20a926643b87",
+    "tests/recovery-host.test.ts": "157ae137ec1fbb2e5f1b155a76c6e4ab133a7593c1bf8a8e0fd59fc05fbeba44",
+    "tests/recovery-policy.test.ts": "521ed50fe029a256bc404a6d031c5af6a7a8597679c61b86c1318f1278e1852a"
+  },
+  "liveProviderCalls": 0,
+  "qualification": "unmeasured; production qualification registry empty; delegated activation refused",
+  "rawLogPolicy": "Full logs remain local. Commands, digests, and outcomes are retained here."
+}

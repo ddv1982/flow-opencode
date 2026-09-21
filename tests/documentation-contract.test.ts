@@ -149,10 +149,12 @@ const FIRST_USE_AND_PILOT_DOC_BYTES = 8_000;
  * prose that stopped earning its place.
  */
 const RETAINED_BASELINE_RULE_BYTES = 400;
+const RECOVERY_RUNTIME_DOC_BYTES = 1_400;
 const MAX_MAINTAINED_DOC_BYTES =
 	PRIOR_MAINTAINED_DOC_BYTES +
 	FIRST_USE_AND_PILOT_DOC_BYTES +
-	RETAINED_BASELINE_RULE_BYTES;
+	RETAINED_BASELINE_RULE_BYTES +
+	RECOVERY_RUNTIME_DOC_BYTES;
 
 /**
  * Decision records under `docs/adr/`, budgeted apart from maintained prose.
@@ -169,7 +171,9 @@ const MAX_MAINTAINED_DOC_BYTES =
  * borrowed against. Slack stays under one record.
  */
 const DELEGATED_RECOVERY_RECORD_BYTES = 2_000;
-const MAX_DECISION_RECORD_BYTES = 48_000 + DELEGATED_RECOVERY_RECORD_BYTES;
+const RECOVERY_RUNTIME_RECORD_BYTES = 1_400;
+const MAX_DECISION_RECORD_BYTES =
+	48_000 + DELEGATED_RECOVERY_RECORD_BYTES + RECOVERY_RUNTIME_RECORD_BYTES;
 
 /**
  * No single maintained document should outgrow the operator-facing README.
