@@ -57,6 +57,8 @@ export function createSimulationTransport(input: unknown) {
 			url.origin === "https://api.typesafe.ai" &&
 			url.pathname === "/v1/systemone"
 		) {
+			if (script.kind !== "guarded-reset-v1")
+				throw new Error("Unexpected Jev request in operator script.");
 			if (++jevCalls !== 1) throw new Error("Simulation Jev script exhausted.");
 			const parsed = z
 				.object({
@@ -121,7 +123,40 @@ export function createSimulationTransport(input: unknown) {
 		let tool: { name: string; arguments: unknown } | undefined;
 		const hasFlowTools =
 			parsed.tools?.some((tool) => tool.name === "flow_status") === true;
-		if (hasFlowTools && toolResults.length === 0)
+		if (hasFlowTools && script.kind === "operator-resume-v1") {
+			const resumed = JSON.stringify(parsed.input).includes(
+				"Write fixed followed by a newline.",
+			);
+			const written = parsed.input.some(
+				(row) => row.type === "function_call" && row.name === "bash",
+			);
+			if (!resumed)
+				tool = {
+					name: "question",
+					arguments: {
+						questions: [
+							{
+								question: "Which output should I write?",
+								header: "Output",
+								options: [
+									{
+										label: "Fixed",
+										description: "Write the corrected output.",
+									},
+								],
+							},
+						],
+					},
+				};
+			else if (!written)
+				tool = {
+					name: "bash",
+					arguments: {
+						command: "printf 'fixed\\n' > result.txt",
+						description: "Write the operator selected result",
+					},
+				};
+		} else if (hasFlowTools && toolResults.length === 0)
 			tool = {
 				name: "flow_status",
 				arguments: { request: { view: "detail" } },

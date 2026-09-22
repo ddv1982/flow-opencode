@@ -1,3 +1,7 @@
+import {
+	type EpisodeQuestion,
+	EpisodeQuestionSchema,
+} from "./recovery-decisions/episode-operator.js";
 // Model-in-the-loop harness for Flow.
 //
 // tests/ proves the runtime and the *text* of prompts deterministically. This
@@ -1288,6 +1292,7 @@ export async function preparePackageCache(
  */
 type MessageEntry = {
 	info: {
+		id?: string;
 		role: string;
 		agent?: string;
 		model?: { providerID?: unknown; modelID?: unknown };
@@ -1304,6 +1309,8 @@ type MessageEntry = {
 		};
 	};
 	parts: {
+		callID?: string;
+		messageID?: string;
 		type: string;
 		tool?: string;
 		text?: string;
@@ -1363,6 +1370,12 @@ export class EvalHost {
 	 * and a bare flag would have swallowed it for the rest of the attempt.
 	 */
 	private lastSelfAbortAt = 0;
+	private readonly escalationQuestions = new Map<string, EpisodeQuestion>();
+	escalationQuestion(sessionId: string): EpisodeQuestion {
+		const question = this.escalationQuestions.get(sessionId);
+		if (!question) throw new Error("No captured escalation question.");
+		return structuredClone(question);
+	}
 
 	readonly project: string;
 	private readonly scratch: string;
@@ -1938,6 +1951,7 @@ export class EvalHost {
 		} = {},
 	): Promise<CommandEnd> {
 		checkCancellation(this.signal);
+		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "command" });
 		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
@@ -1976,6 +1990,7 @@ export class EvalHost {
 		} = {},
 	): Promise<CommandEnd> {
 		checkCancellation(this.signal);
+		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "prompt" });
 		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
@@ -2111,6 +2126,26 @@ export class EvalHost {
 			// attempts each burned their full twenty minutes producing nothing after the
 			// model asked.
 			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
+				const captured = EpisodeQuestionSchema.safeParse({
+					sessionId,
+					calls: messages.flatMap((entry) =>
+						entry.parts
+							.filter(
+								(part) =>
+									part.type === "tool" &&
+									part.tool === "question" &&
+									(part.state?.status === "running" ||
+										part.state?.status === "pending"),
+							)
+							.map((part) => ({
+								messageId: part.messageID ?? entry.info.id,
+								callId: part.callID,
+								input: part.state?.input,
+							})),
+					),
+				});
+				if (captured.success)
+					this.escalationQuestions.set(sessionId, captured.data);
 				await abortWait();
 				return "escalated";
 			}

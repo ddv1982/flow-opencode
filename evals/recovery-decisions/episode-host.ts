@@ -3,6 +3,10 @@ import { lstat, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { z } from "zod";
 import { EvalHost } from "../harness.js";
+import {
+	type OperatorPolicy,
+	OperatorPolicySchema,
+} from "./episode-operator.js";
 import type { EpisodeDriver } from "./episode-runner.js";
 import { datasetDigest } from "./schema.js";
 import { recoverySourceDigests } from "./sources.js";
@@ -72,10 +76,19 @@ export function episodeHostIdentity(input: unknown) {
 		}),
 	};
 }
-type Host = Pick<EvalHost, "project" | "createSession" | "runCommand" | "stop">;
+type Host = Pick<
+	EvalHost,
+	| "project"
+	| "createSession"
+	| "runCommand"
+	| "runPrompt"
+	| "escalationQuestion"
+	| "stop"
+>;
 type StartOptions = Parameters<typeof EvalHost.start>[0];
 export type EpisodeHostOptions = {
 	fixture: unknown;
+	operator?: OperatorPolicy;
 	arm: "manager-only" | "manager-plus-jev";
 	manager: { model: string; prompt: string };
 	host: Pick<
@@ -137,6 +150,9 @@ export async function createEpisodeHostDriver(
 		options.host.recoveryTreatment.arm !== options.arm
 	)
 		throw new Error("Treatment arm differs from registered arm.");
+	const operatorPolicy = Object.freeze(
+		OperatorPolicySchema.parse(options.operator ?? { kind: "disabled" }),
+	);
 	const fixture = EpisodeHostFixtureSchema.parse(options.fixture);
 	const manager = z
 		.object({
@@ -165,6 +181,7 @@ export async function createEpisodeHostDriver(
 		sources[`evals/${path}`] = bytesDigest(await readFile(join("evals", path)));
 	const harnessDigest = datasetDigest({
 		version: "episode-host-v1",
+		operatorPolicy,
 		requestAuthorizationDigest:
 			options.host.requestBudget?.authorizationDigest ?? null,
 		manager,
@@ -193,6 +210,7 @@ export async function createEpisodeHostDriver(
 	let stopping: Promise<void> | undefined;
 	return {
 		harnessDigest,
+		operatorPolicy,
 		origin: options.host.recoveryTreatment ? "simulation" : "live",
 		async prepare(signal) {
 			if (state !== "new")
@@ -233,7 +251,7 @@ export async function createEpisodeHostDriver(
 			context.signal.throwIfAborted();
 			state = "running";
 			const session = await host.createSession("Frozen recovery episode");
-			const end = await host.runCommand(
+			let end = await host.runCommand(
 				session,
 				"flow-auto",
 				`${options.arm === "manager-plus-jev" ? "--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 " : ""}${manager.prompt}\n\n${fixture.task.instruction}`,
@@ -241,20 +259,15 @@ export async function createEpisodeHostDriver(
 			);
 			context.signal.throwIfAborted();
 			lifecycle.signal.throwIfAborted();
-			if (end === "escalated") {
-				await context.record({ kind: "wait-start" });
-				await new Promise<never>((_resolve, reject) => {
-					const signal = AbortSignal.any([context.signal, lifecycle.signal]);
-					if (signal.aborted) {
-						reject(new Error("Episode wait cancelled."));
-						return;
-					}
-					signal.addEventListener(
-						"abort",
-						() => reject(new Error("Episode wait cancelled.")),
-						{ once: true },
-					);
-				});
+			while (end === "escalated") {
+				const reply = await context.waitForOperator(
+					host.escalationQuestion(session),
+				);
+				context.signal.throwIfAborted();
+				lifecycle.signal.throwIfAborted();
+				end = await host.runPrompt(session, reply, manager.model);
+				context.signal.throwIfAborted();
+				lifecycle.signal.throwIfAborted();
 			}
 			state = "ran";
 		},

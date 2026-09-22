@@ -1,12 +1,15 @@
 import { z } from "zod";
 import { requestBudgetStatus } from "./request-budget.js";
 
-export const SimulationScriptSchema = z
-	.object({
-		kind: z.literal("guarded-reset-v1"),
-		outcome: z.enum(["accepted", "subthreshold"]),
-	})
-	.strict();
+export const SimulationScriptSchema = z.discriminatedUnion("kind", [
+	z
+		.object({
+			kind: z.literal("guarded-reset-v1"),
+			outcome: z.enum(["accepted", "subthreshold"]),
+		})
+		.strict(),
+	z.object({ kind: z.literal("operator-resume-v1") }).strict(),
+]);
 export const RecoveryTreatmentSchema = z
 	.object({
 		origin: z.literal("simulation"),

@@ -31,6 +31,7 @@ export async function recoverySourceDigests() {
 		"evals/recovery-decisions/episode-receipts.ts",
 		"evals/recovery-decisions/episode-runner.ts",
 		"evals/recovery-decisions/episode-host.ts",
+		"evals/recovery-decisions/episode-operator.ts",
 		"scripts/paid-budget.ts",
 		"scripts/lib/exclusive-json.ts",
 	].sort();

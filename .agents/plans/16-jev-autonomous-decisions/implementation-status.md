@@ -350,3 +350,42 @@ Its nine opt-in tests were skipped. Six treatment host checks passed separately
 with 98 assertions on OpenCode 1.18.31. Both existing OAuth budget checks also
 passed. The packaged production smoke passed on its pinned OpenCode 1.18.6 host.
 No paid inference occurred.
+
+## Operator intervention and continuation
+
+Evaluation operators can now read the actual manager question and submit one
+response through `episode-read-question` and `episode-submit-reply`. The runner
+owns the file inbox, intervention limit, deadline, and durable wait transaction.
+The host captures question content and call IDs before OpenCode aborts the pending
+question. An accepted response continues as an ordinary message in the same
+session with the registered manager.
+
+The private journal retains the question and exact accepted reply. A shared state
+transition function validates recording and recovery. Replies bind to the current
+wait, episode, arm, and header. Stale, duplicate, malformed, oversized, and symlink
+inputs cannot trigger continuation. Persistence must complete before another
+manager request. Cancellation prevents late continuation. The parsed operator
+policy is frozen and participates in harness identity. Historical timing-only
+receipts remain readable.
+
+Final parent verification passed `bun run check` with 1,426 tests and 7,451
+assertions. Its 13 opt-in checks were skipped. Four real-host operator cases passed
+separately with 52 assertions on OpenCode 1.18.31. Both selected managers completed
+registered simulated episodes through the actual CLI response commands and
+recovered their journals. Cancellation cases consumed no continuation request.
+Six existing treatment cases also passed in the implementation owner's combined
+host run. The final operator rerun includes the subsequent input-size and policy
+immutability fixes. Focused verification passed 36 tests with 169 assertions.
+
+This closes the local operator continuation interface and demonstrates one frozen
+simulated episode per manager. It does not prove a full paired campaign or an
+episode combining a delegated recovery with a later operator intervention.
+Operator attribution remains unverified. Independent source review, representative
+cases, reviewed cost bounds, executable and package-cache byte identity, a new
+paid campaign cap, and live qualification remain open. Journal recovery never
+replays execution. The production registry remains empty and the runner still
+refuses live origins. No paid inference occurred.
+
+See the [operator design decision](operator-resume-design.md),
+[operator workflow](../../../evals/recovery-decisions/run-episodes.md#answer-an-episode-question),
+and [verification receipt](evidence/runtime-operator-verification.json).

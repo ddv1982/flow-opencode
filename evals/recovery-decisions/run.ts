@@ -4,6 +4,7 @@ import { runCalibrationCommand } from "./calibration.js";
 import { collectRecoveryEvaluation, recoverySourceDigests } from "./collect.js";
 import { runCampaignCommand } from "./compare.js";
 import { runDatasetCommand } from "./dataset.js";
+import { runEpisodeOperatorCommand } from "./episode-operator.js";
 import { runEpisodeReceiptCommand } from "./episode-receipts.js";
 import { runEpisodeJournalCommand } from "./episode-runner.js";
 import { runEpisodeCommand } from "./episodes.js";
@@ -37,6 +38,8 @@ export async function runRecoveryEvaluation(args: readonly string[]) {
 	if (args[0] === "manager-preflight") return runManagerPreflight(args);
 	if (args[0] === "qualification-report") return runQualificationCommand(args);
 	if (args[0]?.startsWith("calibration-")) return runCalibrationCommand(args);
+	if (args[0] === "episode-read-question" || args[0] === "episode-submit-reply")
+		return runEpisodeOperatorCommand(args);
 	if (args[0] === "episode-recover") return runEpisodeJournalCommand(args);
 	if (args[0] === "episode-reduce") return runEpisodeReceiptCommand(args);
 	if (args[0]?.startsWith("episode-")) return runEpisodeCommand(args);

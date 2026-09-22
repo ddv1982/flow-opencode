@@ -249,8 +249,8 @@ Fixture paths must be relative, without traversal, symlinks, or host configurati
 paths. Reset permits only the declared initial files. Evaluation permits the initial
 files, completion files, and files below explicitly declared generated directories.
 For Flow-generated state, declare `.flow` in `generatedDirectories`. A returned
-prompt alone does not establish completion. An escalation starts operator wait;
-the adapter currently waits for cancellation and has no human-resume interface.
+prompt alone does not establish completion. An escalation starts operator wait.
+Use the operator interface below to continue the same session.
 
 **Live execution remains blocked.** The runner rejects live origin before host
 startup. The [shared request gate](run-request-budget.md) enforces durable request
@@ -266,7 +266,7 @@ real Jev adapter and guarded tools.
 These scripted responses are not model-quality evidence.
 
 Finishing live execution requires reviewed cost bounds for the actual routes,
-operator-resume integration, and verified package-cache and executable bytes.
+independently reviewed execution evidence, and verified package-cache and executable bytes.
 Simulation treatment support does not authorize live treatment activation or paid
 calls. The production qualification registry remains empty.
 
@@ -282,3 +282,61 @@ checks accepted recovery, manager-only control, and below-threshold rejection fo
 each manager.
 Seeding a simulation fixture is not an observed live episode or a completed
 qualification campaign.
+
+## Answer an episode question
+
+Set `operator` when creating the host driver. Freeze the resulting harness digest
+in the registration before starting the episode.
+
+```ts
+operator: { kind: "file-mailbox-v1", maxInterventions: 3 }
+```
+
+From another terminal, read the current question into a new private file.
+
+```sh
+bun run eval:recovery episode-read-question journal-directory NEW-question.json
+```
+
+Read the question and options in `request.question`. Copy the top-level `digest`
+into a private reply file. Supply the exact text you want to send to the manager.
+
+```json
+{
+	"requestDigest": "COPY_THE_CURRENT_QUESTION_DIGEST",
+	"text": "Use the existing interface and preserve the current configuration.",
+	"recordedBy": "local-operator",
+	"attribution": "unverified"
+}
+```
+
+Submit that file once.
+
+```sh
+bun run eval:recovery episode-submit-reply journal-directory reply.json
+```
+
+The runner records the accepted reply and ends the wait before sending the text
+to the same session and manager. OpenCode has already aborted the question tool.
+Your text becomes an ordinary follow-up message. A subsequent question requires
+a new read and a reply with its new digest.
+
+The deadline continues during operator wait. Without an enabled operator policy,
+or after the intervention limit, the episode waits for cancellation or timeout.
+Reading or recovering a journal does not restart execution.
+
+Keep the question, reply, journal, and reduced draft private. They contain actual
+operator input. `recordedBy` is declared attribution. It does not authenticate the
+operator or constitute independent review. The runner preserves unknown safety
+and spending coverage as unknown.
+
+Run the simulated operator check with:
+
+```sh
+FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/recovery-operator-host.test.ts
+```
+
+The check uses the registered episode runner and actual isolated OpenCode hosts.
+It exercises question capture, response submission, exact-file completion, and
+journal recovery for both managers. It also checks cancellation without a
+continuation request.

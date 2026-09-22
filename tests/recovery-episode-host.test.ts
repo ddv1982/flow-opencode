@@ -62,6 +62,29 @@ async function setup(end: "quiet" | "escalated" = "quiet") {
 				async createSession() {
 					return "test-session";
 				},
+				escalationQuestion(sessionId) {
+					return {
+						sessionId,
+						calls: [
+							{
+								messageId: "message",
+								callId: "call",
+								input: {
+									questions: [
+										{
+											question: "Which result?",
+											header: "Result",
+											options: [],
+										},
+									],
+								},
+							},
+						],
+					};
+				},
+				async runPrompt() {
+					return "quiet" as const;
+				},
 				async runCommand(...args) {
 					prompts.push(args);
 					return end;
@@ -106,6 +129,9 @@ test("host adapter binds actual seeded files, manager request, exact completion 
 	});
 	await driver.run({
 		signal,
+		async waitForOperator() {
+			throw new Error("Unexpected operator wait");
+		},
 		async record() {
 			throw new Error("Unexpected wait");
 		},
@@ -152,9 +178,11 @@ test("escalated prompts wait for cancellation without inventing an intervention"
 	await expect(
 		driver.run({
 			signal: controller.signal,
-			async record(event) {
-				events.push(event.kind);
+			async record() {},
+			async waitForOperator() {
+				events.push("wait-start");
 				controller.abort();
+				throw new Error("Episode wait cancelled.");
 			},
 		}),
 	).rejects.toThrow("cancelled");
@@ -186,7 +214,13 @@ test("traversal reserved paths symlinks and undeclared files are refused", async
 	const driver = await createEpisodeHostDriver(f.options),
 		signal = new AbortController().signal;
 	await driver.prepare(signal);
-	await driver.run({ signal, async record() {} });
+	await driver.run({
+		signal,
+		async waitForOperator() {
+			throw new Error("Unexpected operator wait");
+		},
+		async record() {},
+	});
 	await writeFile(join(f.project, "undeclared.txt"), "unexpected");
 	await expect(
 		driver.evaluate(episodeHostIdentity(fixture).completionCriteria, signal),
@@ -284,7 +318,13 @@ test("episode-specific task reset and completion identity bind fixtures under on
 	expect(identity.completionCriteria).not.toBe(changed.completionCriteria);
 	const signal = new AbortController().signal;
 	await first.prepare(signal);
-	await first.run({ signal, async record() {} });
+	await first.run({
+		signal,
+		async waitForOperator() {
+			throw new Error("Unexpected operator wait");
+		},
+		async record() {},
+	});
 	await expect(
 		first.evaluate(changed.completionCriteria, signal),
 	).rejects.toThrow("criteria");
@@ -300,7 +340,13 @@ test("generated directories are frozen completion allowances and do not weaken r
 		driver = await createEpisodeHostDriver({ ...f.options, fixture: allowed }),
 		signal = new AbortController().signal;
 	await driver.prepare(signal);
-	await driver.run({ signal, async record() {} });
+	await driver.run({
+		signal,
+		async waitForOperator() {
+			throw new Error("Unexpected operator wait");
+		},
+		async record() {},
+	});
 	await mkdir(join(f.project, ".flow"));
 	await writeFile(join(f.project, ".flow/session.json"), "{}");
 	await writeFile(join(f.project, "src/result.txt"), "fixed\n");
@@ -355,6 +401,9 @@ for (const arm of ["manager-only", "manager-plus-jev"] as const)
 		);
 		await driver.run({
 			signal,
+			async waitForOperator() {
+				throw new Error("Unexpected operator wait");
+			},
 			async record() {
 				throw new Error("Unexpected wait");
 			},
@@ -369,3 +418,24 @@ for (const arm of ["manager-only", "manager-plus-jev"] as const)
 		]);
 		await driver.stop();
 	});
+
+test("host identity freezes its operator policy before execution", async () => {
+	const f = await setup();
+	const policy = { kind: "file-mailbox-v1" as const, maxInterventions: 1 };
+	const driver = await createEpisodeHostDriver({
+		...f.options,
+		operator: policy,
+	});
+	const disabled = await createEpisodeHostDriver(f.options);
+	expect(driver.harnessDigest).not.toBe(disabled.harnessDigest);
+	policy.maxInterventions = 50;
+	if (!driver.operatorPolicy) throw new Error("Missing policy");
+	expect(Reflect.set(driver.operatorPolicy, "maxInterventions", 50)).toBe(
+		false,
+	);
+	expect(driver.operatorPolicy).toEqual({
+		kind: "file-mailbox-v1",
+		maxInterventions: 1,
+	});
+	await driver.stop();
+});
