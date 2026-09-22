@@ -258,7 +258,7 @@ test("unsupported treatment and live runner gating refuse before any host start"
 	const f = await setup();
 	await expect(
 		createEpisodeHostDriver({ ...f.options, arm: "manager-plus-jev" }),
-	).rejects.toThrow("requires isolated simulation");
+	).rejects.toThrow("requires isolated treatment");
 	const driver = await createEpisodeHostDriver(f.options);
 	await expect(
 		runEpisode({
@@ -595,4 +595,51 @@ test("ungated and failed-stop native drivers cannot claim complete zero", async 
 	await expect(failed.stop()).rejects.toThrow("Stop failed");
 	if (!failed.reconcileReservations) throw new Error("Missing reconciliation.");
 	await expect(failed.reconcileReservations()).rejects.toThrow("not complete");
+});
+
+test("live source driver binds credential policy and preserves runtime scope while runner refuses startup", async () => {
+	const f = await setup();
+	f.options.host.recoveryTreatment = { origin: "live", arm: "manager-only" };
+	f.options.host.providerCredentials = "disabled";
+	f.options.host.requestBudget = {
+		directory: f.project,
+		authorizationDigest: "a".repeat(64),
+		managerModel: "openai/gpt-5.6-terra",
+	};
+	f.options.manager.model = "openai/gpt-5.6-terra";
+	const driver = await createEpisodeHostDriver(f.options);
+	const inherited = await createEpisodeHostDriver({
+		...f.options,
+		host: { ...f.options.host, providerCredentials: "inherit" },
+	});
+	expect(driver.origin).toBe("live");
+	expect(driver.harnessDigest).not.toBe(inherited.harnessDigest);
+	await expect(
+		runEpisode({
+			registration: {},
+			episodeId: "episode",
+			arm: "manager-only",
+			outputDirectory: join(f.project, "journal"),
+			recordedBy: "test",
+			origin: "live",
+			driver,
+		}),
+	).rejects.toThrow("reviewed route cost bounds");
+	expect(f.starts).toBe(0);
+	const scope: EpisodeReservationScope = {
+		executionId: randomUUID(),
+		registrationDigest: "b".repeat(64),
+		episodeId: "episode",
+		arm: "manager-only",
+		harnessDigest: "c".repeat(64),
+	};
+	await driver.prepare(new AbortController().signal, scope);
+	expect(f.startOptions?.requestBudget?.scope).toEqual(scope);
+	expect(f.startOptions?.recoveryTreatment).toEqual({
+		origin: "live",
+		arm: "manager-only",
+	});
+	expect(f.startOptions?.frozenArtifacts?.identity.packageCache).toBeNull();
+	await driver.stop();
+	expect(f.prompts).toEqual([]);
 });

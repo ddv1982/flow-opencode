@@ -157,7 +157,7 @@ export async function createEpisodeHostDriver(
 ): Promise<EpisodeDriver> {
 	options = { ...options, host: structuredClone(options.host) };
 	if (options.arm === "manager-plus-jev" && !options.host.recoveryTreatment)
-		throw new Error("Manager-plus-Jev requires isolated simulation treatment.");
+		throw new Error("Manager-plus-Jev requires isolated treatment.");
 	if (
 		options.host.recoveryTreatment &&
 		options.host.recoveryTreatment.arm !== options.arm
@@ -211,6 +211,7 @@ export async function createEpisodeHostDriver(
 			options.host.requestBudget?.authorizationDigest ?? null,
 		manager,
 		recoveryTreatment: options.host.recoveryTreatment ?? null,
+		providerCredentials: options.host.providerCredentials ?? "inherit",
 		sources,
 		host: {
 			bun: options.host.toolchain.actualVersion,
@@ -242,7 +243,7 @@ export async function createEpisodeHostDriver(
 			return structuredClone(hostArtifacts);
 		},
 		operatorPolicy,
-		origin: options.host.recoveryTreatment ? "simulation" : "live",
+		origin: options.host.recoveryTreatment?.origin ?? "live",
 		async prepare(signal, scopeInput) {
 			if (state !== "new")
 				throw new Error("An episode host can only prepare once.");

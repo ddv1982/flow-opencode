@@ -8,11 +8,12 @@ import { RecoveryController } from "../../src/application/recovery-policy.js";
 import { createJevDecisionProvider } from "../../src/infrastructure/jev-decision-provider.js";
 import { createFlowPlugin } from "../../src/platform/opencode/plugin-composition.js";
 import BudgetPlugin from "./budget-plugin.js";
-import {
-	EpisodeReservationScopeSchema,
-	requestBudgetStatus,
-} from "./request-budget.js";
+import { EpisodeReservationScopeSchema } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
+import {
+	ExperimentalLiveProfile,
+	validateLiveTreatmentBudget,
+} from "./treatment.js";
 
 const Options = z
 	.object({
@@ -29,34 +30,10 @@ const Options = z
 		budgetReadyPath: z.string().min(1),
 	})
 	.strict();
-const ExperimentalLiveProfile = Object.freeze({
-	id: "isolated-live-evaluation-v1",
-	model: "jev-1.13.0" as const,
-	rubric: "recovery-v1" as const,
-	policy: "bounded-recovery-v1" as const,
-	choice: 0.9,
-	goal: 0.95,
-	suitability: 0.95,
-});
 const LiveTreatmentPlugin: Plugin = async (context, input) => {
 	const options = Options.parse(input);
 	const treatment = options.budget.scope.arm === "manager-plus-jev";
-	const status = await requestBudgetStatus(options.budget.directory);
-	const models = status.authorization.models.map((row) => row.model);
-	if (
-		status.authorization.origin !== "live" ||
-		status.cancelled ||
-		status.authorizationDigest !== options.budget.authorizationDigest ||
-		Date.parse(status.authorization.expiresAt) <= Date.now() ||
-		!models.includes(options.budget.managerModel) ||
-		models.some(
-			(model) =>
-				model !== options.budget.managerModel &&
-				model !== "typesafe/jev-1.13.0",
-		) ||
-		(treatment && !models.includes("typesafe/jev-1.13.0"))
-	)
-		throw new Error("Live evaluation authorization unavailable.");
+	await validateLiveTreatmentBudget(options.budget);
 	if (treatment && !process.env.TYPESAFE_API_KEY)
 		throw new Error("Live evaluation credential unavailable.");
 	const expected = {

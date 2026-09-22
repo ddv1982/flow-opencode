@@ -621,3 +621,46 @@ The implementation stack still requires merge.
 See the [design decision](live-treatment-design.md),
 [execution guide](../../../evals/recovery-decisions/run-episodes.md), and
 [verification receipt](evidence/runtime-live-treatment-verification.json).
+
+## Native live host integration
+
+`EvalHost` now selects the live evaluation entry through an explicit treatment
+origin. Simulation keeps its required script and strict plugin schema. The live
+entry installs its own gate, so native configuration loads one plugin bundle.
+The episode driver preserves live origin and binds credential policy in its
+harness identity. The runner still rejects live episodes before preparation.
+
+Live startup requires a scoped authorization and explicit provider credential
+policy. The Jev arm reads its key only from the selected toolchain environment
+and passes it only to the native server. Control receives none. Inherited manager
+credentials are filtered to the selected provider. Synchronization filters child
+updates, preserves unrelated providers, and refuses malformed existing stores.
+The host validates live scope, profile, authorization, process, and bundle identity
+before returning readiness. No production profile was added.
+
+Parent focused verification passed 192 tests with 619 Bun assertions. Native live
+verification passed three tests with eight Bun assertions. The native test uses
+additional assertions inside an isolated subprocess. It starts both arms for
+`openai/gpt-5.6-terra` and `xai/grok-4.6` on OpenCode 1.18.31. All four hosts loaded
+the live plugin and stopped cleanly with zero inference reservations. Tests
+checked actual process environment, receipts, bundle identity, absent synthetic
+OAuth, and scratch cleanup. Credential-store checks used synthetic values only.
+
+The paired native simulation also passed two tests with 233 assertions. Both
+managers completed control and treatment through recovery and operator
+continuation. The parent verified 27 retained artifact and source hashes.
+Independent review passed 172 focused tests with 509 assertions and found no
+unresolved findings. The comment audit found no added comments or suppressions.
+
+These checks establish native loading and lifecycle. They do not establish real
+provider inference, OAuth refresh against a provider, reviewed prices, operational
+quality, or qualification. No paid inference occurred.
+
+Live runner admission, representative operational cases, independent review,
+reviewed route costs, a new explicit campaign cap, separate live comparisons,
+qualification, and release review remain open. The implementation stack remains
+unmerged. Qualification can run against a frozen final stack before merging.
+
+See the [host design](live-host-design.md),
+[execution guide](../../../evals/recovery-decisions/run-episodes.md), and
+[verification receipt](evidence/runtime-live-host-verification.json).

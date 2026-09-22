@@ -76,6 +76,7 @@ import {
 } from "./recovery-decisions/request-budget.js";
 import { datasetDigest } from "./recovery-decisions/schema.js";
 import {
+	ExperimentalLiveProfile,
 	type RecoveryTreatment,
 	RecoveryTreatmentSchema,
 	validateTreatmentBudget,
@@ -435,6 +436,7 @@ export type CredentialSync = {
 	 * copy cannot say which of its own entries are stale.
 	 */
 	readonly snapshot: string | null;
+	readonly provider?: "openai" | "xai";
 };
 
 /**
@@ -465,8 +467,9 @@ function providerCredentialPaths(childData: string): {
  * authenticate from the environment, and a login the child performs is still worth
  * carrying back.
  */
-async function carryProviderCredentials(
+export async function carryProviderCredentials(
 	childData: string,
+	provider?: "openai" | "xai",
 ): Promise<CredentialSync | null> {
 	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return null;
 	const paths = providerCredentialPaths(childData);
@@ -478,11 +481,30 @@ async function carryProviderCredentials(
 		// then reading the source again would let a concurrent host's sync land in
 		// between, and the snapshot would describe a file this host never saw.
 		snapshot = await readFile(paths.source, "utf8");
+		if (provider) snapshot = selectProviderCredentials(snapshot, provider);
 		await writeFile(paths.target, snapshot, { mode: 0o600 });
-	} catch {
+	} catch (error) {
+		if (provider && (error as NodeJS.ErrnoException).code !== "ENOENT")
+			throw new Error("Selected provider credentials unavailable.");
 		// No stored credentials; the provider may still authenticate from the env.
 	}
-	return { ...paths, snapshot };
+	return { ...paths, snapshot, ...(provider ? { provider } : {}) };
+}
+
+function selectProviderCredentials(
+	contents: string,
+	provider: "openai" | "xai",
+): string {
+	let entries: unknown;
+	try {
+		entries = JSON.parse(contents);
+	} catch {
+		throw new Error("Invalid provider credential store.");
+	}
+	if (!isRecord(entries)) throw new Error("Invalid provider credential store.");
+	return JSON.stringify(
+		Object.hasOwn(entries, provider) ? { [provider]: entries[provider] } : {},
+	);
 }
 
 /**
@@ -616,13 +638,17 @@ export async function syncProviderCredentialsBack(
 				`Eval host credentials are invalid; retained at ${paths.target}.`,
 			);
 		}
-		let current = "";
+		let current = paths.provider ? "{}" : "";
 		try {
 			current = await readFile(paths.source, "utf8");
 		} catch (error) {
 			// The real file is gone — the developer logged out mid-run, or there was
 			// never one to copy. The child's own entries are all there is.
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
+		if (paths.provider) {
+			selectProviderCredentials(current, paths.provider);
+			contents = selectProviderCredentials(contents, paths.provider);
 		}
 		const merged = mergeCredentials(current, contents, paths.snapshot);
 		// Nothing this host rotated, so nothing to publish. Leaving the file alone is
@@ -1472,6 +1498,7 @@ export class EvalHost {
 				...options,
 				requestBudget: {
 					...options.requestBudget,
+					directory: resolve(options.requestBudget.directory),
 					...(options.requestBudget.scope
 						? {
 								scope: Object.freeze(
@@ -1491,8 +1518,34 @@ export class EvalHost {
 				frozenArtifacts.identity,
 			);
 		checkCancellation(options.signal);
+		if (options.recoveryTreatment)
+			options = {
+				...options,
+				recoveryTreatment: RecoveryTreatmentSchema.parse(
+					options.recoveryTreatment,
+				),
+			};
+		const liveTreatment = options.recoveryTreatment?.origin === "live";
+		const simulationTreatment =
+			options.recoveryTreatment?.origin === "simulation";
+		const jevKey =
+			liveTreatment && options.recoveryTreatment?.arm === "manager-plus-jev"
+				? options.toolchain.environment.TYPESAFE_API_KEY
+				: undefined;
+		if (
+			liveTreatment &&
+			!["inherit", "disabled"].includes(options.providerCredentials ?? "")
+		)
+			throw new Error(
+				"Live treatment requires an explicit provider credential policy.",
+			);
+		if (
+			liveTreatment &&
+			options.recoveryTreatment?.arm === "manager-plus-jev" &&
+			!jevKey
+		)
+			throw new Error("Live evaluation credential unavailable.");
 		if (options.recoveryTreatment) {
-			RecoveryTreatmentSchema.parse(options.recoveryTreatment);
 			await validateTreatmentBudget(
 				options.recoveryTreatment,
 				options.requestBudget,
@@ -1559,10 +1612,18 @@ export class EvalHost {
 					delete environment[name];
 			}
 			host.credentialPaths =
-				options.providerCredentials === "disabled" || options.recoveryTreatment
+				options.providerCredentials === "disabled" || simulationTreatment
 					? null
 					: await evaluationPhase("host", "credential-copy-failed", true, () =>
-							carryProviderCredentials(childData),
+							carryProviderCredentials(
+								childData,
+								liveTreatment
+									? options.requestBudget?.managerModel ===
+										"openai/gpt-5.6-terra"
+										? "openai"
+										: "xai"
+									: undefined,
+							),
 						);
 
 			// Flow derives source identity from git, so the fixture must be a repo.
@@ -1670,7 +1731,9 @@ export class EvalHost {
 					entrypoints: [
 						fileURLToPath(
 							new URL(
-								"./recovery-decisions/treatment-plugin.ts",
+								liveTreatment
+									? "./recovery-decisions/live-treatment-plugin.ts"
+									: "./recovery-decisions/treatment-plugin.ts",
 								import.meta.url,
 							),
 						),
@@ -1694,7 +1757,9 @@ export class EvalHost {
 				? [
 						pluginEntry,
 						{
-							treatment: options.recoveryTreatment,
+							...(liveTreatment
+								? { origin: "live" }
+								: { treatment: options.recoveryTreatment }),
 							budget: options.requestBudget,
 							readyPath: join(scratch, "treatment-ready.json"),
 							budgetReadyPath: join(scratch, "budget-ready.json"),
@@ -1711,7 +1776,7 @@ export class EvalHost {
 				`${JSON.stringify(
 					{
 						plugin: [
-							...(options.requestBudget
+							...(options.requestBudget && !liveTreatment
 								? [
 										[
 											pathToFileURL(
@@ -1730,7 +1795,7 @@ export class EvalHost {
 												authorizationDigest:
 													options.requestBudget.authorizationDigest,
 												readyPath: join(scratch, "budget-ready.json"),
-												...(options.recoveryTreatment
+												...(options.recoveryTreatment?.origin === "simulation"
 													? {
 															simulationScript:
 																options.recoveryTreatment.script,
@@ -1785,6 +1850,7 @@ export class EvalHost {
 							detached: process.platform !== "win32",
 							env: {
 								...environment,
+								...(jevKey ? { TYPESAFE_API_KEY: jevKey } : {}),
 								...(options.nativeLlm === false
 									? { OPENCODE_EXPERIMENTAL_NATIVE_LLM: "false" }
 									: {}),
@@ -1880,36 +1946,49 @@ export class EvalHost {
 							receipt.pid !== budgetReceipt.pid ||
 							receipt.authorizationDigest !==
 								options.requestBudget?.authorizationDigest ||
-							receipt.treatmentDigest !==
-								datasetDigest(options.recoveryTreatment) ||
+							(simulationTreatment &&
+								receipt.treatmentDigest !==
+									datasetDigest(options.recoveryTreatment)) ||
+							(liveTreatment &&
+								(budgetReceipt.origin !== "live" ||
+									budgetReceipt.scriptDigest !== null ||
+									receipt.scopeDigest !==
+										datasetDigest(options.requestBudget?.scope) ||
+									receipt.qualification !== "experimental-evaluation" ||
+									receipt.profileDigest !==
+										(options.recoveryTreatment.arm === "manager-plus-jev"
+											? datasetDigest(ExperimentalLiveProfile)
+											: null))) ||
 							receipt.pluginEntrySha256 !== treatmentBundleDigest ||
-							receipt.origin !== "simulation" ||
+							receipt.origin !== options.recoveryTreatment.origin ||
 							receipt.arm !== options.recoveryTreatment.arm
 						)
 							throw new Error(
 								"Treatment did not initialize with the expected identity.",
 							);
-						const auth = await fetch(
-							`${host.baseUrl}/auth/${options.requestBudget?.managerModel.split("/")[0]}`,
-							{
-								method: "PUT",
-								headers: { "content-type": "application/json" },
-								body: JSON.stringify({
-									type: "oauth",
-									access: "simulation-access",
-									refresh: "simulation-refresh",
-									expires: Date.now() + 3600000,
-								}),
-								signal: options.signal
-									? AbortSignal.any([
-											options.signal,
-											AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-										])
-									: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-							},
-						);
-						if (!auth.ok)
-							throw new Error("Simulation credential installation failed.");
+						if (simulationTreatment) {
+							const auth = await fetch(
+								`${host.baseUrl}/auth/${options.requestBudget?.managerModel.split("/")[0]}`,
+								{
+									method: "PUT",
+									headers: { "content-type": "application/json" },
+									body: JSON.stringify({
+										type: "oauth",
+										access: "simulation-access",
+										refresh: "simulation-refresh",
+										expires: Date.now() + 3600000,
+									}),
+									signal: options.signal
+										? AbortSignal.any([
+												options.signal,
+												AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+											])
+										: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+								},
+							);
+							if (!auth.ok)
+								throw new Error("Simulation credential installation failed.");
+						}
 					}
 					checkCancellation(options.signal);
 					await host.verifyArtifacts();
