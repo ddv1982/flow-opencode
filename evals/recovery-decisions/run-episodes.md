@@ -253,10 +253,32 @@ prompt alone does not establish completion. An escalation starts operator wait;
 the adapter currently waits for cancellation and has no human-resume interface.
 
 **Live execution remains blocked.** The runner rejects live origin before host
-startup. The adapter supports the manager-only shape; it rejects manager-plus-Jev.
-The [shared request gate](run-request-budget.md) now enforces durable reservations.
-Finishing live execution requires reviewed cost bounds for the actual routes, an
-isolated Jev treatment, and operator-resume integration. Existing command dispatch limits do
-not cap manager or subagent spending. Package-cache and executable bytes also
-need verified artifact bindings before qualification. Current host-adapter tests
-use an injected host and do not prove a real model-driven run.
+startup. The [shared request gate](run-request-budget.md) enforces durable request
+reservations. Command dispatch limits alone do not cap manager or subagent
+spending.
+
+The isolated treatment uses shared Flow plugin composition with an experimental
+profile. Its configuration permits simulation only. Both arms use the same
+composition and `/flow-auto` command. The Jev arm adds explicit recovery limits.
+The fixed `guarded-reset-v1` script supports `openai/gpt-5.6-terra` and
+`xai/grok-4.6`. It returns accepted or below-threshold Jev responses through the
+real Jev adapter and guarded tools.
+These scripted responses are not model-quality evidence.
+
+Finishing live execution requires reviewed cost bounds for the actual routes,
+operator-resume integration, and verified package-cache and executable bytes.
+Simulation treatment support does not authorize live treatment activation or paid
+calls. The production qualification registry remains empty.
+
+Run the deterministic host check with:
+
+```sh
+FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-treatment-host.test.ts
+```
+
+The check starts isolated OpenCode hosts with synthetic credentials and scripted
+responses. It seeds blocked sessions through existing Flow transitions, then
+checks accepted recovery, manager-only control, and below-threshold rejection for
+each manager.
+Seeding a simulation fixture is not an observed live episode or a completed
+qualification campaign.

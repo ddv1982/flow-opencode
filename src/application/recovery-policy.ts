@@ -138,11 +138,15 @@ export class RecoveryController {
 	readonly #provider: DecisionProvider;
 	readonly #profiles: readonly RecoveryProfile[];
 	readonly #now: () => number;
+	readonly #qualification: "release-profile" | "experimental-evaluation";
 	constructor(
 		provider: DecisionProvider,
 		options: { profiles?: readonly RecoveryProfile[]; now?: () => number } = {},
 	) {
 		this.#provider = provider;
+		this.#qualification = options.profiles
+			? "experimental-evaluation"
+			: "release-profile";
 		this.#profiles = options.profiles ?? QUALIFIED_RECOVERY_PROFILES;
 		this.#now = options.now ?? (() => performance.now());
 	}
@@ -299,7 +303,7 @@ export class RecoveryController {
 					maxUsd: lease.settings.maxUsd,
 					qualification:
 						lease.settings.mode === "delegated"
-							? "release-profile"
+							? this.#qualification
 							: "shadow-only",
 					last: lease.last,
 				}

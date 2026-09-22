@@ -62,7 +62,7 @@ async function setup(end: "quiet" | "escalated" = "quiet") {
 				async createSession() {
 					return "test-session";
 				},
-				async runPrompt(...args) {
+				async runCommand(...args) {
 					prompts.push(args);
 					return end;
 				},
@@ -113,6 +113,7 @@ test("host adapter binds actual seeded files, manager request, exact completion 
 	expect(f.prompts).toEqual([
 		[
 			"test-session",
+			"flow-auto",
 			"Use the frozen task.\n\nChange the result to fixed.",
 			"test/model",
 		],
@@ -206,7 +207,7 @@ test("unsupported treatment and live runner gating refuse before any host start"
 	const f = await setup();
 	await expect(
 		createEpisodeHostDriver({ ...f.options, arm: "manager-plus-jev" }),
-	).rejects.toThrow("not implemented");
+	).rejects.toThrow("requires isolated simulation");
 	const driver = await createEpisodeHostDriver(f.options);
 	await expect(
 		runEpisode({
@@ -335,3 +336,36 @@ test("generated directories are frozen completion allowances and do not weaken r
 	await expect(dirty.prepare(signal)).rejects.toThrow("Undeclared");
 	await dirty.stop();
 });
+
+for (const arm of ["manager-only", "manager-plus-jev"] as const)
+	test(`simulation episode ${arm} carries the arm into the shared command`, async () => {
+		const f = await setup();
+		f.options.arm = arm;
+		f.options.host.recoveryTreatment = {
+			origin: "simulation",
+			arm,
+			script: { kind: "guarded-reset-v1", outcome: "accepted" },
+		};
+		const driver = await createEpisodeHostDriver(f.options);
+		expect(driver.origin).toBe("simulation");
+		const signal = new AbortController().signal;
+		await driver.prepare(signal);
+		expect(f.startOptions?.recoveryTreatment).toEqual(
+			f.options.host.recoveryTreatment,
+		);
+		await driver.run({
+			signal,
+			async record() {
+				throw new Error("Unexpected wait");
+			},
+		});
+		expect(f.prompts).toEqual([
+			[
+				"test-session",
+				"flow-auto",
+				`${arm === "manager-plus-jev" ? "--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 " : ""}Use the frozen task.\n\nChange the result to fixed.`,
+				"test/model",
+			],
+		]);
+		await driver.stop();
+	});
