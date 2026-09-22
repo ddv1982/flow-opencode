@@ -15,12 +15,23 @@ import {
 	type EpisodeArmEvidence,
 	validateEpisodeRegistration,
 } from "./episodes.js";
+import {
+	EpisodeReservationScopeSchema,
+	ReservationReconciliationSchema,
+} from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
 
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Text = z.string().trim().min(1).max(1000);
 const Time = z.number().int().safe().nonnegative().max(1_000_000_000_000);
 const Event = z.discriminatedUnion("kind", [
+	z
+		.object({
+			kind: z.literal("reservation-reconciliation"),
+			atMs: Time,
+			reconciliation: ReservationReconciliationSchema,
+		})
+		.strict(),
 	z.object({ kind: z.literal("start"), atMs: z.literal(0) }).strict(),
 	z
 		.object({
@@ -76,6 +87,7 @@ export const EpisodeReceiptSchema = z
 		expectedHostArtifacts: HostArtifactsSchema.optional(),
 		artifactVerification: HostArtifactVerificationSchema.optional(),
 		reservationCoverage: z.enum(["complete", "unknown"]),
+		reservationScope: EpisodeReservationScopeSchema.optional(),
 		events: z.array(Event).min(1).max(100000),
 	})
 	.strict();
@@ -185,6 +197,16 @@ export async function reduceEpisodeReceipt(
 		receipt.initialStateDigest !== episode.initialStateDigest
 	)
 		throw new Error("Receipt does not match the registered episode and arm.");
+	if (
+		receipt.reservationScope &&
+		(receipt.reservationCoverage !== "unknown" ||
+			receipt.reservationScope.registrationDigest !==
+				receipt.registrationDigest ||
+			receipt.reservationScope.episodeId !== receipt.episodeId ||
+			receipt.reservationScope.arm !== receipt.arm ||
+			receipt.reservationScope.harnessDigest !== arm.harnessDigest)
+	)
+		throw new Error("Receipt reservation scope mismatch.");
 	if (receipt.events[0]?.kind !== "start")
 		throw new Error("Receipt must start at elapsed time zero.");
 	let previous = 0;
@@ -197,10 +219,17 @@ export async function reduceEpisodeReceipt(
 	let activeRuntimeMs = 0;
 	let humanWaitMs = 0;
 	let reservedUsd = 0;
+	let reconciliationAt: number | undefined;
 	let outcome: "completed" | "failed" | "cancelled" | "timed-out" | undefined;
 	const reservationIds = new Set<string>();
 	for (const event of receipt.events.slice(1)) {
-		if (outcome || event.kind === "start" || event.atMs < previous)
+		if (
+			outcome ||
+			event.kind === "start" ||
+			event.atMs < previous ||
+			(reconciliationAt !== undefined &&
+				(event.kind !== "terminal" || event.atMs !== reconciliationAt))
+		)
 			throw new Error("Invalid event order or event after terminal outcome.");
 		const elapsed = event.atMs - previous;
 		if (waitState.wait) humanWaitMs += elapsed;
@@ -213,10 +242,24 @@ export async function reduceEpisodeReceipt(
 			case "intervention":
 				break;
 			case "reservation":
+				if (receipt.reservationScope)
+					throw new Error("Scoped receipts cannot mix legacy reservations.");
 				if (reservationIds.has(event.id))
 					throw new Error("Duplicate reservation.");
 				reservationIds.add(event.id);
 				reservedUsd += event.usd;
+				break;
+			case "reservation-reconciliation":
+				if (
+					!receipt.reservationScope ||
+					reservationIds.size ||
+					datasetDigest(event.reconciliation.scope) !==
+						datasetDigest(receipt.reservationScope) ||
+					event.reconciliation.authorization.origin !== receipt.declaredOrigin
+				)
+					throw new Error("Reservation reconciliation binding mismatch.");
+				reconciliationAt = event.atMs;
+				reservedUsd = event.reconciliation.totalMicroUsd / 1_000_000;
 				break;
 			case "terminal":
 				outcome = event.outcome;
@@ -234,7 +277,9 @@ export async function reduceEpisodeReceipt(
 		activeRuntimeMs: outcome ? activeRuntimeMs : null,
 		humanWaitMs: outcome ? humanWaitMs : null,
 		reservedUsd:
-			outcome && receipt.reservationCoverage === "complete"
+			outcome &&
+			(receipt.reservationCoverage === "complete" ||
+				reconciliationAt !== undefined)
 				? reservedUsd
 				: null,
 		unsafeAcceptedActions: null,

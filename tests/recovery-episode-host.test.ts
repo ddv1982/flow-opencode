@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -8,6 +9,10 @@ import {
 	episodeHostIdentity,
 } from "../evals/recovery-decisions/episode-host.js";
 import { runEpisode } from "../evals/recovery-decisions/episode-runner.js";
+import {
+	createRequestBudget,
+	type EpisodeReservationScope,
+} from "../evals/recovery-decisions/request-budget.js";
 import { datasetDigest } from "../evals/recovery-decisions/schema.js";
 
 const dirs: string[] = [];
@@ -498,4 +503,96 @@ test("driver snapshots launch configuration and refuses missing observed identit
 		unverified.prepare(new AbortController().signal),
 	).rejects.toThrow("did not attest");
 	await unverified.stop();
+});
+
+test("native driver reconciles only a prepared gate after fulfilled stop and preserves composed scope", async () => {
+	const f = await setup();
+	const root = await mkdtemp(join(tmpdir(), "episode-host-budget-"));
+	dirs.push(root);
+	const directory = join(root, "ledger");
+	const authorization = await createRequestBudget(directory, {
+		schemaVersion: 1,
+		origin: "simulation",
+		purpose: "host test",
+		maxRequests: 2,
+		maxMicroUsd: 10000,
+		expiresAt: new Date(Date.now() + 60000).toISOString(),
+		models: [
+			{
+				model: "xai/grok-4.6",
+				reservationMicroUsd: 5000,
+				basis: { kind: "simulation" },
+			},
+		],
+	});
+	f.options.manager.model = "xai/grok-4.6";
+	f.options.host.requestBudget = {
+		directory,
+		authorizationDigest: datasetDigest(authorization),
+		managerModel: "xai/grok-4.6",
+	};
+	const original = f.options.hostFactory;
+	let release = () => {};
+	const pending = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	f.options.hostFactory = async (input) => {
+		if (!original) throw new Error("Missing host factory");
+		const host = await original(input);
+		return {
+			...host,
+			stop: async () => {
+				await pending;
+				await host.stop();
+			},
+		};
+	};
+	const driver = await createEpisodeHostDriver(f.options);
+	const scope: EpisodeReservationScope = {
+		executionId: randomUUID(),
+		registrationDigest: datasetDigest("registration"),
+		episodeId: "one",
+		arm: "manager-only",
+		harnessDigest: datasetDigest("composed wrapper"),
+	};
+	const frozen = structuredClone(scope);
+	await driver.prepare(new AbortController().signal, scope);
+	Object.assign(scope, { episodeId: "mutated" });
+	expect(f.startOptions?.requestBudget?.scope).toEqual(frozen);
+	if (!driver.reconcileReservations) throw new Error("Missing reconciliation.");
+	await expect(driver.reconcileReservations()).rejects.toThrow("not complete");
+	const stopping = driver.stop();
+	await expect(driver.reconcileReservations()).rejects.toThrow("not complete");
+	release();
+	await stopping;
+	expect(await driver.reconcileReservations()).toMatchObject({
+		scope: frozen,
+		claims: [],
+		totalMicroUsd: 0,
+	});
+});
+
+test("ungated and failed-stop native drivers cannot claim complete zero", async () => {
+	const f = await setup();
+	const driver = await createEpisodeHostDriver(f.options);
+	await driver.prepare(new AbortController().signal);
+	await driver.stop();
+	if (!driver.reconcileReservations) throw new Error("Missing reconciliation.");
+	await expect(driver.reconcileReservations()).rejects.toThrow("not complete");
+	const failing = await setup();
+	const original = failing.options.hostFactory;
+	failing.options.hostFactory = async (input) => {
+		if (!original) throw new Error("Missing host factory");
+		return {
+			...(await original(input)),
+			stop: async () => {
+				throw new Error("Stop failed.");
+			},
+		};
+	};
+	const failed = await createEpisodeHostDriver(failing.options);
+	await failed.prepare(new AbortController().signal);
+	await expect(failed.stop()).rejects.toThrow("Stop failed");
+	if (!failed.reconcileReservations) throw new Error("Missing reconciliation.");
+	await expect(failed.reconcileReservations()).rejects.toThrow("not complete");
 });

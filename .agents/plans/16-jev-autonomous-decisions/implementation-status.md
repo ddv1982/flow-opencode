@@ -533,3 +533,44 @@ remain empty. No paid inference occurred.
 See the [design decision](recovery-capture-design.md),
 [capture workflow](../../../evals/recovery-decisions/run-capture.md), and
 [verification receipt](evidence/runtime-capture-verification.json).
+
+## Episode reservation accounting
+
+Budgeted episode hosts now attach an immutable execution scope to each atomic
+request claim. The scope identifies the registered episode, arm, composed driver,
+and unique execution. Historical unscoped claims remain readable. The shared
+request and dollar limits still cover all claims across concurrent hosts.
+
+After confirmed shutdown, the native driver validates the ledger and selects its
+exact scoped claims. A final reconciliation event retains the authorization,
+claims, digest, and integer microdollar sum. Recovery validates this evidence
+without the original ledger. Missing capability, failed shutdown, or failed
+reconciliation leaves spending unknown. A reconciliation error preserves a valid
+terminal task outcome. Accounting time does not inflate active runtime.
+
+Parent focused verification passed 47 tests with 248 assertions. Full repository
+checks passed 1,456 tests with 7,695 assertions and skipped 15 opt-in cases.
+Independent review reported no unresolved findings and separately passed 43 tests
+with 229 assertions. The comment audit found no added comments or suppressions.
+
+The parent ran all four paired simulation hosts on pinned native OpenCode 1.18.31.
+Both managers recovered one completed control and treatment through actual
+operator continuation. Each control retained five manager reservations totaling
+25,000 synthetic microdollars. Each treatment retained six manager reservations
+and one Jev reservation totaling 33,000 synthetic microdollars. Recovered reports
+contain those exact totals. The parent independently checked the disjoint scope
+sets and 27 retained artifact and source hashes. The native check passed two tests
+with 233 assertions. The other 14 opt-in cases were not rerun in this pass.
+
+This closes per-episode reservation reporting for the instrumented host path.
+Synthetic prices do not establish real provider costs. Hashes do not authenticate
+a hostile actor who can rewrite both ledger and journal. Live execution remains
+refused, production profiles remain empty, and no paid inference occurred.
+
+Representative operational data, independent review, reviewed provider cost bounds,
+a new explicit campaign cap, live treatment and execution support, qualification,
+and release review remain open. The implementation stack still requires merge.
+
+See the [design decision](episode-reservations-design.md),
+[accounting guide](../../../evals/recovery-decisions/run-episodes.md#understand-episode-reservation-totals),
+and [verification receipt](evidence/runtime-reservation-verification.json).

@@ -9,6 +9,12 @@ import {
 	runEpisode,
 } from "../evals/recovery-decisions/episode-runner.js";
 import { registerEpisodes } from "../evals/recovery-decisions/episodes.js";
+import {
+	createRequestBudget,
+	type EpisodeReservationScope,
+	reconcileRequestReservations,
+	reserveRequest,
+} from "../evals/recovery-decisions/request-budget.js";
 import { datasetDigest as hash } from "../evals/recovery-decisions/schema.js";
 
 async function fixture(timeoutMs = 1000) {
@@ -291,5 +297,145 @@ test("journal failure prevents acknowledged continuation and invalid transitions
 		);
 	} finally {
 		await rm(f.root, { recursive: true, force: true });
+	}
+});
+
+async function meteredFixture() {
+	const f = await fixture();
+	const directory = join(f.root, "budget");
+	const authorization = await createRequestBudget(directory, {
+		schemaVersion: 1,
+		origin: "simulation",
+		purpose: "runner test",
+		maxRequests: 4,
+		maxMicroUsd: 20000,
+		expiresAt: new Date(Date.now() + 60000).toISOString(),
+		models: [
+			{
+				model: "xai/grok-4.6",
+				reservationMicroUsd: 5000,
+				basis: { kind: "simulation" },
+			},
+		],
+	});
+	let scope: EpisodeReservationScope | undefined;
+	const prepare = f.options.driver.prepare;
+	f.options.driver.prepare = async (signal, input) => {
+		scope = input;
+		return prepare(signal, input);
+	};
+	f.options.driver.run = async () => {
+		if (!scope) throw new Error("Missing reservation scope.");
+		await reserveRequest(
+			directory,
+			"xai/grok-4.6",
+			hash(authorization),
+			undefined,
+			scope,
+		);
+	};
+	f.options.driver.reconcileReservations = async () => {
+		if (!f.stopped() || !scope) throw new Error("Unconfirmed stop.");
+		return reconcileRequestReservations(directory, hash(authorization), scope);
+	};
+	return { ...f, directory };
+}
+test("runner retains complete scoped reservations and recovers without the original ledger", async () => {
+	const f = await meteredFixture();
+	try {
+		const result = await runEpisode(f.options);
+		if (!result) throw new Error("Expected complete receipt.");
+		expect(result.observation.reservedUsd).toBe(0.005);
+		expect(result?.receipt.reservationCoverage).toBe("unknown");
+		expect(result?.receipt.reservationScope).toMatchObject({
+			registrationDigest: hash(f.options.registration),
+			episodeId: "one",
+			arm: "manager-only",
+			harnessDigest: f.options.driver.harnessDigest,
+		});
+		expect(result?.receipt.events.slice(-2).map((event) => event.kind)).toEqual(
+			["reservation-reconciliation", "terminal"],
+		);
+		await rm(f.directory, { recursive: true });
+		expect(
+			await recoverEpisodeJournal(
+				f.options.registration,
+				f.options.outputDirectory,
+			),
+		).toEqual(result);
+	} finally {
+		await rm(f.root, { recursive: true, force: true });
+	}
+});
+
+test("reconciliation failures preserve completed outcome with unknown spending", async () => {
+	for (const malformed of [false, true]) {
+		const f = await meteredFixture();
+		try {
+			const reconcile = f.options.driver.reconcileReservations;
+			f.options.driver.reconcileReservations = async () => {
+				if (!reconcile || !malformed) throw new Error("Ledger unavailable");
+				const value = await reconcile();
+				return { ...value, totalMicroUsd: value.totalMicroUsd + 1 };
+			};
+			const result = await runEpisode(f.options);
+			expect(result?.observation).toMatchObject({
+				reservedUsd: null,
+				result: { kind: "terminal", outcome: "completed" },
+			});
+			expect(
+				result?.receipt.events.some(
+					(event) => event.kind === "reservation-reconciliation",
+				),
+			).toBe(false);
+		} finally {
+			await rm(f.root, { recursive: true, force: true });
+		}
+	}
+});
+
+test("reconciliation waits do not enter episode timing and failed stops cannot reconcile", async () => {
+	const f = await meteredFixture();
+	try {
+		const reconcile = f.options.driver.reconcileReservations;
+		let began = 0,
+			finished = 0;
+		f.options.driver.reconcileReservations = async () => {
+			began = performance.now();
+			await new Promise((resolve) => setTimeout(resolve, 100));
+			finished = performance.now();
+			if (!reconcile) throw new Error("Missing reconciliation.");
+			return reconcile();
+		};
+		const start = performance.now();
+		const result = await runEpisode(f.options);
+		expect(finished - began).toBeGreaterThanOrEqual(90);
+		const events = result?.receipt.events.slice(-2);
+		if (!events?.[0] || !events[1])
+			throw new Error("Missing terminal accounting events.");
+		expect(events[0].atMs).toBe(events[1].atMs);
+		expect(
+			performance.now() - start - (result?.observation.activeRuntimeMs ?? 0),
+		).toBeGreaterThanOrEqual(90);
+		expect(result?.observation.reservedUsd).toBe(0.005);
+	} finally {
+		await rm(f.root, { recursive: true, force: true });
+	}
+	const broken = await meteredFixture();
+	try {
+		let reconciled = false;
+		broken.options.driver.stop = async () => {
+			throw new Error("Still running");
+		};
+		broken.options.driver.reconcileReservations = async () => {
+			reconciled = true;
+			throw new Error("Must not reconcile");
+		};
+		const result = await runEpisode(broken.options);
+		expect(reconciled).toBe(false);
+		expect(result?.observation.reservedUsd).toBeNull();
+		expect(result?.observation.result.kind).toBe("unavailable");
+	} finally {
+		await rm(broken.root, { recursive: true, force: true });
 	}
 });

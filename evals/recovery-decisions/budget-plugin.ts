@@ -1,7 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
-import { requestBudgetStatus } from "./request-budget.js";
+import {
+	EpisodeReservationScopeSchema,
+	requestBudgetStatus,
+} from "./request-budget.js";
 import { createRequestGate } from "./request-gate.js";
 import { datasetDigest } from "./schema.js";
 import { createSimulationTransport } from "./simulation-transport.js";
@@ -10,6 +13,7 @@ import { SimulationScriptSchema } from "./treatment.js";
 const Options = z
 	.object({
 		directory: z.string().min(1),
+		scope: EpisodeReservationScopeSchema.optional(),
 		simulationScript: SimulationScriptSchema.optional(),
 		readyPath: z.string().min(1),
 		authorizationDigest: z.string().regex(/^[a-f0-9]{64}$/),
@@ -21,10 +25,12 @@ let installed:
 			directory: string;
 			controlOrigin: string;
 			scriptDigest: string | null;
+			scopeDigest: string | null;
 	  }
 	| undefined;
 const BudgetPlugin: Plugin = async (context, input) => {
 	const options = Options.parse(input);
+	const scopeDigest = options.scope ? datasetDigest(options.scope) : null;
 	const status = await requestBudgetStatus(options.directory);
 	if (
 		status.authorizationDigest !== options.authorizationDigest ||
@@ -37,6 +43,7 @@ const BudgetPlugin: Plugin = async (context, input) => {
 		if (
 			installed.digest !== options.authorizationDigest ||
 			installed.directory !== options.directory ||
+			installed.scopeDigest !== scopeDigest ||
 			installed.controlOrigin !== controlOrigin ||
 			installed.scriptDigest !==
 				(options.simulationScript
@@ -77,6 +84,7 @@ const BudgetPlugin: Plugin = async (context, input) => {
 		},
 	});
 	installed = {
+		scopeDigest,
 		digest: options.authorizationDigest,
 		directory: options.directory,
 		controlOrigin,
@@ -85,6 +93,7 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			: null,
 	};
 	await writeExclusive(options.readyPath, {
+		scopeDigest,
 		authorizationDigest: options.authorizationDigest,
 		pid: process.pid,
 		origin: status.authorization.origin,
