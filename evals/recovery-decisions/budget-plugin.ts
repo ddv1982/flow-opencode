@@ -2,6 +2,7 @@ import type { Plugin } from "@opencode-ai/plugin";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
 import {
+	type EpisodeReservationScope,
 	EpisodeReservationScopeSchema,
 	requestBudgetStatus,
 } from "./request-budget.js";
@@ -22,12 +23,36 @@ const Options = z
 let installed:
 	| {
 			digest: string;
+			origin: "live" | "simulation";
+			ready: boolean;
+			fetch: typeof globalThis.fetch;
+			webSocket: typeof globalThis.WebSocket;
 			directory: string;
 			controlOrigin: string;
 			scriptDigest: string | null;
 			scopeDigest: string | null;
 	  }
 	| undefined;
+function assertInstalledRequestGate(expected: {
+	directory: string;
+	authorizationDigest: string;
+	scope: EpisodeReservationScope;
+	controlOrigin: string;
+	origin: "live";
+}): void {
+	if (
+		!installed?.ready ||
+		installed.digest !== expected.authorizationDigest ||
+		installed.directory !== expected.directory ||
+		installed.controlOrigin !== expected.controlOrigin ||
+		installed.origin !== expected.origin ||
+		installed.scriptDigest !== null ||
+		installed.scopeDigest !== datasetDigest(expected.scope) ||
+		installed.fetch !== globalThis.fetch ||
+		installed.webSocket !== globalThis.WebSocket
+	)
+		throw new Error("Matching live evaluation request gate is unavailable.");
+}
 const BudgetPlugin: Plugin = async (context, input) => {
 	const options = Options.parse(input);
 	const scopeDigest = options.scope ? datasetDigest(options.scope) : null;
@@ -41,6 +66,9 @@ const BudgetPlugin: Plugin = async (context, input) => {
 	const controlOrigin = context.serverUrl.origin;
 	if (installed) {
 		if (
+			!installed.ready ||
+			installed.fetch !== globalThis.fetch ||
+			installed.webSocket !== globalThis.WebSocket ||
 			installed.digest !== options.authorizationDigest ||
 			installed.directory !== options.directory ||
 			installed.scopeDigest !== scopeDigest ||
@@ -84,6 +112,10 @@ const BudgetPlugin: Plugin = async (context, input) => {
 		},
 	});
 	installed = {
+		ready: false,
+		origin: status.authorization.origin,
+		fetch: globalThis.fetch,
+		webSocket: globalThis.WebSocket,
 		scopeDigest,
 		digest: options.authorizationDigest,
 		directory: options.directory,
@@ -101,6 +133,7 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			? datasetDigest(options.simulationScript)
 			: null,
 	});
+	installed.ready = true;
 	return {};
 };
-export default BudgetPlugin;
+export default Object.assign(BudgetPlugin, { assertInstalledRequestGate });

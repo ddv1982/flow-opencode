@@ -574,3 +574,50 @@ and release review remain open. The implementation stack still requires merge.
 See the [design decision](episode-reservations-design.md),
 [accounting guide](../../../evals/recovery-decisions/run-episodes.md#understand-episode-reservation-totals),
 and [verification receipt](evidence/runtime-reservation-verification.json).
+
+## Isolated live treatment admission
+
+An evaluation-only live plugin now installs the existing request gate before
+composing Flow. Strict options require live authorization and an execution scope.
+The scope supplies the arm. Admission rejects expired, cancelled, mismatched, or
+incomplete authorization and a campaign containing the other manager.
+
+The Jev arm requires a credential before installing the gate. It uses the real
+adapter with a fixed experimental profile. The control arm uses no Jev credential
+and cannot dispatch Jev requests. No production profile was added.
+
+In-memory admission checks bind the installed gate, scope, authorization, and
+active fetch and WebSocket functions. Ready files are output evidence only.
+Failed budget readiness publication prevents reuse in that process. Failed
+startup retains interception. Later gate replacement prevents Jev assessment.
+The budget entry keeps a single default export for native loader compatibility.
+
+Parent focused verification passed 72 tests with 225 Bun assertions. This includes
+46 new isolated subprocess scenarios across both manager configurations. Tests
+invoke actual Flow command and tool hooks through the controller and real adapter.
+Intercepted transport checks that a scoped 3,000-microdollar reservation exists
+before receiving the Jev request. Control produces no Jev request or reservation.
+Synthetic credentials do not appear in the checked persisted evidence.
+
+Independent review found one test false-positive. The exhaustion probe lacked a
+JSON content type and could fail before checking the cap. The corrected probe
+sends JSON and requires the budget-exhausted error. Independent final verification
+passed 46 tests with 92 Bun assertions. No unresolved review findings remain.
+The comment audit found no added comments or suppressions.
+
+The parent also reran the paired native simulation on OpenCode 1.18.31. Both
+managers completed control and treatment through recovery and operator continuation.
+The check passed two tests with 233 assertions. The parent verified all 27 retained
+artifact and source hashes. Other opt-in host cases were not rerun in this pass.
+This regression checks the shared gate change. It does not prove native loading
+of the new live plugin.
+
+The new entry is not yet wired into `EvalHost` or the episode driver. The runner
+still refuses live episodes. Host integration, representative operational cases,
+independent review, reviewed real cost bounds, a new explicit campaign cap,
+qualification, and release review remain open. No paid inference occurred.
+The implementation stack still requires merge.
+
+See the [design decision](live-treatment-design.md),
+[execution guide](../../../evals/recovery-decisions/run-episodes.md), and
+[verification receipt](evidence/runtime-live-treatment-verification.json).

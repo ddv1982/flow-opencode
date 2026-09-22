@@ -290,7 +290,7 @@ startup. The [shared request gate](run-request-budget.md) enforces durable reque
 reservations. Command dispatch limits alone do not cap manager or subagent
 spending.
 
-The isolated treatment uses shared Flow plugin composition with an experimental
+The host's isolated treatment uses shared Flow plugin composition with an experimental
 profile. Its configuration permits simulation only. Both arms use the same
 composition and `/flow-auto` command. The Jev arm adds explicit recovery limits.
 The fixed `guarded-reset-v1` script supports `openai/gpt-5.6-terra` and
@@ -298,8 +298,25 @@ The fixed `guarded-reset-v1` script supports `openai/gpt-5.6-terra` and
 real Jev adapter and guarded tools.
 These scripted responses are not model-quality evidence.
 
+A separate evaluation-only `live-treatment-plugin.ts` implements live admission.
+It installs the existing request gate before composing Flow and checks the active
+in-process gate identity. Its control arm cannot call Jev. Its treatment arm uses
+the real adapter with a fixed experimental profile. This entry is not connected to
+`EvalHost` or the episode driver. The runner still rejects every live episode.
+
+The isolated plugin tests use synthetic credentials and intercepted transport:
+
+```sh
+bun test tests/recovery-live-treatment.test.ts
+```
+
+These tests prove plugin admission and reservation ordering. They do not prove
+native host loading or establish real provider pricing. See the
+[design boundary](../../.agents/plans/16-jev-autonomous-decisions/live-treatment-design.md).
+
 Finishing live execution requires reviewed cost bounds for the actual routes,
-independently reviewed execution evidence, and a new explicit campaign spending cap.
+independently reviewed execution evidence, a new explicit campaign spending cap,
+and host integration for the live entry.
 Simulation treatment support does not authorize live treatment activation or paid
 calls. The production qualification registry remains empty.
 
