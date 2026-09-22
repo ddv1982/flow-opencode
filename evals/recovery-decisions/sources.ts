@@ -13,6 +13,8 @@ export async function recoverySourceDigests() {
 		"evals/recovery-decisions/dataset.ts",
 		"evals/recovery-decisions/run.ts",
 		"evals/recovery-decisions/collect.ts",
+		"evals/recovery-decisions/capture.ts",
+		"evals/recovery-decisions/capture-plugin.ts",
 		"evals/recovery-decisions/sources.ts",
 		"evals/recovery-decisions/campaign.ts",
 		"evals/recovery-decisions/calibration.ts",
