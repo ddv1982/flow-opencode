@@ -389,3 +389,48 @@ refuses live origins. No paid inference occurred.
 See the [operator design decision](operator-resume-design.md),
 [operator workflow](../../../evals/recovery-decisions/run-episodes.md#answer-an-episode-question),
 and [verification receipt](evidence/runtime-operator-verification.json).
+
+## Executable and package-cache identity
+
+Episode drivers now require an explicit native OpenCode executable. Their harness
+identity includes the Bun and OpenCode bytes and the complete applicable package
+cache. Hosts copy those artifacts into private storage, verify the copies and
+reported versions, and launch OpenCode directly. Linux checks read the actual
+process executable handles for OpenCode and the Bun treatment builder.
+
+Checks run after startup and before every command or prompt, including operator
+continuation. Cancellation is checked again after hashing. Cache identity covers
+regular-file bytes, executable bits, directories, and contained relative links.
+Escaping links and special files fail. A symlink at the source cache root becomes
+an independent directory copy. The journal retains the expected manifest and a
+startup verification receipt with its digest and observation method. Recovery
+validates their correspondence. These host-recorded observations still require
+independent execution review. Historical receipts remain readable.
+
+Verification passed `bun run check` with 1,435 tests and 7,480 assertions. Its 14
+opt-in cases were skipped. Five relevant host checks passed separately with 65
+assertions on the final source bytes and native OpenCode 1.18.31. They cover both
+managers' operator resume and cancellation, real packed-cache startup, and copied
+cache drift that blocks prompt dispatch. Focused tests passed 41 cases with 179
+assertions. The independent reviewer ran 12 artifact and receipt cases with 53
+assertions and reported no unresolved material findings.
+
+An earlier host run timed out in xAI cancellation while final source changes and
+repository checks were running. The complete stable-source rerun passed. The
+initial packed-cache check refused external links created by a test install with
+`HOME` omitted. Restoring the normal package-preparation environment produced a
+contained cache without relaxing validation. The nine older opt-in treatment,
+request-budget, and packaged production cases were not rerun in this pass.
+
+This closes byte verification for the selected executable and package artifacts.
+It does not establish publisher authenticity, identify every child executable or
+OS library, or prevent hostile same-account filesystem races. Next, prove a full
+paired simulated campaign, including delegated recovery followed by operator
+intervention. Representative independently reviewed cases, reviewed cost bounds,
+a new explicit paid campaign cap, and live qualification remain open. Live
+episodes remain refused and the production registry remains empty. No paid
+inference occurred.
+
+See the [design decision](artifact-identity-design.md),
+[workflow](../../../evals/recovery-decisions/run-episodes.md#freeze-host-artifact-bytes),
+and [verification receipt](evidence/runtime-artifact-verification.json).

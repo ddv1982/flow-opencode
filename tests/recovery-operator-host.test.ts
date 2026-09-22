@@ -107,6 +107,10 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 							toolchain: currentBunToolchain(packageJson.packageManager),
 							packageCache: root,
 							opencodeVersion: "1.18.31",
+							opencodeExecutable:
+								process.env.FLOW_RECOVERY_OPENCODE_EXECUTABLE ??
+								Bun.which("opencode") ??
+								"",
 							providerCredentials: "disabled",
 							requestBudget: {
 								directory: budget,
@@ -124,6 +128,8 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 							const active = host;
 							return {
 								project: active.project,
+								artifactIdentity: active.artifactIdentity,
+								artifactVerification: active.artifactVerification,
 								createSession: active.createSession.bind(active),
 								stop: active.stop.bind(active),
 								escalationQuestion: active.escalationQuestion.bind(active),
@@ -177,6 +183,17 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 					expect(current.request.question.calls[0]?.callId).toStartWith(
 						"call-",
 					);
+					const header = JSON.parse(
+						await readFile(join(directory, "header.json"), "utf8"),
+					);
+					expect(header.artifactVerification).toEqual({
+						manifestDigest: datasetDigest(driver.expectedHostArtifacts),
+						method:
+							process.platform === "linux"
+								? "copied-files-and-linux-process"
+								: "copied-files-and-direct-spawn",
+					});
+					expect(header.expectedHostArtifacts.packageCache).toBeNull();
 					const before = await requestBudgetStatus(budget);
 					if (cancel) controller.abort();
 					else {

@@ -25,6 +25,7 @@ export async function recoverySourceDigests() {
 		"evals/recovery-decisions/treatment-plugin.ts",
 		"evals/recovery-decisions/simulation-transport.ts",
 		"evals/harness.ts",
+		"evals/host-artifacts.ts",
 		"evals/recovery-decisions/compare.ts",
 		"evals/recovery-decisions/decision-quality.ts",
 		"evals/recovery-decisions/episodes.ts",

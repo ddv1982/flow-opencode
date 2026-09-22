@@ -4,6 +4,12 @@ import { dirname, join } from "node:path";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
 import {
+	type HostArtifacts,
+	HostArtifactsSchema,
+	type HostArtifactVerification,
+	validateHostArtifactVerification,
+} from "../host-artifacts.js";
+import {
 	type EpisodeQuestion,
 	EpisodeQuestionSchema,
 	type OperatorPolicy,
@@ -27,9 +33,12 @@ export type EpisodeDriver = {
 	harnessDigest: string;
 	origin: "simulation" | "live";
 	operatorPolicy?: OperatorPolicy;
-	prepare(
-		signal: AbortSignal,
-	): Promise<{ task: unknown; initialState: unknown }>;
+	expectedHostArtifacts?: HostArtifacts;
+	prepare(signal: AbortSignal): Promise<{
+		task: unknown;
+		initialState: unknown;
+		artifactVerification?: HostArtifactVerification;
+	}>;
 	run(context: {
 		signal: AbortSignal;
 		record(event: Transition): Promise<void>;
@@ -93,6 +102,10 @@ export async function runEpisode(options: {
 		throw new Error(
 			"Live episodes still require reviewed route cost bounds and an isolated Jev treatment. The request-level gate alone does not qualify live execution.",
 		);
+	const expectedHostArtifacts =
+		options.driver.expectedHostArtifacts === undefined
+			? undefined
+			: HostArtifactsSchema.parse(options.driver.expectedHostArtifacts);
 	const operatorPolicy = OperatorPolicySchema.parse(
 		options.driver.operatorPolicy ?? { kind: "disabled" },
 	);
@@ -201,6 +214,10 @@ export async function runEpisode(options: {
 		const reset = await bounded(() =>
 			options.driver.prepare(controller.signal),
 		);
+		validateHostArtifactVerification(
+			expectedHostArtifacts,
+			reset.artifactVerification,
+		);
 		if (
 			datasetDigest(reset.task) !== episode.taskDigest ||
 			datasetDigest(reset.initialState) !== episode.initialStateDigest
@@ -214,6 +231,12 @@ export async function runEpisode(options: {
 		clearTimeout(timer);
 		armDeadline();
 		const header = Header.parse({
+			...(expectedHostArtifacts
+				? {
+						expectedHostArtifacts,
+						artifactVerification: reset.artifactVerification,
+					}
+				: {}),
 			schemaVersion: 1,
 			registrationDigest: datasetDigest(registration),
 			arm: options.arm,

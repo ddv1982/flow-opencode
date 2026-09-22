@@ -8,6 +8,7 @@ import {
 	episodeHostIdentity,
 } from "../evals/recovery-decisions/episode-host.js";
 import { runEpisode } from "../evals/recovery-decisions/episode-runner.js";
+import { datasetDigest } from "../evals/recovery-decisions/schema.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -38,14 +39,15 @@ async function setup(end: "quiet" | "escalated" = "quiet") {
 		manager: { model: "test/model", prompt: "Use the frozen task." },
 		host: {
 			toolchain: {
-				executable: "/test/bun",
+				executable: process.execPath,
 				actualVersion: "1.4.0",
 				expectedVersion: "1.4.0",
 				environment: {},
 			},
-			packageCache: "/test/cache",
+			packageCache: project,
+			opencodeExecutable: process.execPath,
 			packageVersion: "1.0.0",
-			opencodeVersion: "1.2.0",
+			opencodeVersion: Bun.version,
 		},
 		hostFactory: async (input) => {
 			starts++;
@@ -59,6 +61,16 @@ async function setup(end: "quiet" | "escalated" = "quiet") {
 			await writeFile(join(project, "opencode.json"), "{}");
 			return {
 				project,
+				artifactIdentity: input.frozenArtifacts?.identity,
+				artifactVerification: input.frozenArtifacts
+					? {
+							manifestDigest: datasetDigest(input.frozenArtifacts.identity),
+							method:
+								process.platform === "linux"
+									? "copied-files-and-linux-process"
+									: "copied-files-and-direct-spawn",
+						}
+					: undefined,
 				async createSession() {
 					return "test-session";
 				},
@@ -117,7 +129,7 @@ test("host adapter binds actual seeded files, manager request, exact completion 
 	expect(driver.origin).toBe("live");
 	expect(f.starts).toBe(0);
 	const signal = new AbortController().signal;
-	expect(await driver.prepare(signal)).toEqual({
+	expect(await driver.prepare(signal)).toMatchObject({
 		task: fixture.task,
 		initialState: episodeHostIdentity(fixture).initialState,
 	});
@@ -438,4 +450,52 @@ test("host identity freezes its operator policy before execution", async () => {
 		maxInterventions: 1,
 	});
 	await driver.stop();
+});
+
+test("registered cache byte changes refuse before host startup", async () => {
+	const f = await setup();
+	await writeFile(join(f.project, "dependency.js"), "original");
+	const driver = await createEpisodeHostDriver(f.options);
+	await writeFile(join(f.project, "dependency.js"), "modified");
+	const changed = await createEpisodeHostDriver(f.options);
+	expect(changed.harnessDigest).not.toBe(driver.harnessDigest);
+	await expect(driver.prepare(new AbortController().signal)).rejects.toThrow(
+		"bytes changed",
+	);
+	expect(f.starts).toBe(0);
+	await driver.stop();
+});
+test("driver snapshots launch configuration and refuses missing observed identity", async () => {
+	const f = await setup();
+	const driver = await createEpisodeHostDriver(f.options);
+	f.options.host.opencodeExecutable = "/changed/opencode";
+	f.options.host.toolchain = {
+		...f.options.host.toolchain,
+		executable: "/changed/bun",
+	};
+	f.options.host.opencodeVersion = "0.0.0";
+	const manifest = driver.expectedHostArtifacts;
+	if (!manifest) throw new Error("Missing artifact identity");
+	manifest.opencode.bytes.sha256 = "0".repeat(64);
+	await driver.prepare(new AbortController().signal);
+	expect(f.startOptions?.frozenArtifacts?.opencodeExecutable).toBe(
+		process.execPath,
+	);
+	expect(f.startOptions?.opencodeVersion).toBe(Bun.version);
+	expect(driver.expectedHostArtifacts?.opencode.bytes.sha256).not.toBe(
+		"0".repeat(64),
+	);
+	await driver.stop();
+	const other = await setup();
+	const original = other.options.hostFactory;
+	if (!original) throw new Error("Missing factory");
+	other.options.hostFactory = async (options) => ({
+		...(await original(options)),
+		artifactIdentity: undefined,
+	});
+	const unverified = await createEpisodeHostDriver(other.options);
+	await expect(
+		unverified.prepare(new AbortController().signal),
+	).rejects.toThrow("did not attest");
+	await unverified.stop();
 });
