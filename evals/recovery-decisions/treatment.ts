@@ -9,6 +9,7 @@ export const SimulationScriptSchema = z.discriminatedUnion("kind", [
 		})
 		.strict(),
 	z.object({ kind: z.literal("operator-resume-v1") }).strict(),
+	z.object({ kind: z.literal("recovery-operator-v1") }).strict(),
 ]);
 export const RecoveryTreatmentSchema = z
 	.object({

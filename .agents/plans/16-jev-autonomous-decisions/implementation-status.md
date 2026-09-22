@@ -434,3 +434,55 @@ inference occurred.
 See the [design decision](artifact-identity-design.md),
 [workflow](../../../evals/recovery-decisions/run-episodes.md#freeze-host-artifact-bytes),
 and [verification receipt](evidence/runtime-artifact-verification.json).
+
+## Paired simulated recovery and operator campaign
+
+The new opt-in campaign check runs both registered arms for each selected manager.
+A deterministic fixture contains the blocked Flow session before registration.
+Both actual hosts verify the same reset bytes and approved source digest before
+dispatch. Generated host configuration is excluded by frozen fixture Git ignore
+rules. The check never inserts session state after reset verification.
+
+The combined simulation follows matched tool calls and results. Treatment applies
+the exact returned reset grant before asking the operator. Control asks the same
+question without a delegated reset or Jev request. Both arms consume one scripted
+operator response and complete through the same manager session.
+
+A local evaluation wrapper retains the observed grant, reset order, persisted Flow
+state, dispatches, and completion checks before cleanup. The episode completion
+record binds that evidence. The test derives arm observations from recovered
+journals, recomputes each manager's report from retained files, and hashes the
+retained evidence before writing a complete index. Wrapper and fixture-support
+source hashes participate in the registered harness identity.
+
+Parent verification completed all four campaign hosts. Both manager reports contain
+one completed control and one completed treatment. Each control reserved five
+manager requests. Each treatment reserved six manager requests and one Jev request.
+Both arms recorded one operator intervention. Reports preserve unknown safety and
+spending measurements, zero live pairs, and inconclusive qualification. These are
+scripted integration results, not evidence of reduced human intervention or model
+quality. No paid inference occurred.
+
+Final repository checks passed 1,440 tests with 7,528 assertions. The 15 opt-in
+cases were skipped in that default run. Focused episode, transport, and operator
+checks passed 43 tests with 208 assertions. Independent review reported no
+unresolved findings and separately passed four transport cases with 27 assertions.
+
+The final campaign and all six existing treatment host cases passed. Two existing
+xAI operator cases timed out because the selected installed executable reported
+1.18.32 while the registration required 1.18.31. The runner refused preparation
+before any provider request. A diagnostic captured the version error that mailbox
+polling concealed. The cause of the executable update is unknown. All four
+operator cases passed on an isolated verified 1.18.31 executable with 60 assertions.
+Four other opt-in host cases were not rerun in this pass.
+
+This closes the combined paired simulation gap. Representative independently
+reviewed cases, reviewed bounds for actual provider costs, a new explicit paid
+campaign cap, live execution support and qualification, and release review remain
+open. Live
+episodes remain refused and the production qualification registry remains empty.
+The implementation stack still requires review and merge.
+
+See the [design decision](paired-simulation-design.md) and
+[reproduction command](../../../evals/recovery-decisions/run-episodes.md#run-the-paired-simulation-proof),
+and [verification receipt](evidence/runtime-paired-simulation-verification.json).
