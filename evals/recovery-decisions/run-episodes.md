@@ -285,10 +285,20 @@ For Flow-generated state, declare `.flow` in `generatedDirectories`. A returned
 prompt alone does not establish completion. An escalation starts operator wait.
 Use the operator interface below to continue the same session.
 
-**Live execution remains blocked.** The runner rejects live origin before host
-startup. The [shared request gate](run-request-budget.md) enforces durable request
-reservations. Command dispatch limits alone do not cap manager or subagent
-spending.
+**Live execution requires explicit admission.** Before creating a journal or
+starting a host, the runner requires a driver with live admission, frozen host
+artifacts, and reservation reconciliation. The native driver checks the registered
+manager, task, initial state, completion criteria, and arm against its frozen
+configuration. It requires explicit live treatment, a provider credential policy,
+and a current live request budget with reviewed cost bounds and capacity for each
+required model. The Jev arm also requires its toolchain credential.
+
+The [shared request gate](run-request-budget.md) reserves costs before individual
+requests. Admission does not reserve funds or guarantee enough budget to finish;
+concurrent hosts can consume the remaining cap. Command dispatch still requires
+`FLOW_EVAL_AUTHORIZATION`. That separate dispatch count does not cap manager or
+subagent spending. Both authorizations must come from an explicitly approved
+campaign; creating or running test fixtures does not grant paid-call permission.
 
 The host's isolated simulation treatment uses shared Flow plugin composition with an experimental
 profile. Both arms use the same
@@ -304,7 +314,7 @@ in-process gate identity. Its control arm cannot call Jev. Its treatment arm use
 the real adapter with a fixed experimental profile. `EvalHost` and the episode
 driver select this entry when `recoveryTreatment.origin` is `live`. Live host
 startup requires a scoped live budget and an explicit `providerCredentials`
-policy. The runner still rejects every live episode.
+policy. Generic drivers without live admission remain rejected.
 
 The live Jev arm receives `TYPESAFE_API_KEY` from the selected toolchain environment
 only at native server spawn. The control arm receives no Jev key. Inherited manager
@@ -334,9 +344,12 @@ reservations. It proves native loading and cleanup. It does not prove live
 inference or provider OAuth refresh. See the
 [host design](../../.agents/plans/16-jev-autonomous-decisions/live-host-design.md).
 
-Finishing live execution requires reviewed cost bounds for the actual routes,
-independently reviewed execution evidence, a new explicit campaign spending cap,
-and runner admission for the live entry.
+Running an actual campaign still requires reviewed cost bounds for the actual
+routes and a new explicit campaign spending cap. Independent execution and safety
+review remain necessary for qualification. The driver and review identities are
+trusted local inputs; admission does not authenticate reviewer attestations.
+A live-origin journal remains qualification-inconclusive and has no safety review
+until reviewed separately. Production qualification profiles remain empty.
 Simulation treatment support does not authorize live treatment activation or paid
 calls. The production qualification registry remains empty.
 

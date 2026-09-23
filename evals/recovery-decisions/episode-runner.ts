@@ -40,6 +40,16 @@ export type EpisodeDriver = {
 	origin: "simulation" | "live";
 	operatorPolicy?: OperatorPolicy;
 	expectedHostArtifacts?: HostArtifacts;
+	admitLive?(
+		input: {
+			scope: EpisodeReservationScope;
+			manager: { model: string; prompt: string };
+			taskDigest: string;
+			initialStateDigest: string;
+			completionCriteria: string;
+		},
+		signal?: AbortSignal,
+	): Promise<void>;
 	prepare(
 		signal: AbortSignal,
 		scope?: EpisodeReservationScope,
@@ -106,11 +116,17 @@ export async function runEpisode(options: {
 	driver: EpisodeDriver;
 	signal?: AbortSignal;
 }) {
+	const admitLive = options.driver.admitLive?.bind(options.driver);
 	if (options.origin !== options.driver.origin)
 		throw new Error("Driver origin mismatch.");
-	if (options.origin !== "simulation")
+	if (
+		options.origin === "live" &&
+		(!admitLive ||
+			!options.driver.expectedHostArtifacts ||
+			!options.driver.reconcileReservations)
+	)
 		throw new Error(
-			"Live episodes still require reviewed route cost bounds and an isolated Jev treatment. The request-level gate alone does not qualify live execution.",
+			"Live episodes require admission for reviewed route cost bounds, isolated treatment, frozen artifacts, and reservation reconciliation.",
 		);
 	const expectedHostArtifacts =
 		options.driver.expectedHostArtifacts === undefined
@@ -141,6 +157,19 @@ export async function runEpisode(options: {
 		}),
 	);
 	options.signal?.throwIfAborted();
+	if (options.origin === "live" && admitLive) {
+		await admitLive(
+			{
+				scope: reservationScope,
+				manager: { model: arm.model, prompt: arm.prompt },
+				taskDigest: episode.taskDigest,
+				initialStateDigest: episode.initialStateDigest,
+				completionCriteria: episode.completionCriteria,
+			},
+			options.signal,
+		);
+		options.signal?.throwIfAborted();
+	}
 	await mkdir(options.outputDirectory, { mode: 0o700 });
 	if (process.platform !== "win32") {
 		const parent = await open(dirname(options.outputDirectory), "r");

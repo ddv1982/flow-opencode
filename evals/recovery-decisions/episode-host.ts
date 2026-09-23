@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { EvalHost } from "../harness.js";
 import {
@@ -20,6 +20,7 @@ import {
 } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
 import { recoverySourceDigests } from "./sources.js";
+import { validateTreatmentBudget } from "./treatment.js";
 
 const FilePath = z
 	.string()
@@ -156,6 +157,10 @@ export async function createEpisodeHostDriver(
 	options: EpisodeHostOptions,
 ): Promise<EpisodeDriver> {
 	options = { ...options, host: structuredClone(options.host) };
+	if (options.host.requestBudget)
+		options.host.requestBudget.directory = resolve(
+			options.host.requestBudget.directory,
+		);
 	if (options.arm === "manager-plus-jev" && !options.host.recoveryTreatment)
 		throw new Error("Manager-plus-Jev requires isolated treatment.");
 	if (
@@ -244,6 +249,68 @@ export async function createEpisodeHostDriver(
 		},
 		operatorPolicy,
 		origin: options.host.recoveryTreatment?.origin ?? "live",
+		...(options.host.recoveryTreatment?.origin === "live"
+			? ({
+					async admitLive(input, signal) {
+						signal?.throwIfAborted();
+						const scope = EpisodeReservationScopeSchema.parse(input.scope);
+						const identity = episodeHostIdentity(fixture);
+						if (
+							state !== "new" ||
+							scope.arm !== options.arm ||
+							datasetDigest(input.manager) !== datasetDigest(manager) ||
+							input.taskDigest !== datasetDigest(identity.task) ||
+							input.initialStateDigest !==
+								datasetDigest(identity.initialState) ||
+							input.completionCriteria !== identity.completionCriteria
+						)
+							throw new Error(
+								"Live episode differs from frozen host configuration.",
+							);
+						if (
+							options.host.providerCredentials !== "inherit" &&
+							options.host.providerCredentials !== "disabled"
+						)
+							throw new Error(
+								"Live episode requires explicit provider credential policy.",
+							);
+						if (
+							options.arm === "manager-plus-jev" &&
+							!options.host.toolchain.environment.TYPESAFE_API_KEY?.trim()
+						)
+							throw new Error(
+								"Live Jev episode requires a toolchain credential.",
+							);
+						const treatment = options.host.recoveryTreatment;
+						if (!treatment) throw new Error("Live treatment unavailable.");
+						const status = await validateTreatmentBudget(
+							treatment,
+							options.host.requestBudget
+								? { ...options.host.requestBudget, scope }
+								: undefined,
+						);
+						const requiredModels =
+							options.arm === "manager-plus-jev"
+								? [manager.model, "typesafe/jev-1.13.0"]
+								: [manager.model];
+						if (
+							status.consumed >= status.authorization.maxRequests ||
+							requiredModels.some((model) => {
+								const bound = status.authorization.models.find(
+									(row) => row.model === model,
+								);
+								return (
+									!bound ||
+									status.reservedMicroUsd + bound.reservationMicroUsd >
+										status.authorization.maxMicroUsd
+								);
+							})
+						)
+							throw new Error("Live episode request budget exhausted.");
+						signal?.throwIfAborted();
+					},
+				} satisfies Pick<EpisodeDriver, "admitLive">)
+			: {}),
 		async prepare(signal, scopeInput) {
 			if (state !== "new")
 				throw new Error("An episode host can only prepare once.");
