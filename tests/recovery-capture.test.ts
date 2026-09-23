@@ -243,8 +243,15 @@ test("actual opt-in flow_status captures exact workspace inputs; ordinary plugin
 	}
 	const hooks = await CapturePlugin(pluginContext(f.workspace), {
 		captureDirectory: f.directory,
+		reviewer: { model: "provider/independent-reviewer", steps: 80 },
 	});
 	try {
+		const config: Parameters<NonNullable<typeof hooks.config>>[0] = {};
+		await hooks.config?.(config);
+		expect(config.agent?.["flow-reviewer"]).toMatchObject({
+			model: "provider/independent-reviewer",
+			steps: 80,
+		});
 		const result = await hooks.tool?.flow_status?.execute(
 			{ request: { view: "compact" }, recoveryProposal: f.proposal },
 			toolContext(f.workspace),
