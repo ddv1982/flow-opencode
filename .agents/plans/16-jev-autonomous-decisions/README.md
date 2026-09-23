@@ -286,7 +286,7 @@ Each live lane runs in its own isolated environment at the PR head through a det
 - [ ] Lane 2. Run until an attempt or cost budget is exhausted. Save `evidence/JEV-4/worker-2/long-run.png`. Pass when the exact exhausted limit is reported and no extra action starts.
 - [ ] Lane 3. Remove provider availability during a run. Save `evidence/JEV-4/worker-3/provider-loss.png`. Pass when the bounded fallback or checkpoint occurs without false success.
 - [ ] Lane 4. Disable advice and rerun the same fixture. Save `evidence/JEV-4/worker-4/opt-out.png`. Pass when no TypeSafe calls occur and standard behavior returns.
-- [ ] Lane 5. Issue `/flow-auto stop` while recovery is pending. Save `evidence/JEV-4/worker-5/stop.png`. Pass when pending authority is revoked and no new mutation follows.
+- [x] Lane 5. Issue `/flow-auto stop` while recovery is pending. Save `evidence/JEV-4/worker-5/stop.png`. Pass when pending authority is revoked and no new mutation follows. The [receipt](evidence/JEV-4/worker-5/receipt.json) records a real OpenCode 1.18.31 TUI run with simulated provider replies at `0ac5a1d`; revision stayed 11 and no reset call occurred.
 - [ ] Lane 6. Compact during a delegated run. Save `evidence/JEV-4/worker-6/compaction.png`. Pass when budgets and causal authority remain intact in the live process.
 - [ ] Lane 7. Restart during an unresolved checkpoint. Save `evidence/JEV-4/worker-7/restart.png`. Pass when the user sees that a new explicit invocation is needed.
 - [ ] Lane 8. Return an unexpected resolved model version. Save `evidence/JEV-4/worker-8/upgrade.png`. Pass when delegated use is refused pending qualification.
