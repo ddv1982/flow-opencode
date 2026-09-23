@@ -10,6 +10,7 @@ export const SimulationScriptSchema = z.discriminatedUnion("kind", [
 		.object({
 			kind: z.literal("guarded-reset-v1"),
 			outcome: z.enum(["accepted", "subthreshold"]),
+			jevDelayMs: z.number().int().min(0).max(9000).optional(),
 		})
 		.strict(),
 	z.object({ kind: z.literal("operator-resume-v1") }).strict(),

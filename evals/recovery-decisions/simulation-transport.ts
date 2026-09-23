@@ -71,6 +71,8 @@ export function createSimulationTransport(input: unknown) {
 				.parse(body);
 			const candidate = parsed.state.candidates[0];
 			if (!candidate) throw new Error("Missing simulation candidate.");
+			if (script.kind === "guarded-reset-v1" && script.jevDelayMs)
+				await Bun.sleep(script.jevDelayMs);
 			return Response.json({
 				model: "jev-1.13.0",
 				answers: {
