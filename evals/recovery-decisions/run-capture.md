@@ -10,7 +10,7 @@ existing provider configuration and authorization.
 1. Choose a new absolute output directory outside the workspace. Its parent must
    exist. Do not create the output directory yourself. Each recorder claims its
    own directory and refuses an existing one.
-2. In the target workspace's OpenCode configuration, replace the ordinary Flow
+2. On a POSIX host, in the target workspace's OpenCode configuration, replace the ordinary Flow
    plugin entry with the absolute source entry and capture options below.
    Replace both example paths with actual absolute paths. Do not load both Flow
    entries together.
@@ -21,12 +21,17 @@ existing provider configuration and authorization.
     [
       "file:///absolute/flow-opencode/evals/recovery-decisions/capture-plugin.ts",
       {
-        "captureDirectory": "/absolute/private-parent/new-recovery-captures"
+        "captureDirectory": "/absolute/private-parent/new-recovery-captures",
+        "reviewer": { "model": "provider/reviewer-model" }
       }
     ]
   ]
 }
 ```
+
+Preserve any existing `reviewer` option from the ordinary Flow plugin entry;
+omit it if none was configured. Windows capture is unsupported because POSIX
+directory and file permission checks do not provide a privacy guarantee there.
 
 3. Start a fresh OpenCode process from the target workspace. Use an existing
    recovery proposal at a blocked checkpoint. The capture plugin keeps the

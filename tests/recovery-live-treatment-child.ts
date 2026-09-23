@@ -20,7 +20,7 @@ const scenario = process.argv[3];
 assert(root && scenario);
 const managerModel =
 	process.argv[4] === "xai" ? "xai/grok-4.6" : "openai/gpt-5.6-terra";
-const control = scenario === "control";
+const control = scenario === "control" || scenario === "control-with-jev";
 const workspace = join(root, "workspace");
 await mkdir(workspace);
 const scope: EpisodeReservationScope = {
@@ -33,7 +33,7 @@ const scope: EpisodeReservationScope = {
 const directory = join(root, "budget");
 const simulation = scenario === "simulation";
 const modelNames =
-	scenario === "missing-jev"
+	scenario === "control" || scenario === "missing-jev"
 		? [managerModel]
 		: scenario === "wrong-manager"
 			? [
@@ -171,6 +171,7 @@ const invalid = [
 	"expired",
 	"cancelled",
 	"missing-jev",
+	"control-with-jev",
 	"wrong-manager",
 	"other-manager",
 	"missing-key",
@@ -248,6 +249,17 @@ if (invalid.includes(scenario)) {
 			assert.equal(ready.arm, scope.arm);
 			assert.equal(ready.scopeDigest, datasetDigest(scope));
 			assert.equal(ready.qualification, "experimental-evaluation");
+			if (control) {
+				await assert.rejects(
+					fetch("https://api.typesafe.ai/v1/systemone", {
+						method: "POST",
+						headers: { "content-type": "application/json" },
+						body: JSON.stringify({ model: "jev-1.13.0" }),
+					}),
+					/model not authorized/i,
+				);
+				assert.equal(requests, 0);
+			}
 			const mode = control ? "shadow" : "delegated";
 			await hooks["command.execute.before"]?.(
 				{

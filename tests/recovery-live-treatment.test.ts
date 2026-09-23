@@ -7,6 +7,7 @@ for (const manager of ["openai", "xai"]) {
 	for (const scenario of [
 		"accepted",
 		"control",
+		"control-with-jev",
 		"transport-failure",
 		"replaced-fetch",
 		"replaced-websocket",

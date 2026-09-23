@@ -4,7 +4,12 @@ import { resolveWorkspaceRoot } from "../../src/infrastructure/fs/workspace-path
 import { createFlowPlugin } from "../../src/platform/opencode/plugin-composition.js";
 import { CapturingRecoveryController } from "./capture.js";
 
-const Options = z.object({ captureDirectory: z.string().min(1) }).strict();
+const Options = z
+	.object({
+		captureDirectory: z.string().min(1),
+		reviewer: z.unknown().optional(),
+	})
+	.strict();
 const CapturePlugin: Plugin = async (context, input) => {
 	const options = Options.parse(input);
 	const recovery = await CapturingRecoveryController.create(
@@ -14,6 +19,6 @@ const CapturePlugin: Plugin = async (context, input) => {
 	return createFlowPlugin({
 		entryUrl: import.meta.url,
 		createRecovery: () => recovery,
-	})(context);
+	})(context, { reviewer: options.reviewer });
 };
 export default CapturePlugin;

@@ -109,7 +109,7 @@ test("combined script observes granted reset before question and survives questi
 	const write = await session.next();
 	expect(write.name).toBe("bash");
 	expect(JSON.parse(write.arguments ?? "{}").command).toBe(
-		"printf 'fixed\\n' > result.txt",
+		"printf '%s\\n' 'export const parse = (value: string | null) => value?.trim() ?? \"\";' > parser.ts && printf 'fixed\\n' > result.txt",
 	);
 	session.complete(write, "");
 	expect((await session.next()).type).toBe("message");

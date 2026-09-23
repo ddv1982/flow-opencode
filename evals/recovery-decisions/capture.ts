@@ -76,6 +76,10 @@ export class CapturingRecoveryController extends RecoveryController {
 		workspace: string,
 		outputDirectory: string,
 	): Promise<CapturingRecoveryController> {
+		if (process.platform === "win32")
+			throw new Error(
+				"Recovery capture requires POSIX filesystem permissions; Windows is not supported.",
+			);
 		try {
 			if (!isAbsolute(outputDirectory)) throw new Error();
 			const root = await realpath(workspace);
