@@ -79,8 +79,12 @@ export async function frozenCampaignFixture() {
 				generatedDirectories: [".flow"],
 				completion: {
 					criteria:
-						"The exact operator selected output is written after the recovery attempt.",
-					files: { "result.txt": "fixed\n" },
+						"The parser handles null input and the exact operator selected output is written after recovery.",
+					files: {
+						"parser.ts":
+							'export const parse = (value: string | null) => value?.trim() ?? "";\n',
+						"result.txt": "fixed\n",
+					},
 				},
 			},
 		};
