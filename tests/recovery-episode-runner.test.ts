@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -311,6 +312,37 @@ test("completed episode excludes confirmed cleanup past the deadline", async () 
 			).reason,
 		).toBe("criteria-evaluated");
 	} finally {
+		await rm(f.root, { recursive: true, force: true });
+	}
+});
+
+test("execution deadline starts after the durable start event", async () => {
+	const f = await fixture();
+	const original = globalThis.setTimeout;
+	const scheduled: { header: boolean; start: boolean }[] = [];
+	globalThis.setTimeout = ((...args: Parameters<typeof setTimeout>) => {
+		const [handler, delay, ...parameters] = args;
+		if (delay === 1000)
+			scheduled.push({
+				header: existsSync(join(f.options.outputDirectory, "header.json")),
+				start: existsSync(
+					join(f.options.outputDirectory, "events", "000000.json"),
+				),
+			});
+		return original(handler, delay, ...parameters);
+	}) as typeof setTimeout;
+	try {
+		const result = await runEpisode(f.options);
+		expect(result?.observation.result).toEqual({
+			kind: "terminal",
+			outcome: "completed",
+		});
+		expect(scheduled).toEqual([
+			{ header: false, start: false },
+			{ header: true, start: true },
+		]);
+	} finally {
+		globalThis.setTimeout = original;
 		await rm(f.root, { recursive: true, force: true });
 	}
 });
