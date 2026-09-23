@@ -222,7 +222,11 @@ export class RecoveryController {
 			this.#lease = null;
 		}
 	}
+	#expireLease(): void {
+		if (this.#lease && this.#now() >= this.#lease.deadline) this.revoke();
+	}
 	observeMessage(hostId: string, id: string, synthetic: boolean): void {
+		this.#expireLease();
 		const host =
 			this.#hosts.get(hostId) ??
 			(!synthetic && this.#protectedSessions.size
@@ -246,6 +250,7 @@ export class RecoveryController {
 		}
 	}
 	#origin(context: RecoveryContext): Lease | null {
+		this.#expireLease();
 		const host = this.#hosts.get(context.hostSessionId);
 		if (!host?.fenced) return null;
 		if (
@@ -297,6 +302,7 @@ export class RecoveryController {
 		}
 	}
 	snapshot() {
+		this.#expireLease();
 		const lease = this.#lease;
 		return lease
 			? {
@@ -318,6 +324,7 @@ export class RecoveryController {
 		revision: number,
 		nextAction: string | null,
 	): string | null {
+		this.#expireLease();
 		const lease = this.#lease;
 		if (
 			!lease ||
@@ -359,6 +366,7 @@ export class RecoveryController {
 		source: SourceDigest | null,
 		mutation: RecoveryMutation,
 	): void {
+		this.#expireLease();
 		const reserved = mutation.request.operationId.startsWith("flow-recovery-");
 		if (
 			reserved &&
@@ -648,13 +656,8 @@ export class RecoveryController {
 			lease.calls >= lease.settings.maxCalls
 		)
 			throw new Error("Recovery decision budget exhausted.");
-		lease.packets.add(packetDigest);
-		lease.remedies.add(remedyDigest);
-		lease.checkpointCalls.set(
-			checkpoint,
-			(lease.checkpointCalls.get(checkpoint) ?? 0) + 1,
-		);
 		lease.inFlight = true;
+		let attemptReserved = false;
 		let advice: DecisionAdvice;
 		try {
 			advice = await this.#provider.assess(packet, {
@@ -671,6 +674,15 @@ export class RecoveryController {
 						return false;
 					lease.calls++;
 					lease.reservedUsd += JEV_ATTEMPT_RESERVATION_USD;
+					if (!attemptReserved) {
+						attemptReserved = true;
+						lease.packets.add(packetDigest);
+						lease.remedies.add(remedyDigest);
+						lease.checkpointCalls.set(
+							checkpoint,
+							(lease.checkpointCalls.get(checkpoint) ?? 0) + 1,
+						);
+					}
 					return true;
 				},
 			});
@@ -682,6 +694,10 @@ export class RecoveryController {
 		if (this.#lease !== lease || lease.controller.signal.aborted)
 			throw new Error("Recovery advice was cancelled.");
 		this.#origin(context);
+		if (!attemptReserved) {
+			lease.packets.add(packetDigest);
+			lease.remedies.add(remedyDigest);
+		}
 		const profile = this.#profile() ?? {
 			choice: 0.9,
 			goal: 0.95,
@@ -696,6 +712,7 @@ export class RecoveryController {
 				? advice.assessments[candidate.id]
 				: undefined;
 		const selected =
+			attemptReserved &&
 			advice.kind === "answered" &&
 			advice.model === "jev-1.13.0" &&
 			candidate &&
