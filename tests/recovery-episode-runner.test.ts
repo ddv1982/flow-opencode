@@ -251,13 +251,13 @@ test("live mode and cancelled starts cannot prepare or consume authorization", a
 });
 
 test("evaluator error stays unavailable when cleanup crosses deadline", async () => {
-	const f = await fixture(60);
+	const f = await fixture(1000);
 	try {
 		f.options.driver.evaluate = async () => {
 			throw new Error("evaluation failed");
 		};
 		f.options.driver.stop = async () => {
-			await new Promise((resolve) => setTimeout(resolve, 100));
+			await new Promise((resolve) => setTimeout(resolve, 1200));
 		};
 		const result = await runEpisode(f.options);
 		expect(result?.observation.result.kind).toBe("unavailable");
