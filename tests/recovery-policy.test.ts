@@ -57,6 +57,7 @@ async function setup(
 	mode: "shadow" | "delegated" = "delegated",
 	custom: DecisionProvider = provider,
 	independent = false,
+	findingEvidence = "parser.ts",
 ) {
 	const repository = new MemorySessionRepository(),
 		env = deterministicEnvironment();
@@ -93,7 +94,7 @@ async function setup(
 				{
 					severity: "blocking",
 					summary: "Null input crashes",
-					evidence: "parser.ts",
+					evidence: i ? findingEvidence : "parser.ts",
 					...(i
 						? {
 								findingId:
@@ -409,6 +410,174 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 	});
+});
+
+test("oversized advice does not consume a checkpoint decision slot", async () => {
+	let calls = 0;
+	const s = await setup(
+		"shadow",
+		{
+			async assess(packet) {
+				calls++;
+				expect(Buffer.byteLength(JSON.stringify(packet))).toBeGreaterThan(
+					32000,
+				);
+				return { kind: "unavailable", reason: "oversize" };
+			},
+		},
+		false,
+		"x".repeat(32000),
+	);
+	for (let index = 0; index < 3; index++) {
+		const proposal = s.proposal();
+		const response = await s.flow.status({
+			request: { view: "compact" },
+			recoveryProposal: {
+				...proposal,
+				id: `oversize-${index}`,
+				candidates: proposal.candidates.map((candidate) => ({
+					...candidate,
+					remedy: `Guard null before parsing ${index}`,
+				})),
+			},
+		});
+		expect(response.status).toBe("ok");
+		if (index === 0)
+			expect(
+				(
+					await s.flow.status({
+						request: { view: "compact" },
+						recoveryProposal: {
+							...proposal,
+							id: "oversize-repeat",
+							candidates: proposal.candidates.map((candidate) => ({
+								...candidate,
+								remedy: "Guard null before parsing 0",
+							})),
+						},
+					})
+				).status,
+			).toBe("error");
+	}
+	expect(calls).toBeGreaterThanOrEqual(1);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
+test("provider retries reserve each paid attempt but count as one checkpoint decision", async () => {
+	let assessments = 0;
+	const advice = (id: string) => ({
+		kind: "answered" as const,
+		model: "jev-1.13.0" as const,
+		choice: id,
+		probabilities: { [id]: 1, abstain: 0 },
+		confidence: 1,
+		assessments: { [id]: { goal: 1, suitability: 1 } },
+		inputTokens: 100,
+		outputTokens: 10,
+		latencyMs: 1,
+	});
+	const s = await setup("shadow", {
+		async assess(packet, options) {
+			assessments++;
+			expect(options.reserveAttempt()).toBe(true);
+			expect(options.reserveAttempt()).toBe(true);
+			return advice(packet.candidates[0]?.id ?? "missing");
+		},
+	});
+	for (let index = 0; index < 2; index++) {
+		const proposal = s.proposal();
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: {
+						...proposal,
+						id: `retry-${index}`,
+						candidates: proposal.candidates.map((candidate) => ({
+							...candidate,
+							remedy: `Guard null before parsing ${index}`,
+						})),
+					},
+				})
+			).status,
+		).toBe("ok");
+	}
+	const proposal = s.proposal();
+	expect(
+		(
+			await s.flow.status({
+				request: { view: "compact" },
+				recoveryProposal: {
+					...proposal,
+					id: "retry-third",
+					candidates: proposal.candidates.map((candidate) => ({
+						...candidate,
+						remedy: "Guard null before parsing third",
+					})),
+				},
+			})
+		).status,
+	).toBe("error");
+	expect(assessments).toBe(2);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 2 });
+	const unreserved = await setup("delegated", {
+		async assess(packet) {
+			return advice(packet.candidates[0]?.id ?? "missing");
+		},
+	});
+	const response = await unreserved.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: unreserved.proposal(),
+	});
+	expect(response.status).toBe("ok");
+	expect(JSON.stringify(response)).toContain('"kind":"abstain"');
+	expect(JSON.stringify(response)).not.toContain('"recommended"');
+	expect(unreserved.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
+test("expired recovery lease stops prompting and clears authority", async () => {
+	let now = 0;
+	const s = await setup();
+	const controller = new RecoveryController(provider, {
+		profiles: [profile],
+		now: () => now,
+	});
+	controller.activate("host", { mode: "shadow", maxCalls: 2, maxUsd: 0.01 });
+	controller.observeMessage("host", "old-user", false);
+	controller.observeAssistant("host", "old-assistant", "old-user");
+	expect(
+		controller.proposalPrompt("host", "flow", 10, "await-user-direction"),
+	).not.toBeNull();
+	now = 60 * 60 * 1000;
+	expect(
+		controller.proposalPrompt("host", "flow", 11, "await-user-direction"),
+	).toBeNull();
+	expect(controller.snapshot()).toEqual({ mode: "off" });
+	const mutation: RecoveryMutation = {
+		kind: "feature-reset",
+		request: {
+			operationId: "manual-after-expiry",
+			expectedRevision: revision(s.repository),
+			featureId: FEATURE,
+		},
+	};
+	const session = s.repository.session;
+	if (!session) throw new Error("fixture session missing");
+	expect(() =>
+		controller
+			.guard({ ...context, messageId: "old-assistant" })
+			.check(session, null, mutation),
+	).toThrow("fresh real user direction");
+	controller.observeMessage("host", "new-user", false);
+	controller.observeAssistant("host", "new-assistant", "new-user");
+	const flow = createFlowService(
+		s.repository,
+		s.env,
+		controller.guard({ ...context, messageId: "new-assistant" }),
+	);
+	expect((await flow.featureReset({ request: mutation.request })).status).toBe(
+		"ok",
+	);
 });
 
 test("concurrent identical proposals buy one assessment and duplicate mutation replays", async () => {
