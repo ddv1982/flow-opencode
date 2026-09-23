@@ -61,7 +61,9 @@ export async function validateLiveTreatmentBudget(budget: {
 				model !== budget.managerModel && model !== "typesafe/jev-1.13.0",
 		) ||
 		(budget.scope.arm === "manager-plus-jev" &&
-			!models.includes("typesafe/jev-1.13.0"))
+			!models.includes("typesafe/jev-1.13.0")) ||
+		(budget.scope.arm === "manager-only" &&
+			models.includes("typesafe/jev-1.13.0"))
 	)
 		throw new Error("Live evaluation authorization unavailable.");
 	return status;
