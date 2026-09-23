@@ -376,6 +376,7 @@ export async function runEpisode(options: {
 	} finally {
 		terminalAtMs = elapsed();
 		clearTimeout(timer);
+		options.signal?.removeEventListener("abort", cancel);
 		accepting = false;
 		controller.abort();
 		let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
@@ -395,7 +396,6 @@ export async function runEpisode(options: {
 		} finally {
 			clearTimeout(cleanupTimer);
 		}
-		options.signal?.removeEventListener("abort", cancel);
 		await queue.catch(() => {});
 	}
 	if (

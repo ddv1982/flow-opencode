@@ -173,6 +173,32 @@ test("deadline during operator wait confirms cleanup and rejects late events", a
 	}
 });
 
+test("external abort during execution cancels the episode", async () => {
+	const f = await fixture();
+	const controller = new AbortController();
+	let entered: () => void = () => {};
+	const running = new Promise<void>((resolve) => {
+		entered = resolve;
+	});
+	try {
+		f.options.driver.run = async ({ signal }) => {
+			entered();
+			await new Promise<void>((resolve) => {
+				signal.addEventListener("abort", () => resolve(), { once: true });
+			});
+		};
+		const episode = runEpisode({ ...f.options, signal: controller.signal });
+		await running;
+		controller.abort();
+		expect((await episode)?.observation.result).toEqual({
+			kind: "terminal",
+			outcome: "cancelled",
+		});
+	} finally {
+		await rm(f.root, { recursive: true, force: true });
+	}
+});
+
 test("unconfirmed cleanup and evaluator errors preserve unavailable evidence", async () => {
 	const f = await fixture();
 	try {
@@ -288,6 +314,47 @@ test("completed episode excludes confirmed cleanup past the deadline", async () 
 		await rm(f.root, { recursive: true, force: true });
 	}
 });
+
+test.each([
+	["completed", true],
+	["failed", false],
+] as const)(
+	"external abort during cleanup cannot replace a %s outcome",
+	async (outcome, met) => {
+		const f = await fixture();
+		const controller = new AbortController();
+		let entered: () => void = () => {};
+		let release: () => void = () => {};
+		const stopping = new Promise<void>((resolve) => {
+			entered = resolve;
+		});
+		const barrier = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		try {
+			f.options.driver.evaluate = async () => ({
+				met,
+				evidence: { file: "after" },
+			});
+			f.options.driver.stop = async () => {
+				entered();
+				await barrier;
+			};
+			const running = runEpisode({ ...f.options, signal: controller.signal });
+			await stopping;
+			controller.abort();
+			release();
+			const result = await running;
+			expect(result?.observation.result).toEqual({
+				kind: "terminal",
+				outcome,
+			});
+		} finally {
+			release();
+			await rm(f.root, { recursive: true, force: true });
+		}
+	},
+);
 
 test("journal failure prevents acknowledged continuation and invalid transitions poison execution", async () => {
 	const f = await fixture();
