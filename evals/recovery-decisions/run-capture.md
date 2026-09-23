@@ -37,15 +37,17 @@ directory and file permission checks do not provide a privacy guarantee there.
 OpenCode combines user and workspace plugin entries. If your user configuration
 loads the ordinary Flow plugin, the workspace entry above loads a second Flow
 instance and capture cannot start. On Linux, use an empty private configuration
-directory for the capture run. Keep `HOME` and `XDG_DATA_HOME` unchanged so
-OpenCode can still read stored provider credentials. If your user configuration
-also defines provider settings, put the required non-secret fields in
+directory and clear explicit OpenCode config overrides for the capture run. Keep
+`HOME` and `XDG_DATA_HOME` unchanged so OpenCode can still read stored provider
+credentials. If your user configuration also defines provider settings, put the
+required non-secret fields in
 `/absolute/private-parent/opencode-config/opencode/opencode.json`. Do not copy
 its `plugin` list or credentials.
 
 ```sh
 mkdir -m 700 /absolute/private-parent/opencode-config
-XDG_CONFIG_HOME=/absolute/private-parent/opencode-config \
+env -u OPENCODE_CONFIG -u OPENCODE_CONFIG_CONTENT -u OPENCODE_CONFIG_DIR \
+	XDG_CONFIG_HOME=/absolute/private-parent/opencode-config \
 	opencode /absolute/workspace
 ```
 
