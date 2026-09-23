@@ -425,7 +425,6 @@ export async function runEpisode(options: {
 		!persistenceFailed &&
 		(reason || outcome)
 	) {
-		const terminalAtMs = elapsed();
 		let reconciliation: ReservationReconciliation | undefined;
 		let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
 		try {
