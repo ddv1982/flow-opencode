@@ -267,6 +267,28 @@ test("evaluator error stays unavailable when cleanup crosses deadline", async ()
 	}
 });
 
+test("completed episode excludes confirmed cleanup past the deadline", async () => {
+	const f = await fixture(300);
+	try {
+		f.options.driver.stop = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 450));
+		};
+		const result = await runEpisode(f.options);
+		expect(result?.observation.result).toEqual({
+			kind: "terminal",
+			outcome: "completed",
+		});
+		expect(result?.observation.activeRuntimeMs).toBeLessThan(300);
+		expect(
+			JSON.parse(
+				await readFile(join(f.options.outputDirectory, "status.json"), "utf8"),
+			).reason,
+		).toBe("criteria-evaluated");
+	} finally {
+		await rm(f.root, { recursive: true, force: true });
+	}
+});
+
 test("journal failure prevents acknowledged continuation and invalid transitions poison execution", async () => {
 	const f = await fixture();
 	try {
