@@ -1,0 +1,5 @@
+- [x] Add a focused regression proving fenced heading-shaped lines are excluded while real duplicate headings retain GitHub-style suffixes.
+- [x] Update Markdown anchor extraction to ignore fenced code and preserve the existing documentation-link contract.
+- [x] Run the focused documentation-contract test and the repository check.
+- [x] Cover longer fenced blocks and retain their delimiter character and opening length during anchor extraction.
+- [x] Re-run focused and repository validation on the corrected final source.

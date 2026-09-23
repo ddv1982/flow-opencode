@@ -219,8 +219,28 @@ function headings(markdown: string): string[] {
 
 function markdownAnchors(markdown: string): Set<string> {
 	const counts = new Map<string, number>();
+	let fence: { character: string; length: number } | undefined;
+	const prose = markdown
+		.split("\n")
+		.filter((line) => {
+			const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+			if (!fence && marker) {
+				fence = { character: marker[0] ?? "", length: marker.length };
+				return false;
+			}
+			if (!fence) return true;
+			if (
+				new RegExp(`^ {0,3}${fence.character}{${fence.length},}[\\t ]*$`).test(
+					line,
+				)
+			) {
+				fence = undefined;
+			}
+			return false;
+		})
+		.join("\n");
 	return new Set(
-		[...markdown.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)].map((match) => {
+		[...prose.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)].map((match) => {
 			const base = (match[1] ?? "")
 				.trim()
 				.toLowerCase()
@@ -232,6 +252,25 @@ function markdownAnchors(markdown: string): Set<string> {
 		}),
 	);
 }
+
+test("ignores fenced code while preserving duplicate heading suffixes", () => {
+	const anchors = markdownAnchors(`
+# Repeated heading
+
+\`\`\`markdown
+# Heading-shaped code
+\`\`\`
+
+\`\`\`\`markdown
+\`\`\`
+# Heading-shaped code in a longer fence
+\`\`\`\`
+
+# Repeated heading
+`);
+
+	expect(anchors).toEqual(new Set(["repeated-heading", "repeated-heading-1"]));
+});
 
 async function markdownFiles(directory: string): Promise<string[]> {
 	const entries = await readdir(directory, { withFileTypes: true });
