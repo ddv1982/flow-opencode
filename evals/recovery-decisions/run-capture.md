@@ -9,7 +9,8 @@ existing provider configuration and authorization.
 
 1. Choose a new absolute output directory outside the workspace. Its parent must
    exist. Do not create the output directory yourself. Each recorder claims its
-   own directory and refuses an existing one.
+   own directory and refuses an existing one. A failed startup may still claim
+   the directory. Use a new path for the next attempt.
 2. On a POSIX host, in the target workspace's OpenCode configuration, replace the ordinary Flow
    plugin entry with the absolute source entry and capture options below.
    Replace both example paths with actual absolute paths. Do not load both Flow
@@ -32,6 +33,24 @@ existing provider configuration and authorization.
 Preserve any existing `reviewer` option from the ordinary Flow plugin entry;
 omit it if none was configured. Windows capture is unsupported because POSIX
 directory and file permission checks do not provide a privacy guarantee there.
+
+OpenCode combines user and workspace plugin entries. If your user configuration
+loads the ordinary Flow plugin, the workspace entry above loads a second Flow
+instance and capture cannot start. On Linux, use an empty private configuration
+directory for the capture run. Keep `HOME` and `XDG_DATA_HOME` unchanged so
+OpenCode can still read stored provider credentials. If your user configuration
+also defines provider settings, put the required non-secret fields in
+`/absolute/private-parent/opencode-config/opencode/opencode.json`. Do not copy
+its `plugin` list or credentials.
+
+```sh
+mkdir -m 700 /absolute/private-parent/opencode-config
+XDG_CONFIG_HOME=/absolute/private-parent/opencode-config \
+	opencode /absolute/workspace
+```
+
+The workspace's `opencode.json` still supplies the capture plugin. The
+command-scoped `XDG_CONFIG_HOME` leaves your usual configuration unchanged.
 
 3. Start a fresh OpenCode process from the target workspace. Use an existing
    recovery proposal at a blocked checkpoint. The capture plugin keeps the
