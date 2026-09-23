@@ -54,7 +54,8 @@ const LiveTreatmentPlugin: Plugin = async (context, input) => {
 				model !== options.budget.managerModel &&
 				model !== "typesafe/jev-1.13.0",
 		) ||
-		(treatment && !models.includes("typesafe/jev-1.13.0"))
+		(treatment && !models.includes("typesafe/jev-1.13.0")) ||
+		(!treatment && models.includes("typesafe/jev-1.13.0"))
 	)
 		throw new Error("Live evaluation authorization unavailable.");
 	if (treatment && !process.env.TYPESAFE_API_KEY)
