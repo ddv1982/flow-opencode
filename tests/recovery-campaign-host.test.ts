@@ -441,7 +441,7 @@ smoke(
 						expect(recovered).toEqual(result);
 						expect(recovered.observation.result).toEqual({
 							kind: "terminal",
-							outcome: "completed",
+							outcome: "failed",
 						});
 						expect(recovered.observation.interruptions).toBe(1);
 						expect(recovered.observation.reservedUsd).toBeNull();
