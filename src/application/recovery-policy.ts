@@ -153,6 +153,13 @@ export class RecoveryController {
 	#host(id: string): Host {
 		let host = this.#hosts.get(id);
 		if (!host) {
+			if (this.#hosts.size >= 128) {
+				for (const candidate of this.#hosts.keys()) {
+					if (candidate === this.#lease?.host) continue;
+					this.#hosts.delete(candidate);
+					break;
+				}
+			}
 			if (this.#hosts.size >= 128)
 				throw new Error(
 					"Recovery host capacity reached. Restart with explicit user direction.",

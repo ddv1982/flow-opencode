@@ -209,6 +209,7 @@ export async function runEpisode(options: {
 	const elapsed = () => Math.max(0, Math.floor(performance.now() - start));
 	let stopConfirmed = false;
 	let executionFailed = false;
+	let terminalAtMs = 0;
 	try {
 		armDeadline();
 		const reset = await bounded(() =>
@@ -373,6 +374,8 @@ export async function runEpisode(options: {
 		executionFailed = reason === null;
 		outcome = null;
 	} finally {
+		terminalAtMs = elapsed();
+		clearTimeout(timer);
 		accepting = false;
 		controller.abort();
 		let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
@@ -392,7 +395,6 @@ export async function runEpisode(options: {
 		} finally {
 			clearTimeout(cleanupTimer);
 		}
-		clearTimeout(timer);
 		options.signal?.removeEventListener("abort", cancel);
 		await queue.catch(() => {});
 	}
@@ -405,7 +407,7 @@ export async function runEpisode(options: {
 	)
 		await append({
 			kind: "terminal",
-			atMs: elapsed(),
+			atMs: terminalAtMs,
 			outcome: reason ?? outcome ?? "failed",
 		});
 	await writeExclusive(join(options.outputDirectory, "status.json"), {
