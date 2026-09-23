@@ -305,7 +305,7 @@ export async function createEpisodeHostDriver(
 									(sum, bound) => sum + (bound?.reservationMicroUsd ?? 0),
 									0,
 								) >
-									status.authorization.maxMicroUsd
+								status.authorization.maxMicroUsd
 						)
 							throw new Error("Live episode request budget exhausted.");
 						signal?.throwIfAborted();
