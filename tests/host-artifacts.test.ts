@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, setDefaultTimeout, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import {
 	chmod,
@@ -22,7 +22,7 @@ import {
 } from "../evals/host-artifacts.js";
 
 const roots: string[] = [];
-const HASH_TEST_TIMEOUT_MS = 30_000;
+setDefaultTimeout(30_000);
 afterEach(async () => {
 	await Promise.all(
 		roots.splice(0).map((path) => rm(path, { recursive: true, force: true })),
@@ -70,7 +70,7 @@ test("tree identity covers file bytes executable mode empty directories and cont
 	expect(await artifactTree(relocated)).not.toEqual(
 		await artifactTree(f.cache),
 	);
-}, HASH_TEST_TIMEOUT_MS);
+});
 test("escaping links cycles and special cache entries fail closed", async () => {
 	const f = await setup();
 	await symlink("../outside", join(f.cache, "link"));
@@ -83,7 +83,7 @@ test("escaping links cycles and special cache entries fail closed", async () => 
 		expect(spawnSync("mkfifo", [join(f.cache, "fifo")]).status).toBe(0);
 		await expect(artifactTree(f.cache)).rejects.toThrow("Unsupported");
 	}
-}, HASH_TEST_TIMEOUT_MS);
+});
 test("private stage retains exact bytes and refuses destination drift", async () => {
 	const f = await setup();
 	await symlink("module.js", join(f.cache, "link"));
@@ -102,7 +102,7 @@ test("private stage retains exact bytes and refuses destination drift", async ()
 	await expect(verifyHostArtifacts(staged, f.expected)).rejects.toThrow(
 		"bytes changed",
 	);
-}, HASH_TEST_TIMEOUT_MS);
+});
 test("same-version source byte changes and native launcher scripts cannot start", async () => {
 	const f = await setup();
 	await writeFile(join(f.cache, "module.js"), "other");
@@ -139,7 +139,7 @@ test("same-version source byte changes and native launcher scripts cannot start"
 	await expect(verifyHostArtifacts(paths, expected)).rejects.toThrow(
 		"bytes changed",
 	);
-}, HASH_TEST_TIMEOUT_MS);
+});
 test("stage refuses wrong reported versions and cancellation", async () => {
 	const f = await setup();
 	await expect(
@@ -162,7 +162,7 @@ test("stage refuses wrong reported versions and cancellation", async () => {
 			signal: AbortSignal.abort(),
 		}),
 	).rejects.toThrow();
-}, HASH_TEST_TIMEOUT_MS);
+});
 
 test("symlinked cache root becomes an independent private directory", async () => {
 	const f = await setup();
@@ -180,4 +180,4 @@ test("symlinked cache root becomes an independent private directory", async () =
 	expect(await artifactTree(staged.packageCache ?? "")).toEqual(
 		f.expected.packageCache ?? [],
 	);
-}, HASH_TEST_TIMEOUT_MS);
+});
