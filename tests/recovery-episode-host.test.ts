@@ -670,9 +670,12 @@ async function liveFixture(
 		origin: "live",
 		purpose: "Synthetic local admission test; no external dispatch",
 		maxRequests: 10,
-		maxMicroUsd: 50000,
+		maxMicroUsd: 100000,
 		expiresAt: new Date(Date.now() + 60000).toISOString(),
-		models: [model, "typesafe/jev-1.13.0"].map((model) => ({
+		models: (arm === "manager-plus-jev"
+			? [model, "typesafe/jev-1.13.0"]
+			: [model]
+		).map((model) => ({
 			model,
 			reservationMicroUsd: 5000,
 			basis: {
@@ -820,12 +823,14 @@ for (const failure of [
 	"budget",
 	"cancelled",
 	"exhausted",
+	"one-slot",
 	"digest",
 	"simulation",
 	"expired",
 	"manager",
 	"aborted",
 	"unaffordable",
+	"combined-cost",
 	"missing-jev",
 ] as const) {
 	test(`live runner refuses ${failure} before host startup and journal creation`, async () => {
@@ -846,6 +851,13 @@ for (const failure of [
 					"xai/grok-4.6",
 					datasetDigest(l.authorization),
 				);
+		if (failure === "one-slot")
+			for (let i = 0; i < 9; i++)
+				await reserveRequest(
+					l.directory,
+					"xai/grok-4.6",
+					datasetDigest(l.authorization),
+				);
 		if (failure === "digest" && l.f.options.host.requestBudget)
 			l.f.options.host.requestBudget.authorizationDigest = "b".repeat(64);
 		if (
@@ -853,10 +865,12 @@ for (const failure of [
 			failure === "expired" ||
 			failure === "manager" ||
 			failure === "unaffordable" ||
+			failure === "combined-cost" ||
 			failure === "missing-jev"
 		) {
 			const authorization = structuredClone(l.authorization);
 			if (failure === "unaffordable") authorization.maxMicroUsd = 1;
+			if (failure === "combined-cost") authorization.maxMicroUsd = 5000;
 			if (failure === "missing-jev")
 				authorization.models = authorization.models.filter(
 					(row) => row.model !== "typesafe/jev-1.13.0",
@@ -886,12 +900,14 @@ for (const failure of [
 			budget: "requires a request budget",
 			cancelled: "Live evaluation authorization unavailable",
 			exhausted: "Live episode request budget exhausted",
+			"one-slot": "Live episode request budget exhausted",
 			digest: "Live evaluation authorization unavailable",
 			simulation: "Live evaluation authorization unavailable",
 			expired: "Live evaluation authorization unavailable",
 			manager: "Live evaluation authorization unavailable",
 			aborted: /abort/i,
 			unaffordable: "Live episode request budget exhausted",
+			"combined-cost": "Live episode request budget exhausted",
 			"missing-jev": "Live evaluation authorization unavailable",
 		}[failure];
 

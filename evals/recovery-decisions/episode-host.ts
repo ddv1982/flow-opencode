@@ -293,18 +293,19 @@ export async function createEpisodeHostDriver(
 							options.arm === "manager-plus-jev"
 								? [manager.model, "typesafe/jev-1.13.0"]
 								: [manager.model];
+						const requiredReservations = requiredModels.map((model) =>
+							status.authorization.models.find((row) => row.model === model),
+						);
 						if (
-							status.consumed >= status.authorization.maxRequests ||
-							requiredModels.some((model) => {
-								const bound = status.authorization.models.find(
-									(row) => row.model === model,
-								);
-								return (
-									!bound ||
-									status.reservedMicroUsd + bound.reservationMicroUsd >
-										status.authorization.maxMicroUsd
-								);
-							})
+							status.consumed + requiredModels.length >
+								status.authorization.maxRequests ||
+							requiredReservations.some((bound) => !bound) ||
+							status.reservedMicroUsd +
+								requiredReservations.reduce(
+									(sum, bound) => sum + (bound?.reservationMicroUsd ?? 0),
+									0,
+								) >
+									status.authorization.maxMicroUsd
 						)
 							throw new Error("Live episode request budget exhausted.");
 						signal?.throwIfAborted();
