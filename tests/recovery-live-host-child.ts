@@ -134,7 +134,10 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
 			maxRequests: 1,
 			maxMicroUsd: 3000,
 			expiresAt: new Date(Date.now() + 300000).toISOString(),
-			models: [managerModel, "typesafe/jev-1.13.0"].map((model) => ({
+			models: (arm === "manager-plus-jev"
+				? [managerModel, "typesafe/jev-1.13.0"]
+				: [managerModel]
+			).map((model) => ({
 				model,
 				reservationMicroUsd: 3000,
 				basis: {
