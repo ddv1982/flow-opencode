@@ -208,8 +208,9 @@ export function createSimulationTransport(input: unknown) {
 				tool = {
 					name: "bash",
 					arguments: {
-						command: "printf 'fixed\\n' > result.txt",
-						description: "Write the operator selected result",
+						command:
+							"printf '%s\\n' 'export const parse = (value: string | null) => value?.trim() ?? \"\";' > parser.ts && printf 'fixed\\n' > result.txt",
+						description: "Repair the parser and write the operator selected result",
 					},
 				};
 		} else if (hasFlowTools && toolResults.length === 0)
