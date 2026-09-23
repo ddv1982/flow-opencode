@@ -298,6 +298,35 @@ describe("process-local recovery", () => {
 			).toBe("error");
 		}
 	});
+	test("ordinary host churn cannot stop a protected recovery or restore evicted lineage", async () => {
+		const s = await setup();
+		const mutation = await recommend(s);
+		for (let i = 0; i < 129; i++) {
+			s.controller.observeMessage(`ordinary-${i}`, `user-${i}`, false);
+			s.controller.observeAssistant(
+				`ordinary-${i}`,
+				`assistant-${i}`,
+				`user-${i}`,
+			);
+		}
+		const evicted = createFlowService(
+			s.repository,
+			s.env,
+			s.controller.guard({
+				hostSessionId: "ordinary-0",
+				messageId: "assistant-0",
+				agent: "build",
+			}),
+		);
+		expect(
+			(
+				await evicted.featureReset({
+					request: { ...mutation.request, operationId: "stale-host" },
+				})
+			).status,
+		).toBe("error");
+		expect((await apply(s, mutation)).status).toBe("ok");
+	});
 	test("source drift after advice refuses the existing grant", async () => {
 		const s = await setup(),
 			mutation = await recommend(s);
