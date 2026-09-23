@@ -45,7 +45,7 @@ flow_plan_save`, and the process-local reviewer selection. Availability remains
 successful review is separate evidence that OpenCode could start the reviewer.
 
 If a Flow command or tool is missing, restart OpenCode and follow
-[configuration troubleshooting](troubleshooting.md#flow-is-not-available-after-installation).
+[configuration troubleshooting](troubleshooting.md#flow-commands-are-missing).
 
 ## Run a goal
 
