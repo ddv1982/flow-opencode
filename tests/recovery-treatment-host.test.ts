@@ -30,7 +30,12 @@ import {
 const smoke =
 	process.env.FLOW_RECOVERY_TREATMENT_SMOKE === "1" ? test : test.skip;
 for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
-	for (const scenario of ["accepted", "control", "subthreshold"] as const)
+	for (const scenario of [
+		"accepted",
+		"control",
+		"subthreshold",
+		"model-mismatch",
+	] as const)
 		smoke(
 			`real ${managerModel} host guarded reset simulation ${scenario}`,
 			async () => {
@@ -74,7 +79,9 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 						script: {
 							kind: "guarded-reset-v1",
 							outcome:
-								scenario === "subthreshold" ? "subthreshold" : "accepted",
+								scenario === "subthreshold" || scenario === "model-mismatch"
+									? scenario
+									: "accepted",
 						},
 					};
 					host = await EvalHost.start({
@@ -143,6 +150,36 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 						{ quietMs: 200, timeoutMs: 45000, stalledMs: 15000 },
 					);
 					const after = await loadSession(host.project);
+					if (scenario === "model-mismatch") {
+						const messages = (await fetch(
+							`${host.url}/session/${session}/message`,
+						).then((response) => response.json())) as Array<{
+							parts?: Array<{
+								type?: string;
+								tool?: string;
+								state?: { output?: string };
+							}>;
+						}>;
+						const recovery = messages
+							.flatMap((message) => message.parts ?? [])
+							.filter(
+								(part) =>
+									part.type === "tool" &&
+									part.tool === "flow_status" &&
+									typeof part.state?.output === "string",
+							)
+							.map((part) => JSON.parse(part.state?.output ?? "{}"))
+							.map((result) => result.workflowData?.recovery)
+							.find((result) => result?.reason === "model-mismatch");
+						expect(recovery).toMatchObject({
+							kind: "unavailable",
+							reason: "model-mismatch",
+							requestedModel: "jev-1.13.0",
+							model: "jev-1.14.0",
+							selectedCandidateId: null,
+						});
+						if (recovery) expect(recovery).not.toHaveProperty("recommended");
+					}
 					const status = await requestBudgetStatus(directory);
 					const claims = await Promise.all(
 						(await readdir(directory))
