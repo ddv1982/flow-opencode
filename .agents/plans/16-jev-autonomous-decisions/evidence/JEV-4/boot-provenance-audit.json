@@ -8,7 +8,21 @@
       "historicalHead": "0ac5a1dbb415afba932298d2c0b425cea814e6bc",
       "retained": ["TUI video", "screenshot", "terminal transcript", "session revision observation"],
       "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
-      "verdict": "partial"
+      "verdict": "partial; simulated stop proved, packed-plugin identity for the observed TUI host remains open",
+      "currentProbe": "worker-5/packed-current/receipt.json",
+      "currentSourceHead": "560c7503b43beac66432801a4d3ec04c6c042cea",
+      "currentProbeEvidence": [
+        "frozen install and build",
+        "packed-plugin smoke",
+        "simulated treatment bundle identity",
+        "real TUI screenshot and video",
+        "sanitized event trace",
+        "exact Jev packet digest",
+        "unchanged session after delayed reply"
+      ],
+      "currentProbeMissing": [
+        "observed TUI host loading the packed plugin bytes under the approved simulation seam"
+      ]
     },
     {
       "lane": 10,
@@ -36,5 +50,5 @@
       "currentVerdict": "pass for status, mode selection, and stop controls; no Jev quality claim"
     }
   ],
-  "interpretation": "The historical UI media alone does not authenticate a packed plugin build. The current lane-10 capture binds the packed artifact, X11 media, and sanitized event trace to its source head; lane 5 still lacks a complete boot-provenance capture. No controls capture qualifies Jev decision quality."
+  "interpretation": "Lane 10 has a packed-plugin TUI controls capture. Lane 5 has a real TUI stop during delayed simulated Jev advice, an exact packet digest, and unchanged Session v5 state, but its observed host used the eval-only treatment bundle rather than the packed plugin. Keep lane 5 open until that boot-provenance requirement is met. Neither controls nor simulated transport evidence qualifies Jev decision quality."
 }

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "hostVersion": "OpenCode 1.18.31",
+  "clientVersion": "OpenCode 1.18.32",
+  "treatmentOrigin": "simulation",
+  "treatmentArm": "manager-plus-jev",
+  "treatmentDigest": "e52848a8e4ef347f528f31bd454d8eb2cf6ba1e451c1023433adf618dd9807eb",
+  "treatmentPluginSha256": "2e7ed19de03288de23cd8f7c7a148a2d0d8b8f0e7b539db3a2d5555d97123a56",
+  "budgetGateOrigin": "simulation",
+  "budgetGateScriptDigest": "71b95241db5941c6edce4a29b224df8cf3b3816f1795b2e75552c583b71722db",
+  "projectConfigSha256": "e7273470f30bc7136c40bb17dd0bbf6819c93124d857dcd373862fd4311332b5",
+  "packedSourceDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+  "budgetPluginSourceSha256": "e11aa702d8b39d807454f545f680a0903557213dd7c7ef3e1ac4060ae60d3bcc",
+  "simulationTransportSourceSha256": "58ba6f55f872249bb52f97fa7781361851a71b411d120a225ca53654a54806f5"
+}
