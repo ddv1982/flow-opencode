@@ -80,6 +80,39 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 		spy.mockRestore();
 	}
 });
+test("accepted Unicode remedies leave room for the full provider envelope", async () => {
+	const finding = packet.findings[0];
+	const candidate = packet.candidates[0];
+	if (!finding || !candidate) throw new Error("Fixture is incomplete.");
+	const candidates = [0, 1, 2].map((index) => ({
+		...candidate,
+		id: `unicode-${index}`,
+		remedy: "漢".repeat(1000),
+		changedFromPreviousAttempt: "x",
+	}));
+	const base = { ...packet, candidates };
+	const remaining = 15_990 - Buffer.byteLength(JSON.stringify(base));
+	if (remaining < 0) throw new Error("Fixture exceeds packet budget.");
+	const padded: DecisionPacket = {
+		...base,
+		findings: [{ ...finding, evidence: "x".repeat(remaining) }],
+	};
+	expect(Buffer.byteLength(JSON.stringify(padded))).toBeLessThanOrEqual(16000);
+	const spy = spyOn(globalThis, "fetch").mockResolvedValue(
+		Response.json(response()),
+	);
+	try {
+		await createJevDecisionProvider(() => "credential").assess(padded, {
+			signal: new AbortController().signal,
+			reserveAttempt: () => true,
+		});
+		const body = spy.mock.calls[0]?.[1]?.body;
+		expect(typeof body).toBe("string");
+		expect(Buffer.byteLength(String(body))).toBeLessThan(32000);
+	} finally {
+		spy.mockRestore();
+	}
+});
 test("runtime adapter rejects unknown model and invalid distributions", async () => {
 	for (const payload of [
 		{ ...response(), model: "jev-latest" },

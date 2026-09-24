@@ -34,7 +34,7 @@ export const RecoveryProposalSchema = z
 							.refine((id) => id !== "abstain"),
 						action: z.enum(["retry", "independent-feature"]),
 						featureId: z.string().min(1).max(128),
-						remedy: Text,
+						remedy: Text.max(1000),
 						changedFromPreviousAttempt: Text,
 						findingIds: z.array(z.string().min(1).max(128)).min(1).max(30),
 					})
