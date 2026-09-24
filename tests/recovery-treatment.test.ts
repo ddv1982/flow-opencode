@@ -212,3 +212,73 @@ test("guarded reset simulation refuses a fresh Flow checkpoint", async () => {
 	);
 	await expect(transport(request)).rejects.toThrow("blocked fixture");
 });
+
+test("simulation cites every live blocker of the blocked feature", async () => {
+	const transport = createSimulationTransport(treatment.script);
+	const response = await transport(
+		new Request("https://chatgpt.com/backend-api/codex/responses", {
+			method: "POST",
+			body: JSON.stringify({
+				model: "gpt-5.6-terra",
+				stream: true,
+				tools: [{ name: "flow_status" }],
+				input: [
+					{ type: "function_call", call_id: "call-1", name: "flow_status" },
+					{
+						type: "function_call_output",
+						call_id: "call-1",
+						output: JSON.stringify({
+							status: "ok",
+							workflowData: {
+								projection: {
+									sessionId: "blocked-session",
+									revision: 12,
+									blockedFeature: { featureId: "parser" },
+									findingsDigest: [
+										{
+											featureId: "other",
+											findingId: "other.R1-01",
+											severity: "blocking",
+											live: true,
+										},
+										{
+											featureId: "parser",
+											findingId: "parser.R1-01",
+											severity: "blocking",
+											live: true,
+										},
+										{
+											featureId: "parser",
+											findingId: "parser.R2-02",
+											severity: "blocking",
+											live: true,
+										},
+										{
+											featureId: "parser",
+											findingId: "parser.R0-03",
+											severity: "blocking",
+											live: false,
+										},
+									],
+								},
+							},
+						}),
+					},
+				],
+			}),
+		}),
+	);
+	const events = (await response.text())
+		.split("\n\n")
+		.filter((line) => line.startsWith("data: "))
+		.map((line) => JSON.parse(line.slice(6)));
+	const done = events.find((event) => event.type === "response.completed");
+	const argumentsText = done?.response?.output?.[0]?.arguments;
+	if (typeof argumentsText !== "string")
+		throw new Error("Simulation did not call a tool.");
+	expect(JSON.parse(argumentsText)).toMatchObject({
+		recoveryProposal: {
+			candidates: [{ findingIds: ["parser.R1-01", "parser.R2-02"] }],
+		},
+	});
+});

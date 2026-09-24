@@ -1,83 +1,71 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-09-22T11:26:25.416345+00:00",
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "5aea96734840adf953e46260ca49683c1849c8cf",
+  "recordedAt": "2026-09-24T01:22:19.852778+00:00",
   "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
   "checks": [
     {
       "command": "bun run check",
-      "runner": "parent",
       "exitCode": 0,
-      "passed": 1435,
+      "passed": 1456,
       "skipped": 14,
       "failed": 0,
-      "assertions": 7480,
-      "scope": "Whole repository. Final startup cancellation and builder process-handle refinements additionally covered by final focused/host checks and push preflight."
+      "assertions": 7786,
+      "logSha256": "dbedba9c06a3780278ea47b3310d810e70ff3bf53445de84378ea4cd0213eccd"
     },
     {
       "command": "bun test tests/host-artifacts.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-operator.test.ts",
-      "runner": "parent",
       "exitCode": 0,
-      "passed": 41,
+      "passed": 47,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 179
+      "assertions": 191,
+      "logSha256": "e43044c44b856e6638db0c6b86cc267dd5e646a59dc93915c91e6ec47b1dcdc6"
     },
     {
-      "command": "FLOW_HOST_ARTIFACT_SMOKE=1 FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/host-artifacts-host.test.ts tests/recovery-operator-host.test.ts",
-      "runner": "parent",
+      "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode FLOW_HOST_ARTIFACT_SMOKE=1 FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/host-artifacts-host.test.ts tests/recovery-operator-host.test.ts",
       "exitCode": 0,
       "passed": 5,
+      "skipped": 0,
       "failed": 0,
       "assertions": 65,
-      "scope": "Final source bytes. Native copied executables, both operator managers, packed-cache drift rejection."
+      "logSha256": "2a4a8c3dab13d7547777c4c1bd2f5318d10c67b8362e7da6746d3e50057d1c2a"
     },
     {
-      "command": "bun test tests/host-artifacts.test.ts tests/recovery-episode-receipts.test.ts",
-      "runner": "independent reviewer",
+      "command": "bun run smoke:live",
       "exitCode": 0,
-      "passed": 12,
+      "passed": 22,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 53
+      "assertions": 133,
+      "logSha256": "9cae65e387f47ef8b64003fa8f52fdfb6c021024468547496bac7120a4227100"
     }
   ],
-  "hostVersion": "1.18.31",
-  "bunVersion": "1.4.0",
-  "managers": [
-    "openai/gpt-5.6-terra",
-    "xai/grok-4.6"
-  ],
-  "paidInference": false,
-  "productionActivation": false,
-  "liveRunnerEnabled": false,
-  "priorFailedCheck": {
-    "passed": 4,
-    "failed": 1,
-    "reason": "xAI cancellation question timeout while final source edits and repository checks overlapped. Complete stable-source rerun passed. Exact timeout cause not established."
-  },
-  "limits": [
-    "Selected artifacts only; not publisher authenticity, OS libraries, arbitrary child executables, or hostile same-account race protection.",
-    "Receipt records host observations, not independent attestation.",
-    "Full paired simulated campaign and combined delegated recovery/operator intervention remain unproved.",
-    "Nine older opt-in checks were not rerun in this pass.",
-    "Independent review used inherited models; model diversity unverified."
-  ],
-  "sourceSha256": {
+  "sourceDigests": {
     "evals/harness.ts": "691379bf9c8d0e534fa3362477eb4c0e65457536007b821b926b468ff52b9a45",
-    "evals/host-artifacts.ts": "675af8093190e18e8de65606fc87c699a948c79645362075f49eeecad8e38862",
+    "evals/host-artifacts.ts": "4a5ac5162782c729c97c95d947d845a7c2f179833dd7be55eed6eaa409a61fb8",
     "evals/recovery-decisions/episode-host.ts": "9d3a3de75119559ffc67b05f530c12ffdb3381f64ddfd3b9a4d258ac54485616",
     "evals/recovery-decisions/episode-receipts.ts": "2ea8cf796fd191ae8aa2ae3749772cd6c5e7a436f4679f32e1a489c674c89a0b",
-    "evals/recovery-decisions/episode-runner.ts": "a992c29447943f120d0603945de0b8ebef56d958e7ff950482e823dd0dd04cae",
+    "evals/recovery-decisions/episode-runner.ts": "6022f9af6db7444116382347326e5602c00f7522551251e658359accae809dfe",
     "evals/recovery-decisions/sources.ts": "7e5644a340f3e75ee50925d2ccf00cf61ee47e10eb8c7a6958bec95a505b764f",
     "tests/host-artifacts-host.test.ts": "80462950755b54aa76c51af8c8a413b1de1f3f760f37b89f85735497669c127d",
-    "tests/host-artifacts.test.ts": "8ae2b917e6194f216c84f8503cae6f371e534f839f01e574b1c5456cf8149cd9",
+    "tests/host-artifacts.test.ts": "e465a20dcf8fc8ecdb30da593965c9a6aab8aec4e0dfa30b99d19942f022561e",
     "tests/recovery-episode-host.test.ts": "82b9da93fc9dc9f0c4c00340bf0e576a443f4df3a90ce49664e36826e0b2096a",
     "tests/recovery-episode-receipts.test.ts": "6ca509e536c705ac35a1adec131ee0358080a8524e00be31085e29f3f66de4e0",
     "tests/recovery-operator-host.test.ts": "16d1d2a26892c932fe175d5dcf481a53f49826d7268c9ea8e567e6dd90d650ca"
   },
-  "logSha256": {
-    "/tmp/flow-identity-parent-check.log": "fd36e7b9d80ab22f15dc129533b0b76bf4d1f0546271c82a2b38dc559dc57027",
-    "/tmp/flow-identity-parent-focused.log": "962c89d82e2bf58acd8d4e9d7bce83f234a646df19852e49977816efb18f2733",
-    "/tmp/flow-identity-parent-host-final.log": "9d5cb710ad7ac2d687a3e9f4c90eac8eb7e1cf3652085ae417f6cdaff604f500",
-    "/tmp/flow-identity-parent-host.log": "5d26bd57b5f30c38f212c2223136513b34d0b6965a1aefc5cb41acc4d60d878a",
-    "/tmp/flow-identity-judge-tests.log": "8e170928ef4cdb640d96e55581cf317a70d66c19c1cce5ba56a2bde99831b00b"
-  }
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-artifact-verification-a8090bd9.json",
+    "verifiedCodeHead": "a8090bd93cdf9ebad7d11455be1b905523686fe2",
+    "originalSha256": "83537a1e3fd09959f65e29bd37ad5150a10e136fce4117d010d55a243c561d17"
+  },
+  "limits": [
+    "Native host tests use scripted manager and provider responses, not paid decision quality.",
+    "Production delegated recovery remains disabled.",
+    "The receipt verifies the source files at verifiedCodeHead; prior receipts remain historical."
+  ]
 }
