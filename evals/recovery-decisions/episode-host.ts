@@ -186,6 +186,13 @@ export async function createEpisodeHostDriver(
 		options.host.requestBudget.managerModel !== manager.model
 	)
 		throw new Error("Host budget manager differs from the registered manager.");
+	if (
+		options.host.recoveryTreatment?.origin === "live" &&
+		!["inherit", "disabled"].includes(options.host.providerCredentials ?? "")
+	)
+		throw new Error(
+			"Live treatment requires an explicit provider credential policy.",
+		);
 	const hostArtifacts = await captureHostArtifacts({
 		paths: {
 			bun: options.host.toolchain.executable,
