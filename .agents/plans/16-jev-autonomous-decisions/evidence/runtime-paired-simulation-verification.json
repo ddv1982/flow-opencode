@@ -1,116 +1,65 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-09-22T12:21:31.411347+00:00",
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "a395d7347096274a8ecb057e90849f29d526dd12",
+  "recordedAt": "2026-09-24T01:41:30.905870+00:00",
   "qualification": "inconclusive",
-  "paidInference": false,
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
   "productionActivation": false,
-  "liveRunnerEnabled": false,
-  "bunVersion": "1.4.0",
-  "hostVersion": "1.18.31",
   "checks": [
     {
       "command": "bun run check",
-      "runner": "parent",
       "exitCode": 0,
-      "passed": 1440,
+      "passed": 1462,
       "skipped": 15,
       "failed": 0,
-      "assertions": 7528
+      "assertions": 7835,
+      "logSha256": "c18f2e9de41dce297154bea0bb10c48a6c214c8c6b810bcbdbe77360dd74acf6"
     },
     {
-      "command": "bun test tests/recovery-campaign.test.ts tests/recovery-treatment.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-operator.test.ts",
-      "runner": "parent",
+      "command": "bun test tests/recovery-campaign.test.ts tests/recovery-treatment.test.ts tests/recovery-episode-runner.test.ts tests/recovery-operator.test.ts",
       "exitCode": 0,
-      "passed": 43,
+      "passed": 32,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 208
+      "assertions": 128,
+      "logSha256": "78caa1cf0604d1fa69e7a564bc35dd8217647f3cbaa40a4c0c1790b84083a4fb"
     },
     {
-      "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_CAMPAIGN_OUTPUT=/tmp/flow-campaign-parent-final FLOW_RECOVERY_TREATMENT_SMOKE=1 FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/recovery-campaign-host.test.ts tests/recovery-treatment-host.test.ts tests/recovery-operator-host.test.ts",
-      "runner": "parent",
-      "exitCode": 1,
-      "passed": 10,
-      "failed": 2,
-      "assertions": 357,
-      "scope": "Four new campaign hosts and all six treatment host cases passed. Existing xAI operator resume/cancel timed out; isolated diagnostic identified executable version mismatch before startup."
-    },
-    {
-      "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/recovery-operator-host.test.ts",
-      "runner": "parent",
+      "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-campaign-host.test.ts",
       "exitCode": 0,
-      "passed": 4,
+      "passed": 2,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 60
+      "assertions": 237,
+      "logSha256": "e848597dbf5df0479137cc58d80d2ad9a310a85ea888d8dac7d4f2ee00e39f60"
     },
     {
-      "command": "bun test tests/recovery-campaign.test.ts",
-      "runner": "independent reviewer",
+      "command": "bun run smoke:live",
       "exitCode": 0,
-      "passed": 4,
+      "passed": 22,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 27
+      "assertions": 133,
+      "logSha256": "fe9d678e2ef5bfdadef8a3ee56047e778be0a5cdfcae45cbe0916968112d2019"
     }
   ],
-  "campaigns": [
-    {
-      "manager": "openai/gpt-5.6-terra",
-      "registrationDigest": "20692c5113f48582730da3bf5266d52d5b7db4d623c4328f88a873aaf6e95e6a",
-      "reportSha256": "9c06d2e7ce7f42a54c0d93c6b60605d3e064b305af083c23e2a27c437d19a84f",
-      "completedControl": 1,
-      "completedTreatment": 1,
-      "declaredLivePairs": 0,
-      "controlManagerRequests": 5,
-      "treatmentManagerRequests": 6,
-      "treatmentJevRequests": 1,
-      "operatorInterventionsPerArm": 1
-    },
-    {
-      "manager": "xai/grok-4.6",
-      "registrationDigest": "19a512a4b297839b275fcebb06318449c5fc37a7a6dee3b8af6f5727f8ff042a",
-      "reportSha256": "2cb766b5674313a70743933e7098006ec6af2530d84ee658f7299c963b1fa9e1",
-      "completedControl": 1,
-      "completedTreatment": 1,
-      "declaredLivePairs": 0,
-      "controlManagerRequests": 5,
-      "treatmentManagerRequests": 6,
-      "treatmentJevRequests": 1,
-      "operatorInterventionsPerArm": 1
-    }
-  ],
-  "retainedProof": {
-    "path": "/tmp/flow-campaign-parent-final/complete.json",
-    "sha256": "0870859c5157e0af95a83264ad6d06d31b802ef35a4b1aad9f1a38ff00969530",
-    "indexedFilesVerified": 22,
-    "currentWrapperSourceHashesVerified": 4
+  "sourceDigests": {
+    "evals/recovery-decisions/treatment.ts": "6b0458b86d2ffcb23aa61acad068f453771d45de9d6ee4ccbd53225a59d2cb40",
+    "evals/recovery-decisions/simulation-transport.ts": "8713e2c2bf393f5a84fb858731684f04f95ab211f4f70a9ef150f5e2ed8aca9d",
+    "tests/recovery-campaign-host.test.ts": "0f9b8819300f3f7a05f63786c8d4921ea6910007c58956f9531101d2e977353e",
+    "tests/recovery-campaign-support.ts": "f242f1fc187aeea5964f76d56b3cb1912a267e18decb283c7d7eaf31837a304e",
+    "tests/recovery-campaign.test.ts": "e324a74d77a478334335a4378712501209aa10d0d762d5737887300ae7193d91"
   },
-  "diagnosis": {
-    "error": "Artifact opencode version differs from registered version.",
-    "registeredVersion": "1.18.31",
-    "observedInstalledVersion": "1.18.32",
-    "phase": "preparation before any provider request",
-    "updateMechanism": "unknown",
-    "resolution": "Use isolated verified opencode-linux-x64@1.18.31. Full operator suite passed. No timeout or application code change."
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-paired-simulation-verification-55d33499.json",
+    "verifiedCodeHead": "55d334994c5dda59a629c0bd52507be4335acea5",
+    "originalSha256": "955f29d6dd221161a3fbbc85d6e478dace5b515f89f3ef9ada9e66198ff7d457"
   },
   "limits": [
-    "One deterministic pair per manager is integration evidence, not representative model-quality or live qualification evidence.",
-    "Operator response is scripted. Attribution is test-observed, not independent review.",
-    "Report costs and safety remain unknown. Synthetic reservation units are not actual provider prices.",
-    "Four other opt-in host checks were not rerun: packed-cache identity, two OAuth budget checks, older packaged production smoke.",
-    "Independent code review used inherited models; model diversity unverified."
-  ],
-  "sourceSha256": {
-    "evals/recovery-decisions/treatment.ts": "6b0458b86d2ffcb23aa61acad068f453771d45de9d6ee4ccbd53225a59d2cb40",
-    "evals/recovery-decisions/simulation-transport.ts": "b7cffd63a620b3c2d8f0c46242008ff606b2b638fc6e0253b67af64272f16dfa",
-    "tests/recovery-campaign-host.test.ts": "e425319871f2da134a6add93a9154f85095ca7fbb430dcdf3e91004ed41f837e",
-    "tests/recovery-campaign-support.ts": "1ec13f1e50808f727a49cc3676b5e1250f8c035bd3001b0f55b7b4c2d37b8f48",
-    "tests/recovery-campaign.test.ts": "ec23cb8003c02bfcb271fefc3d8bbb5764ea0a61947306ac817c9ac5517b82dc"
-  },
-  "logSha256": {
-    "/tmp/flow-campaign-parent-check.log": "c8beba903ca1bdbe0ae740b19a05b540b5909d6f3dc5a2999d0f4b98eb43464d",
-    "/tmp/flow-campaign-parent-focused.log": "b9a6999d19dc488b173265f296140b0b1a6397321820d00c40436a8f257e5977",
-    "/tmp/flow-campaign-parent-host.log": "f2cde7d7056185f224a9f8eaffa7935c14522eed07ec9bfc322a62f4d9c352c2",
-    "/tmp/flow-campaign-parent-operator-pinned.log": "9a6725918cc5c69458d0ad23e8bf7f75a216d28bbc0146f362cf72ad86adab9b",
-    "/tmp/flow-campaign-judge-focused.log": "60dffdd5f1ebbf0c97ac1acbd0376e794f46264f854a944184080a1c4513bbea",
-    "/tmp/operator-host-diMzvF/startup-error.txt": "e43b8819fc5039d3009350c17741e2667ac430f72e575aab0e66d3ad5107248a"
-  }
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
+  ]
 }
