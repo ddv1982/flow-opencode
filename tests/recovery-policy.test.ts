@@ -58,6 +58,8 @@ async function setup(
 	custom: DecisionProvider = provider,
 	independent = false,
 	findingEvidence = "parser.ts",
+	initialFindingEvidence = "parser.ts",
+	extraLiveFinding = false,
 ) {
 	const repository = new MemorySessionRepository(),
 		env = deterministicEnvironment();
@@ -94,7 +96,7 @@ async function setup(
 				{
 					severity: "blocking",
 					summary: "Null input crashes",
-					evidence: i ? findingEvidence : "parser.ts",
+					evidence: i ? findingEvidence : initialFindingEvidence,
 					...(i
 						? {
 								findingId:
@@ -103,6 +105,15 @@ async function setup(
 							}
 						: {}),
 				},
+				...(i && extraLiveFinding
+					? [
+							{
+								severity: "blocking" as const,
+								summary: "Second live blocker",
+								evidence: "second.ts",
+							},
+						]
+					: []),
 			],
 		});
 	}
@@ -537,11 +548,8 @@ test("oversized advice does not consume a checkpoint decision slot", async () =>
 	const s = await setup(
 		"shadow",
 		{
-			async assess(packet) {
+			async assess() {
 				calls++;
-				expect(Buffer.byteLength(JSON.stringify(packet))).toBeGreaterThan(
-					32000,
-				);
 				return { kind: "unavailable", reason: "oversize" };
 			},
 		},
@@ -561,7 +569,7 @@ test("oversized advice does not consume a checkpoint decision slot", async () =>
 				})),
 			},
 		});
-		expect(response.status).toBe("ok");
+		expect(response.status).toBe("error");
 		if (index === 0)
 			expect(
 				(
@@ -579,8 +587,96 @@ test("oversized advice does not consume a checkpoint decision slot", async () =>
 				).status,
 			).toBe("error");
 	}
-	expect(calls).toBeGreaterThanOrEqual(1);
+	expect(calls).toBe(0);
 	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
+test("packet uses current live finding wording instead of oversized history", async () => {
+	const s = await setup(
+		"shadow",
+		{
+			async assess(packet, options) {
+				expect(packet.findings).toHaveLength(1);
+				expect(packet.findings[0]?.evidence).toBe("parser.ts");
+				expect(Buffer.byteLength(JSON.stringify(packet))).toBeLessThan(32000);
+				return provider.assess(packet, options);
+			},
+		},
+		false,
+		"parser.ts",
+		"x".repeat(32000),
+	);
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: s.proposal(),
+	});
+	expect(response.status).toBe("ok");
+	if (response.status !== "ok") throw new Error(response.summary);
+	expect(JSON.stringify(response)).toContain('"kind":"selected"');
+});
+
+test("candidate must cite the target's live blockers", async () => {
+	const incomplete = await setup(
+		"shadow",
+		provider,
+		false,
+		"parser.ts",
+		"parser.ts",
+		true,
+	);
+	expect(
+		(
+			await incomplete.flow.status({
+				request: { view: "compact" },
+				recoveryProposal: incomplete.proposal(),
+			})
+		).status,
+	).toBe("error");
+	const unrelated = await setup("shadow", provider, true);
+	const session = unrelated.repository.session;
+	if (!session) throw new Error("fixture session missing");
+	const historical = session.runs[0];
+	if (!historical) throw new Error("fixture run missing");
+	const foreignId = "independent.R1-01";
+	unrelated.repository.session = {
+		...session,
+		runs: [
+			{
+				...historical,
+				id: "independent-history",
+				featureId: "independent",
+				state: "superseded",
+				reviews: historical.reviews.map((review) => ({
+					...review,
+					result: review.result
+						? {
+								...review.result,
+								findings: review.result.findings.map((finding) => ({
+									...finding,
+									findingId: foreignId,
+								})),
+							}
+						: null,
+				})),
+			},
+			...session.runs,
+		],
+	};
+	const proposal = unrelated.proposal();
+	expect(
+		(
+			await unrelated.flow.status({
+				request: { view: "compact" },
+				recoveryProposal: {
+					...proposal,
+					candidates: proposal.candidates.map((candidate) => ({
+						...candidate,
+						findingIds: [foreignId],
+					})),
+				},
+			})
+		).status,
+	).toBe("error");
 });
 
 test("provider retries reserve each paid attempt but count as one checkpoint decision", async () => {
