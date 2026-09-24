@@ -8,7 +8,9 @@ existing provider configuration and authorization.
 ## Select the capture plugin
 
 1. Choose a new absolute output directory outside the workspace. Its parent must
-   exist. Do not create the output directory yourself. Each recorder claims its
+   exist and be trusted. Use a private `0700` parent; capture also checks that
+   every ancestor is owned by you or root and cannot be renamed by another
+   account. Do not create the output directory yourself. Each recorder claims its
    own directory and refuses an existing one.
 2. On a POSIX host, in the target workspace's OpenCode configuration, replace the ordinary Flow
    plugin entry with the absolute source entry and capture options below.
