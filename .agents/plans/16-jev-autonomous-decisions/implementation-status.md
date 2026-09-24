@@ -342,10 +342,10 @@ execution. Operator wait/resume, representative independently reviewed cases,
 reviewed request-cost bounds, executable and package-cache identity, a new paid
 campaign cap, and live qualification remain open.
 
-See the [design decision](treatment-design.md) and the
-[verification receipt](evidence/runtime-treatment-verification.json).
+See the [design decision](treatment-design.md).
 
-Final verification passed `bun run check` with 1,416 tests and 7,410 assertions.
+The current-head [verification receipt](evidence/runtime-treatment-verification.json)
+records the full `bun run check` totals and source digests.
 Its nine opt-in tests were skipped. Six treatment host checks passed separately
 with 98 assertions on OpenCode 1.18.31. Both existing OAuth budget checks also
 passed. The packaged production smoke passed on its pinned OpenCode 1.18.6 host.
