@@ -82,6 +82,7 @@ export function createCommandHook(
 		autoDrive: AutoDriveCoordinator;
 		flow: FlowService;
 		recovery?: RecoveryController;
+		showRefusal?: (message: string) => Promise<void>;
 	}>,
 ): CommandHook {
 	const { assertOperational, autoDrive, flow, recovery } = options;
@@ -174,6 +175,15 @@ export function createCommandHook(
 				invocation = null;
 				recovery?.revoke(input.sessionID);
 				autoDrive.deactivate(input.sessionID);
+			}
+			if (
+				command === "flow-auto" &&
+				error instanceof Error &&
+				error.message.startsWith("Delegated recovery is unavailable.")
+			) {
+				try {
+					await options.showRefusal?.(error.message);
+				} catch {}
 			}
 			throw error;
 		}
