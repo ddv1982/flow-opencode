@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "8fdd24336a345c277459af578404ba3f438bb485",
-  "recordedAt": "2026-09-24T04:57:34.425454+00:00",
+  "verifiedCodeHead": "9f7aca378f063671339fa4fb515a5b2d21168583",
+  "recordedAt": "2026-09-24T02:58:07.717766+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -15,7 +15,7 @@
       "skipped": 14,
       "failed": 0,
       "assertions": 7793,
-      "logSha256": "e0d84a2eb543728ada2ca74c849c88f8ba3efd37da60869c360cc9e19b46e55f"
+      "logSha256": "27158d11392ffb459f2e0c5f16ee0b2669025b4417146ea4036a4afcf8e85695"
     },
     {
       "command": "bun test tests/host-artifacts.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-operator.test.ts",
@@ -24,7 +24,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 191,
-      "logSha256": "e901020686e24b825bccc5c3ab38a1021f608e9b89741218dc37ddb7c1796250"
+      "logSha256": "16c3f2d60f22652c4bc1465a7791c91f0ebdd201649b1978507da6f3da940ce0"
     },
     {
       "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode FLOW_HOST_ARTIFACT_SMOKE=1 FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/host-artifacts-host.test.ts tests/recovery-operator-host.test.ts",
@@ -32,8 +32,8 @@
       "passed": 5,
       "skipped": 0,
       "failed": 0,
-      "assertions": 67,
-      "logSha256": "669243df8365c31abc4ad1892a828ac53eb9ec8a2ec839a9bdd492d1e3418eea"
+      "assertions": 65,
+      "logSha256": "8f8771d0e218d173d43d40b5bb1b9cef0386e4928dee26db500e6411d315f6c8"
     },
     {
       "command": "bun run smoke:live",
@@ -42,18 +42,18 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "9c70a0b4429622725e00e7e46fae5fc0eba8b6562a6006ee006e7cd836b8bc43"
+      "logSha256": "5257f3d86c597786f71fbbe81618afe399aafe533728d75dfd3f62453920f565"
     }
   ],
   "sourceDigests": {
-    "evals/harness.ts": "639056fa2df7ef077154f2efd4b9220920e009ebdf7db519674193402c4f9e18",
+    "evals/harness.ts": "691379bf9c8d0e534fa3362477eb4c0e65457536007b821b926b468ff52b9a45",
     "evals/host-artifacts.ts": "4a5ac5162782c729c97c95d947d845a7c2f179833dd7be55eed6eaa409a61fb8",
     "evals/recovery-decisions/compare.ts": "22be5d8b6617b921516e130371222005663632149ba12e66d8e8946bd2a2fa08",
     "evals/recovery-decisions/episode-host.ts": "9d3a3de75119559ffc67b05f530c12ffdb3381f64ddfd3b9a4d258ac54485616",
     "evals/recovery-decisions/episode-receipts.ts": "2ea8cf796fd191ae8aa2ae3749772cd6c5e7a436f4679f32e1a489c674c89a0b",
     "evals/recovery-decisions/episode-runner.ts": "6022f9af6db7444116382347326e5602c00f7522551251e658359accae809dfe",
     "evals/recovery-decisions/sources.ts": "7e5644a340f3e75ee50925d2ccf00cf61ee47e10eb8c7a6958bec95a505b764f",
-    "tests/host-artifacts-host.test.ts": "5dad0c84d33ae3394786995ac74d285bb91b7707f3f97f8895c0cb5a7a4e583b",
+    "tests/host-artifacts-host.test.ts": "80462950755b54aa76c51af8c8a413b1de1f3f760f37b89f85735497669c127d",
     "tests/host-artifacts.test.ts": "e465a20dcf8fc8ecdb30da593965c9a6aab8aec4e0dfa30b99d19942f022561e",
     "tests/recovery-comparison.test.ts": "1b57d8098d28c00689e5b8182279ddbbb325a06e007ec6504f2af15c9ec5411a",
     "tests/recovery-decision-quality.test.ts": "3ce75ab979b6b83b18f8c954c9e039b46e481af693a44fffd1ddc44c2d8c0e44",
@@ -62,9 +62,9 @@
     "tests/recovery-operator-host.test.ts": "16d1d2a26892c932fe175d5dcf481a53f49826d7268c9ea8e567e6dd90d650ca"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-artifact-verification-9f7aca37.json",
-    "verifiedCodeHead": "9f7aca378f063671339fa4fb515a5b2d21168583",
-    "originalSha256": "a9a14cb0f911ddd0adfcc2c98096f71fa3061eef007f7ec7f80020646ec4fc06"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-artifact-verification-be47032a.json",
+    "verifiedCodeHead": "be47032ac47e1e3b296a2df17243354d32bceab8",
+    "originalSha256": "874d08730298bc4ad35927bd4d4cf1e07aa0c63c9ce2d7a5beca0f75da9a7250"
   },
   "limits": [
     "Native host tests use scripted manager and provider responses, not paid decision quality.",
