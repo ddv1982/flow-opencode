@@ -140,6 +140,20 @@ test("same-version source byte changes and native launcher scripts cannot start"
 		"bytes changed",
 	);
 });
+
+test("native artifact capture accepts 64-bit universal Mach-O headers", async () => {
+	const f = await setup();
+	for (const magic of ["cafebabf", "bfbafeca"]) {
+		const executable = join(f.root, `macho-${magic}`);
+		await writeFile(executable, Buffer.from(magic, "hex"), { mode: 0o700 });
+		const identity = await captureHostArtifacts({
+			paths: { ...f.paths, opencode: executable },
+			bunVersion: Bun.version,
+			opencodeVersion: Bun.version,
+		});
+		expect(identity.opencode.bytes.size).toBe(4);
+	}
+});
 test("stage refuses wrong reported versions and cancellation", async () => {
 	const f = await setup();
 	await expect(

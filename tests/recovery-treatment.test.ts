@@ -179,3 +179,36 @@ test("simulation has no remote fallback and emits one bounded Jev result", async
 	});
 	await expect(transport(request())).rejects.toThrow("exhausted");
 });
+
+test("guarded reset simulation refuses a fresh Flow checkpoint", async () => {
+	const transport = createSimulationTransport(treatment.script);
+	const request = new Request(
+		"https://chatgpt.com/backend-api/codex/responses",
+		{
+			method: "POST",
+			body: JSON.stringify({
+				model: "gpt-5.6-terra",
+				stream: true,
+				tools: [{ name: "flow_status" }],
+				input: [
+					{ type: "function_call", call_id: "call-1", name: "flow_status" },
+					{
+						type: "function_call_output",
+						call_id: "call-1",
+						output: JSON.stringify({
+							status: "ok",
+							workflowData: {
+								projection: {
+									status: "idle",
+									revision: 0,
+									nextAction: "flow_plan_save",
+								},
+							},
+						}),
+					},
+				],
+			}),
+		},
+	);
+	await expect(transport(request)).rejects.toThrow("blocked fixture");
+});
