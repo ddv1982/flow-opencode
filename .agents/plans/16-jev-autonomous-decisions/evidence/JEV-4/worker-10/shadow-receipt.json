@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-tui-recovery-controls",
+  "head": "1cb337fbdbf3e44469c14a66f786602c77b702c2",
+  "lane": "JEV-4 worker-10",
+  "laneVerdict": "pass",
+  "qualification": "inconclusive",
+  "recordedAt": "2026-09-24T10:32:57.099201+00:00",
+  "host": "OpenCode 1.18.31",
+  "managerModel": "openai/gpt-5.6-terra",
+  "sessionId": "ses_f2d107209ffej6IcvwIkf2O0JR",
+  "flowSession": {
+    "id": "session:de077652-9ed8-4c32-af4b-a765b80a3c96",
+    "revision": 1,
+    "approval": "pending",
+    "sourceSha256": "4ca6099ca930f8ba17f8ebf063fa6e5c522da05aa0485ba580d6401f45764da0"
+  },
+  "capture": {
+    "source": "X11 xterm window attached to controlled tmux",
+    "windowOnly": true,
+    "videoDurationSeconds": 45,
+    "videoFrames": 45,
+    "frameRate": 1
+  },
+  "observations": [
+    "flow_status reported recovery mode shadow-only with one call remaining.",
+    "A draft README plan was saved for approval; no README file was created.",
+    "/flow-auto stop reported Flow auto stopped.",
+    "A later flow_status call reported recovery mode off.",
+    "No Jev request was observed."
+  ],
+  "files": [
+    {
+      "name": "shadow.png",
+      "sha256": "52ad59a425051553cec59a7b8d3de974fe1fc4eaf56b5d6e9595447d61f7b3f0"
+    },
+    {
+      "name": "off.png",
+      "sha256": "e36dc14b04e19377aea3c9e19808c4b347057a8f7cd61b9abbab94ec818b5f45"
+    },
+    {
+      "name": "shadow-controls.mp4",
+      "sha256": "841ef9db7a76cab7ab1d89f4b4c7b5c7fa8592677bf892212e9f8f71e307bab7"
+    },
+    {
+      "name": "shadow-before.txt",
+      "sha256": "74b4ddd98fdbf8b1293f849c995cec301a79f3e446ac83ba3b21634f16ede295"
+    },
+    {
+      "name": "shadow-after.txt",
+      "sha256": "221e45354077b04179e8d3e100f50a5863616cf6ebe720d5cd159888eda4206c"
+    }
+  ],
+  "limits": [
+    "This lane verifies visible controls, not a blocked recovery decision, Jev model quality, or a release-owned delegated profile.",
+    "The manager OAuth invoice cost is unknown despite the TUI display.",
+    "The separate JEV-4 operator interaction review and other live lanes remain open."
+  ]
+}

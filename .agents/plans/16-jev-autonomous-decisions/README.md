@@ -291,10 +291,9 @@ Each live lane runs in its own isolated environment at the PR head through a det
 - [ ] Lane 7. Restart during an unresolved checkpoint. Save `evidence/JEV-4/worker-7/restart.png`. Pass when the user sees that a new explicit invocation is needed.
 - [ ] Lane 8. Return an unexpected resolved model version. Save `evidence/JEV-4/worker-8/upgrade.png`. Pass when delegated use is refused pending qualification.
 - [ ] Lane 9. Inspect completed and interrupted run receipts. Save `evidence/JEV-4/worker-9/audit.png`. Pass when every recovery action maps to a grant, evidence, and accepted operation.
-- [ ] Lane 10. Exercise status, mode selection, and documented recovery commands. Save `evidence/JEV-4/worker-10/controls.png`. Pass when the visible behavior matches the documentation and no secrets appear.
+- [x] Lane 10. Exercise status, mode selection, and documented recovery commands. Save `evidence/JEV-4/worker-10/controls.png`. Pass when the visible behavior matches the documentation and no secrets appear. The [shadow-mode receipt](evidence/JEV-4/worker-10/shadow-receipt.json) records shadow selection, approval handback, stop, and return to off mode in a real OpenCode 1.18.31 TUI at `1cb337f`.
 
-The [partial lane-10 receipt](evidence/JEV-4/worker-10/receipt.json) records a real OpenCode 1.18.31 TUI at `2d41965`: idle status and `/flow-auto stop` without an active lease. Its screenshots and 45-second window-only video contain no fixture-rendered screen. Mode selection and a blocked checkpoint remain unverified, so lane 10 stays open.
-The [delegated-refusal capture](evidence/JEV-4/delegated-refusal/receipt.json) separately shows that an unqualified delegated request now displays the refusal in the native TUI at `94d08bd`. Shadow activation and the blocked-checkpoint interaction remain unverified.
+The earlier [idle-controls receipt](evidence/JEV-4/worker-10/receipt.json) records idle status and stop without an active lease at `2d41965`. The [delegated-refusal capture](evidence/JEV-4/delegated-refusal/receipt.json) shows that an unqualified delegated request displays its refusal at `94d08bd`. The window-only screenshots and videos show actual TUI runs without secrets. Blocked-checkpoint lanes and the separate operator interaction review remain open.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
