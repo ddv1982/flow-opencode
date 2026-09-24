@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "classification": "observed-ordinary-task-not-a-recovery-case",
+  "originatingTaskId": "echo-pr05-managed-status-verification-20260924",
+  "flowSessionId": "session:68cebb6b-6709-4099-a08a-3b431a646484",
+  "echoSourceHead": "d3316969e1c7a268731b1215eb0e6278709b157e",
+  "sourceDigest": "sha256:89f8e90d1f7e62a025dd07c071bb5b01d5e91f25ed259f68932c229879915394",
+  "flowRevision": 23,
+  "goal": "Complete the still-open PR-05 managed-status replacement verification using isolated fixtures and Echo's real Rust test surface, preserving user data and honestly leaving unavailable live or performance acceptance unclaimed.",
+  "canonicalGate": "cargo test --workspace",
+  "broadGateObservations": [
+    {
+      "id": "5ef52529-5804-429b-b277-7e28d621120c",
+      "command": "cargo test --workspace",
+      "scope": "broad",
+      "exitCode": 1,
+      "outputComplete": true,
+      "outputDigest": "sha256:a96bf18474bc74aaa584873de13befcaf953650a47b6fbcb5da743d4772e15d2",
+      "recordedRevision": 5,
+      "ineligibleReason": null
+    },
+    {
+      "id": "0452cc3c-e3df-408a-a53e-6b3c9a348c36",
+      "command": "cargo test --workspace",
+      "scope": "broad",
+      "exitCode": 1,
+      "outputComplete": true,
+      "outputDigest": "sha256:a96bf18474bc74aaa584873de13befcaf953650a47b6fbcb5da743d4772e15d2",
+      "recordedRevision": 13,
+      "ineligibleReason": null
+    },
+    {
+      "id": "36eb071a-c9b7-45d2-b05c-4cce25fae902",
+      "command": "cargo test --workspace",
+      "scope": "broad",
+      "exitCode": null,
+      "outputComplete": false,
+      "outputDigest": "sha256:943bca65d4e404f71c338b6953066e2fc2edd12223e3879186f9eb54981243ec",
+      "recordedRevision": 14,
+      "ineligibleReason": "exit-code-unavailable"
+    },
+    {
+      "id": "01fc5bd2-6c66-4485-88e6-feed30ffc915",
+      "command": "cargo test --workspace",
+      "scope": "broad",
+      "exitCode": 0,
+      "outputComplete": false,
+      "outputDigest": "sha256:1b3368f11dc9d4a7eec18415f817d6aec8d9b751cd4670fea5fd59bb7c0287bb",
+      "recordedRevision": 15,
+      "ineligibleReason": null
+    },
+    {
+      "id": "2ab0711d-d3d6-4408-8e11-334aaf47302d",
+      "command": "cargo test --workspace",
+      "scope": "broad",
+      "exitCode": 101,
+      "outputComplete": true,
+      "outputDigest": "sha256:397f209469de9489af9f91a6d8e9ec4b0abcf5fe7ed5ce3a3fa5866db9ff953c",
+      "recordedRevision": 16,
+      "ineligibleReason": null
+    },
+    {
+      "id": "ff20d206-f773-4c55-a75c-819d022a6b60",
+      "command": "cargo test --workspace",
+      "scope": "broad",
+      "exitCode": 0,
+      "outputComplete": true,
+      "outputDigest": "sha256:91c608f0fcbf77cfcd54370a5f7aab264143ae431fd50ab841c779e44baba179",
+      "recordedRevision": 17,
+      "ineligibleReason": null
+    }
+  ],
+  "finalFocusedValidationRevisions": [
+    18,
+    19,
+    20
+  ],
+  "independentReview": {
+    "id": "review:2cf279e4-eea7-452e-9862-ce3c88c475f7",
+    "verdict": "passed",
+    "recordedRevision": 22,
+    "findings": [
+      {
+        "findingId": "pr05-managed-status-verification.R21-01",
+        "severity": "advisory",
+        "summary": "The broad Rust gate has a disclosed intermittent unrelated recording-lease failure."
+      }
+    ]
+  },
+  "closure": {
+    "kind": "completed",
+    "recordedRevision": 23,
+    "summary": "PR-05 isolated managed-status replacement/removal verification completed with exact focused checks, a complete passing workspace gate, and independent review. Native live and performance acceptance remain unverified; the unrelated intermittent recording-lease test failure is preserved as an advisory risk."
+  },
+  "qualifyingRecoveryCases": 0,
+  "reasonNotQualifying": "The ordinary task closed after one passing review; no repeated-review recovery checkpoint or manager recovery proposal occurred."
+}

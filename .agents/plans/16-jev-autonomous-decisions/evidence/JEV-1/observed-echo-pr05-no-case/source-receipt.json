@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "classification": "nonqualifying-observed-source-audit",
+  "recordedAt": "2026-09-24T21:27:56.262146+00:00",
+  "flowSessionId": "session:68cebb6b-6709-4099-a08a-3b431a646484",
+  "echoSourceHead": "d3316969e1c7a268731b1215eb0e6278709b157e",
+  "sourceDigest": "sha256:89f8e90d1f7e62a025dd07c071bb5b01d5e91f25ed259f68932c229879915394",
+  "opencodeHostVersion": "1.18.31",
+  "before": {
+    "flowSourceHead": "c17ab469260acd29b2271ad0792b134b20c28e7c",
+    "tarballSha256": "d35205113e3985d00ebad5531d9ceb144932b6cbc587478deccba11ae0ef97ae",
+    "installedDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+    "recordedRevision": 15,
+    "exitCode": 0,
+    "outputComplete": false
+  },
+  "after": {
+    "flowSourceHead": "bf59a014903549300dfe277526cb133b337dfd70",
+    "tarballSha256": "fc87857b0a4fad38b93518a40332da675904a22952e16cbb7f75a14443a3f1fb",
+    "installedDistSha256": "7448f3d22a9a6b7477e8d4f172772453c9361f9a07e52e685e6c697f093a1a7c",
+    "failedRevision": 16,
+    "passingRevision": 17,
+    "passingExitCode": 0,
+    "passingOutputComplete": true,
+    "reviewVerdict": "passed",
+    "closureRevision": 23
+  },
+  "privateSourceSha256": {
+    "flowArchive": "9e584009dfbd3a737f9014bdfe60f5d3156ec445077ec3e7151920f1bde8ef08",
+    "externalPassingGateLog": "1e66d1da0ed6c2a8cc442285089b93a82311db80688ae434b0f793aae49ca791",
+    "releasedPluginHostLog": "d1aef9aaf7cd07f8ebc07e48f173832b85feefdc69ef5fed4dc4751968ba21ae",
+    "pr112PluginHostLog": "457f630d7570ccb0466e50ffe0193353a3ca3685449af8ada2650c1ff84a0933"
+  },
+  "files": {
+    "README.md": "cfc172baedd68613d961a4cca7d70fd4f8046139bcb6440f8896d88fbf1d50eb",
+    "task-summary.json": "bff598098ccc078b2f612204d6f3141ac6aae9f792f761a32bb6e40cd4771c25"
+  },
+  "limits": [
+    "No Jev advice or recovery proposal was captured; this task is not a qualification sample.",
+    "The prior intermittent recording-lease failure remains part of the archive and was not repaired in the managed-status task.",
+    "Private raw host sessions and archive are digest-bound operator-retained sources, not independently published data.",
+    "The two host runs differed in packed Flow plugin bytes; the observed output-completeness improvement is a real-task integration result, not a controlled quality comparison."
+  ]
+}
