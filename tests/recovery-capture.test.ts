@@ -6,6 +6,7 @@ import {
 	mkdtemp,
 	readdir,
 	readFile,
+	rename,
 	rm,
 	symlink,
 	writeFile,
@@ -151,6 +152,36 @@ test("fresh external canonical directory is required", async () => {
 			join(f.root, "destination-link"),
 		),
 	).rejects.toThrow();
+});
+
+test("capture refuses a parent writable by another account", async () => {
+	const f = await setup();
+	const unsafeParent = await mkdtemp(join(tmpdir(), "unsafe-capture-parent-"));
+	roots.push(unsafeParent);
+	await chmod(unsafeParent, 0o777);
+	await expect(
+		CapturingRecoveryController.create(
+			f.workspace,
+			join(unsafeParent, "captures"),
+		),
+	).rejects.toThrow("fresh private directory");
+	await expect(lstat(join(unsafeParent, "captures"))).rejects.toThrow();
+});
+
+test("capture refuses a replacement for its claimed directory", async () => {
+	const f = await setup();
+	const controller = await CapturingRecoveryController.create(
+		f.workspace,
+		f.directory,
+	);
+	const moved = `${f.directory}-moved`;
+	await rename(f.directory, moved);
+	await mkdir(f.directory, { mode: 0o700 });
+	await expect(
+		controller.guard(context).propose(f.session, f.sourceDigest, f.proposal),
+	).rejects.toThrow("Recovery capture failed; assessment was not attempted.");
+	expect(await readdir(f.directory)).toEqual([]);
+	expect(await readdir(moved)).toEqual([]);
 });
 
 test("failed private writes stop before controller delegation and expose no private detail", async () => {
