@@ -221,8 +221,8 @@ export function createSimulationTransport(input: unknown) {
 				name: "flow_status",
 				arguments: { request: { view: "detail" } },
 			};
-		else if (hasFlowTools && toolResults.length === 1 && latest) {
-			const projection = latest.workflowData.projection;
+		else if (hasFlowTools && toolResults.length === 1) {
+			const projection = latest?.workflowData.projection;
 			const ids = [...new Set(findingIds(projection))];
 			if (!projection?.blockedFeature || !ids.length)
 				throw new Error("Simulation requires blocked fixture findings.");
