@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "92d343e6984d8ef191c074dfbf8c5ab299823791",
-  "recordedAt": "2026-09-24T02:08:35.904653+00:00",
+  "verifiedCodeHead": "490a99d896588c5497dd022c234aab8618d878eb",
+  "recordedAt": "2026-09-24T04:15:12.261276+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -11,20 +11,20 @@
     {
       "command": "bun run check",
       "exitCode": 0,
-      "passed": 1526,
+      "passed": 1531,
       "skipped": 15,
       "failed": 0,
-      "assertions": 8099,
-      "logSha256": "99aee10b7bbb91ab05bc872f1a49e1ad9a8e2de60e86e5edd7bac284f73cc2de"
+      "assertions": 8133,
+      "logSha256": "ddf9695beec6e77e53dec1ddcc769e08ef6b4bf8540cab8bf46159dedc76a259"
     },
     {
-      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts",
+      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-capture.test.ts",
       "exitCode": 0,
-      "passed": 54,
-      "skipped": 0,
+      "passed": 81,
+      "skipped": 1,
       "failed": 0,
-      "assertions": 117,
-      "logSha256": "ae51fbed45a7d8442ccab29167768cf3c4e0c6ece25f46988bd02eb068eab0d6"
+      "assertions": 387,
+      "logSha256": "5cc52e73d9b8a009b43c6703e032d13966b41528160224aaae61e1e37aa80f38"
     },
     {
       "command": "bun run smoke:live",
@@ -33,20 +33,24 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "7342a231968d918e0a1432ac6dbce3f4823098c07d21cf77903f5eea906b28b2"
+      "logSha256": "b71b1c734a7592dc559c81c5ecf8354d246208c1a2e835f898035f1427f6bcb1"
     }
   ],
   "sourceDigests": {
     "evals/recovery-decisions/budget-plugin.ts": "f871bd0f2dc820fd87505f5701009a07662c61745ea98bfd3beda47224831103",
+    "evals/recovery-decisions/capture.ts": "0db16805da9cfb1ae5c5eca1c13229b5d1eb53c1122d9f7cfda282867070bf8a",
     "evals/recovery-decisions/live-treatment-plugin.ts": "8c9b428a67bd492e3f8d427283442a4e921e4d7c6419427f35a25fb9d18470b0",
+    "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
     "evals/recovery-decisions/sources.ts": "62e03969ee3cf391ea4ddec4820598e3bde04cb564fb9371baba958d0df56698",
+    "tests/recovery-capture.test.ts": "576fa58effc54fd33363cee96a3bcddebbe8615ae6f07fe577315d5ea93af76c",
+    "tests/recovery-live-treatment-child.ts": "816909716f27ec8054f888fb0b4a813d29c01dd6214fc06e1702eddd3e550cc0",
     "tests/recovery-live-treatment.test.ts": "866317d3b6dc1487b77942dab9c1d6f485cf8a29544eef78f8e8523b6317f782",
-    "tests/recovery-live-treatment-child.ts": "816909716f27ec8054f888fb0b4a813d29c01dd6214fc06e1702eddd3e550cc0"
+    "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-7cc44a2e.json",
-    "verifiedCodeHead": "7cc44a2e744f12b2fbbc450cef56b1725345d8c3",
-    "originalSha256": "cd8121cc88ace4bf7ddb7e6341a086ef7e93e6ab6953704cffaf9b4d2e52c27f"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-92d343e6.json",
+    "verifiedCodeHead": "92d343e6984d8ef191c074dfbf8c5ab299823791",
+    "originalSha256": "438cee886db5ed35037df2f31db4a1e06dd120fa010c5d8bc05816e2ed51311e"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
