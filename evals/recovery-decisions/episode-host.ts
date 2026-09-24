@@ -19,7 +19,10 @@ import {
 	reconcileRequestReservations,
 } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
-import { recoverySourceDigests } from "./sources.js";
+import {
+	recoverySourceDigests,
+	verifyRecoverySourceDigests,
+} from "./sources.js";
 
 const FilePath = z
 	.string()
@@ -274,6 +277,7 @@ export async function createEpisodeHostDriver(
 				hostArtifacts,
 				signal,
 			);
+			await verifyRecoverySourceDigests(sources, signal);
 			signal.throwIfAborted();
 			lifecycle.signal.throwIfAborted();
 			starting = (options.hostFactory ?? EvalHost.start)({
