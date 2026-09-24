@@ -111,6 +111,16 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			);
 		},
 	});
+	Object.defineProperty(globalThis, "fetch", {
+		value: globalThis.fetch,
+		writable: false,
+		configurable: false,
+	});
+	Object.defineProperty(globalThis, "WebSocket", {
+		value: globalThis.WebSocket,
+		writable: false,
+		configurable: false,
+	});
 	installed = {
 		ready: false,
 		origin: status.authorization.origin,
