@@ -59,7 +59,7 @@ async function setup(
 	independent = false,
 	findingEvidence = "parser.ts",
 	initialFindingEvidence = "parser.ts",
-	extraLiveFinding = false,
+	extraLiveFindings = 0,
 ) {
 	const repository = new MemorySessionRepository(),
 		env = deterministicEnvironment();
@@ -105,14 +105,12 @@ async function setup(
 							}
 						: {}),
 				},
-				...(i && extraLiveFinding
-					? [
-							{
-								severity: "blocking" as const,
-								summary: "Second live blocker",
-								evidence: "second.ts",
-							},
-						]
+				...(i
+					? Array.from({ length: extraLiveFindings }, (_, index) => ({
+							severity: "blocking" as const,
+							summary: `Additional live blocker ${index}`,
+							evidence: `additional-${index}.ts`,
+						}))
 					: []),
 			],
 		});
@@ -622,7 +620,7 @@ test("candidate must cite the target's live blockers", async () => {
 		false,
 		"parser.ts",
 		"parser.ts",
-		true,
+		1,
 	);
 	expect(
 		(
@@ -677,6 +675,35 @@ test("candidate must cite the target's live blockers", async () => {
 			})
 		).status,
 	).toBe("error");
+});
+
+test("candidate can cite eleven live blocking findings", async () => {
+	const s = await setup(
+		"shadow",
+		provider,
+		false,
+		"parser.ts",
+		"parser.ts",
+		10,
+	);
+	const findings = s.repository.session?.runs.at(-1)?.reviews.at(-1)
+		?.result?.findings;
+	const ids = findings?.map((finding) => finding.findingId);
+	if (ids?.length !== 11 || ids.some((id) => !id))
+		throw new Error("Fixture needs eleven canonical live findings.");
+	const proposal = s.proposal();
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: {
+			...proposal,
+			candidates: proposal.candidates.map((candidate) => ({
+				...candidate,
+				findingIds: ids,
+			})),
+		},
+	});
+	expect(response.status).toBe("ok");
+	expect(JSON.stringify(response)).toContain('"kind":"selected"');
 });
 
 test("provider retries reserve each paid attempt but count as one checkpoint decision", async () => {
