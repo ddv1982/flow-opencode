@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "235e591ef8e026123f325b0870e85b17f60d099b",
-  "recordedAt": "2026-09-24T01:56:48.624077+00:00",
+  "verifiedCodeHead": "a395d7347096274a8ecb057e90849f29d526dd12",
+  "recordedAt": "2026-09-24T01:41:30.905870+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -15,7 +15,7 @@
       "skipped": 15,
       "failed": 0,
       "assertions": 7835,
-      "logSha256": "48a8d6041f34004a9b1effccb89c65fe825876111d7c445974860f6a00ba7b28"
+      "logSha256": "c18f2e9de41dce297154bea0bb10c48a6c214c8c6b810bcbdbe77360dd74acf6"
     },
     {
       "command": "bun test tests/recovery-campaign.test.ts tests/recovery-treatment.test.ts tests/recovery-episode-runner.test.ts tests/recovery-operator.test.ts",
@@ -24,7 +24,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 128,
-      "logSha256": "e3e5d5764820fed2acb5949de982c6366a2d1268a6105fa1518ef67242ff2ea3"
+      "logSha256": "78caa1cf0604d1fa69e7a564bc35dd8217647f3cbaa40a4c0c1790b84083a4fb"
     },
     {
       "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-campaign-host.test.ts",
@@ -33,7 +33,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 237,
-      "logSha256": "559fd6afe3cbefb2e4fbba4b2d409007ae70559b6ed9b309ef387de7ad809a8f"
+      "logSha256": "e848597dbf5df0479137cc58d80d2ad9a310a85ea888d8dac7d4f2ee00e39f60"
     },
     {
       "command": "bun run smoke:live",
@@ -42,7 +42,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "713eebcaefee999c050ce0eb87959119a75929cf9f87b5c6b0e2e7e45c554853"
+      "logSha256": "fe9d678e2ef5bfdadef8a3ee56047e778be0a5cdfcae45cbe0916968112d2019"
     }
   ],
   "sourceDigests": {
@@ -53,9 +53,9 @@
     "tests/recovery-campaign.test.ts": "e324a74d77a478334335a4378712501209aa10d0d762d5737887300ae7193d91"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-paired-simulation-verification-a395d734.json",
-    "verifiedCodeHead": "a395d7347096274a8ecb057e90849f29d526dd12",
-    "originalSha256": "96d7a16bf5603816d492c7b86a0058b6b9488d426df198856f997ff97a2586dc"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-paired-simulation-verification-55d33499.json",
+    "verifiedCodeHead": "55d334994c5dda59a629c0bd52507be4335acea5",
+    "originalSha256": "955f29d6dd221161a3fbbc85d6e478dace5b515f89f3ef9ada9e66198ff7d457"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
