@@ -94,6 +94,8 @@ test("blocked campaign fixture has repeatable frozen session bytes", async () =>
 
 const smoke =
 	process.env.FLOW_RECOVERY_CAMPAIGN_SMOKE === "1" ? test : test.skip;
+const SMOKE_TIMEOUT_MS = 420_000;
+const AUTHORIZATION_HEADROOM_MS = 180_000;
 smoke(
 	"paired native campaigns score Flow recovery after operator resumption",
 	async () => {
@@ -122,7 +124,9 @@ smoke(
 				await mkdir(directory, { mode: 0o700 });
 				const budget = join(directory, "budget"),
 					dispatch = join(directory, "dispatch");
-				const expiresAt = new Date(Date.now() + 360000).toISOString();
+				const expiresAt = new Date(
+					Date.now() + SMOKE_TIMEOUT_MS + AUTHORIZATION_HEADROOM_MS,
+				).toISOString();
 				const authorization = await createRequestBudget(budget, {
 					schemaVersion: 1,
 					origin: "simulation",
@@ -638,5 +642,5 @@ smoke(
 			else process.env.FLOW_EVAL_AUTHORIZATION = previous;
 		}
 	},
-	420000,
+	SMOKE_TIMEOUT_MS,
 );
