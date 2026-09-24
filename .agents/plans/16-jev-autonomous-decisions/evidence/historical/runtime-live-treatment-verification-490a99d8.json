@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "9fb15b719406b1a70ad00f6022d95d4bd24f36e4",
-  "recordedAt": "2026-09-24T04:34:06.554807+00:00",
+  "verifiedCodeHead": "490a99d896588c5497dd022c234aab8618d878eb",
+  "recordedAt": "2026-09-24T04:15:12.261276+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -11,20 +11,20 @@
     {
       "command": "bun run check",
       "exitCode": 0,
-      "passed": 1533,
+      "passed": 1531,
       "skipped": 15,
       "failed": 0,
-      "assertions": 8137,
-      "logSha256": "5f1848c65b63b8ccc4c0dc95522900ffe3fa802cbb51047a0493d245898784f8"
+      "assertions": 8133,
+      "logSha256": "ddf9695beec6e77e53dec1ddcc769e08ef6b4bf8540cab8bf46159dedc76a259"
     },
     {
-      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-capture.test.ts tests/jev-decision-provider.test.ts",
+      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-capture.test.ts",
       "exitCode": 0,
-      "passed": 87,
+      "passed": 81,
       "skipped": 1,
       "failed": 0,
-      "assertions": 403,
-      "logSha256": "c08295161f5817e107aab27da399609065b6fb758eaeaff25cb59df66a6d2d9a"
+      "assertions": 387,
+      "logSha256": "5cc52e73d9b8a009b43c6703e032d13966b41528160224aaae61e1e37aa80f38"
     },
     {
       "command": "bun run smoke:live",
@@ -33,25 +33,24 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "5d072630b0347bc75eafa0930c563ee42fde68b3d570197862c47b91361e872e"
+      "logSha256": "b71b1c734a7592dc559c81c5ecf8354d246208c1a2e835f898035f1427f6bcb1"
     }
   ],
   "sourceDigests": {
     "evals/recovery-decisions/budget-plugin.ts": "f871bd0f2dc820fd87505f5701009a07662c61745ea98bfd3beda47224831103",
     "evals/recovery-decisions/capture.ts": "0db16805da9cfb1ae5c5eca1c13229b5d1eb53c1122d9f7cfda282867070bf8a",
-    "evals/recovery-decisions/live-treatment-plugin.ts": "1ed42081e4b018ee636c60c95aa5b8daa6582d3a22fec2075d10586c37f33d51",
+    "evals/recovery-decisions/live-treatment-plugin.ts": "8c9b428a67bd492e3f8d427283442a4e921e4d7c6419427f35a25fb9d18470b0",
     "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
     "evals/recovery-decisions/sources.ts": "62e03969ee3cf391ea4ddec4820598e3bde04cb564fb9371baba958d0df56698",
-    "src/infrastructure/jev-decision-provider.ts": "1a5171453083928e4da7edf7dd93a68e5be415d07e181e93072344bfb12c7593",
     "tests/recovery-capture.test.ts": "576fa58effc54fd33363cee96a3bcddebbe8615ae6f07fe577315d5ea93af76c",
-    "tests/recovery-live-treatment-child.ts": "4d013d416c5dd93c573c41929b4d64dba7678203a2d0ebabb0a69d2167ba0ac2",
-    "tests/recovery-live-treatment.test.ts": "68e9e7bf0b3d19c77e71761137e0093ef958a490dfe9927ae0dc58f1ab2611f5",
+    "tests/recovery-live-treatment-child.ts": "816909716f27ec8054f888fb0b4a813d29c01dd6214fc06e1702eddd3e550cc0",
+    "tests/recovery-live-treatment.test.ts": "866317d3b6dc1487b77942dab9c1d6f485cf8a29544eef78f8e8523b6317f782",
     "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-490a99d8.json",
-    "verifiedCodeHead": "490a99d896588c5497dd022c234aab8618d878eb",
-    "originalSha256": "77e307195de49d22bb5e1f7c4450caa9479831e95a93416e4de20e56e25ee04d"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-92d343e6.json",
+    "verifiedCodeHead": "92d343e6984d8ef191c074dfbf8c5ab299823791",
+    "originalSha256": "438cee886db5ed35037df2f31db4a1e06dd120fa010c5d8bc05816e2ed51311e"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
