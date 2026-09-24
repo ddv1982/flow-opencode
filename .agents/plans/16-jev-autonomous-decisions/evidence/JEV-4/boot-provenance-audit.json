@@ -16,8 +16,22 @@
       "historicalHead": "1cb337fbdbf3e44469c14a66f786602c77b702c2",
       "retained": ["TUI video", "screenshots", "terminal transcripts", "session ID"],
       "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
-      "verdict": "partial"
+      "verdict": "partial; new packed probe narrows provenance gap but does not authenticate historical media or satisfy the screenshot requirement",
+      "newProbe": "worker-10/packed-probe/receipt.json",
+      "newProbeHead": "db70a7c52dacbe3bd2354b15a50d21976bd95ed9",
+      "newProbeEvidence": [
+        "frozen install and build output",
+        "packed smoke output",
+        "tarball and installed module digests",
+        "project startup log",
+        "sanitized session event trace",
+        "terminal panes showing shadow selection and stop"
+      ],
+      "newProbeMissing": [
+        "real TUI screenshot and video for this exact run",
+        "complete ten-lane interaction review"
+      ]
     }
   ],
-  "interpretation": "The retained media supports visible UI observations but cannot authenticate which packed plugin build handled the commands. Re-run each lane under the full live-lane boot recipe before marking it passed. Historical receipt claims are not treated as current gate verdicts."
+  "interpretation": "Historical UI media cannot authenticate the packed plugin build. A new lane-10 packed probe confirms startup and command state transitions at its own head, but has no real TUI screenshot or video. Keep lanes 5 and 10 open until each has a complete exact-head live capture; blocked recovery and decision quality are separate gates."
 }

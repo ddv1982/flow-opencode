@@ -1,0 +1,38 @@
+     - Approval: pending
+     - Revision: 1
+     - Progress: 0/1
+     - Next action: flow_plan_approve
+
+     Feature: inspect-repository-surface
+
+     - Inspect opencode.json and the repository root.
+     - Confirm no source, tests, CI, or implementation target exists.
+     - No source, configuration, Git, or release edits authorized.
+     - Gate: python -m json.tool opencode.json
+
+     Process-local model settings report:
+
+     - Requested planning specialist: openai/gpt-5.6-terra; execution not confirmed.
+     - Implementation model observed: openai/gpt-5.6-luna.
+     - Requested review model: openai/gpt-5.6-sol; availability unverified.
+
+     No lifecycle, Git, or release mutation was made.
+
+     ▣  Build · GPT-5.6 Luna · 21.5s
+
+  ┃
+  ┃  Flow auto stopped.
+  ┃
+
+     Thought · 820ms
+
+     Flow auto is stopped. The draft plan remains pending approval at revision 1; no implementation ran.
+
+     ▣  Build · GPT-5.6 Luna · 6.1s
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · GPT-5.6 Luna OpenAI
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/flow-jev-overnight-20260924/jev4-packed-lane10/project                             29.5K (7%)  ctrl+p commands

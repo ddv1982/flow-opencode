@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "classification": "partial-live-lane-evidence",
+  "lane": "JEV-4 worker-10",
+  "head": "db70a7c52dacbe3bd2354b15a50d21976bd95ed9",
+  "recordedAt": "2026-09-24T15:08:19.625258+00:00",
+  "host": "OpenCode 1.18.32",
+  "toolchain": "Bun 1.4.0",
+  "packedPlugin": {
+    "package": "opencode-plugin-flow@9.0.2",
+    "tarballSha256": "d35205113e3985d00ebad5531d9ceb144932b6cbc587478deccba11ae0ef97ae",
+    "distIndexSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+    "cacheConfig": "isolated XDG_CACHE_HOME package cache installed from the tarball; project opencode.json selects opencode-plugin-flow@9.0.2",
+    "installedIndexSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d"
+  },
+  "sessionId": "ses_f2c10c69cffeYE6HwJYBwNpVco",
+  "flowSessionId": "session:27312bad-7e6a-41f7-8b0e-bf4b5636751f",
+  "observations": [
+    "Packed-plugin smoke passed at this source head on pinned OpenCode 1.18.6; the interactive host was OpenCode 1.18.32.",
+    "Disposable host startup log loaded the project config and reported Flow 9.0.2 active.",
+    "Initial /flow-auto shadow text omitted required recovery flags and kept mode off.",
+    "Correct /flow-auto --recovery=shadow --recovery-calls=1 --recovery-usd=1 selected shadow mode with one call remaining.",
+    "/flow-auto stop returned mode to off; the Flow plan stayed pending at revision 1.",
+    "No Jev tool call or decision packet appeared in the sanitized session trace."
+  ],
+  "laneVerdict": "partial",
+  "limits": [
+    "No screenshot or video was captured because the GNOME screenshot D-Bus service denied capture and the terminal was not an X11 window.",
+    "This session did not reach a blocked recovery checkpoint or invoke Jev; it cannot qualify decision quality.",
+    "The packed smoke and TUI used separate OpenCode host versions, both identified above."
+  ],
+  "files": {
+    "status-pane.txt": "55139582a9341db6473cbef0be50413966f608d891e6bb3499607311fa9c3fe0",
+    "event-trace.json": "e816d8f397fa997fcbb3d30b72df5c82c973a53dd1b5658dea311a26dc54f3b6",
+    "stop-pane.txt": "f64a973d7df5852406f1b447324f442305a4e38093025507b2a658679330d16d",
+    "host-startup.txt": "3ae4dc694f6518bfe6d580151983662dbf84a893ad9544de7e1b577f46a2adec",
+    "shadow-pane.txt": "663fd706c9fa1137687e3f9cbb9b8308059371bc725f310d7eda411eb8d857e8",
+    "build.log": "6341fbf9152ada11b995f9dffed1589cdccbe9636ebb6290f60529d4beab66dd",
+    "frozen-install.log": "f276c13c3f2abd721964e4b6df1f0a5d643ea9a01b0c11a40f58e579002fbbc3",
+    "pack.log": "40978af50e40a3942d184407d718d4e2e111ec9ccf8674c8bcd73704892bbe93",
+    "packed-cache-install.log": "d524a0374a508252e070b3333aa6b09b2aafa465946278c0a01024fe1d05e260",
+    "packed-smoke.log": "bc48fc0996811e468c03eeb56da89df99b9769b0226671692d9c4c926fc36e49"
+  }
+}

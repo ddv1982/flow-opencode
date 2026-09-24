@@ -1,0 +1,339 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized-opencode-session-trace",
+  "sessionId": "ses_f2c10c69cffeYE6HwJYBwNpVco",
+  "rawExportSha256": "437a6cbd60a4ff8e1cd8c328cb66b4ef6157e45fe1d8f9aa97a0d200517621b0",
+  "messages": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "flow-status"
+        },
+        {
+          "type": "text",
+          "command": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "revision": 0,
+            "approval": null
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "flow-auto shadow (no recovery options)"
+        },
+        {
+          "type": "text",
+          "command": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "revision": 0,
+            "approval": null
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_guidance",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "read",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "task",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_plan_save",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "revision": 0,
+            "approval": null
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_guidance",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_plan_save",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "flow-auto shadow (no recovery options)"
+        },
+        {
+          "type": "text",
+          "command": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "flow-auto --recovery=shadow --recovery-calls=1 --recovery-usd=1"
+        },
+        {
+          "type": "text",
+          "command": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_guidance",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "flow-auto stop"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "text",
+          "command": "flow-status"
+        },
+        {
+          "type": "text",
+          "command": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    }
+  ],
+  "recoveryStates": [
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "revision": 0,
+      "approval": null
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "revision": 0,
+      "approval": null
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "revision": 0,
+      "approval": null
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "revision": 1,
+      "approval": "pending"
+    }
+  ],
+  "jevToolCallsObserved": 0,
+  "note": "Full session export stays outside the repository; this trace retains tool names and bounded Flow status fields only."
+}
