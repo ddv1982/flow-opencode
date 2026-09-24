@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "reviewId": "review:ef05edde-f2ef-4403-bf42-878bd7bf5a8e",
+      "verdict": "failed",
+      "findings": [
+        {
+          "findingId": "phase5-eight-condition-harness.R14-01",
+          "severity": "blocking",
+          "summary": "The reported unavailable-browser Playwright gate lacks durable validation evidence.",
+          "evidence": "The assignment links only `pnpm typecheck`, `pnpm test`, and `pnpm build`. It provides no validation record for `pnpm e2e -- --project=chromium --grep @phase5-visual`, including its nonzero exit, selected eight tests, or the exact missing managed Chromium executable. The packet summary alone does not prove the required unavailable-condition result."
+        },
+        {
+          "findingId": "phase5-eight-condition-harness.R14-02",
+          "severity": "blocking",
+          "summary": "The four reduced-motion scenarios assert application motion state that media emulation does not control.",
+          "evidence": "`e2e/garden-loop.spec.ts:810-830` only emulates `prefers-reduced-motion` but expects `data-ambient-motion=\"still\"`. The Phaser state is driven by persisted `settings.reducedMotion` (`src/App.tsx:249-252`, `src/hooks/useAppSettings.ts:20-22`), whose cleared-storage default is false (`src/persistence/repositories.ts:28-31`); the media query only suppresses CSS animation (`src/styles.css:1205-1212`). Thus the reduced scenarios will fail rather than verify the requested condition."
+        },
+        {
+          "findingId": "phase5-eight-condition-harness.R14-03",
+          "severity": "blocking",
+          "summary": "Manual tracing conflicts with the configured Playwright Test tracing lifecycle.",
+          "evidence": "`playwright.config.ts:14-17` enables `trace: 'retain-on-failure'`, while `e2e/garden-loop.spec.ts:822` calls `page.context().tracing.start()` and line 853 stops that same context trace. Playwright Test owns tracing when configured, so starting/stopping it manually can encounter an already-started trace or disrupt runner trace capture; the named eight-condition trace artifacts are not reliably producible by this harness."
+        }
+      ]
+    },
+    {
+      "attempt": 2,
+      "reviewId": "review:be2a8855-61eb-4b51-b7c0-615a2e8598da",
+      "verdict": "failed",
+      "findings": [
+        {
+          "findingId": "phase5-eight-condition-harness.R14-01",
+          "severity": "advisory",
+          "summary": "Repair proven; terminal fixed pending pass: unavailable-browser evidence is now durable.",
+          "evidence": "Current-source validation `pnpm e2e:compiled --project=chromium --grep @phase5-visual` completed with exit 0 and exactly eight explicit skips; `e2e/garden-loop.spec.ts:813-816` statically marks the unavailable managed Chromium conditions unverified."
+        },
+        {
+          "findingId": "phase5-eight-condition-harness.R14-02",
+          "severity": "advisory",
+          "summary": "Repair proven; terminal fixed pending pass: motion assertions now match the emulated preference.",
+          "evidence": "`e2e/garden-loop.spec.ts:820-841` configures the scenario's `reducedMotion` context option and asserts the corresponding `prefers-reduced-motion` media query, without incorrectly asserting persisted application reduced-motion state."
+        },
+        {
+          "findingId": "phase5-eight-condition-harness.R14-03",
+          "severity": "blocking",
+          "summary": "Manual tracing still conflicts with Playwright Test's configured tracing lifecycle.",
+          "evidence": "`e2e/garden-loop.spec.ts:820-830` creates a context from the Playwright Test `browser` fixture and manually calls `context.tracing.start()`, while `playwright.config.ts:14-17` still enables `trace: 'retain-on-failure'`. Playwright Test 1.61 instruments every browser context created during the test and starts runner tracing on context creation, including contexts created with `browser.newContext`; therefore this context is not tracing-isolated. The manual start can encounter an already-started trace, and the focused validation skipped all eight scenarios, so it does not prove the named trace artifacts can be produced. Lines 865-869 likewise manually stop and attach that conflicting trace."
+        }
+      ]
+    }
+  ]
+}

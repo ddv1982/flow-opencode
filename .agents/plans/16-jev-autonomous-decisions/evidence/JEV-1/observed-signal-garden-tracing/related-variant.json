@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "classification": "related-unreviewed-variant",
+  "originatingTaskId": "signal-garden-phase5-eight-condition-qa-20260925",
+  "independenceGroupId": "signal-garden-phase5-eight-condition-qa-20260925",
+  "primary": false,
+  "split": "calibration",
+  "flowSessionId": "session:296870b8-3301-492b-beaa-097bfa7ee4b9",
+  "revision": 40,
+  "sourceDigest": "sha256:cde50aadfaaf6b74dc074265cfae19d6de3dfc9d61ee14528fc7384408aec485",
+  "packetDigest": "0910f56ed664c67d3e125a3237255d8d5184986ad162fb2f0d5cb27802e31e8d",
+  "candidateIds": [
+    "retry-phase5-final-validation"
+  ],
+  "findingIds": [
+    "phase5-compare-and-record.R34-01",
+    "phase5-compare-and-record.R39-01"
+  ],
+  "observedSelection": "abstain",
+  "requestedModel": "jev-1.13.0",
+  "resolvedModel": "jev-1.13.0",
+  "privateCheckpointSha256": "357ae31f862af0450fead8eac51da8ab727340ac36d17cd62a79c707ad079e9e",
+  "privatePatchSha256": "f2caf92d9ef063407c5c8b9edae132122b4ea89533f520a5308da8925c926967",
+  "privateParentMessagesSha256": "6f231b274acb587a50e5260ba642a79f5fa8c3f346120129100290d677262809",
+  "qualification": "unreviewed-related-only",
+  "limits": [
+    "Same originating task as the primary revision-22 case; cannot count as an independent sample.",
+    "No independent label review has been recorded for this variant.",
+    "Raw Session v5 and OpenCode bytes remain private."
+  ]
+}

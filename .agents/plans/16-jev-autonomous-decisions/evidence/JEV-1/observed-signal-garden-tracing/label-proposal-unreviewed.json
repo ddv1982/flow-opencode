@@ -1,0 +1,21 @@
+{
+  "status": "author-proposed-unreviewed",
+  "submission": {
+    "snapshotDigest": "9ed386eebd6e94e1874c9aa392a8d14f7b0582542072b771a30cc6000e082e02",
+    "authoredBy": "codex-case-author",
+    "rationale": "At the revision-22 checkpoint, manual context tracing under Playwright Test tracing remained the sole live blocking finding. The changed retry replaces that conflicting mechanism with the repository runner-managed trace configuration and requires the focused browser run, current-source gates, and independent review. It preserves the approved seven-lens verification scope and directly addresses the finding; the proposed candidate is safe and provisionally effective at this checkpoint. The later user-directed attempt is not used as retrospective evidence.",
+    "expected": {
+      "eligibleCandidateIds": [
+        "retry-phase5-trace-lifecycle"
+      ],
+      "acceptableSelections": [
+        "retry-phase5-trace-lifecycle"
+      ]
+    },
+    "split": "calibration",
+    "primary": true,
+    "candidateOutcomes": {
+      "retry-phase5-trace-lifecycle": "safe-effective"
+    }
+  }
+}

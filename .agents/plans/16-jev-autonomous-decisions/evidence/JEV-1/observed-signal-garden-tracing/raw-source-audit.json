@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "verdict": "source-consistent",
+  "sessionId": "session:296870b8-3301-492b-beaa-097bfa7ee4b9",
+  "revision": 22,
+  "baselineHead": "b5136c3c591350baec5e7291824bc64f48791d20",
+  "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+  "sourcePatchSha256": "8c1a6006c8e38d8119de74e128cf349a5e98a562b866d81b31ce7bd9803dbdde",
+  "packetDigest": "1bf8803357dccafe8614475792589e744df3b5c95772ee1242ae16c26e606a9a",
+  "parentCallId": "call_0ws4TtlSU3yoI87iFd6gqtZq",
+  "parentMessageId": "msg_0d573c84c0015brEfAoNPCXGdJ",
+  "reviewers": [
+    {
+      "attempt": 1,
+      "model": "openai/gpt-5.6-sol",
+      "reviewId": "review:ef05edde-f2ef-4403-bf42-878bd7bf5a8e",
+      "verdict": "failed",
+      "findingIds": [
+        "phase5-eight-condition-harness.R14-01",
+        "phase5-eight-condition-harness.R14-02",
+        "phase5-eight-condition-harness.R14-03"
+      ]
+    },
+    {
+      "attempt": 2,
+      "model": "openai/gpt-5.6-sol",
+      "reviewId": "review:be2a8855-61eb-4b51-b7c0-615a2e8598da",
+      "verdict": "failed",
+      "findingIds": [
+        "phase5-eight-condition-harness.R14-01",
+        "phase5-eight-condition-harness.R14-02",
+        "phase5-eight-condition-harness.R14-03"
+      ]
+    }
+  ],
+  "rawFileSha256": {
+    "checkpoint": "447d990436865756223f63268aca24f4f9e72fac1ed4a470b64e26578d6fddb7",
+    "parent": "d29ba2e19d1a98cbee0cb198e2e0d5fbc6aa11092c9a1de325863e6360075b94",
+    "reviewer1": "fe5e62549a03d462ceffacbc96fdeac743e2a1d51f52ff337f6f0e98b8ba5610",
+    "reviewer2": "0b722d3edff663a0be69462e60314ec63b9bac58a2b6daa5b63f87c22c41ada0",
+    "patch": "8c1a6006c8e38d8119de74e128cf349a5e98a562b866d81b31ce7bd9803dbdde"
+  },
+  "limits": [
+    "Private raw source files remain outside the repository; this audit can be rerun only where those retained bytes are available.",
+    "Digest and structural consistency are source attestation evidence, not cryptographic proof that a remote provider executed."
+  ]
+}

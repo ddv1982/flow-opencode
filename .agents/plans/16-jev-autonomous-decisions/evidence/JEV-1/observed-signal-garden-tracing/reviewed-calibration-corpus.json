@@ -1,0 +1,511 @@
+{
+  "schemaVersion": 1,
+  "purpose": "reviewed-evaluation",
+  "labelStatus": "independently-reviewed",
+  "cases": [
+    {
+      "id": "signal-garden-phase5-trace-lifecycle-20260925",
+      "rationale": "At the revision-22 checkpoint, manual context tracing under Playwright Test tracing remained the sole live blocking finding. The changed retry replaces that conflicting mechanism with the repository runner-managed trace configuration and requires the focused browser run, current-source gates, and independent review. It preserves the approved seven-lens verification scope and directly addresses the finding; the proposed candidate is safe and provisionally effective at this checkpoint. The later user-directed attempt is not used as retrospective evidence.",
+      "session": {
+        "version": 5,
+        "id": "session:296870b8-3301-492b-beaa-097bfa7ee4b9",
+        "revision": 22,
+        "goal": "Complete the unfinished Phase 5 verification in docs/ui-upgrade-plan.md: exercise the full seven-lens journey in light and dark themes on desktop and a 390px mobile viewport, each with and without prefers-reduced-motion. Use disposable browser storage and the repository Playwright harness. Capture actual screenshots/traces for the eight conditions, compare with existing screenshots, and report any unavailable condition as unverified. Fix only a demonstrated product defect with a focused regression. Run the current-source typecheck, tests, build, and appropriate Playwright gate before independent Flow review. Do not push, merge, deploy, or use personal browser data.",
+        "approval": "approved",
+        "plan": {
+          "summary": "Verify the complete seven-lens journey across all eight requested theme, viewport, and motion conditions through the repository Playwright harness, recording screenshots, traces, comparison evidence, and only a demonstrated focused fix.",
+          "overview": "Extend the existing Playwright journey coverage with a dedicated, parameterized visual-verification path that creates a fresh profile per condition, emulates color scheme and reduced-motion preference, fixes the mobile viewport to 390px, completes every lens, and writes condition-specific screenshots and traces to Playwright output. Compare captured garden states with the maintained screenshots and update Phase 5 with honest results; make no product changes unless a condition demonstrates a defect, in which case add the smallest regression coverage with the fix.",
+          "requirements": [
+            "Exercise all eight combinations of light/dark, desktop/390px mobile, and no-preference/reduce motion through the full seven-lens path.",
+            "Use only disposable Playwright browser storage; do not access personal browser data.",
+            "Capture actual screenshot and trace artifacts for every condition and compare captures to existing docs screenshots.",
+            "Mark unavailable conditions unverified rather than inferring success.",
+            "Do not alter product behavior unless a reproduced defect requires a focused fix and regression.",
+            "Run current-source typecheck, unit tests, production build, and the relevant Playwright gate before independent review.",
+            "Do not push, merge, deploy, or release."
+          ],
+          "decisions": [
+            "The existing `e2e/garden-loop.spec.ts` is the repository Playwright harness and its journey helpers provide the least invasive verification foundation.",
+            "The current whole-repository gate is `pnpm test`, because it compiles localization and runs the complete Vitest suite; the required typecheck, build, and Playwright observations are recorded as feature validation.",
+            "Desktop uses the configured Chromium project; the requested 390px width is set explicitly in the verification test rather than relying on Pixel 5 defaults.",
+            "System light/dark and `prefers-reduced-motion` are emulated with Playwright media settings, while each test begins by clearing localStorage and onboarding a disposable profile.",
+            "Screenshot and trace paths will be reported from the Playwright output. Existing maintained `home` and `garden` screenshots are visual references, not pixel baselines for every journey state."
+          ],
+          "features": [
+            {
+              "id": "phase5-eight-condition-harness",
+              "title": "Capture eight-condition journey evidence",
+              "summary": "Add focused repository Playwright coverage for all requested full seven-lens theme, viewport, and prefers-reduced-motion conditions, using disposable storage and writing screenshots/traces.",
+              "targets": [
+                "e2e/garden-loop.spec.ts",
+                "playwright.config.ts"
+              ],
+              "validation": [
+                "Run `pnpm e2e -- --project=chromium --grep @phase5-visual` and inspect the eight screenshot and trace outputs.",
+                "Each condition completes all seven lenses, reaches pending-seed state, has the emulated theme and motion behavior, and has no horizontal overflow at 390px.",
+                "Run `pnpm typecheck`, `pnpm test`, and `pnpm build` against current source."
+              ],
+              "dependsOn": [],
+              "kind": "change"
+            },
+            {
+              "id": "phase5-compare-and-record",
+              "title": "Compare captures and complete Phase 5 record",
+              "summary": "Compare the eight actual captures against the existing documentation screenshots, report artifact locations and any unavailable condition honestly, and mark only demonstrated Phase 5 outcomes complete.",
+              "targets": [
+                "docs/ui-upgrade-plan.md",
+                "docs/screenshots/"
+              ],
+              "validation": [
+                "Reviewer inspection confirms Phase 5 records the eight-condition outcome, comparison scope, artifact locations, and unverified status where applicable.",
+                "If a product defect is demonstrated, its focused regression and minimal fix are included; otherwise product source remains unchanged."
+              ],
+              "dependsOn": [
+                "phase5-eight-condition-harness"
+              ],
+              "kind": "change"
+            }
+          ],
+          "evidence": [
+            {
+              "requirement": "Whole-repository current-source unit test gate",
+              "environment": "Linux repository workspace with pnpm dependencies",
+              "command": "pnpm test",
+              "scope": "gate",
+              "platform": "linux",
+              "assertions": []
+            }
+          ]
+        },
+        "runs": [
+          {
+            "id": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+            "featureId": "phase5-eight-condition-harness",
+            "attempt": 1,
+            "state": "superseded",
+            "startedRevision": 3,
+            "summary": "phase5-eight-condition-harness incomplete: source inspection found the reduced-motion and trace paths cannot provide the requested eight-condition evidence, and the reported browser-unavailable Playwright gate has no assignment-linked validation record. Typecheck, unit tests, and build are verified.",
+            "artifactsChanged": [
+              {
+                "path": "e2e/garden-loop.spec.ts"
+              }
+            ],
+            "validations": [
+              {
+                "id": "5f2a4c29-c631-41c6-8bc6-cca960d62521",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm e2e -- --project=chromium --grep @phase5-visual",
+                "sourceDigest": "sha256:2450f837a770a4c6a01a4df6f5ce467b92d30ea20e0c5805e069f2c5a6a08d26",
+                "exitCode": 1,
+                "outputDigest": "sha256:e47d181271f42576dd5168ea35cfa432b9baaf14d8a48c1fa3065c105aefd88b",
+                "outputComplete": true,
+                "recordedRevision": 4,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "0b06fe02-fa55-45e9-8082-707ad8bc473b",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm e2e -- --project=chromium --grep @phase5-visual",
+                "sourceDigest": "sha256:92ef821973e63e879db282913756c2693145c965e0332346f5eae00767253569",
+                "exitCode": 1,
+                "outputDigest": "sha256:3845d131d2788282f8f7ebb56c065d6c5221af1a3a0373db31e600ca2011d3b8",
+                "outputComplete": true,
+                "recordedRevision": 5,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "d542d203-8b03-461e-bb91-2d9d69c7fa0c",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm e2e:compiled --project=chromium --grep @phase5-visual",
+                "sourceDigest": "sha256:92ef821973e63e879db282913756c2693145c965e0332346f5eae00767253569",
+                "exitCode": 1,
+                "outputDigest": "sha256:58b261c61990eba2f5c8c562a82eb05091433354ae6345fe405a81f1eae8eb2c",
+                "outputComplete": true,
+                "recordedRevision": 6,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "cdc629fd-df7e-46d6-beda-a7d73a9793cc",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm typecheck",
+                "sourceDigest": "sha256:92ef821973e63e879db282913756c2693145c965e0332346f5eae00767253569",
+                "exitCode": 0,
+                "outputDigest": "sha256:1733af5d8dcf00308f2a6862c89eef130542b3c63d15e57ecf8ee2a92d6be956",
+                "outputComplete": true,
+                "recordedRevision": 7,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "f136bd5a-e853-4713-aab3-89bd35e38844",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "broad",
+                "command": "pnpm test",
+                "sourceDigest": "sha256:92ef821973e63e879db282913756c2693145c965e0332346f5eae00767253569",
+                "exitCode": 0,
+                "outputDigest": "sha256:7cf90e806da85c61fa726078d52405ab49f64b9b3a7003109f0e7c132cecbca4",
+                "outputComplete": true,
+                "recordedRevision": 8,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "5c8ac0ff-0cca-4101-9a41-a9c8dc07d338",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm build",
+                "sourceDigest": "sha256:92ef821973e63e879db282913756c2693145c965e0332346f5eae00767253569",
+                "exitCode": 0,
+                "outputDigest": "sha256:54a67d6eda7de56520ad83120f85ff8e1b38e9bab5adb64c61fd81884011c634",
+                "outputComplete": true,
+                "recordedRevision": 9,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "cbe66bad-b531-4d9f-b7c8-cf6d6c0b5b32",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm typecheck",
+                "sourceDigest": "sha256:f25481c1fd60fa4817608ebaba66e9d8fe1ff562b1512103aebe88dac65e63a5",
+                "exitCode": 0,
+                "outputDigest": "sha256:1733af5d8dcf00308f2a6862c89eef130542b3c63d15e57ecf8ee2a92d6be956",
+                "outputComplete": true,
+                "recordedRevision": 10,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "e6ec9d44-e415-41f8-a660-c068061d5ebe",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm e2e:compiled --project=chromium --grep @phase5-visual",
+                "sourceDigest": "sha256:f25481c1fd60fa4817608ebaba66e9d8fe1ff562b1512103aebe88dac65e63a5",
+                "exitCode": 1,
+                "outputDigest": "sha256:ae11b8072a0fac1c929ebea90b1a84f2d84b1b518d8d34f246c11591ac680f79",
+                "outputComplete": true,
+                "recordedRevision": 11,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "c57d6fc6-8af3-419d-8d6c-f771f8428029",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "broad",
+                "command": "pnpm test",
+                "sourceDigest": "sha256:f25481c1fd60fa4817608ebaba66e9d8fe1ff562b1512103aebe88dac65e63a5",
+                "exitCode": 0,
+                "outputDigest": "sha256:361cfcac1fac43427a9025a5f5c6b0dcc7e36f1b372b64373e51128786a5681b",
+                "outputComplete": true,
+                "recordedRevision": 12,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "375ad076-cbc0-495e-9422-62b98d21716f",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "scope": "focused",
+                "command": "pnpm build",
+                "sourceDigest": "sha256:f25481c1fd60fa4817608ebaba66e9d8fe1ff562b1512103aebe88dac65e63a5",
+                "exitCode": 0,
+                "outputDigest": "sha256:beb341fe78502c0589e4ec24285b618b92c1beea64b2084562a3b5e8d6898f85",
+                "outputComplete": true,
+                "recordedRevision": 13,
+                "hostPlatform": "linux"
+              }
+            ],
+            "reviews": [
+              {
+                "id": "review:ef05edde-f2ef-4403-bf42-878bd7bf5a8e",
+                "operationId": "90245e1e-5fcf-47f0-969d-1b161e5be72b",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7",
+                "kind": "feature",
+                "sourceDigest": "sha256:f25481c1fd60fa4817608ebaba66e9d8fe1ff562b1512103aebe88dac65e63a5",
+                "validationIds": [
+                  "cbe66bad-b531-4d9f-b7c8-cf6d6c0b5b32",
+                  "c57d6fc6-8af3-419d-8d6c-f771f8428029",
+                  "375ad076-cbc0-495e-9422-62b98d21716f"
+                ],
+                "packet": {
+                  "summary": "One modified tracked TypeScript Playwright spec (mode 100644); no additions, deletions, renames, generated artifacts, executable-mode changes, or unrelated pre-existing work. It adds eight isolated full-journey conditions, manual trace artifacts, and screenshots. Current-source typecheck, 110-test unit suite, and production build pass. The focused Chromium gate selected all eight conditions but each is unverified because the host lacks Playwright's managed Chromium executable; no product defect was observed. `test-results/` and `dist/` are ignored.",
+                  "riskLenses": []
+                },
+                "createdRevision": 14,
+                "result": {
+                  "verdict": "failed",
+                  "findings": [
+                    {
+                      "severity": "blocking",
+                      "summary": "The reported unavailable-browser Playwright gate lacks durable validation evidence.",
+                      "evidence": "The assignment links only `pnpm typecheck`, `pnpm test`, and `pnpm build`. It provides no validation record for `pnpm e2e -- --project=chromium --grep @phase5-visual`, including its nonzero exit, selected eight tests, or the exact missing managed Chromium executable. The packet summary alone does not prove the required unavailable-condition result.",
+                      "findingId": "phase5-eight-condition-harness.R14-01"
+                    },
+                    {
+                      "severity": "blocking",
+                      "summary": "The four reduced-motion scenarios assert application motion state that media emulation does not control.",
+                      "evidence": "`e2e/garden-loop.spec.ts:810-830` only emulates `prefers-reduced-motion` but expects `data-ambient-motion=\"still\"`. The Phaser state is driven by persisted `settings.reducedMotion` (`src/App.tsx:249-252`, `src/hooks/useAppSettings.ts:20-22`), whose cleared-storage default is false (`src/persistence/repositories.ts:28-31`); the media query only suppresses CSS animation (`src/styles.css:1205-1212`). Thus the reduced scenarios will fail rather than verify the requested condition.",
+                      "findingId": "phase5-eight-condition-harness.R14-02"
+                    },
+                    {
+                      "severity": "blocking",
+                      "summary": "Manual tracing conflicts with the configured Playwright Test tracing lifecycle.",
+                      "evidence": "`playwright.config.ts:14-17` enables `trace: 'retain-on-failure'`, while `e2e/garden-loop.spec.ts:822` calls `page.context().tracing.start()` and line 853 stops that same context trace. Playwright Test owns tracing when configured, so starting/stopping it manually can encounter an already-started trace or disrupt runner trace capture; the named eight-condition trace artifacts are not reliably producible by this harness.",
+                      "findingId": "phase5-eight-condition-harness.R14-03"
+                    }
+                  ],
+                  "terminalDisposition": "submitted",
+                  "recordedRevision": 15
+                }
+              }
+            ]
+          },
+          {
+            "id": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e",
+            "featureId": "phase5-eight-condition-harness",
+            "attempt": 2,
+            "state": "blocked",
+            "startedRevision": 16,
+            "summary": "phase5-eight-condition-harness incomplete. R14-01 and R14-02 repairs are proven, with terminal fixed pending pass. R14-03 is a recurring blocking tracing conflict.",
+            "artifactsChanged": [
+              {
+                "path": "e2e/garden-loop.spec.ts"
+              }
+            ],
+            "validations": [
+              {
+                "id": "08680a6e-b18c-499c-94de-92cb5f76d7f0",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e",
+                "scope": "focused",
+                "command": "pnpm e2e:compiled --project=chromium --grep @phase5-visual",
+                "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+                "exitCode": 0,
+                "outputDigest": "sha256:d489441fb0fced7bb2ea928b35d1778ccb2b5046150a14ac3177109514900cd1",
+                "outputComplete": true,
+                "recordedRevision": 17,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "0621017d-0db5-4b4f-8f8e-e1f0c736d71c",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e",
+                "scope": "focused",
+                "command": "pnpm typecheck",
+                "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+                "exitCode": 0,
+                "outputDigest": "sha256:1733af5d8dcf00308f2a6862c89eef130542b3c63d15e57ecf8ee2a92d6be956",
+                "outputComplete": true,
+                "recordedRevision": 18,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "8164e3b6-02a4-49b7-bbc5-bd8fb0a4e980",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e",
+                "scope": "broad",
+                "command": "pnpm test",
+                "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+                "exitCode": 0,
+                "outputDigest": "sha256:bf6657ff8826f84547cc84dd7009e28d00c73ea4171a870bdff60131c84f2b0b",
+                "outputComplete": true,
+                "recordedRevision": 19,
+                "hostPlatform": "linux"
+              },
+              {
+                "id": "9e82b5c5-b38f-4e13-840b-2dbef0578c4c",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e",
+                "scope": "focused",
+                "command": "pnpm build",
+                "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+                "exitCode": 0,
+                "outputDigest": "sha256:7f7f59f2855a61af3c4d79ea6a88c81ab64b1116fb22e91ad5edbfce5eafb4f6",
+                "outputComplete": true,
+                "recordedRevision": 20,
+                "hostPlatform": "linux"
+              }
+            ],
+            "reviews": [
+              {
+                "id": "review:be2a8855-61eb-4b51-b7c0-615a2e8598da",
+                "operationId": "c52edc12-dbf3-4331-bf35-8ff82d8d97dd",
+                "featureId": "phase5-eight-condition-harness",
+                "runId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e",
+                "kind": "feature",
+                "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+                "validationIds": [
+                  "08680a6e-b18c-499c-94de-92cb5f76d7f0",
+                  "0621017d-0db5-4b4f-8f8e-e1f0c736d71c",
+                  "8164e3b6-02a4-49b7-bbc5-bd8fb0a4e980",
+                  "9e82b5c5-b38f-4e13-840b-2dbef0578c4c"
+                ],
+                "packet": {
+                  "summary": "One modified tracked TypeScript Playwright spec (100644); no additions, deletions, renames, generated files, executable mode changes, or unrelated work. Eight focused tests now use a custom fresh context, media emulation, named screenshot/trace attachments, and an explicit static skip when the managed Chromium executable is absent. `pnpm e2e:compiled --project=chromium --grep @phase5-visual` passed with exactly 8 skipped, making each unavailable condition durable and explicit. `pnpm typecheck`, `pnpm test` (110), and `pnpm build` pass. No product behavior was changed.",
+                  "riskLenses": []
+                },
+                "createdRevision": 21,
+                "result": {
+                  "verdict": "failed",
+                  "findings": [
+                    {
+                      "severity": "advisory",
+                      "summary": "Repair proven; terminal fixed pending pass: unavailable-browser evidence is now durable.",
+                      "evidence": "Current-source validation `pnpm e2e:compiled --project=chromium --grep @phase5-visual` completed with exit 0 and exactly eight explicit skips; `e2e/garden-loop.spec.ts:813-816` statically marks the unavailable managed Chromium conditions unverified.",
+                      "findingId": "phase5-eight-condition-harness.R14-01"
+                    },
+                    {
+                      "severity": "advisory",
+                      "summary": "Repair proven; terminal fixed pending pass: motion assertions now match the emulated preference.",
+                      "evidence": "`e2e/garden-loop.spec.ts:820-841` configures the scenario's `reducedMotion` context option and asserts the corresponding `prefers-reduced-motion` media query, without incorrectly asserting persisted application reduced-motion state.",
+                      "findingId": "phase5-eight-condition-harness.R14-02"
+                    },
+                    {
+                      "severity": "blocking",
+                      "summary": "Manual tracing still conflicts with Playwright Test's configured tracing lifecycle.",
+                      "evidence": "`e2e/garden-loop.spec.ts:820-830` creates a context from the Playwright Test `browser` fixture and manually calls `context.tracing.start()`, while `playwright.config.ts:14-17` still enables `trace: 'retain-on-failure'`. Playwright Test 1.61 instruments every browser context created during the test and starts runner tracing on context creation, including contexts created with `browser.newContext`; therefore this context is not tracing-isolated. The manual start can encounter an already-started trace, and the focused validation skipped all eight scenarios, so it does not prove the named trace artifacts can be produced. Lines 865-869 likewise manually stop and attach that conflicting trace.",
+                      "findingId": "phase5-eight-condition-harness.R14-03"
+                    }
+                  ],
+                  "terminalDisposition": "submitted",
+                  "recordedRevision": 22
+                }
+              }
+            ]
+          }
+        ],
+        "operations": [
+          {
+            "id": "a53924b5-5bf3-4d40-a6a2-53c4394cc3b5",
+            "kind": "plan-save",
+            "inputDigest": "sha256:3c2fbf17a3b395509364d05476542ec0d335379db7b68bea877b98bf22cfa691",
+            "committedRevision": 1
+          },
+          {
+            "id": "0a0f2e25-f54e-4777-97ec-429db388e495",
+            "kind": "plan-approve",
+            "inputDigest": "sha256:155c2410337d70af3a73bc51c6a62836e6a7a441d272b45846eb018e6aa8a404",
+            "committedRevision": 2
+          },
+          {
+            "id": "af734a1f-3502-45e2-bbf7-4cc7e52710ff",
+            "kind": "run-start",
+            "inputDigest": "sha256:5e06344a5517bed556a3a06c54cc58f79d798447c6d32925730dc890e11541cf",
+            "committedRevision": 3,
+            "entityId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7"
+          },
+          {
+            "id": "90245e1e-5fcf-47f0-969d-1b161e5be72b",
+            "kind": "review-start",
+            "inputDigest": "sha256:e6254b12fb6266214c68d4ca1a68c18efd1e057aec3e3584f82624b7e8417d33",
+            "committedRevision": 14,
+            "entityId": "review:ef05edde-f2ef-4403-bf42-878bd7bf5a8e"
+          },
+          {
+            "id": "review-submit:ef05edde-20260924-a",
+            "kind": "feature-complete",
+            "inputDigest": "sha256:47f7d1d30fc1bf08cce00f5a78fd1a85c8db6a9978c113a709f4356dccfef2de",
+            "committedRevision": 15,
+            "entityId": "run:d4b21ca6-fed3-4777-9d41-2e264a2378f7"
+          },
+          {
+            "id": "fbfdb0aa-f306-4e99-b0b9-7e7aec79e4d1",
+            "kind": "feature-reset",
+            "inputDigest": "sha256:1963bd3f33d1bb1a60c91542f80a3178ff5424bfc97f78daff1dc65927d8509c",
+            "committedRevision": 16,
+            "entityId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e"
+          },
+          {
+            "id": "c52edc12-dbf3-4331-bf35-8ff82d8d97dd",
+            "kind": "review-start",
+            "inputDigest": "sha256:c4556126b19dcb5fcb9743b2db4d2c1d0ddbbaf4ec0ba2e2a3ea0810768527b8",
+            "committedRevision": 21,
+            "entityId": "review:be2a8855-61eb-4b51-b7c0-615a2e8598da"
+          },
+          {
+            "id": "review-submit:33a4be2d-31da-4607-ab42-75cf305a1d71",
+            "kind": "feature-complete",
+            "inputDigest": "sha256:1622fa1131407cd21884f1db50ddc90e409124f7d1a214648eb45bc908445ff1",
+            "committedRevision": 22,
+            "entityId": "run:ac63e30a-6d7a-4fb7-ad40-9b5e2f45452e"
+          }
+        ],
+        "closure": null
+      },
+      "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+      "proposal": {
+        "id": "recovery:phase5-trace-lifecycle",
+        "sessionId": "session:296870b8-3301-492b-beaa-097bfa7ee4b9",
+        "expectedRevision": 22,
+        "candidates": [
+          {
+            "id": "retry-phase5-trace-lifecycle",
+            "action": "retry",
+            "featureId": "phase5-eight-condition-harness",
+            "remedy": "Replace manual Playwright context tracing with repository-harness trace configuration that preserves one successful trace per Phase 5 condition without conflicting with the configured trace lifecycle; then repeat focused browser, typecheck, test, build, and independent review.",
+            "changedFromPreviousAttempt": "The prior retry made unavailable conditions durable and corrected reduced-motion media assertions, but retained manual context tracing under a runner-managed trace setting.",
+            "findingIds": [
+              "phase5-eight-condition-harness.R14-03"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "eligibleCandidateIds": [
+          "retry-phase5-trace-lifecycle"
+        ],
+        "acceptableSelections": [
+          "retry-phase5-trace-lifecycle"
+        ]
+      },
+      "provenance": {
+        "origin": "observed-recovery",
+        "sourceReference": "signal-garden-b5136c3-phase5-20260925",
+        "originatingTaskId": "signal-garden-phase5-eight-condition-qa-20260925",
+        "independenceGroupId": "signal-garden-phase5-eight-condition-qa-20260925",
+        "scenarioFamily": "review-playwright-trace-conflict",
+        "capturedAt": "2026-09-24T22:05:36.271Z",
+        "importedBy": "codex-case-importer",
+        "sanitization": {
+          "reviewedBy": "codex-local-source-audit",
+          "reviewedAt": "2026-09-24T22:10:00.000Z",
+          "notes": "Reviewed the exact parsed Signal Garden Session v5 checkpoint and manager proposal for credentials and unrelated private content. Payload bytes are unchanged; the reconstructed packet digest matches the live Jev shadow result. Independent label and source review remain pending.",
+          "payloadDigest": "a78f09d47573ba5c67de80f55bdcd2179f60d9c3c51d2ec28335c402e109de46"
+        }
+      },
+      "labels": {
+        "snapshotDigest": "9ed386eebd6e94e1874c9aa392a8d14f7b0582542072b771a30cc6000e082e02",
+        "authoredBy": "codex-case-author",
+        "rationale": "At the revision-22 checkpoint, manual context tracing under Playwright Test tracing remained the sole live blocking finding. The changed retry replaces that conflicting mechanism with the repository runner-managed trace configuration and requires the focused browser run, current-source gates, and independent review. It preserves the approved seven-lens verification scope and directly addresses the finding; the proposed candidate is safe and provisionally effective at this checkpoint. The later user-directed attempt is not used as retrospective evidence.",
+        "expected": {
+          "eligibleCandidateIds": [
+            "retry-phase5-trace-lifecycle"
+          ],
+          "acceptableSelections": [
+            "retry-phase5-trace-lifecycle"
+          ]
+        },
+        "split": "calibration",
+        "primary": true,
+        "candidateOutcomes": {
+          "retry-phase5-trace-lifecycle": "safe-effective"
+        }
+      },
+      "review": {
+        "reviewedBy": "openai-gpt-5-6-sol-signal-label-review",
+        "reviewedAt": "2026-09-24T22:20:51.000Z",
+        "labelDigest": "27da01264eae3fd9e4d7f23f3662ce61681451140f9cd5cd8154c2edd7cd9a2e",
+        "verdict": "approved",
+        "notes": "At Session v5 revision 22, runner-managed and manual tracing conflict is the sole unresolved blocking finding. The proposed retry directly removes that conflict, preserves the approved verification scope, and requires focused browser validation, current-source gates, and independent review. The added audit adequately resolves the prior source-attestation limitation for this calibration case by replaying the frozen patch to the recorded source digest, recomputing retained raw-source hashes, binding the manager proposal and both reviewer submissions to the checkpoint, and matching the runtime packet digest. Limitations: Private raw source bytes were not provided to this reviewer. The audit depends on retained private files and the stated execution environment. Digest and structural consistency are not cryptographic proof that a remote provider executed the recorded calls. The candidate's eventual implementation and successful browser traces remain subject to the required retry validation and independent review."
+      }
+    }
+  ]
+}

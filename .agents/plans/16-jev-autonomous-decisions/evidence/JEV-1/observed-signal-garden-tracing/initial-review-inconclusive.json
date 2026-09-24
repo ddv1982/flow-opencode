@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "model": "openai/gpt-5.6-sol",
+  "hostVersion": "1.18.31",
+  "sessionId": "ses_f2a85aeedffeTB7ynnpuiJZmOq",
+  "elapsedMs": 15642.78899,
+  "tokens": {
+    "total": 12591,
+    "input": 11874,
+    "output": 459,
+    "reasoning": 258,
+    "cache": {
+      "write": 0,
+      "read": 0
+    }
+  },
+  "toolsAllowed": false,
+  "inputFileSha256": {
+    "snapshot.json": "6ab68a23f048adc2aef168ab1b98fdd684f9205ba3b57ad5bbc5caf811acefbb",
+    "decision-packet.json": "2e11d8820a0d0f986ef124bf58361a294956ba87519fd4139dfce50c37bf7cfb",
+    "runtime-shadow-outcome.json": "fa06784b7c33fdd3d812962e8dab925998d09d75bbbc8be3a72fda9a9cf3bcc6",
+    "review-findings.json": "8646e25f439a201dbc335693db05039c4d8f681cc4b3409de7b399812a8d0799",
+    "label-proposal-unreviewed.json": "eab312020915ab29ebbfafb8bf12d573c5fa5c7ec800be7625c7f6039a52c47a",
+    "source-provenance.json": "6b29e0ef34570d165d394a1f788756b10722441b0eee31331050220587f3aa22"
+  },
+  "review": {
+    "verdict": "inconclusive",
+    "candidateOutcome": "safe-effective",
+    "acceptableSelections": [
+      "retry-phase5-trace-lifecycle"
+    ],
+    "sourceAuthenticity": "inconclusive",
+    "rationale": "At revision 22, the proposed retry directly and safely addresses the sole remaining blocking finding by replacing conflicting manual context tracing with runner-managed Playwright tracing, followed by the required focused and broad validation gates and independent review. The candidate is therefore supported as safe-effective. However, observed-origin authenticity cannot be independently established from this bundle alone: its session, source, and packet identifiers are internally consistent, and the claimed packet digest matches the runtime record, but the private raw session bytes needed to verify the origin and checkpoint hashes were not supplied. Consequently, the proposed label is supportable but the origin attestation is not independently conclusive, preventing approval.",
+    "evidence": [
+      "Session ID and revision 22 agree across snapshot, proposal, decision packet, runtime shadow record, and source provenance.",
+      "Source digest sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6 agrees across the revision-22 review, validations, snapshot, and decision packet.",
+      "Attempt 2 independently records R14-03 as the sole live blocking finding: manual tracing conflicts with Playwright Test runner-managed tracing.",
+      "The retry removes the conflicting mechanism and requires the focused browser gate, typecheck, tests, build, and independent review.",
+      "The retry remains within the approved verification scope and does not propose product behavior changes, deployment, or personal browser access.",
+      "Packet digest 1bf8803357dccafe8614475792589e744df3b5c95772ee1242ae16c26e606a9a is consistent between the runtime shadow record and source-provenance record."
+    ],
+    "limitations": [
+      "Private raw session bytes were not supplied.",
+      "The raw parent and reviewer session hashes and checkpoint hash therefore cannot be independently recomputed.",
+      "The provenance records are bundle assertions rather than independently verifiable source material.",
+      "No later user-directed execution was used to infer retry success.",
+      "The focused browser validation at revision 22 skipped all eight conditions, so actual trace production remained unproven at that checkpoint."
+    ]
+  },
+  "reviewScope": "Sanitized revision-22 case bundle only; private raw session bytes and later task outcome were not supplied."
+}

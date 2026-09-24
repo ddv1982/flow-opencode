@@ -1,0 +1,37 @@
+{
+  "sessionId": "session:296870b8-3301-492b-beaa-097bfa7ee4b9",
+  "revision": 22,
+  "sourceDigest": "sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6",
+  "goal": "Complete the unfinished Phase 5 verification in docs/ui-upgrade-plan.md: exercise the full seven-lens journey in light and dark themes on desktop and a 390px mobile viewport, each with and without prefers-reduced-motion. Use disposable browser storage and the repository Playwright harness. Capture actual screenshots/traces for the eight conditions, compare with existing screenshots, and report any unavailable condition as unverified. Fix only a demonstrated product defect with a focused regression. Run the current-source typecheck, tests, build, and appropriate Playwright gate before independent Flow review. Do not push, merge, deploy, or use personal browser data.",
+  "planDigest": "64d121c3d5f0590b35df2f004d57d307cec72876e9956036c0e80fd12bb1aa3c",
+  "rubric": "recovery-v1",
+  "findings": [
+    {
+      "id": "phase5-eight-condition-harness.R14-01",
+      "summary": "Repair proven; terminal fixed pending pass: unavailable-browser evidence is now durable.",
+      "evidence": "Current-source validation `pnpm e2e:compiled --project=chromium --grep @phase5-visual` completed with exit 0 and exactly eight explicit skips; `e2e/garden-loop.spec.ts:813-816` statically marks the unavailable managed Chromium conditions unverified."
+    },
+    {
+      "id": "phase5-eight-condition-harness.R14-02",
+      "summary": "Repair proven; terminal fixed pending pass: motion assertions now match the emulated preference.",
+      "evidence": "`e2e/garden-loop.spec.ts:820-841` configures the scenario's `reducedMotion` context option and asserts the corresponding `prefers-reduced-motion` media query, without incorrectly asserting persisted application reduced-motion state."
+    },
+    {
+      "id": "phase5-eight-condition-harness.R14-03",
+      "summary": "Manual tracing still conflicts with Playwright Test's configured tracing lifecycle.",
+      "evidence": "`e2e/garden-loop.spec.ts:820-830` creates a context from the Playwright Test `browser` fixture and manually calls `context.tracing.start()`, while `playwright.config.ts:14-17` still enables `trace: 'retain-on-failure'`. Playwright Test 1.61 instruments every browser context created during the test and starts runner tracing on context creation, including contexts created with `browser.newContext`; therefore this context is not tracing-isolated. The manual start can encounter an already-started trace, and the focused validation skipped all eight scenarios, so it does not prove the named trace artifacts can be produced. Lines 865-869 likewise manually stop and attach that conflicting trace."
+    }
+  ],
+  "candidates": [
+    {
+      "id": "retry-phase5-trace-lifecycle",
+      "action": "retry",
+      "featureId": "phase5-eight-condition-harness",
+      "remedy": "Replace manual Playwright context tracing with repository-harness trace configuration that preserves one successful trace per Phase 5 condition without conflicting with the configured trace lifecycle; then repeat focused browser, typecheck, test, build, and independent review.",
+      "changedFromPreviousAttempt": "The prior retry made unavailable conditions durable and corrected reduced-motion media assertions, but retained manual context tracing under a runner-managed trace setting.",
+      "findingIds": [
+        "phase5-eight-condition-harness.R14-03"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "at": "2026-09-24T22:05:36.271Z",
+  "sourceRevision": 22,
+  "managerProposal": {
+    "id": "recovery:phase5-trace-lifecycle",
+    "sessionId": "session:296870b8-3301-492b-beaa-097bfa7ee4b9",
+    "expectedRevision": 22,
+    "candidates": [
+      {
+        "id": "retry-phase5-trace-lifecycle",
+        "action": "retry",
+        "featureId": "phase5-eight-condition-harness",
+        "remedy": "Replace manual Playwright context tracing with repository-harness trace configuration that preserves one successful trace per Phase 5 condition without conflicting with the configured trace lifecycle; then repeat focused browser, typecheck, test, build, and independent review.",
+        "changedFromPreviousAttempt": "The prior retry made unavailable conditions durable and corrected reduced-motion media assertions, but retained manual context tracing under a runner-managed trace setting.",
+        "findingIds": [
+          "phase5-eight-condition-harness.R14-03"
+        ]
+      }
+    ]
+  },
+  "recovery": {
+    "kind": "abstain",
+    "mode": "shadow",
+    "packetDigest": "1bf8803357dccafe8614475792589e744df3b5c95772ee1242ae16c26e606a9a",
+    "model": "jev-1.13.0",
+    "requestedModel": "jev-1.13.0",
+    "selectedCandidateId": null,
+    "action": null,
+    "featureId": null,
+    "reason": null
+  },
+  "executionMutationObserved": false
+}

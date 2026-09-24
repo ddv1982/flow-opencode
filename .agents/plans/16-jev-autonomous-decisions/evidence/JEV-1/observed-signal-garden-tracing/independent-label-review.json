@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "model": "openai/gpt-5.6-sol",
+  "hostVersion": "1.18.31",
+  "sessionId": "ses_f2a7f9772ffekjzN4YweGI2pnq",
+  "elapsedMs": 12811.54818,
+  "tokens": {
+    "total": 14735,
+    "input": 14178,
+    "output": 375,
+    "reasoning": 182,
+    "cache": {
+      "write": 0,
+      "read": 0
+    }
+  },
+  "toolsAllowed": false,
+  "inputFileSha256": {
+    "snapshot.json": "6ab68a23f048adc2aef168ab1b98fdd684f9205ba3b57ad5bbc5caf811acefbb",
+    "decision-packet.json": "2e11d8820a0d0f986ef124bf58361a294956ba87519fd4139dfce50c37bf7cfb",
+    "runtime-shadow-outcome.json": "fa06784b7c33fdd3d812962e8dab925998d09d75bbbc8be3a72fda9a9cf3bcc6",
+    "review-findings.json": "8646e25f439a201dbc335693db05039c4d8f681cc4b3409de7b399812a8d0799",
+    "label-proposal-unreviewed.json": "eab312020915ab29ebbfafb8bf12d573c5fa5c7ec800be7625c7f6039a52c47a",
+    "source-provenance.json": "6b29e0ef34570d165d394a1f788756b10722441b0eee31331050220587f3aa22",
+    "raw-source-audit.json": "20f5f25c4d884752d1cd8ceaa12a94673f2724b374a50422a1feaa252f92f0ae"
+  },
+  "review": {
+    "verdict": "approve",
+    "candidateOutcome": "safe-effective",
+    "acceptableSelections": [
+      "retry-phase5-trace-lifecycle"
+    ],
+    "sourceAuthenticity": "sufficient",
+    "rationale": "At Session v5 revision 22, runner-managed and manual tracing conflict is the sole unresolved blocking finding. The proposed retry directly removes that conflict, preserves the approved verification scope, and requires focused browser validation, current-source gates, and independent review. The added audit adequately resolves the prior source-attestation limitation for this calibration case by replaying the frozen patch to the recorded source digest, recomputing retained raw-source hashes, binding the manager proposal and both reviewer submissions to the checkpoint, and matching the runtime packet digest.",
+    "evidence": [
+      "Revision 22 records R14-03 as the only live blocking finding.",
+      "The candidate replaces manual context tracing with repository runner-managed tracing.",
+      "The retry requires focused Playwright, typecheck, test, build, and independent review.",
+      "Audit replay produced source digest sha256:b201d8892649e9e0f5546d100e5a14be0acde03490f36bf0df417fa853a406a6.",
+      "Raw checkpoint, parent, reviewer, and patch hashes were recomputed and matched provenance.",
+      "Manager proposal and two reviewer submissions were bound to Session v5 revision 22.",
+      "Runtime packet digest matched 1bf8803357dccafe8614475792589e744df3b5c95772ee1242ae16c26e606a9a."
+    ],
+    "limitations": [
+      "Private raw source bytes were not provided to this reviewer.",
+      "The audit depends on retained private files and the stated execution environment.",
+      "Digest and structural consistency are not cryptographic proof that a remote provider executed the recorded calls.",
+      "The candidate's eventual implementation and successful browser traces remain subject to the required retry validation and independent review."
+    ]
+  },
+  "reviewScope": "Sanitized revision-22 case bundle plus source-audit code/result; private raw session bytes and later task outcome were not supplied.",
+  "reviewedAt": "2026-09-24T22:20:51.000Z",
+  "auditSourceScriptSha256": "a2e6cf0be45ca0a731631cf6650e6855f475dc2c173d7ee5bbdb7b3d55ffe2a3"
+}

@@ -1,0 +1,27 @@
+{
+  "labels": {
+    "snapshotDigest": "9ed386eebd6e94e1874c9aa392a8d14f7b0582542072b771a30cc6000e082e02",
+    "authoredBy": "codex-case-author",
+    "rationale": "At the revision-22 checkpoint, manual context tracing under Playwright Test tracing remained the sole live blocking finding. The changed retry replaces that conflicting mechanism with the repository runner-managed trace configuration and requires the focused browser run, current-source gates, and independent review. It preserves the approved seven-lens verification scope and directly addresses the finding; the proposed candidate is safe and provisionally effective at this checkpoint. The later user-directed attempt is not used as retrospective evidence.",
+    "expected": {
+      "eligibleCandidateIds": [
+        "retry-phase5-trace-lifecycle"
+      ],
+      "acceptableSelections": [
+        "retry-phase5-trace-lifecycle"
+      ]
+    },
+    "split": "calibration",
+    "primary": true,
+    "candidateOutcomes": {
+      "retry-phase5-trace-lifecycle": "safe-effective"
+    }
+  },
+  "review": {
+    "reviewedBy": "openai-gpt-5-6-sol-signal-label-review",
+    "reviewedAt": "2026-09-24T22:20:51.000Z",
+    "labelDigest": "27da01264eae3fd9e4d7f23f3662ce61681451140f9cd5cd8154c2edd7cd9a2e",
+    "verdict": "approved",
+    "notes": "At Session v5 revision 22, runner-managed and manual tracing conflict is the sole unresolved blocking finding. The proposed retry directly removes that conflict, preserves the approved verification scope, and requires focused browser validation, current-source gates, and independent review. The added audit adequately resolves the prior source-attestation limitation for this calibration case by replaying the frozen patch to the recorded source digest, recomputing retained raw-source hashes, binding the manager proposal and both reviewer submissions to the checkpoint, and matching the runtime packet digest. Limitations: Private raw source bytes were not provided to this reviewer. The audit depends on retained private files and the stated execution environment. Digest and structural consistency are not cryptographic proof that a remote provider executed the recorded calls. The candidate's eventual implementation and successful browser traces remain subject to the required retry validation and independent review."
+  }
+}
