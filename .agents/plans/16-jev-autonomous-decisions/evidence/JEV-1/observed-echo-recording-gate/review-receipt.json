@@ -22,7 +22,7 @@
     "build-draft.ts": "519ebad205ebcff23b7d5a966984c8d44b99adb5ad9e194d210669fb59f9734d",
     "apply-review.ts": "3e3c53392f6a054f6682811be6ff1eac3eba9d07065aac9471c002a8858d2c59",
     "dataset-import.log": "e2354ce650b1fa4394f8009a909214892dfab665f4dc3f3d941ea36be9bece6f",
-    "receipt.json": "01b6dbce1311d93a5c9a1e291a3bd3e7c36611175ab7649880d874a9c176230d"
+    "receipt.json": "616bece29e80a6e76a4518dd5084b375a1788d1aa1af3044a804d4a6dba6b033"
   },
   "limits": [
     "The reviewer saw sanitized metadata and linked digests, not private raw session bytes.",
