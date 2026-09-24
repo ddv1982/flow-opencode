@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "classification": "evidence-gap-audit",
+  "lanes": [
+    {
+      "lane": 5,
+      "historicalReceipt": "worker-5/receipt.json",
+      "historicalHead": "0ac5a1dbb415afba932298d2c0b425cea814e6bc",
+      "retained": ["TUI video", "screenshot", "terminal transcript", "session revision observation"],
+      "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
+      "verdict": "partial"
+    },
+    {
+      "lane": 10,
+      "historicalReceipt": "worker-10/shadow-receipt.json",
+      "historicalHead": "1cb337fbdbf3e44469c14a66f786602c77b702c2",
+      "retained": ["TUI video", "screenshots", "terminal transcripts", "session ID"],
+      "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
+      "verdict": "partial"
+    }
+  ],
+  "interpretation": "The retained media supports visible UI observations but cannot authenticate which packed plugin build handled the commands. Re-run each lane under the full live-lane boot recipe before marking it passed. Historical receipt claims are not treated as current gate verdicts."
+}
