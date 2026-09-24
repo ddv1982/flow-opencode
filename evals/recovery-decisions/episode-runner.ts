@@ -212,8 +212,6 @@ export async function runEpisode(options: {
 			initialStateDigest: datasetDigest(reset.initialState),
 			resetProtocol: registration.protocol.execution.resetProtocol,
 		});
-		clearTimeout(timer);
-		armDeadline();
 		const header = Header.parse({
 			schemaVersion: 1,
 			registrationDigest: datasetDigest(registration),
@@ -231,10 +229,13 @@ export async function runEpisode(options: {
 		await writeExclusive(join(options.outputDirectory, "header.json"), header);
 		journalHeader = header;
 		previous = datasetDigest(header);
-		start = performance.now();
 		await append({ kind: "start", atMs: 0 });
+		controller.signal.throwIfAborted();
+		start = performance.now();
 		started = true;
 		accepting = true;
+		clearTimeout(timer);
+		armDeadline();
 		await bounded(() =>
 			options.driver.run({
 				signal: controller.signal,
