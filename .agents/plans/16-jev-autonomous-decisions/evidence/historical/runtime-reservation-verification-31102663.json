@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "d510e9f15347bcaaf9a88cac87c551349bb02bc2",
-  "recordedAt": "2026-09-24T06:06:12.840160+00:00",
+  "verifiedCodeHead": "31102663832e6ac1862fadd034f0e159b365354c",
+  "recordedAt": "2026-09-24T05:41:08.878430+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -11,20 +11,20 @@
     {
       "command": "bun run check",
       "exitCode": 0,
-      "passed": 1485,
+      "passed": 1484,
       "skipped": 15,
       "failed": 0,
-      "assertions": 8043,
-      "logSha256": "de86771b5ba6ef83c635c0eb0ad438a066d79c8bff425f9b7282ee07cb22fe93"
+      "assertions": 8039,
+      "logSha256": "96613076c5c2431efc586993854fe48c17e39ab24fd7be7dc2771108ac9d9244"
     },
     {
       "command": "bun test tests/recovery-episode-runner.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-campaign.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-treatment.test.ts tests/recovery-capture.test.ts tests/host-artifacts-host.test.ts",
       "exitCode": 0,
-      "passed": 76,
+      "passed": 75,
       "skipped": 2,
       "failed": 0,
-      "assertions": 502,
-      "logSha256": "5389f5a5928bd130953307882e06d6a04230a8a4828a0f8347c37a0233b8f8fe"
+      "assertions": 498,
+      "logSha256": "cf1b20f96b6b5040de64b946e91b2bfb8ecff9914621087b31ef5c5132647a67"
     },
     {
       "command": "bun run smoke:live",
@@ -33,7 +33,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "0c8771c44cfd83c93fdc48869970255c9483a86d5838e9ee17d9bdc543b3fef0"
+      "logSha256": "882eb15c80740b9c9b3c6870db0e73bd16bb3e0e3fa23dec0fecdb629f3c2bba"
     }
   ],
   "sourceDigests": {
@@ -43,7 +43,7 @@
     "evals/recovery-decisions/compare.ts": "22be5d8b6617b921516e130371222005663632149ba12e66d8e8946bd2a2fa08",
     "evals/recovery-decisions/episode-host.ts": "abddd32cb7922effb32a007a4eccaefc1d33a4490b2bbf8eb302ea3805937bf0",
     "evals/recovery-decisions/episode-receipts.ts": "8a5e29fd899460830e47ac95ece10f5900459b5094aa931fb5eee1dc1b24b4ca",
-    "evals/recovery-decisions/episode-runner.ts": "6e588e7f7c055d6b8ef99eedcacbc8a3130857cee989c5cd7a7f59a93940d1be",
+    "evals/recovery-decisions/episode-runner.ts": "80dd5e1b01ccf151f5749a5210e7b88e3d1bb576aef5a60b82a11ceac9c74335",
     "evals/recovery-decisions/request-budget.ts": "38f9a5888bd3d2c0ba003cc8c26fbb006249d912c2653c9fb0ae9312f47adf36",
     "evals/recovery-decisions/request-gate.ts": "7fbe85a7ffa86349ded0f32e336b6f2d74548d1129a91c28ca9408fd31a524aa",
     "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
@@ -56,14 +56,14 @@
     "tests/recovery-decision-quality.test.ts": "3ce75ab979b6b83b18f8c954c9e039b46e481af693a44fffd1ddc44c2d8c0e44",
     "tests/recovery-episode-host.test.ts": "7c0d5d11dc56502d4a754447809a63567a6e6f9a4f44ffe5db6cbc37ce56cc52",
     "tests/recovery-episode-receipts.test.ts": "1b435c498c9c1635ef4bac8970ac1011cf451e7225b8b2d358980b99659078a1",
-    "tests/recovery-episode-runner.test.ts": "f78196e89303b2a0410714aadc1d738eb19ed0ddb8fb6862e8afd69af41cf7ec",
+    "tests/recovery-episode-runner.test.ts": "b48d227d0f36c1d404c11f2842fd543c649f5059b3e4b4dfa7d81ce6e8b53d35",
     "tests/recovery-request-budget.test.ts": "014fe96bd20411af8a3ea0707ee1e716c6e310d148b2d921432ba6ce02282d8d",
     "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-reservation-verification-31102663.json",
-    "verifiedCodeHead": "31102663832e6ac1862fadd034f0e159b365354c",
-    "originalSha256": "9a0a63fd9438a076e4d19f7661e25f4a4c34c1763ad1d37fa50a573356a20aac"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-reservation-verification-72d9a4d7.json",
+    "verifiedCodeHead": "72d9a4d732f9c950852638a17dbd5c50291e188a",
+    "originalSha256": "9d1d7f46af4a5c7ec83e7e6c516f3ff160aacaa3726a405cf680bc92e40abe85"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
