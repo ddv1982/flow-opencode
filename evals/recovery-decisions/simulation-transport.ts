@@ -37,15 +37,14 @@ const Recommended = z
 		}),
 	})
 	.passthrough();
-function findingIds(value: unknown): string[] {
-	if (Array.isArray(value)) return value.flatMap(findingIds);
-	if (typeof value !== "object" || value === null) return [];
-	return Object.entries(value).flatMap(([key, child]) =>
-		key === "findingId" && typeof child === "string"
-			? [child]
-			: findingIds(child),
-	);
-}
+const Finding = z
+	.object({
+		featureId: z.string(),
+		findingId: z.string(),
+		severity: z.enum(["blocking", "advisory"]),
+		live: z.boolean(),
+	})
+	.passthrough();
 export function createSimulationTransport(input: unknown) {
 	const script = SimulationScriptSchema.parse(input);
 	let managerCalls = 0;
@@ -163,9 +162,23 @@ export function createSimulationTransport(input: unknown) {
 			};
 		else if (hasFlowTools && toolResults.length === 1) {
 			const projection = latest?.workflowData.projection;
-			const ids = [...new Set(findingIds(projection))];
-			if (!projection?.blockedFeature || !ids.length)
+			const digest = z.array(Finding).safeParse(projection?.findingsDigest);
+			if (!projection?.blockedFeature || !digest.success)
 				throw new Error("Simulation requires blocked fixture findings.");
+			const ids = [
+				...new Set(
+					digest.data
+						.filter(
+							(row) =>
+								row.featureId === projection.blockedFeature?.featureId &&
+								row.live &&
+								row.severity === "blocking",
+						)
+						.map((row) => row.findingId),
+				),
+			];
+			if (!ids.length || ids.length > 30)
+				throw new Error("Simulation requires bounded live blockers.");
 			tool = {
 				name: "flow_status",
 				arguments: {
@@ -182,7 +195,7 @@ export function createSimulationTransport(input: unknown) {
 								remedy: "Guard null before parsing",
 								changedFromPreviousAttempt:
 									"Handle absent values instead of coercion",
-								findingIds: ids.slice(-1),
+								findingIds: ids,
 							},
 						],
 					},
