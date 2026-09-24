@@ -16,7 +16,7 @@ for line in textwrap.wrap(finding, width=95):
 print("Candidate:", candidate["id"], candidate["action"], candidate["remedy"])
 print("Allowed actions:", ", ".join(episode["authority"]["allowedActions"]))
 
-for label in ("pr105", "current"):
+for label in ("pr105", "reviewed"):
     raw = json.loads((root / f"{label}-live.json").read_text())
     report = json.loads((root / f"{label}-report-unreviewed.json").read_text())
     observed = raw["observations"][0]

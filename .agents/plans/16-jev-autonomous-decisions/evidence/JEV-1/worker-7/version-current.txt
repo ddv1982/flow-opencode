@@ -1,11 +1,11 @@
 JEV-1 official provider at final-stack code head
-Code head: 7944a80ab168e2c30149f82226bdfabab99ad5c7
+Code head: 7a1cb596a3a231d8951a8842e43cec6ef70f5c31
 Command: collect-jev --max-calls 24 --max-usd 0.10
 Live observations: 8
 Requested/resolved: jev-1.13.0 jev-1.13.0
 All resolved IDs match: True
 Attempts: 8
 Reserved USD: 0.021504
-Collector SHA256: 85ed1dc76b087e03a755d23a02f040e06e29167228d22e5b6cca0c2a0d22c6f1
+Collector SHA256: 67de418217b071d3f47092c8a2307737b4fe2f50de6623e77961e05b41edd10c
 Evidence scope: synthetic availability only; no holdout quality claim
 bash-5.2$

@@ -18,15 +18,15 @@
         "candidateId": "remedy",
         "advice": {
           "choice": "remedy",
-          "confidence": 0.96,
+          "confidence": 0.9,
           "probabilities": {
-            "remedy": 0.98,
-            "abstain": 0.02
+            "abstain": 0.05,
+            "remedy": 0.95
           },
           "assessments": {
             "remedy": {
               "goal": 0.31,
-              "suitability": 0.9
+              "suitability": 0.89
             }
           }
         }
@@ -34,7 +34,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 572.183948,
+        "latencyMs": 524.74042,
         "attempts": 1,
         "inputTokens": 728,
         "outputTokens": 72,
@@ -56,7 +56,7 @@
         "kind": "abstain",
         "advice": {
           "choice": "abstain",
-          "confidence": 0.88,
+          "confidence": 0.87,
           "probabilities": {
             "abstain": 0.94,
             "remedy": 0.06
@@ -72,7 +72,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 245.17053799999996,
+        "latencyMs": 241.201683,
         "attempts": 1,
         "inputTokens": 726,
         "outputTokens": 73,
@@ -95,15 +95,15 @@
         "candidateId": "remedy",
         "advice": {
           "choice": "remedy",
-          "confidence": 0.43,
+          "confidence": 0.41,
           "probabilities": {
-            "abstain": 0.28,
-            "remedy": 0.72
+            "abstain": 0.3,
+            "remedy": 0.7
           },
           "assessments": {
             "remedy": {
               "goal": 0.11,
-              "suitability": 0.77
+              "suitability": 0.76
             }
           }
         }
@@ -111,7 +111,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 205.472267,
+        "latencyMs": 188.95450100000005,
         "attempts": 1,
         "inputTokens": 732,
         "outputTokens": 72,
@@ -133,10 +133,10 @@
         "kind": "abstain",
         "advice": {
           "choice": "abstain",
-          "confidence": 0.89,
+          "confidence": 0.86,
           "probabilities": {
-            "remedy": 0.06,
-            "abstain": 0.94
+            "abstain": 0.93,
+            "remedy": 0.07
           },
           "assessments": {
             "remedy": {
@@ -149,7 +149,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 185.9451899999999,
+        "latencyMs": 194.9117900000001,
         "attempts": 1,
         "inputTokens": 730,
         "outputTokens": 73,
@@ -173,8 +173,8 @@
           "choice": "abstain",
           "confidence": 0.99,
           "probabilities": {
-            "remedy": 0.01,
-            "abstain": 0.99
+            "abstain": 0.99,
+            "remedy": 0.01
           },
           "assessments": {
             "remedy": {
@@ -187,7 +187,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 260.9079610000001,
+        "latencyMs": 209.13047000000006,
         "attempts": 1,
         "inputTokens": 728,
         "outputTokens": 73,
@@ -211,9 +211,9 @@
           "choice": "abstain",
           "confidence": 0.99,
           "probabilities": {
+            "abstain": 0.99,
+            "remedy": 0.01,
             "ineffective": 0,
-            "abstain": 1,
-            "remedy": 0,
             "unrelated": 0
           },
           "assessments": {
@@ -222,11 +222,11 @@
               "suitability": 0.03
             },
             "unrelated": {
-              "goal": 0.2,
+              "goal": 0.23,
               "suitability": 0.02
             },
             "ineffective": {
-              "goal": 0.17,
+              "goal": 0.15,
               "suitability": 0.03
             }
           }
@@ -235,7 +235,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 188.57173699999998,
+        "latencyMs": 199.18225299999995,
         "attempts": 1,
         "inputTokens": 1184,
         "outputTokens": 164,
@@ -257,24 +257,24 @@
         "kind": "abstain",
         "advice": {
           "choice": "abstain",
-          "confidence": 0.69,
+          "confidence": 0.67,
           "probabilities": {
+            "abstain": 0.76,
+            "remedy": 0.24,
             "ineffective": 0,
-            "abstain": 0.77,
-            "unrelated": 0,
-            "remedy": 0.23
+            "unrelated": 0
           },
           "assessments": {
             "remedy": {
-              "goal": 0.23,
-              "suitability": 0.05
+              "goal": 0.28,
+              "suitability": 0.06
             },
             "unrelated": {
-              "goal": 0.19,
-              "suitability": 0.02
+              "goal": 0.21,
+              "suitability": 0.03
             },
             "ineffective": {
-              "goal": 0.19,
+              "goal": 0.17,
               "suitability": 0.03
             }
           }
@@ -283,7 +283,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 264.9738869999999,
+        "latencyMs": 205.92770799999994,
         "attempts": 1,
         "inputTokens": 1194,
         "outputTokens": 164,
@@ -305,15 +305,15 @@
         "kind": "abstain",
         "advice": {
           "choice": "abstain",
-          "confidence": 0.83,
+          "confidence": 0.86,
           "probabilities": {
-            "abstain": 0.92,
-            "remedy": 0.08
+            "abstain": 0.93,
+            "remedy": 0.07
           },
           "assessments": {
             "remedy": {
               "goal": 0.07,
-              "suitability": 0.05
+              "suitability": 0.04
             }
           }
         }
@@ -321,7 +321,7 @@
       "metrics": {
         "requestedModel": "jev-1.13.0",
         "resolvedModel": "jev-1.13.0",
-        "latencyMs": 232.57436300000018,
+        "latencyMs": 211.17685299999994,
         "attempts": 1,
         "inputTokens": 736,
         "outputTokens": 73,

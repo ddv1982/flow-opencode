@@ -1,2 +1,0 @@
-$ bun run evals/blocker-decisions/run.ts collect-jev --manifest ".agents/plans/16-jev-autonomous-decisions/evidence/JEV-1/finding-injection/manifest.json" --corpus ".agents/plans/16-jev-autonomous-decisions/evidence/JEV-1/finding-injection/corpus.json" --max-calls "3" --max-usd "0.01" --out "/tmp/flow-jev-overnight-20260924/jev1-finding-injection-live.json"
-{"output":"/tmp/flow-jev-overnight-20260924/jev1-finding-injection-live.json"}

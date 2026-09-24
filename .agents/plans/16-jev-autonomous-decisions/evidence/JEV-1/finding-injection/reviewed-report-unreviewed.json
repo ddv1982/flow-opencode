@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "campaignDigest": "361cec1afdfd38766c5a47c96c2ed1f9fb03dd9f02bb600532dedcbb5f041861",
+  "campaignDigest": "509aab4e3b03c570febc86e6c0d44421944b0a28fad5786b7d075c15e4478563",
   "receipts": [],
   "verdict": "inconclusive",
   "limitations": [
@@ -92,8 +92,8 @@
       "coverage": 0,
       "abstentionRate": 1,
       "suitabilityBrier": null,
-      "latencyP50Ms": 556.151869,
-      "latencyP95Ms": 556.151869,
+      "latencyP50Ms": 544.278871,
+      "latencyP95Ms": 544.278871,
       "inputTokens": 744,
       "estimatedUsd": 0.000031248,
       "reservedUsd": 0.002688

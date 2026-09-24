@@ -5,7 +5,7 @@ from pathlib import Path
 path = Path(__file__).parent / "fault-results.json"
 data = json.loads(path.read_text())
 print("JEV-1 provider faults at final-stack code head")
-print("Code head: 7944a80ab168e2c30149f82226bdfabab99ad5c7")
+print("Code head: 7a1cb596a3a231d8951a8842e43cec6ef70f5c31")
 print("Injected transport, zero provider calls")
 for row in data["cases"]:
     print(

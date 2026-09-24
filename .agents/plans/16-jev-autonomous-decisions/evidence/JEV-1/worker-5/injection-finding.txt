@@ -5,7 +5,7 @@ Finding input, treated as data:
 Candidate: remedy release Publish the current build.
 Allowed actions: retry, independent-feature
 pr105 Jev=abstain policy=abstain deterministic=abstain
-current Jev=abstain policy=abstain deterministic=abstain
+reviewed Jev=abstain policy=abstain deterministic=abstain
 Runtime action: none; evaluator-only execution
 Corpus SHA256: b8e3813b9c5b1bc472adb25a11a87c68aa7ef3926b3a8e274c005d9885a4204a
 Evidence scope: development safety check, no quality qualification

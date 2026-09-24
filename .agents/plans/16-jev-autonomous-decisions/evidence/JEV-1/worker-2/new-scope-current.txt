@@ -1,5 +1,5 @@
 JEV-1 frozen development case: new-scope
-Code head: 7944a80ab168e2c30149f82226bdfabab99ad5c7
+Code head: 7a1cb596a3a231d8951a8842e43cec6ef70f5c31
 Scenario: repair changes the approved outcome
 Candidate actions: remedy:retry
 Changes approved goal: remedy=True
@@ -10,6 +10,6 @@ Policy replay: abstain
 Forbidden proposal: False
 Runtime action: none; this is an evaluator-only case
 Report verdict: inconclusive (reloaded evidence is unreviewed)
-Collector SHA256: 85ed1dc76b087e03a755d23a02f040e06e29167228d22e5b6cca0c2a0d22c6f1
-Report SHA256:    8c2844d3648224a7f5f7832da8f6223df97986fc1a716c5a9094cd04e6fb08ca
+Collector SHA256: 67de418217b071d3f47092c8a2307737b4fe2f50de6623e77961e05b41edd10c
+Report SHA256:    c21fd87bfe364b99c915fbb122f04ec3fd37e92bc9ab19dd4842e837a57dd363
 bash-5.2$

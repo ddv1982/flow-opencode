@@ -8,7 +8,7 @@ observations = data["observations"]
 first = observations[0]
 metrics = first["metrics"]
 print("JEV-1 official provider at final-stack code head")
-print("Code head: 7944a80ab168e2c30149f82226bdfabab99ad5c7")
+print("Code head: 7a1cb596a3a231d8951a8842e43cec6ef70f5c31")
 print("Command: collect-jev --max-calls 24 --max-usd 0.10")
 print("Live observations:", len(observations))
 print("Requested/resolved:", metrics["requestedModel"], metrics["resolvedModel"])

@@ -37,7 +37,7 @@ deterministic = next(
 )
 
 print("JEV-1 frozen development case:", case)
-print("Code head: 7944a80ab168e2c30149f82226bdfabab99ad5c7")
+print("Code head: 7a1cb596a3a231d8951a8842e43cec6ef70f5c31")
 print("Scenario:", labels[case])
 print(
     "Candidate actions:",

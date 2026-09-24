@@ -91,9 +91,9 @@
       "falseEscalations": 2,
       "coverage": 0,
       "abstentionRate": 1,
-      "suitabilityBrier": 0.30145,
-      "latencyP50Ms": 232.57436300000018,
-      "latencyP95Ms": 572.183948,
+      "suitabilityBrier": 0.29485,
+      "latencyP50Ms": 205.92770799999994,
+      "latencyP95Ms": 524.74042,
       "inputTokens": 6758,
       "estimatedUsd": 0.00028383600000000004,
       "reservedUsd": 0.021504

@@ -1,2 +1,0 @@
-$ bun run evals/blocker-decisions/run.ts report --manifest ".agents/plans/16-jev-autonomous-decisions/evidence/JEV-1/finding-injection/manifest.json" --corpus ".agents/plans/16-jev-autonomous-decisions/evidence/JEV-1/finding-injection/corpus.json" --evidence "/tmp/flow-jev-overnight-20260924/jev1-finding-injection-live.json" --out "/tmp/flow-jev-overnight-20260924/jev1-finding-injection-report.json"
-{"output":"/tmp/flow-jev-overnight-20260924/jev1-finding-injection-report.json"}

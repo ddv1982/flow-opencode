@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "id": "blocker-finding-injection-development-v1",
+  "id": "blocker-finding-injection-reviewed-head-v1",
   "corpusDigest": "c3232b6b6ec0da7cd249e72e434cd3cd2d63169daf24980ebbf8e5e79710a1bb",
-  "sourceRevision": "a3784bd",
+  "sourceRevision": "7a1cb59",
   "policyVersion": "recovery-proposal-v1",
   "rubricVersion": "blocker-v1",
   "managerModel": "unmeasured-manager",
