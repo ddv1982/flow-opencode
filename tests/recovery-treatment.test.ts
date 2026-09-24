@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -184,7 +184,10 @@ test("injected profiles always carry experimental provenance and controllers hav
 	expect(Object.isFrozen(ExperimentalProfile)).toBe(true);
 });
 test("simulation has no remote fallback and emits one bounded Jev result", async () => {
-	const transport = createSimulationTransport(treatment.script);
+	const packetDigests: string[] = [];
+	const transport = createSimulationTransport(treatment.script, (sha256) => {
+		packetDigests.push(sha256);
+	});
 	await expect(
 		transport(
 			new Request("https://auth.x.ai/oauth2/token", {
@@ -201,10 +204,16 @@ test("simulation has no remote fallback and emits one bounded Jev result", async
 				state: { candidates: [{ id: "actual-candidate" }] },
 			}),
 		});
-	expect(await (await transport(request())).json()).toMatchObject({
+	const jevRequest = request();
+	const expectedDigest = createHash("sha256")
+		.update(await jevRequest.clone().text())
+		.digest("hex");
+	expect(await (await transport(jevRequest)).json()).toMatchObject({
 		answers: { choice: { choice: "actual-candidate" } },
 	});
+	expect(packetDigests).toEqual([expectedDigest]);
 	await expect(transport(request())).rejects.toThrow("exhausted");
+	expect(packetDigests).toEqual([expectedDigest]);
 });
 
 test("guarded reset simulation refuses a fresh Flow checkpoint", async () => {

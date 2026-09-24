@@ -322,6 +322,17 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 				await running;
 				await Bun.sleep(7200);
 				expect(await loadSession(host.project)).toEqual(before);
+				expect(
+					JSON.parse(
+						await readFile(
+							join(host.project, "..", "simulation-jev-packet.json"),
+							"utf8",
+						),
+					),
+				).toMatchObject({
+					model: "typesafe/jev-1.13.0",
+					sha256: expect.stringMatching(/^[a-f0-9]{64}$/),
+				});
 				const outcome = await host.outcome([session], 0);
 				expect(outcome.flowCalls.map((call) => call.tool)).toContain(
 					"flow_status",
