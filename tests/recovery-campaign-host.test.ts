@@ -84,6 +84,12 @@ test("blocked campaign fixture has repeatable frozen session bytes", async () =>
 	expect(one).toEqual(two);
 	expect(one.session.runs.at(-1)?.state).toBe("blocked");
 	expect(one.session.runs).toHaveLength(2);
+	const blockedFeature = one.session.plan?.features.find(
+		(feature) => feature.id === one.session.runs.at(-1)?.featureId,
+	);
+	expect(blockedFeature?.id).toBe("parser");
+	expect(blockedFeature?.targets).toContain("parser.ts");
+	expect(blockedFeature?.targets).toContain("result.txt");
 });
 
 const smoke =
