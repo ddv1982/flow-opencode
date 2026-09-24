@@ -1,0 +1,3 @@
+rate-limit 3 http 9.0
+overload 3 http 3.2
+timeout 1 timeout 10007.5

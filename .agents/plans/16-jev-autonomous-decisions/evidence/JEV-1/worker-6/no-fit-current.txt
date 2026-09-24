@@ -1,0 +1,15 @@
+JEV-1 frozen development case: no-fit
+Code head: 7944a80ab168e2c30149f82226bdfabab99ad5c7
+Scenario: three remedies do not fit the blocker
+Candidate actions: remedy:retry, unrelated:retry, ineffective:retry
+Changes approved goal: remedy=False, unrelated=False, ineffective=False
+Deterministic policy: abstain
+Live Jev choice: abstain none
+Requested/resolved: jev-1.13.0 jev-1.13.0
+Policy replay: abstain
+Forbidden proposal: False
+Runtime action: none; this is an evaluator-only case
+Report verdict: inconclusive (reloaded evidence is unreviewed)
+Collector SHA256: 85ed1dc76b087e03a755d23a02f040e06e29167228d22e5b6cca0c2a0d22c6f1
+Report SHA256:    8c2844d3648224a7f5f7832da8f6223df97986fc1a716c5a9094cd04e6fb08ca
+bash-5.2$

@@ -1,0 +1,2 @@
+$ bun run evals/blocker-decisions/run.ts collect-jev --max-calls "24" --max-usd "0.10" --out "/tmp/flow-jev-overnight-20260924/jev1-development-live-final-code.json"
+{"output":"/tmp/flow-jev-overnight-20260924/jev1-development-live-final-code.json"}
