@@ -124,11 +124,15 @@ test("real command hook captures explicit shadow limits and stop revokes", async
 			throw new Error("not used");
 		},
 	});
+	const visibleRefusals: string[] = [];
 	const hook = createCommandHook({
 		recovery,
 		autoDrive: auto,
 		flow,
 		assertOperational() {},
+		async showRefusal(message) {
+			visibleRefusals.push(message);
+		},
 	});
 	const output = { parts: [] } as Parameters<typeof hook>[1];
 	await hook(
@@ -162,6 +166,9 @@ test("real command hook captures explicit shadow limits and stop revokes", async
 			{ parts: [] } as Parameters<typeof hook>[1],
 		),
 	).rejects.toThrow("No release-owned live qualification");
+	expect(visibleRefusals).toHaveLength(1);
+	expect(visibleRefusals[0]).toContain("Use shadow.");
+	expect(recovery.snapshot()).toEqual({ mode: "off" });
 });
 
 test("cross-host plain auto synchronously revokes the prior recovery invocation", async () => {

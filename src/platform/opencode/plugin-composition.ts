@@ -128,6 +128,17 @@ export function createFlowPlugin(dependencies: {
 				autoDrive,
 				flow,
 				recovery,
+				showRefusal: async (message) => {
+					await ctx.client.tui.showToast({
+						body: {
+							title: "Flow recovery unavailable",
+							message,
+							variant: "warning",
+							duration: 12000,
+						},
+						query: { directory: ctx.directory },
+					});
+				},
 			}),
 			"chat.message": async (input, output) => {
 				if (
