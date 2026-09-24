@@ -439,6 +439,7 @@ and [verification receipt](evidence/runtime-artifact-verification.json).
 
 The new opt-in campaign check runs both registered arms for each selected manager.
 A deterministic fixture contains the blocked Flow session before registration.
+Its approved parser feature targets `parser.ts` and `result.txt`.
 Both actual hosts verify the same reset bytes and approved source digest before
 dispatch. Generated host configuration is excluded by frozen fixture Git ignore
 rules. The check never inserts session state after reset verification.
