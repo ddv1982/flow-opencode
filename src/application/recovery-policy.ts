@@ -36,7 +36,7 @@ export const RecoveryProposalSchema = z
 						featureId: z.string().min(1).max(128),
 						remedy: Text,
 						changedFromPreviousAttempt: Text,
-						findingIds: z.array(z.string().min(1).max(128)).min(1).max(10),
+						findingIds: z.array(z.string().min(1).max(128)).min(1).max(30),
 					})
 					.strict(),
 			)
