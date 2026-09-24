@@ -57,6 +57,9 @@ async function setup(
 	mode: "shadow" | "delegated" = "delegated",
 	custom: DecisionProvider = provider,
 	independent = false,
+	findingEvidence = "parser.ts",
+	initialFindingEvidence = "parser.ts",
+	extraLiveFinding = false,
 ) {
 	const repository = new MemorySessionRepository(),
 		env = deterministicEnvironment();
@@ -93,7 +96,7 @@ async function setup(
 				{
 					severity: "blocking",
 					summary: "Null input crashes",
-					evidence: "parser.ts",
+					evidence: i ? findingEvidence : initialFindingEvidence,
 					...(i
 						? {
 								findingId:
@@ -102,6 +105,15 @@ async function setup(
 							}
 						: {}),
 				},
+				...(i && extraLiveFinding
+					? [
+							{
+								severity: "blocking" as const,
+								summary: "Second live blocker",
+								evidence: "second.ts",
+							},
+						]
+					: []),
 			],
 		});
 	}
@@ -280,6 +292,126 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 	});
+	test("revoked recovery turn cannot abandon a session before fresh direction", async () => {
+		const s = await setup("shadow");
+		const session = s.repository.session;
+		if (!session) throw new Error("fixture session missing");
+		await s.flow.status({
+			request: { view: "compact" },
+			recoveryProposal: s.proposal(),
+		});
+		s.controller.revoke("host");
+		const request = {
+			request: {
+				operationId: "abandon-after-stop",
+				expectedRevision: session.revision,
+				sessionId: session.id,
+				kind: "abandoned" as const,
+				summary: "Stop this work",
+			},
+		};
+		expect((await s.flow.sessionClose(request)).status).toBe("error");
+		expect(s.repository.session?.id).toBe(session.id);
+		expect(s.repository.archives.size).toBe(0);
+		s.controller.observeMessage("host", "fresh-user", false);
+		s.controller.observeAssistant("host", "fresh-assistant", "fresh-user");
+		const directed = createFlowService(
+			s.repository,
+			s.env,
+			s.controller.guard({ ...context, messageId: "fresh-assistant" }),
+		);
+		expect((await directed.sessionClose(request)).status).toBe("ok");
+	});
+	test("closed protected sessions free capacity without bypassing failed binds", async () => {
+		const s = await setup("shadow");
+		const base = s.repository.session;
+		if (!base) throw new Error("fixture session missing");
+		const controller = new RecoveryController(provider, {
+			profiles: [profile],
+		});
+		for (let index = 0; index <= 128; index++) {
+			s.repository.session = { ...base, id: `protected-${index}` };
+			const host = `protected-host-${index}`;
+			controller.activate(host, { mode: "shadow", maxCalls: 1, maxUsd: 0.01 });
+			controller.observeMessage(host, `user-${index}`, false);
+			controller.observeAssistant(host, `assistant-${index}`, `user-${index}`);
+			const flow = createFlowService(
+				s.repository,
+				s.env,
+				controller.guard({
+					hostSessionId: host,
+					messageId: `assistant-${index}`,
+					agent: "build",
+				}),
+			);
+			const result = await flow.status({
+				request: { view: "compact" },
+				recoveryProposal: s.proposal(),
+			});
+			expect(result.status).toBe(index === 128 ? "error" : "ok");
+		}
+		s.repository.session = { ...base, id: "protected-127" };
+		controller.observeMessage("protected-host-127", "fresh-user", false);
+		controller.observeAssistant(
+			"protected-host-127",
+			"fresh-assistant",
+			"fresh-user",
+		);
+		const directed = createFlowService(
+			s.repository,
+			s.env,
+			controller.guard({
+				hostSessionId: "protected-host-127",
+				messageId: "fresh-assistant",
+				agent: "build",
+			}),
+		);
+		expect(
+			(
+				await directed.sessionClose({
+					request: {
+						operationId: "close-protected-127",
+						expectedRevision: base.revision,
+						sessionId: "protected-127",
+						kind: "abandoned",
+						summary: "Explicitly stop",
+					},
+				})
+			).status,
+		).toBe("ok");
+		s.repository.session = { ...base, id: "protected-128" };
+		const last = controller.guard({
+			hostSessionId: "protected-host-128",
+			messageId: "assistant-128",
+			agent: "build",
+		});
+		expect(
+			(
+				await createFlowService(s.repository, s.env, last).status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		const lastSession = s.repository.session;
+		if (!lastSession) throw new Error("fixture session missing");
+		expect(() =>
+			controller
+				.guard({
+					hostSessionId: "unobserved-host",
+					messageId: "unobserved-assistant",
+					agent: "build",
+				})
+				.check(lastSession, null, {
+					kind: "feature-reset",
+					request: {
+						operationId: "cross-host",
+						expectedRevision: base.revision,
+						featureId: FEATURE,
+					},
+				}),
+		).toThrow("different host session");
+	});
 	test("wrong host and worker cannot consume the pending operation", async () => {
 		const s = await setup(),
 			mutation = await recommend(s);
@@ -409,6 +541,259 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 	});
+});
+
+test("oversized advice does not consume a checkpoint decision slot", async () => {
+	let calls = 0;
+	const s = await setup(
+		"shadow",
+		{
+			async assess() {
+				calls++;
+				return { kind: "unavailable", reason: "oversize" };
+			},
+		},
+		false,
+		"x".repeat(32000),
+	);
+	for (let index = 0; index < 3; index++) {
+		const proposal = s.proposal();
+		const response = await s.flow.status({
+			request: { view: "compact" },
+			recoveryProposal: {
+				...proposal,
+				id: `oversize-${index}`,
+				candidates: proposal.candidates.map((candidate) => ({
+					...candidate,
+					remedy: `Guard null before parsing ${index}`,
+				})),
+			},
+		});
+		expect(response.status).toBe("error");
+		if (index === 0)
+			expect(
+				(
+					await s.flow.status({
+						request: { view: "compact" },
+						recoveryProposal: {
+							...proposal,
+							id: "oversize-repeat",
+							candidates: proposal.candidates.map((candidate) => ({
+								...candidate,
+								remedy: "Guard null before parsing 0",
+							})),
+						},
+					})
+				).status,
+			).toBe("error");
+	}
+	expect(calls).toBe(0);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
+test("packet uses current live finding wording instead of oversized history", async () => {
+	const s = await setup(
+		"shadow",
+		{
+			async assess(packet, options) {
+				expect(packet.findings).toHaveLength(1);
+				expect(packet.findings[0]?.evidence).toBe("parser.ts");
+				expect(Buffer.byteLength(JSON.stringify(packet))).toBeLessThan(32000);
+				return provider.assess(packet, options);
+			},
+		},
+		false,
+		"parser.ts",
+		"x".repeat(32000),
+	);
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: s.proposal(),
+	});
+	expect(response.status).toBe("ok");
+	if (response.status !== "ok") throw new Error(response.summary);
+	expect(JSON.stringify(response)).toContain('"kind":"selected"');
+});
+
+test("candidate must cite the target's live blockers", async () => {
+	const incomplete = await setup(
+		"shadow",
+		provider,
+		false,
+		"parser.ts",
+		"parser.ts",
+		true,
+	);
+	expect(
+		(
+			await incomplete.flow.status({
+				request: { view: "compact" },
+				recoveryProposal: incomplete.proposal(),
+			})
+		).status,
+	).toBe("error");
+	const unrelated = await setup("shadow", provider, true);
+	const session = unrelated.repository.session;
+	if (!session) throw new Error("fixture session missing");
+	const historical = session.runs[0];
+	if (!historical) throw new Error("fixture run missing");
+	const foreignId = "independent.R1-01";
+	unrelated.repository.session = {
+		...session,
+		runs: [
+			{
+				...historical,
+				id: "independent-history",
+				featureId: "independent",
+				state: "superseded",
+				reviews: historical.reviews.map((review) => ({
+					...review,
+					result: review.result
+						? {
+								...review.result,
+								findings: review.result.findings.map((finding) => ({
+									...finding,
+									findingId: foreignId,
+								})),
+							}
+						: null,
+				})),
+			},
+			...session.runs,
+		],
+	};
+	const proposal = unrelated.proposal();
+	expect(
+		(
+			await unrelated.flow.status({
+				request: { view: "compact" },
+				recoveryProposal: {
+					...proposal,
+					candidates: proposal.candidates.map((candidate) => ({
+						...candidate,
+						findingIds: [foreignId],
+					})),
+				},
+			})
+		).status,
+	).toBe("error");
+});
+
+test("provider retries reserve each paid attempt but count as one checkpoint decision", async () => {
+	let assessments = 0;
+	const advice = (id: string) => ({
+		kind: "answered" as const,
+		model: "jev-1.13.0" as const,
+		choice: id,
+		probabilities: { [id]: 1, abstain: 0 },
+		confidence: 1,
+		assessments: { [id]: { goal: 1, suitability: 1 } },
+		inputTokens: 100,
+		outputTokens: 10,
+		latencyMs: 1,
+	});
+	const s = await setup("shadow", {
+		async assess(packet, options) {
+			assessments++;
+			expect(options.reserveAttempt()).toBe(true);
+			expect(options.reserveAttempt()).toBe(true);
+			return advice(packet.candidates[0]?.id ?? "missing");
+		},
+	});
+	for (let index = 0; index < 2; index++) {
+		const proposal = s.proposal();
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: {
+						...proposal,
+						id: `retry-${index}`,
+						candidates: proposal.candidates.map((candidate) => ({
+							...candidate,
+							remedy: `Guard null before parsing ${index}`,
+						})),
+					},
+				})
+			).status,
+		).toBe("ok");
+	}
+	const proposal = s.proposal();
+	expect(
+		(
+			await s.flow.status({
+				request: { view: "compact" },
+				recoveryProposal: {
+					...proposal,
+					id: "retry-third",
+					candidates: proposal.candidates.map((candidate) => ({
+						...candidate,
+						remedy: "Guard null before parsing third",
+					})),
+				},
+			})
+		).status,
+	).toBe("error");
+	expect(assessments).toBe(2);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 2 });
+	const unreserved = await setup("delegated", {
+		async assess(packet) {
+			return advice(packet.candidates[0]?.id ?? "missing");
+		},
+	});
+	const response = await unreserved.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: unreserved.proposal(),
+	});
+	expect(response.status).toBe("ok");
+	expect(JSON.stringify(response)).toContain('"kind":"abstain"');
+	expect(JSON.stringify(response)).not.toContain('"recommended"');
+	expect(unreserved.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
+test("expired recovery lease stops prompting and clears authority", async () => {
+	let now = 0;
+	const s = await setup();
+	const controller = new RecoveryController(provider, {
+		profiles: [profile],
+		now: () => now,
+	});
+	controller.activate("host", { mode: "shadow", maxCalls: 2, maxUsd: 0.01 });
+	controller.observeMessage("host", "old-user", false);
+	controller.observeAssistant("host", "old-assistant", "old-user");
+	expect(
+		controller.proposalPrompt("host", "flow", 10, "await-user-direction"),
+	).not.toBeNull();
+	now = 60 * 60 * 1000;
+	expect(
+		controller.proposalPrompt("host", "flow", 11, "await-user-direction"),
+	).toBeNull();
+	expect(controller.snapshot()).toEqual({ mode: "off" });
+	const mutation: RecoveryMutation = {
+		kind: "feature-reset",
+		request: {
+			operationId: "manual-after-expiry",
+			expectedRevision: revision(s.repository),
+			featureId: FEATURE,
+		},
+	};
+	const session = s.repository.session;
+	if (!session) throw new Error("fixture session missing");
+	expect(() =>
+		controller
+			.guard({ ...context, messageId: "old-assistant" })
+			.check(session, null, mutation),
+	).toThrow("fresh real user direction");
+	controller.observeMessage("host", "new-user", false);
+	controller.observeAssistant("host", "new-assistant", "new-user");
+	const flow = createFlowService(
+		s.repository,
+		s.env,
+		controller.guard({ ...context, messageId: "new-assistant" }),
+	);
+	expect((await flow.featureReset({ request: mutation.request })).status).toBe(
+		"ok",
+	);
 });
 
 test("concurrent identical proposals buy one assessment and duplicate mutation replays", async () => {

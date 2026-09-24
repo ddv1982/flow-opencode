@@ -1,92 +1,47 @@
 {
   "schemaVersion": 1,
-  "recordedAt": "2026-09-22T10:57:21.418904+00:00",
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "0dc1fc737c78dc635f7c6ca3cfdaceb600d8151d",
+  "recordedAt": "2026-09-23T23:42:04.749436+00:00",
   "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
   "checks": [
     {
       "command": "bun run check",
-      "runner": "parent",
       "exitCode": 0,
-      "passed": 1426,
+      "passed": 1432,
       "skipped": 13,
       "failed": 0,
-      "assertions": 7451
+      "assertions": 7472,
+      "logSha256": "605ec47ceeee42f169d4596c5223932dbd85c11fb4e8b9aa4f545a9083dfab5c"
     },
     {
-      "command": "FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/recovery-operator-host.test.ts",
-      "runner": "parent",
-      "exitCode": 0,
-      "passed": 4,
-      "failed": 0,
-      "assertions": 52,
-      "scope": "Final source bytes. Both managers resume and cancel through actual CLI subprocesses, registered episode runner, and journal recovery."
-    },
-    {
-      "command": "FLOW_RECOVERY_OPERATOR_SMOKE=1 FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-operator-host.test.ts tests/recovery-treatment-host.test.ts",
-      "runner": "implementation owner",
+      "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=pinned FLOW_RECOVERY_OPERATOR_SMOKE=1 FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-operator-host.test.ts tests/recovery-treatment-host.test.ts",
       "exitCode": 0,
       "passed": 10,
+      "skipped": 0,
       "failed": 0,
       "assertions": 150,
-      "scope": "Before final raw-reader cap and policy-freeze fixes. Parent final operator rerun covers those fixes. Six existing guarded-reset cases passed."
+      "logSha256": "703b67299e46850402740eb430096ad706743ee8e735e37a7ac932cc3d9e1b46"
     },
     {
-      "command": "bun test tests/recovery-treatment.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-operator.test.ts",
-      "runner": "implementation owner",
+      "command": "bun run smoke:live",
       "exitCode": 0,
-      "passed": 36,
+      "passed": 22,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 169
-    },
-    {
-      "command": "Final two regression tests",
-      "runner": "independent reviewer",
-      "exitCode": 0,
-      "passed": 2,
-      "failed": 0,
-      "assertions": 6
-    },
-    {
-      "command": "git diff --check",
-      "runner": "parent",
-      "exitCode": 0
+      "assertions": 133,
+      "logSha256": "4ba68741371d9b07510b4df7726f814f842b9e96cf0b74670676c441f3b3dd91"
     }
   ],
-  "hostVersion": "1.18.31",
-  "managers": [
-    "openai/gpt-5.6-terra",
-    "xai/grok-4.6"
-  ],
-  "paidInference": false,
-  "productionActivation": false,
-  "liveRunnerEnabled": false,
-  "operatorAttribution": "unverified",
-  "limits": [
-    "Operator host cases use manager-only arm. Existing treatment cases separately verify guarded recovery.",
-    "No full paired campaign or combined delegated-recovery then operator-wait episode proof.",
-    "Synthetic provider responses establish wiring, not model quality or actual pricing.",
-    "No crash replay. Journal recovery is read-only.",
-    "Actual question and response text remain private review evidence.",
-    "Two existing request-budget opt-in smokes and packaged production opt-in smoke were not rerun in this pass.",
-    "Artifact-byte verification, independently reviewed source evidence, reviewed costs, new paid cap and live qualification remain open."
-  ],
-  "review": {
-    "designCandidates": 2,
-    "selection": "Runner-owned file inbox with inline journal evidence",
-    "implementationOwners": 1,
-    "parentDiffReview": true,
-    "independentCorrectnessReview": "No unresolved material findings after final delta review",
-    "commentAudit": "No actionable added or moved comments or suppressions; zero deletions",
-    "isolation": "Read-only shared checkout with separate temporary design artifacts. Single code owner. Parent owns documentation and Git actions.",
-    "modelDiversity": "unverified; inherited settings",
-    "stickyHooks": "unverified; inactive across turns"
-  },
   "sourceDigests": {
     "evals/harness.ts": "99d2da4d2a378ff4e57e0c4637afa32a266153217971da4ef9caf79574e52904",
     "evals/recovery-decisions/episode-host.ts": "81fe2b3bf1e4cecbe9161b33069868540741cb55a4fb6f91db621108d75fa9b9",
     "evals/recovery-decisions/episode-operator.ts": "a8405fd7f7a19dc64f47763079b68e613be552082ed8d3904e4a7d8cbbc43c13",
     "evals/recovery-decisions/episode-receipts.ts": "8677ea2b95f6caadd77ef97f54e012f5f7c0a7bd82b109eb9e6dcda668053736",
-    "evals/recovery-decisions/episode-runner.ts": "04c38958afa99af827769e77f48127b985446d6247ad621294e522c42eebb437",
+    "evals/recovery-decisions/episode-runner.ts": "9052e67312984dc4092aaeef2f8ecdfd4bee157066fc02a24702e1d045aa50e9",
     "evals/recovery-decisions/run.ts": "6a995ee28db9ba648dacfe5c1644b6e5156ba6dd28a5c93539b6322aed1d938b",
     "evals/recovery-decisions/simulation-transport.ts": "e61fc3d14272a987da52bbdc4209cd3aae21db5947b6f8269fd6e631b11528a5",
     "evals/recovery-decisions/sources.ts": "131927f63f4d6b76a67f1c258220c77c1246a4659ff6a934845b334d79329186",
@@ -96,11 +51,14 @@
     "tests/recovery-operator-support.ts": "be24ec970b84a9bb7228b0a8c6e3658d739d171efcd5a63ffeeccd0e62f7b45f",
     "tests/recovery-operator.test.ts": "3bfa07e7a24180e2981e1e3527b74922b837975509b3e70f5a644fa575c781e5"
   },
-  "localEvidence": {
-    "/tmp/flow-operator-parent-check.log": "2a3d037aa6a571ee3f3a377ebd68ee12293c553c0d6edbaea068fb0932dc5359",
-    "/tmp/flow-operator-parent-host.log": "a889199e621b53f4584da78de8909dd02ac20f8570a345bcfe4893a5a6927aeb",
-    "/tmp/flow-operator-final-host.log": "6000b18cd9bc7753378d3c914c97711ad009152e8051c6c6e975c35dd27b3dab",
-    "/tmp/flow-operator-focused.log": "9dd86a4b1d8b0cd2195441bae0372650c973fc496666cca7e54039e8031042ed",
-    "/tmp/flow-operator-code-review.md": "3181ffa97cc8626957646c2d31b8c20f57ad5a1c9cf977cf8c8a8bd34a30bbe6"
-  }
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-operator-verification-7df0c2e8.json",
+    "verifiedCodeHead": "7df0c2e8403d560535242a5c29718692330180ed",
+    "originalSha256": "7838acff0270f3c29bf3b106af2778383bf0fc852d90f8c0fe362915985aa749"
+  },
+  "limits": [
+    "Native host tests use scripted manager and Jev responses; no paid inference or model-quality claim.",
+    "Operator attribution remains unverified and raw episode replies require review.",
+    "Production delegated recovery remains disabled."
+  ]
 }
