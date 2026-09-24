@@ -1,4 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { open, realpath } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import type {
 	ObservedValidation,
 	PreparedValidation,
@@ -14,6 +18,7 @@ import type { Hooks } from "./sdk.js";
 
 const MAX_CAPTURES = 128;
 const CAPTURE_TTL_MS = 15 * 60 * 1_000;
+const MAX_HOST_OUTPUT_BYTES = 8 * 1024 * 1024;
 
 type PendingCapture = PreparedValidation &
 	Readonly<{
@@ -39,6 +44,7 @@ type ValidationCaptureOptions = Readonly<{
 		| undefined;
 	now?: (() => number) | undefined;
 	randomId?: (() => string) | undefined;
+	readFullOutput?: ((path: string) => Promise<string | null>) | undefined;
 }>;
 
 type BeforeInput = Parameters<NonNullable<Hooks["tool.execute.before"]>>[0];
@@ -82,6 +88,37 @@ function digest(value: string) {
 	return `sha256:${createHash("sha256").update(value).digest("hex")}` as const;
 }
 
+export async function readHostToolOutput(
+	path: string,
+	dataHome = process.env.XDG_DATA_HOME?.trim() ||
+		join(homedir(), ".local", "share"),
+): Promise<string | null> {
+	if (!isAbsolute(path) || !/^tool_[a-zA-Z0-9]+$/.test(basename(path)))
+		return null;
+	const directory = join(dataHome, "opencode", "tool-output");
+	if (dirname(path) !== directory) return null;
+	try {
+		if (dirname(await realpath(path)) !== (await realpath(directory)))
+			return null;
+		const file = await open(
+			path,
+			constants.O_RDONLY |
+				(process.platform === "win32" ? 0 : constants.O_NOFOLLOW),
+		);
+		try {
+			const stat = await file.stat();
+			if (!stat.isFile() || stat.size > MAX_HOST_OUTPUT_BYTES) return null;
+			const bytes = await file.readFile();
+			if (bytes.byteLength !== stat.size) return null;
+			return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+		} finally {
+			await file.close();
+		}
+	} catch {
+		return null;
+	}
+}
+
 function isBash(tool: string): boolean {
 	return tool.toLowerCase() === "bash";
 }
@@ -91,6 +128,7 @@ export class ValidationCaptureCoordinator {
 	readonly #readReport: ValidationCaptureOptions["readReport"];
 	readonly #now: () => number;
 	readonly #randomId: () => string;
+	readonly #readFullOutput: (path: string) => Promise<string | null>;
 	readonly #pending = new Map<string, PendingCapture>();
 
 	constructor(options: ValidationCaptureOptions) {
@@ -98,6 +136,29 @@ export class ValidationCaptureCoordinator {
 		this.#readReport = options.readReport;
 		this.#now = options.now ?? Date.now;
 		this.#randomId = options.randomId ?? randomUUID;
+		this.#readFullOutput = options.readFullOutput ?? readHostToolOutput;
+	}
+
+	async #completeSpilledOutput(
+		visible: string,
+		metadata: unknown,
+	): Promise<string | null> {
+		if (!metadata || typeof metadata !== "object") return null;
+		const host = metadata as Record<string, unknown>;
+		if (host.truncated !== true || typeof host.outputPath !== "string")
+			return null;
+		const marker = `...output truncated...\n\nFull output saved to: ${host.outputPath}\n\n`;
+		if (!visible.startsWith(marker)) return null;
+		const tail = visible.slice(marker.length);
+		if (tail.length < 64) return null;
+		try {
+			const full = await this.#readFullOutput(host.outputPath);
+			return full && full.length > tail.length && full.endsWith(tail)
+				? full
+				: null;
+		} catch {
+			return null;
+		}
 	}
 
 	/**
@@ -240,6 +301,11 @@ export class ValidationCaptureCoordinator {
 		// would lose the record entirely and make Flow unusable on such a host.
 		const observedExit = exitCode(output.metadata);
 		const observedComplete = completeOutput(output.metadata);
+		const fullOutput =
+			observedComplete === false
+				? await this.#completeSpilledOutput(output.output, output.metadata)
+				: null;
+		const outputComplete = observedComplete === true || fullOutput !== null;
 		const hostGap: ValidationIneligibleReason | null =
 			observedExit === null
 				? "exit-code-unavailable"
@@ -262,8 +328,8 @@ export class ValidationCaptureCoordinator {
 			...(observedAssertions.length > 0 ? { observedAssertions } : {}),
 			captureId: capture.captureId,
 			exitCode: observedExit,
-			outputDigest: digest(output.output),
-			outputComplete: observedComplete === true,
+			outputDigest: digest(fullOutput ?? output.output),
+			outputComplete,
 			...(hostGap ? { ineligibleReason: hostGap } : {}),
 		});
 		output.output = `${output.output}\n\n[flow-validation] ${JSON.stringify({
@@ -280,6 +346,7 @@ export class ValidationCaptureCoordinator {
 			...(observation.ineligibleReason
 				? { ineligibleReason: observation.ineligibleReason }
 				: {}),
+			...(fullOutput ? { fullOutputDigest: observation.outputDigest } : {}),
 		})}`;
 		return observation;
 	}
