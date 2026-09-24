@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
@@ -142,6 +142,26 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 					const session = await host.createSession(
 						"Seeded simulation recovery",
 					);
+					const captureDirectory = process.env.FLOW_RECOVERY_TUI_CAPTURE_DIR;
+					const captureThisHost =
+						captureDirectory &&
+						managerModel === "openai/gpt-5.6-terra" &&
+						scenario === "model-mismatch";
+					if (captureThisHost) {
+						await writeFile(
+							join(captureDirectory, "capture-ready.json"),
+							JSON.stringify({ url: host.url, session, project: host.project }),
+						);
+						const attached = join(captureDirectory, "capture-attached");
+						const deadline = Date.now() + 90_000;
+						while (
+							!(await Bun.file(attached).exists()) &&
+							Date.now() < deadline
+						)
+							await Bun.sleep(200);
+						if (!(await Bun.file(attached).exists()))
+							throw new Error("TUI capture did not attach.");
+					}
 					await host.runCommand(
 						session,
 						"flow-auto",
@@ -210,6 +230,14 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 						expect(after?.runs.at(-1)?.state).toBe("active");
 						expect(after?.runs).toHaveLength((before?.runs.length ?? 0) + 1);
 					} else expect(after).toEqual(before);
+					if (captureThisHost) {
+						const release = join(captureDirectory, "capture-release");
+						const deadline = Date.now() + 90_000;
+						while (!(await Bun.file(release).exists()) && Date.now() < deadline)
+							await Bun.sleep(200);
+						if (!(await Bun.file(release).exists()))
+							throw new Error("TUI capture release did not arrive.");
+					}
 				} finally {
 					if (previous === undefined)
 						delete process.env.FLOW_EVAL_AUTHORIZATION;

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import type { RecoveryController } from "../../application/recovery-policy.js";
 import {
 	type FlowCodingModel,
@@ -27,6 +28,16 @@ import type { Hooks, Plugin } from "./sdk.js";
 import { guardTools } from "./tool-guard.js";
 import { createTools } from "./tools.js";
 import { ValidationCaptureCoordinator } from "./validation-capture.js";
+
+const JevModel = z
+	.string()
+	.max(32)
+	.regex(/^jev-\d+\.\d+\.\d+$/);
+const ModelMismatch = z.object({
+	reason: z.literal("model-mismatch"),
+	requestedModel: JevModel,
+	model: JevModel,
+});
 
 export function createFlowPlugin(dependencies: {
 	createRecovery(): RecoveryController;
@@ -102,6 +113,19 @@ export function createFlowPlugin(dependencies: {
 		});
 		const tools = createTools({
 			recovery,
+			onRecoveryOutcome: async (outcome) => {
+				const mismatch = ModelMismatch.safeParse(outcome);
+				if (!mismatch.success) return;
+				await ctx.client.tui.showToast({
+					body: {
+						title: "Jev model changed",
+						message: `Requested ${mismatch.data.requestedModel}, received ${mismatch.data.model}. Recovery remains blocked pending qualification.`,
+						variant: "warning",
+						duration: 15000,
+					},
+					query: { directory: ctx.directory },
+				});
+			},
 			validation,
 			prepareValidation: prepareWorkspaceValidation,
 			autoTimingSnapshot: () => autoDrive.timingSnapshot(),
