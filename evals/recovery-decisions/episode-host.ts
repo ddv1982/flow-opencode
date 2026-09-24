@@ -449,7 +449,13 @@ export async function createEpisodeHostDriver(
 				evidence: { kind: "exact-file-checks", checks },
 			};
 		},
-		async reconcileReservations() {
+		async reconciliationTimeoutMs() {
+			if (!options.host.requestBudget) return 5000;
+			const names = await readdir(options.host.requestBudget.directory);
+			const claims = names.filter((name) => /^request-\d{6}\.json$/.test(name));
+			return 5000 + Math.min(claims.length, 100000) * 20;
+		},
+		async reconcileReservations(signal?: AbortSignal) {
 			if (
 				!stopped ||
 				!prepared ||
@@ -461,6 +467,7 @@ export async function createEpisodeHostDriver(
 				options.host.requestBudget.directory,
 				options.host.requestBudget.authorizationDigest,
 				reservationScope,
+				signal,
 			);
 		},
 		stop() {
