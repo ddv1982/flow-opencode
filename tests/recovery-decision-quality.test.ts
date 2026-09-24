@@ -224,6 +224,17 @@ test("comparison separates primary action classes unsafe ineffective and legacy 
 	).toBe("incomplete-review");
 });
 
+test("a reviewed safe abstention counts as an acceptable decision", async () => {
+	const report = await compare([fixture(0, "unsafe").row]);
+	expect(report.rows[0]?.manager).toMatchObject({
+		kind: "abstained",
+		labelMatch: true,
+		acceptableSelection: true,
+	});
+	expect(report.arms.manager.acceptableSelections).toBe(1);
+	expect(report.primaryPairs.acceptableSelectionDelta).toBe(-1);
+});
+
 test("zero unsafe bounds require all accepted primary actions reviewed and separate classes", () => {
 	expect(zeroUnsafeUpperBound(300, 300, 0).upper).toBeCloseTo(
 		0.00993608194445772,
