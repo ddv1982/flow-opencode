@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "c9e7e719030aa67702662c568316ab79ef265bf7",
-  "recordedAt": "2026-09-24T02:28:54.955750+00:00",
+  "verifiedCodeHead": "34e76390f47d893703744d77dfdff1142d2b193d",
+  "recordedAt": "2026-09-24T02:12:28.819923+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -14,17 +14,17 @@
       "passed": 1529,
       "skipped": 16,
       "failed": 0,
-      "assertions": 8112,
-      "logSha256": "95930bd6c9c17406a709ef1f06d06f0453c6bd90b8ee19d8600f80aefcc06238"
+      "assertions": 8111,
+      "logSha256": "e3a46404d677ae6e9a5f23146299340bfff6d619d0bf812f9ef17c725e2a0c59"
     },
     {
-      "command": "bun test tests/recovery-live-host.test.ts tests/recovery-live-treatment.test.ts tests/recovery-episode-host.test.ts",
+      "command": "bun test tests/recovery-live-host.test.ts tests/recovery-live-treatment.test.ts",
       "exitCode": 0,
-      "passed": 65,
+      "passed": 50,
       "skipped": 1,
       "failed": 0,
-      "assertions": 172,
-      "logSha256": "a7b083a967966ad7cbe2e8266a465cf494b1ca6b559b036e80de0bcca524e4e7"
+      "assertions": 100,
+      "logSha256": "b31c766175fa60e3cd49aac22175d61b952a429e64bbadaea2266e75f5109270"
     },
     {
       "command": "FLOW_RECOVERY_LIVE_HOST_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-live-host.test.ts",
@@ -33,7 +33,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 8,
-      "logSha256": "fd3b5d796cabd616f6aa322eba11ee7c216f4f59640411f2ed3d418990936e6c"
+      "logSha256": "d71f52d58af9c6bc2710def6629792e0f2b106b4e7d4d482bb0b50c7fe13e6d8"
     },
     {
       "command": "bun run smoke:live",
@@ -42,23 +42,23 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "feb15a4757805d895f37e642481a3e737be87aa683ac106696e40ef9ad6408db"
+      "logSha256": "38d134eb21b07ff9abd867cd558204c08eaf62029834b17ea5d2b1aaf9067109"
     }
   ],
   "sourceDigests": {
     "evals/harness.ts": "8a169e9bd2b1ee109dda9ac5b776d8083d9807c9e20215ac8207b28d54ffa399",
-    "evals/recovery-decisions/episode-host.ts": "3e9b832362cdd52876c77789632537499f7854c09e983aa70acfe46187a0881f",
+    "evals/recovery-decisions/episode-host.ts": "2edbf7d73713bc59f8ef4d050d16f82c02ace402b337778b2e784572f202eff4",
     "evals/recovery-decisions/live-treatment-plugin.ts": "459f105519a7fbc9072953a3070459f26ecb7b8fc02b5ef1cb75204bfa710f9d",
     "evals/recovery-decisions/treatment-plugin.ts": "44a5925189e37e43e39ec85bcadde8f27cb181b33b7dd043c5c7e27cd105ccee",
     "evals/recovery-decisions/treatment.ts": "61950e96c778e2aac7d722d53d371c5e2fef2fe4c3f003a8ae0df95a7fcb1aa8",
-    "tests/recovery-episode-host.test.ts": "df90b45ed16b42b6fbbe65cb55fa55ab35be760e6922f772284400279e1f4173",
+    "tests/recovery-episode-host.test.ts": "ee3695531b565866ead27af3e5efee0ba31f54dc8f68d9cc03c82052daadb023",
     "tests/recovery-live-host.test.ts": "3988301538ddb64f8eb36559d34bbea295d1110e4dde5e250b7793ade6a4af4b",
     "tests/recovery-live-host-child.ts": "9af6fad981a54cb048ad7b50ae603bdc98be2b3264de02ebba426c96622b6b71"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-host-verification-34e76390.json",
-    "verifiedCodeHead": "34e76390f47d893703744d77dfdff1142d2b193d",
-    "originalSha256": "9c3f0cfcf433244983f9507ae8eaacd726c6bf6475ec1b4a645a8137e81bb202"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-host-verification-83061927.json",
+    "verifiedCodeHead": "83061927c63c5933e673d90946bb6c50c6b11fc5",
+    "originalSha256": "50a064d2aedb59afc7bdd235df92d728aecfdfc2d4ccfc5a9e1c55dae3d87ed8"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
