@@ -1,6 +1,10 @@
 import { z } from "zod";
 import type { DecisionProvider } from "../application/ports/decision-provider.js";
-import { JEV_PINNED_MODEL, requestJev } from "./jev-transport.js";
+import {
+	JEV_PINNED_MODEL,
+	type JevTransport,
+	requestJev,
+} from "./jev-transport.js";
 
 const Probability = z.number().finite().min(0).max(1);
 const Choice = z
@@ -14,6 +18,7 @@ const Choice = z
 const Noul = z.object({ type: z.literal("noul"), noul: Probability }).strict();
 export function createJevDecisionProvider(
 	readApiKey: () => string | undefined,
+	transport?: JevTransport,
 ): DecisionProvider {
 	return {
 		async assess(packet, options) {
@@ -63,6 +68,7 @@ export function createJevDecisionProvider(
 					apiKey: key,
 					signal: options.signal,
 					budget: { reserve: options.reserveAttempt },
+					...(transport ? { transport } : {}),
 				},
 			);
 			if (!response.ok) return { kind: "unavailable", reason: response.reason };
