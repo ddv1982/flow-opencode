@@ -423,3 +423,38 @@ test("failed auto setup revokes its recovery lease", async () => {
 	).rejects.toThrow("anchor failed");
 	expect(recovery.snapshot()).toEqual({ mode: "off" });
 });
+
+test("shadow recovery prompt does not add a second handback at one checkpoint", async () => {
+	const recovery = new RecoveryController(unavailable);
+	recovery.activate("host", { mode: "shadow", maxCalls: 2, maxUsd: 0.01 });
+	const prompts: string[] = [];
+	let revision = 10;
+	const auto = new AutoDriveCoordinator({
+		recovery,
+		readProjection: async () => ({
+			sessionId: "flow",
+			status: "blocked",
+			revision,
+			nextAction: "await-user-direction",
+		}),
+		prompt: async (_host, prompt) => {
+			prompts.push(prompt);
+		},
+	});
+	const metadata = await auto.activate("host");
+	await auto.observeMessage(
+		"host",
+		delivery,
+		[{ type: "text", synthetic: true, metadata }],
+		"initial",
+	);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	revision = 11;
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(2);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(2);
+});
