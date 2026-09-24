@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { operationInputDigest } from "../domain/operation.js";
+import { livePriorFindings } from "../domain/review-findings.js";
 import {
 	currentRun,
 	type Session,
@@ -75,6 +76,7 @@ export type RecoveryProfile = Readonly<{
 const QUALIFIED_RECOVERY_PROFILES: readonly RecoveryProfile[] = Object.freeze(
 	[],
 );
+const MAX_RECOVERY_PACKET_BYTES = 16_000;
 
 const hash = (value: unknown) =>
 	createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -568,18 +570,6 @@ export class RecoveryController {
 			throw new Error("This checkpoint is not eligible for recovery advice.");
 		if (lease.inFlight) throw new Error("Recovery advice is already pending.");
 		const checkpoint = `${session.id}/${session.revision}`;
-		const findingEntries = session.runs.flatMap((run) =>
-			run.reviews.flatMap((review) =>
-				(review.result?.findings ?? []).map((f) => ({
-					id: f.findingId ?? "",
-					summary: f.summary,
-					evidence: f.evidence ?? "",
-					scope: f.scopeBlocker === true,
-				})),
-			),
-		);
-		const findings = findingEntries.filter((f) => f.id).slice(-30);
-		const ids = new Set(findings.map((f) => f.id));
 		if (
 			new Set(proposal.candidates.map((c) => c.id)).size !==
 			proposal.candidates.length
@@ -589,7 +579,22 @@ export class RecoveryController {
 			const feature = session.plan?.features.find(
 				(f) => f.id === candidate.featureId,
 			);
-			if (!feature || candidate.findingIds.some((id) => !ids.has(id)))
+			const findingFeatureId =
+				candidate.action === "retry"
+					? candidate.featureId
+					: projection.blockedFeature?.featureId;
+			if (!feature || !findingFeatureId) return false;
+			const liveFindings = livePriorFindings(session, findingFeatureId);
+			const liveIds = new Set(liveFindings.map((finding) => finding.findingId));
+			const proposedIds = new Set(candidate.findingIds);
+			if (
+				candidate.findingIds.some((id) => !liveIds.has(id)) ||
+				liveFindings.some(
+					(finding) =>
+						finding.severity === "blocking" &&
+						!proposedIds.has(finding.findingId),
+				)
+			)
 				return false;
 			if (
 				!feature.dependsOn.every(
@@ -651,6 +656,24 @@ export class RecoveryController {
 			throw new Error(
 				"No proposed recovery action is permitted by current history and dependencies.",
 			);
+		const findingFeatureIds = new Set(
+			candidates.map((candidate) =>
+				candidate.action === "retry"
+					? candidate.featureId
+					: projection.blockedFeature?.featureId,
+			),
+		);
+		const findings = [...findingFeatureIds].flatMap((featureId) =>
+			featureId
+				? livePriorFindings(session, featureId).map((finding) => ({
+						id: finding.findingId,
+						summary: finding.summary,
+						evidence: finding.evidence ?? "",
+					}))
+				: [],
+		);
+		if (findings.length > 30)
+			throw new Error("Too many live findings for bounded recovery advice.");
 		const packet: DecisionPacket = {
 			sessionId: session.id,
 			revision: session.revision,
@@ -658,13 +681,11 @@ export class RecoveryController {
 			goal: session.goal,
 			planDigest: this.#binding(session),
 			rubric: "recovery-v1",
-			findings: findings.map(({ id, summary, evidence }) => ({
-				id,
-				summary,
-				evidence,
-			})),
+			findings,
 			candidates,
 		};
+		if (Buffer.byteLength(JSON.stringify(packet)) > MAX_RECOVERY_PACKET_BYTES)
+			throw new Error("Recovery context exceeds the bounded request size.");
 		const packetDigest = hash(packet),
 			remedyDigest = hash(
 				candidates.map((c) => ({
