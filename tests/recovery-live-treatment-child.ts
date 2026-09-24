@@ -20,7 +20,10 @@ const scenario = process.argv[3];
 assert(root && scenario);
 const managerModel =
 	process.argv[4] === "xai" ? "xai/grok-4.6" : "openai/gpt-5.6-terra";
-const control = scenario === "control" || scenario === "control-with-jev";
+const control =
+	scenario === "control" ||
+	scenario === "control-with-jev" ||
+	scenario === "control-manager-gate";
 const workspace = join(root, "workspace");
 await mkdir(workspace);
 const scope: EpisodeReservationScope = {
@@ -34,7 +37,9 @@ const directory = join(root, "budget");
 const simulation = scenario === "simulation";
 const retryReplacedFetch = scenario === "retry-replaced-fetch";
 const modelNames =
-	scenario === "control" || scenario === "missing-jev"
+	scenario === "control" ||
+	scenario === "control-manager-gate" ||
+	scenario === "missing-jev"
 		? [managerModel]
 		: scenario === "wrong-manager"
 			? [
@@ -89,6 +94,24 @@ const intercepted = Object.assign(
 	async (input: string | URL | Request) => {
 		const request =
 			input instanceof Request ? input : new Request(String(input));
+		if (scenario.endsWith("manager-gate")) {
+			assert.equal(
+				request.url,
+				managerModel === "xai/grok-4.6"
+					? "https://api.x.ai/v1/chat/completions"
+					: "https://chatgpt.com/backend-api/codex/responses",
+			);
+			const evidence = await reconcileRequestReservations(
+				directory,
+				options.budget.authorizationDigest,
+				scope,
+			);
+			assert.deepEqual(
+				evidence.claims.map((claim) => claim.model),
+				[managerModel],
+			);
+			return Response.json({ ok: true });
+		}
 		assert.equal(request.url, "https://api.typesafe.ai/v1/systemone");
 		requests++;
 		const evidence = await reconcileRequestReservations(
@@ -96,9 +119,9 @@ const intercepted = Object.assign(
 			options.budget.authorizationDigest,
 			scope,
 		);
-		assert.equal(evidence.claims.length, 1);
-		assert.equal(evidence.totalMicroUsd, 3000);
-		assert.equal(evidence.claims[0]?.model, "typesafe/jev-1.13.0");
+		assert.equal(evidence.claims.length, requests);
+		assert.equal(evidence.totalMicroUsd, requests * 3000);
+		assert.equal(evidence.claims.at(-1)?.model, "typesafe/jev-1.13.0");
 		assert.equal(
 			request.headers.get("authorization"),
 			"Bearer synthetic-live-key",
@@ -106,7 +129,9 @@ const intercepted = Object.assign(
 		if (scenario === "transport-failure")
 			throw new Error("intercepted transport failure");
 		if (retryReplacedFetch && requests === 1) {
-			globalThis.fetch = intercepted as typeof fetch;
+			assert.throws(() => {
+				globalThis.fetch = intercepted as typeof fetch;
+			});
 			return new Response("retry", {
 				status: 429,
 				headers: { "retry-after": "0" },
@@ -216,6 +241,29 @@ if (invalid.includes(scenario)) {
 	await assert.rejects(BudgetPlugin(context, gateOptions));
 	await assert.rejects(fetch("https://unlisted.invalid/inference"));
 } else if (
+	scenario === "control-manager-gate" ||
+	scenario === "treatment-manager-gate"
+) {
+	await BudgetPlugin(context, gateOptions);
+	BudgetPlugin.assertInstalledRequestGate(expected);
+	assert.throws(() => {
+		globalThis.fetch = intercepted as typeof fetch;
+	});
+	assert.throws(() => {
+		globalThis.WebSocket = originalWebSocket;
+	});
+	const route =
+		managerModel === "xai/grok-4.6"
+			? "https://api.x.ai/v1/chat/completions"
+			: "https://chatgpt.com/backend-api/codex/responses";
+	const response = await fetch(route, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify({ model: managerModel.split("/")[1] }),
+	});
+	assert.deepEqual(await response.json(), { ok: true });
+	assert.equal((await requestBudgetStatus(directory)).consumed, 1);
+} else if (
 	scenario === "gate-fetch" ||
 	scenario === "gate-websocket" ||
 	scenario === "gate-scope"
@@ -223,14 +271,25 @@ if (invalid.includes(scenario)) {
 	await BudgetPlugin(context, gateOptions);
 	await BudgetPlugin(context, gateOptions);
 	BudgetPlugin.assertInstalledRequestGate(expected);
-	if (scenario === "gate-fetch") globalThis.fetch = intercepted as typeof fetch;
-	if (scenario === "gate-websocket") globalThis.WebSocket = originalWebSocket;
+	if (scenario === "gate-fetch")
+		assert.throws(() => {
+			globalThis.fetch = intercepted as typeof fetch;
+		});
+	if (scenario === "gate-websocket")
+		assert.throws(() => {
+			globalThis.WebSocket = originalWebSocket;
+		});
 	if (scenario === "gate-scope")
 		options.budget.scope = { ...scope, executionId: randomUUID() };
-	await assert.rejects(LiveTreatmentPlugin(context, options));
-	await assert.rejects(
-		BudgetPlugin(context, { ...gateOptions, scope: options.budget.scope }),
-	);
+	if (scenario === "gate-scope") {
+		await assert.rejects(LiveTreatmentPlugin(context, options));
+		await assert.rejects(
+			BudgetPlugin(context, { ...gateOptions, scope: options.budget.scope }),
+		);
+	} else {
+		BudgetPlugin.assertInstalledRequestGate(expected);
+		await BudgetPlugin(context, gateOptions);
+	}
 } else {
 	const fixture = await frozenCampaignFixture();
 	for (const [name, bytes] of Object.entries(fixture.fixture.files)) {
@@ -305,9 +364,13 @@ if (invalid.includes(scenario)) {
 				} as never,
 			});
 			if (scenario === "replaced-fetch")
-				globalThis.fetch = intercepted as typeof fetch;
+				assert.throws(() => {
+					globalThis.fetch = intercepted as typeof fetch;
+				});
 			if (scenario === "replaced-websocket")
-				globalThis.WebSocket = originalWebSocket;
+				assert.throws(() => {
+					globalThis.WebSocket = originalWebSocket;
+				});
 			const run = fixture.session.runs.at(-1);
 			assert(run);
 			const finding = run.reviews.at(-1)?.result?.findings[0]?.findingId;
@@ -343,7 +406,9 @@ if (invalid.includes(scenario)) {
 				} as ToolContext,
 			);
 			assert.equal(typeof result, "string");
-			if (scenario === "accepted") {
+			if (
+				["accepted", "replaced-fetch", "replaced-websocket"].includes(scenario)
+			) {
 				assert.match(result as string, /recommended/);
 				assert.equal(
 					JSON.parse(result as string).workflowData.recovery.kind,
@@ -354,9 +419,9 @@ if (invalid.includes(scenario)) {
 				assert.equal(requests, 1);
 				assert.match(result as string, /unavailable/);
 			} else if (retryReplacedFetch) {
-				assert.equal(requests, 1);
-				assert.match(result as string, /unavailable/);
-				assert.throws(() => BudgetPlugin.assertInstalledRequestGate(expected));
+				assert.equal(requests, 2);
+				assert.match(result as string, /recommended/);
+				BudgetPlugin.assertInstalledRequestGate(expected);
 			} else {
 				assert.equal(requests, 0);
 				assert.match(result as string, /unavailable/);
@@ -366,8 +431,8 @@ if (invalid.includes(scenario)) {
 				options.budget.authorizationDigest,
 				scope,
 			);
-			assert.equal(reconciled.totalMicroUsd, requests ? 3000 : 0);
-			if (requests && !retryReplacedFetch) {
+			assert.equal(reconciled.totalMicroUsd, requests * 3000);
+			if (requests) {
 				await assert.rejects(
 					fetch("https://api.typesafe.ai/v1/systemone", {
 						method: "POST",
@@ -376,7 +441,7 @@ if (invalid.includes(scenario)) {
 					}),
 					/budget exhausted/,
 				);
-				assert.equal(requests, 1);
+				assert.equal(requests, retryReplacedFetch ? 2 : 1);
 			}
 		} finally {
 			await hooks.dispose?.();

@@ -8,6 +8,8 @@ for (const manager of ["openai", "xai"]) {
 		"accepted",
 		"control",
 		"control-with-jev",
+		"control-manager-gate",
+		"treatment-manager-gate",
 		"transport-failure",
 		"retry-replaced-fetch",
 		"replaced-fetch",
