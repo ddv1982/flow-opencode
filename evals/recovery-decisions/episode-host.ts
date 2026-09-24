@@ -19,7 +19,10 @@ import {
 	reconcileRequestReservations,
 } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
-import { recoverySourceDigests } from "./sources.js";
+import {
+	recoverySourceDigests,
+	verifyRecoverySourceDigests,
+} from "./sources.js";
 import { validateTreatmentBudget } from "./treatment.js";
 
 const FilePath = z
@@ -295,6 +298,7 @@ export async function createEpisodeHostDriver(
 							options.host.requestBudget
 								? { ...options.host.requestBudget, scope }
 								: undefined,
+							signal,
 						);
 						const requiredModels =
 							options.arm === "manager-plus-jev"
@@ -342,6 +346,7 @@ export async function createEpisodeHostDriver(
 				hostArtifacts,
 				signal,
 			);
+			await verifyRecoverySourceDigests(sources, signal);
 			signal.throwIfAborted();
 			lifecycle.signal.throwIfAborted();
 			starting = (options.hostFactory ?? EvalHost.start)({
