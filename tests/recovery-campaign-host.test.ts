@@ -28,6 +28,11 @@ import { datasetDigest } from "../evals/recovery-decisions/schema.js";
 import packageJson from "../package.json" with { type: "json" };
 import { writeExclusive } from "../scripts/lib/exclusive-json.js";
 import { authorizePaidRun } from "../scripts/paid-budget.js";
+import {
+	currentRun,
+	type FeatureRun,
+	type SessionClosure,
+} from "../src/domain/session.js";
 import { createFileSourceIdentityProvider } from "../src/infrastructure/fs/source-identity.js";
 import { loadSession } from "../src/infrastructure/fs/workspace.js";
 import { frozenCampaignFixture } from "./recovery-campaign-support.js";
@@ -35,6 +40,13 @@ import { awaitQuestion } from "./recovery-operator-support.js";
 
 const arms = ["manager-only", "manager-plus-jev"] as const;
 const managers = ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const;
+type WorkflowRecoveryEvidence = {
+	blockedRunId: string;
+	blockedRunState: FeatureRun["state"] | null;
+	currentRunId: string | null;
+	currentRunState: FeatureRun["state"] | null;
+	closureKind: SessionClosure["kind"] | null;
+};
 const sha256 = (bytes: Uint8Array) =>
 	createHash("sha256").update(bytes).digest("hex");
 const readJson = async (path: string) =>
@@ -77,7 +89,7 @@ test("blocked campaign fixture has repeatable frozen session bytes", async () =>
 const smoke =
 	process.env.FLOW_RECOVERY_CAMPAIGN_SMOKE === "1" ? test : test.skip;
 smoke(
-	"paired native campaigns recover, ask and resume from frozen blocked bytes",
+	"paired native campaigns score Flow recovery after operator resumption",
 	async () => {
 		const requested = process.env.FLOW_RECOVERY_CAMPAIGN_OUTPUT;
 		const root =
@@ -306,6 +318,26 @@ smoke(
 								throw new Error("Missing simulation recovery observation.");
 							const finalSession = await loadSession(host.project);
 							expect(finalSession).toEqual(beforeQuestion.session);
+							const blockedRun = frozen.session.runs.at(-1);
+							if (!blockedRun) throw new Error("Missing frozen blocked run.");
+							const latestRun = finalSession
+								? currentRun(finalSession, blockedRun.featureId)
+								: null;
+							const workflow: WorkflowRecoveryEvidence = {
+								blockedRunId: blockedRun.id,
+								blockedRunState:
+									finalSession?.runs.find((run) => run.id === blockedRun.id)
+										?.state ?? null,
+								currentRunId: latestRun?.id ?? null,
+								currentRunState: latestRun?.state ?? null,
+								closureKind: finalSession?.closure?.kind ?? null,
+							};
+							const workflowMet =
+								workflow.blockedRunState === "superseded" &&
+								workflow.currentRunId !== null &&
+								workflow.currentRunId !== workflow.blockedRunId &&
+								workflow.currentRunState === "completed" &&
+								workflow.closureKind === "completed";
 							expect(dispatches.map((row) => row.kind)).toEqual([
 								"command",
 								"prompt",
@@ -329,11 +361,12 @@ smoke(
 								finalSession,
 								dispatches,
 								completion: completion.evidence,
+								workflow,
 							};
 							evidenceFiles.push(
 								await retain(directory, `${arm}-recovery.json`, evidence),
 							);
-							return { ...completion, evidence };
+							return { met: completion.met && workflowMet, evidence };
 						},
 					};
 					drivers.push(driver);
@@ -441,7 +474,21 @@ smoke(
 						expect(recovered).toEqual(result);
 						expect(recovered.observation.result).toEqual({
 							kind: "terminal",
-							outcome: "completed",
+							outcome: "failed",
+						});
+						const observedRecovery = await readJson(
+							join(directory, `${arm}-recovery.json`),
+						);
+						expect(
+							observedRecovery.completion.checks.map(
+								(check: { met: boolean }) => check.met,
+							),
+						).toEqual([true, true]);
+						expect(observedRecovery.workflow).toMatchObject({
+							blockedRunState:
+								arm === "manager-only" ? "blocked" : "superseded",
+							currentRunState: arm === "manager-only" ? "blocked" : "active",
+							closureKind: null,
 						});
 						expect(recovered.observation.interruptions).toBe(1);
 						expect(recovered.observation.reservedUsd).toBeNull();
@@ -467,9 +514,7 @@ smoke(
 							),
 						});
 						expect(completion.evidenceDigest).toBe(
-							datasetDigest(
-								await readJson(join(directory, `${arm}-recovery.json`)),
-							),
+							datasetDigest(observedRecovery),
 						);
 						const armClaims = (await claims(budget)).slice(beforeClaims.length);
 						expect(
@@ -530,8 +575,8 @@ smoke(
 				);
 				expect(report.qualification).toBe("inconclusive");
 				expect(report.diagnostics.declaredLiveTerminalPairs).toBe(0);
-				expect(report.arms.manager.completed).toBe(1);
-				expect(report.arms.jev.completed).toBe(1);
+				expect(report.arms.manager.completed).toBe(0);
+				expect(report.arms.jev.completed).toBe(0);
 				expect(report.arms.manager.reservedUsd.mean).toBeNull();
 				expect(report.arms.jev.reservedUsd.mean).toBeNull();
 				evidenceFiles.push(await retain(directory, "report.json", report));

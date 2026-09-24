@@ -127,48 +127,56 @@ export function createCommandHook(
 			output.parts.length = 1;
 			return;
 		}
-		assertOperational(`execute /${command}`);
-		if (parsed.settings) {
-			if (!recovery) throw new Error("Recovery is unavailable in this host.");
-			recovery.activate(input.sessionID, parsed.settings);
-		} else recovery?.revoke(input.sessionID);
-		if (command === "flow-auto" || command === "flow-plan") {
-			const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
-			if (evidence) {
-				await flow.status({ request: { view: "compact" } });
-				assertCurrent();
-				await flow.requestAnchor({ goal: parsed.goal, evidence });
-				assertCurrent();
+		try {
+			assertOperational(`execute /${command}`);
+			if (parsed.settings) {
+				if (!recovery) throw new Error("Recovery is unavailable in this host.");
+				recovery.activate(input.sessionID, parsed.settings);
+			} else recovery?.revoke(input.sessionID);
+			if (command === "flow-auto" || command === "flow-plan") {
+				const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
+				if (evidence) {
+					await flow.status({ request: { view: "compact" } });
+					assertCurrent();
+					await flow.requestAnchor({ goal: parsed.goal, evidence });
+					assertCurrent();
+				}
 			}
-		}
-		assertCurrent();
-		rewriteCommand(command, parsed.goal, output);
-		if (command !== "flow-auto")
-			return void autoDrive.deactivate(input.sessionID);
-		const metadata = await autoDrive.activate(input.sessionID);
-		assertCurrent();
-		// Preflight, not a gate. The lifecycle works either way; what changes is
-		// whether the user is told up front that this host cannot carry the
-		// continuation, instead of watching Flow stop after every feature and
-		// guessing which of the two it is.
-		if (autoDrive.continuationSupport() === "unsupported") {
-			output.parts.unshift(
-				asHostTextPart(
-					textPart(
-						"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+			assertCurrent();
+			rewriteCommand(command, parsed.goal, output);
+			if (command !== "flow-auto")
+				return void autoDrive.deactivate(input.sessionID);
+			const metadata = await autoDrive.activate(input.sessionID);
+			assertCurrent();
+			if (autoDrive.continuationSupport() === "unsupported") {
+				output.parts.unshift(
+					asHostTextPart(
+						textPart(
+							"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+						),
 					),
-				),
+				);
+			}
+			const instruction = output.parts.find(
+				(part): part is TextPart =>
+					part.type === "text" && part.synthetic === true,
 			);
+			if (!instruction) {
+				throw new Error("/flow-auto is missing its synthetic instruction.");
+			}
+			instruction.metadata = { ...instruction.metadata, ...metadata };
+		} catch (error) {
+			if (
+				command === "flow-auto" &&
+				invocation?.host === input.sessionID &&
+				invocation.generation === entryGeneration
+			) {
+				invocation = null;
+				recovery?.revoke(input.sessionID);
+				autoDrive.deactivate(input.sessionID);
+			}
+			throw error;
 		}
-		const instruction = output.parts.find(
-			(part): part is TextPart =>
-				part.type === "text" && part.synthetic === true,
-		);
-		if (!instruction) {
-			autoDrive.deactivate(input.sessionID);
-			throw new Error("/flow-auto is missing its synthetic instruction.");
-		}
-		instruction.metadata = { ...instruction.metadata, ...metadata };
 	};
 }
 
