@@ -589,6 +589,32 @@ test("oversized advice does not consume a checkpoint decision slot", async () =>
 	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
 });
 
+test("large Unicode remedies stop before the duplicated provider payload", async () => {
+	let calls = 0;
+	const s = await setup("shadow", {
+		async assess(packet, options) {
+			calls++;
+			return provider.assess(packet, options);
+		},
+	});
+	const proposal = s.proposal();
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: {
+			...proposal,
+			candidates: [0, 1, 2].map((index) => ({
+				...proposal.candidates[0],
+				id: `unicode-${index}`,
+				remedy: `${"漢".repeat(1660)}${index}`,
+				changedFromPreviousAttempt: "x",
+			})),
+		},
+	});
+	expect(response.status).toBe("error");
+	expect(calls).toBe(0);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
 test("packet uses current live finding wording instead of oversized history", async () => {
 	const s = await setup(
 		"shadow",
