@@ -1,89 +1,64 @@
 {
   "schemaVersion": 1,
-  "scope": "Episode reservation attribution and recoverable accounting",
-  "baseCommit": "01b7dde0b3c80281a8d2002cbd4ad9077f22bd5b",
-  "paidInference": false,
-  "liveEpisodesEnabled": false,
-  "productionProfilesAdded": false,
-  "toolchain": {
-    "bun": "1.4.0",
-    "opencode": "1.18.31"
-  },
-  "verification": {
-    "focused": {
-      "passed": 47,
-      "assertions": 248
-    },
-    "repository": {
-      "passed": 1456,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "e6600d28a511bfe0711676d089b947c8ef5b2215",
+  "recordedAt": "2026-09-24T01:50:06.767637+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1478,
       "skipped": 15,
-      "assertions": 7695
+      "failed": 0,
+      "assertions": 8003,
+      "logSha256": "f2cda432ed5bf5838748a6b241c5b1897756e7b98acddf917712674da1a78bfd"
     },
-    "independent": {
-      "passed": 43,
-      "assertions": 229,
-      "findings": [],
-      "modelIdentity": "unverified"
+    {
+      "command": "bun test tests/recovery-episode-runner.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-campaign.test.ts",
+      "exitCode": 0,
+      "passed": 41,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 205,
+      "logSha256": "f446e9b04b72aecc6b3cb567f068781b7c10c8019326854972b16e1ba8ff01c6"
     },
-    "native": {
-      "passed": 2,
-      "assertions": 233,
-      "hosts": 4,
-      "origin": "simulation",
-      "managerOnlyMicroUsd": 25000,
-      "managerPlusJevMicroUsd": 33000,
-      "verifiedArtifactHashes": 27
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "e452ad3bb280827be3f0da142178dc1b26f4c1f01f34786d6b515f69c46d25e5"
     }
-  },
-  "limitations": [
-    "Synthetic prices are not real billing evidence.",
-    "Local hashes do not authenticate coordinated evidence rewrites.",
-    "The other 14 opt-in checks were not rerun in this pass.",
-    "Live support, independently reviewed data and prices, new cap, qualification and release remain open."
   ],
-  "sources": {
+  "sourceDigests": {
     "evals/harness.ts": "df6bf24d57618266e6f4d0ed2925fa6e7845e6af337aa40a1f98e9b1c02c911e",
     "evals/recovery-decisions/budget-plugin.ts": "a7df85bfd1bbca3b4465e5a709196ca6d36491def5c7c8210131c2a224f51c2f",
     "evals/recovery-decisions/episode-host.ts": "f5336780e73be56644d166077b3a513868572f38e21eaa66b85a60d1c349b84a",
     "evals/recovery-decisions/episode-receipts.ts": "8a5e29fd899460830e47ac95ece10f5900459b5094aa931fb5eee1dc1b24b4ca",
-    "evals/recovery-decisions/episode-runner.ts": "09c86bf27ceebb724e2be4cc398e280e286d5b0897c9da327ede17ea3bce555e",
+    "evals/recovery-decisions/episode-runner.ts": "0912add310318d20a984c849e5f4f489cc7fe5a3bcb0cd524a8ab2fc045c5730",
     "evals/recovery-decisions/request-budget.ts": "8606054e0b1ea3d277c7ccfbb8320734af0992c134548ee405946165057525cd",
     "evals/recovery-decisions/request-gate.ts": "7fbe85a7ffa86349ded0f32e336b6f2d74548d1129a91c28ca9408fd31a524aa",
     "evals/recovery-decisions/treatment-plugin.ts": "7d674357d99525204dceecf0c4f7ee36065fbdd5adf170cee8ae17aca891dd02",
-    "tests/recovery-campaign-host.test.ts": "3a81305de1e373334aaab9ad5a2e3f41a5342e3bc1b9dff560ff34beb67639ed",
+    "tests/recovery-campaign-host.test.ts": "0d50864c26aae5177f361ea1a61c8024f5a1de8ec1e2a606918660879ed1851d",
     "tests/recovery-episode-host.test.ts": "7c0d5d11dc56502d4a754447809a63567a6e6f9a4f44ffe5db6cbc37ce56cc52",
     "tests/recovery-episode-receipts.test.ts": "1b435c498c9c1635ef4bac8970ac1011cf451e7225b8b2d358980b99659078a1",
-    "tests/recovery-episode-runner.test.ts": "95543451ec101cf4ded1e99046c1780d56f3490fe2bfc2f3712d2cc9dcc41c46",
+    "tests/recovery-episode-runner.test.ts": "afa2e8df99da68e27afb711fed9339ed48c6db5c202f9ac780f826ca38b4ac16",
     "tests/recovery-request-budget.test.ts": "014fe96bd20411af8a3ea0707ee1e716c6e310d148b2d921432ba6ce02282d8d"
   },
-  "artifacts": [
-    {
-      "path": "/tmp/flow-reservation-parent-focused.log",
-      "sha256": "25bb06adcb93add7854cd8ae1d1d7ebea697c1950e73822d4d515c3ff8de6510"
-    },
-    {
-      "path": "/tmp/flow-reservation-parent-check.log",
-      "sha256": "a38158a1272a0a9f3187585d32aeb2f625af54b19ab7c5115f0e4c92a541423e"
-    },
-    {
-      "path": "/tmp/flow-reservation-parent-native.log",
-      "sha256": "4487e4a08cdf71236fd07d7bcbfdb30e504a2c6c36ab2b64fc52788cc4977f78"
-    },
-    {
-      "path": "/tmp/flow-reservation-parent-artifacts.log",
-      "sha256": "e659219662fd3645dc4158368a272536f038c874a12bbdfaad5a58880e122c1f"
-    },
-    {
-      "path": "/tmp/flow-reservation-parent-native/complete.json",
-      "sha256": "7a0abde0680a314f504fc3cd82fa42ab6df2788ff194cdaf9272bf8dec6464b5"
-    },
-    {
-      "path": "/tmp/flow-reservation-code-review.md",
-      "sha256": "c88cfc1c87e251a83cc2a791a020764cb04d44744c4480cb52022695900076c9"
-    },
-    {
-      "path": "/tmp/flow-reservation-judge-focused.log",
-      "sha256": "8951c94f674d3b497e056a80f9b0f9dbd64d2a9766cb92d567915e8db04fdd7d"
-    }
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-reservation-verification-1beb7d02.json",
+    "verifiedCodeHead": "1beb7d0204be570620e37e467c2d50e00afa0a71",
+    "originalSha256": "3840eb3ead609a39e2a4aadc50da07b7df61b927b36dd741c081e0c3f2fcf90c"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
   ]
 }
