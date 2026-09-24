@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { operationInputDigest } from "../domain/operation.js";
+import { livePriorFindings } from "../domain/review-findings.js";
 import {
 	currentRun,
 	type Session,
@@ -75,6 +76,7 @@ export type RecoveryProfile = Readonly<{
 const QUALIFIED_RECOVERY_PROFILES: readonly RecoveryProfile[] = Object.freeze(
 	[],
 );
+const MAX_RECOVERY_PACKET_BYTES = 16_000;
 
 const hash = (value: unknown) =>
 	createHash("sha256").update(JSON.stringify(value)).digest("hex");
@@ -112,6 +114,8 @@ type Host = {
 	fenced: boolean;
 };
 export type RecoveryGuard = Readonly<{
+	checkClose(session: Session): void;
+	retireClosedSession(sessionId: string): void;
 	check(
 		session: Session,
 		source: SourceDigest | null,
@@ -226,7 +230,11 @@ export class RecoveryController {
 			this.#lease = null;
 		}
 	}
+	#expireLease(): void {
+		if (this.#lease && this.#now() >= this.#lease.deadline) this.revoke();
+	}
 	observeMessage(hostId: string, id: string, synthetic: boolean): void {
+		this.#expireLease();
 		const host =
 			this.#hosts.get(hostId) ??
 			(!synthetic && this.#protectedSessions.size
@@ -250,6 +258,7 @@ export class RecoveryController {
 		}
 	}
 	#origin(context: RecoveryContext): Lease | null {
+		this.#expireLease();
 		const host = this.#hosts.get(context.hostSessionId);
 		if (!host?.fenced) return null;
 		if (
@@ -286,14 +295,14 @@ export class RecoveryController {
 	#bind(lease: Lease, session: Session) {
 		const binding = this.#binding(session);
 		if (lease.session === null) {
-			lease.session = session.id;
-			lease.binding = binding;
 			if (
 				this.#protectedSessions.size >= 128 &&
 				!this.#protectedSessions.has(session.id)
 			)
 				throw new Error("Recovery session capacity reached.");
 			this.#protectedSessions.add(session.id);
+			lease.session = session.id;
+			lease.binding = binding;
 		}
 		if (lease.session !== session.id || lease.binding !== binding) {
 			this.revoke(lease.host);
@@ -301,6 +310,7 @@ export class RecoveryController {
 		}
 	}
 	snapshot() {
+		this.#expireLease();
 		const lease = this.#lease;
 		return lease
 			? {
@@ -322,6 +332,7 @@ export class RecoveryController {
 		revision: number,
 		nextAction: string | null,
 	): string | null {
+		this.#expireLease();
 		const lease = this.#lease;
 		if (
 			!lease ||
@@ -343,6 +354,11 @@ export class RecoveryController {
 	guard(context: RecoveryContext): RecoveryGuard {
 		const identity = this.#lease;
 		return {
+			checkClose: (session) => this.#checkClose(context, session),
+			retireClosedSession: (sessionId) => {
+				if (this.#lease?.session === sessionId) this.revoke();
+				this.#protectedSessions.delete(sessionId);
+			},
 			check: (s, source, m) => this.#check(context, s, source, m),
 			accepted: (s, m, replayed) => this.#accepted(context, s, m, replayed),
 			propose: (s, source, p) => this.#propose(context, s, source, p),
@@ -357,23 +373,7 @@ export class RecoveryController {
 			},
 		};
 	}
-	#check(
-		context: RecoveryContext,
-		session: Session,
-		source: SourceDigest | null,
-		mutation: RecoveryMutation,
-	): void {
-		const reserved = mutation.request.operationId.startsWith("flow-recovery-");
-		if (
-			reserved &&
-			(!this.#lease ||
-				this.#lease.host !== context.hostSessionId ||
-				!this.#lease.pending ||
-				hash(this.#lease.pending.mutation) !== hash(mutation))
-		)
-			throw new Error(
-				"Recovery operation requires its original live host grant.",
-			);
+	#checkProtectedSession(context: RecoveryContext, session: Session): void {
 		if (
 			this.#protectedSessions.has(session.id) &&
 			!this.#hosts.get(context.hostSessionId)?.fenced
@@ -386,6 +386,38 @@ export class RecoveryController {
 			)
 				throw new Error("Recovery belongs to a different host session.");
 		}
+	}
+	#checkClose(context: RecoveryContext, session: Session): void {
+		this.#expireLease();
+		this.#checkProtectedSession(context, session);
+		const lease = this.#origin(context);
+		if (!lease) return;
+		this.#bind(lease, session);
+		const parent = this.#hosts
+			.get(context.hostSessionId)
+			?.parents.get(context.messageId);
+		if (lease.direction === null || parent !== lease.direction)
+			throw new Error("Session closure requires fresh real user direction.");
+	}
+	#check(
+		context: RecoveryContext,
+		session: Session,
+		source: SourceDigest | null,
+		mutation: RecoveryMutation,
+	): void {
+		this.#expireLease();
+		const reserved = mutation.request.operationId.startsWith("flow-recovery-");
+		if (
+			reserved &&
+			(!this.#lease ||
+				this.#lease.host !== context.hostSessionId ||
+				!this.#lease.pending ||
+				hash(this.#lease.pending.mutation) !== hash(mutation))
+		)
+			throw new Error(
+				"Recovery operation requires its original live host grant.",
+			);
+		this.#checkProtectedSession(context, session);
 		const lease = this.#origin(context);
 		if (!lease) return;
 		this.#bind(lease, session);
@@ -538,18 +570,6 @@ export class RecoveryController {
 			throw new Error("This checkpoint is not eligible for recovery advice.");
 		if (lease.inFlight) throw new Error("Recovery advice is already pending.");
 		const checkpoint = `${session.id}/${session.revision}`;
-		const findingEntries = session.runs.flatMap((run) =>
-			run.reviews.flatMap((review) =>
-				(review.result?.findings ?? []).map((f) => ({
-					id: f.findingId ?? "",
-					summary: f.summary,
-					evidence: f.evidence ?? "",
-					scope: f.scopeBlocker === true,
-				})),
-			),
-		);
-		const findings = findingEntries.filter((f) => f.id).slice(-30);
-		const ids = new Set(findings.map((f) => f.id));
 		if (
 			new Set(proposal.candidates.map((c) => c.id)).size !==
 			proposal.candidates.length
@@ -559,7 +579,22 @@ export class RecoveryController {
 			const feature = session.plan?.features.find(
 				(f) => f.id === candidate.featureId,
 			);
-			if (!feature || candidate.findingIds.some((id) => !ids.has(id)))
+			const findingFeatureId =
+				candidate.action === "retry"
+					? candidate.featureId
+					: projection.blockedFeature?.featureId;
+			if (!feature || !findingFeatureId) return false;
+			const liveFindings = livePriorFindings(session, findingFeatureId);
+			const liveIds = new Set(liveFindings.map((finding) => finding.findingId));
+			const proposedIds = new Set(candidate.findingIds);
+			if (
+				candidate.findingIds.some((id) => !liveIds.has(id)) ||
+				liveFindings.some(
+					(finding) =>
+						finding.severity === "blocking" &&
+						!proposedIds.has(finding.findingId),
+				)
+			)
 				return false;
 			if (
 				!feature.dependsOn.every(
@@ -621,6 +656,24 @@ export class RecoveryController {
 			throw new Error(
 				"No proposed recovery action is permitted by current history and dependencies.",
 			);
+		const findingFeatureIds = new Set(
+			candidates.map((candidate) =>
+				candidate.action === "retry"
+					? candidate.featureId
+					: projection.blockedFeature?.featureId,
+			),
+		);
+		const findings = [...findingFeatureIds].flatMap((featureId) =>
+			featureId
+				? livePriorFindings(session, featureId).map((finding) => ({
+						id: finding.findingId,
+						summary: finding.summary,
+						evidence: finding.evidence ?? "",
+					}))
+				: [],
+		);
+		if (findings.length > 30)
+			throw new Error("Too many live findings for bounded recovery advice.");
 		const packet: DecisionPacket = {
 			sessionId: session.id,
 			revision: session.revision,
@@ -628,13 +681,11 @@ export class RecoveryController {
 			goal: session.goal,
 			planDigest: this.#binding(session),
 			rubric: "recovery-v1",
-			findings: findings.map(({ id, summary, evidence }) => ({
-				id,
-				summary,
-				evidence,
-			})),
+			findings,
 			candidates,
 		};
+		if (Buffer.byteLength(JSON.stringify(packet)) > MAX_RECOVERY_PACKET_BYTES)
+			throw new Error("Recovery context exceeds the bounded request size.");
 		const packetDigest = hash(packet),
 			remedyDigest = hash(
 				candidates.map((c) => ({
@@ -652,13 +703,8 @@ export class RecoveryController {
 			lease.calls >= lease.settings.maxCalls
 		)
 			throw new Error("Recovery decision budget exhausted.");
-		lease.packets.add(packetDigest);
-		lease.remedies.add(remedyDigest);
-		lease.checkpointCalls.set(
-			checkpoint,
-			(lease.checkpointCalls.get(checkpoint) ?? 0) + 1,
-		);
 		lease.inFlight = true;
+		let attemptReserved = false;
 		let advice: DecisionAdvice;
 		try {
 			advice = await this.#provider.assess(packet, {
@@ -675,6 +721,15 @@ export class RecoveryController {
 						return false;
 					lease.calls++;
 					lease.reservedUsd += JEV_ATTEMPT_RESERVATION_USD;
+					if (!attemptReserved) {
+						attemptReserved = true;
+						lease.packets.add(packetDigest);
+						lease.remedies.add(remedyDigest);
+						lease.checkpointCalls.set(
+							checkpoint,
+							(lease.checkpointCalls.get(checkpoint) ?? 0) + 1,
+						);
+					}
 					return true;
 				},
 			});
@@ -686,6 +741,10 @@ export class RecoveryController {
 		if (this.#lease !== lease || lease.controller.signal.aborted)
 			throw new Error("Recovery advice was cancelled.");
 		this.#origin(context);
+		if (!attemptReserved) {
+			lease.packets.add(packetDigest);
+			lease.remedies.add(remedyDigest);
+		}
 		const profile = this.#profile() ?? {
 			choice: 0.9,
 			goal: 0.95,
@@ -700,6 +759,7 @@ export class RecoveryController {
 				? advice.assessments[candidate.id]
 				: undefined;
 		const selected =
+			attemptReserved &&
 			advice.kind === "answered" &&
 			advice.model === "jev-1.13.0" &&
 			candidate &&

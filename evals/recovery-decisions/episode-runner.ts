@@ -248,8 +248,6 @@ export async function runEpisode(options: {
 			initialStateDigest: datasetDigest(reset.initialState),
 			resetProtocol: registration.protocol.execution.resetProtocol,
 		});
-		clearTimeout(timer);
-		armDeadline();
 		const header = Header.parse({
 			...(expectedHostArtifacts
 				? {
@@ -274,10 +272,13 @@ export async function runEpisode(options: {
 		await writeExclusive(join(options.outputDirectory, "header.json"), header);
 		journalHeader = header;
 		previous = datasetDigest(header);
-		start = performance.now();
 		await append({ kind: "start", atMs: 0 });
+		controller.signal.throwIfAborted();
+		start = performance.now();
 		started = true;
 		accepting = true;
+		clearTimeout(timer);
+		armDeadline();
 		await bounded(() =>
 			options.driver.run({
 				signal: controller.signal,
@@ -396,6 +397,7 @@ export async function runEpisode(options: {
 	} finally {
 		terminalAtMs = elapsed();
 		clearTimeout(timer);
+		options.signal?.removeEventListener("abort", cancel);
 		accepting = false;
 		controller.abort();
 		let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
@@ -415,7 +417,6 @@ export async function runEpisode(options: {
 		} finally {
 			clearTimeout(cleanupTimer);
 		}
-		options.signal?.removeEventListener("abort", cancel);
 		await queue.catch(() => {});
 	}
 	if (
