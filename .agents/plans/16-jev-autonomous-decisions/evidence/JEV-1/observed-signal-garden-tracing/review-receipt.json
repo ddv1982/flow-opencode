@@ -4,7 +4,7 @@
   "caseId": "signal-garden-phase5-trace-lifecycle-20260925",
   "corpusDigest": "30ad57f129993a7e16bb338e7c6a9701838d16ab334ec2791f9211a7e88f7551",
   "files": {
-    "README.md": "76851eaa512dd857854e1ffb3b65c5e64719a266f229ebfa863395a4762f999c",
+    "README.md": "15b0a689dfaa55733867cf503431ab40e3245ea1c51cb6a885dcc7b141029ff1",
     "checkpoint.json": "d7b458457c904946a49e1c3360f4c3d2340cf3ee71a201eea69006dd578dd435",
     "manager-proposal.json": "dcdedb5fe8f4b0673baaa4288a1b92231c6a1496cf9d55a30d289e376bd7021f",
     "decision-packet.json": "2e11d8820a0d0f986ef124bf58361a294956ba87519fd4139dfce50c37bf7cfb",
@@ -18,7 +18,7 @@
     "audit-source.ts": "66352d95bcd68f194bced8d3779a8a649954da8fa5bdbd3e29d45def4f15944c",
     "build-draft.ts": "ebef8243e4650ffe1df5c018eafcba63f4a3cb4d078e2c07bec85a315b8cf6af",
     "reconstruct-packet.ts": "27caf91dd29011f7d99ef9288a518f680987af0c0a1c4f416847097f5d65c29d",
-    "apply-review.ts": "b956d5adb028e1f8e735b7d3e3d48c44884f886cba07472d6d2cff0df2f0f078",
+    "apply-review.ts": "314632c63c0dfd283264a27fc0349f925f194eeab6b5515510bfceef45fb0198",
     "independent-label-review.json": "a53abe0643cb8cda07dbdc0bd86bea7d0b29be1b1949cf14c1c06b53146bd836",
     "initial-review-inconclusive.json": "f6eb1090558bbb3981b9473662d95d7051e31022dd0c899a136f3aa48c10caff",
     "prior-review-before-audit-fix.json": "b2782d8625cef2593fde6bc3e59800391349ec3cf008aa4b2309132c2809b5eb",

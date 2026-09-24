@@ -69,27 +69,59 @@ const submission = {
 };
 const reviewedCase = reviewSnapshot(draft, submission);
 const oneCaseCorpus = await buildReviewedCorpus([reviewedCase]);
+const echoDirectory = join(directory, "..", "observed-echo-recording-gate");
+const echoReceipt = JSON.parse(
+	await readFile(join(echoDirectory, "review-receipt.json"), "utf8"),
+);
+for (const name of [
+	"reviewed-case.json",
+	"reviewed-calibration-corpus.json",
+	"runtime-shadow-outcome.json",
+	"decision-packet.json",
+]) {
+	if (!echoReceipt.files?.[name])
+		throw new Error(`Echo receipt does not bind ${name}.`);
+}
+for (const [name, expected] of Object.entries(
+	echoReceipt.files as Record<string, string>,
+)) {
+	if (name.includes("/") || name.includes(".."))
+		throw new Error("Echo receipt contains an invalid file name.");
+	if (hash(await readFile(join(echoDirectory, name))) !== expected)
+		throw new Error(`Echo receipt digest differs: ${name}`);
+}
 const echoCase = JSON.parse(
+	await readFile(join(echoDirectory, "reviewed-case.json"), "utf8"),
+);
+const echoCorpus = JSON.parse(
 	await readFile(
-		join(directory, "..", "observed-echo-recording-gate", "reviewed-case.json"),
+		join(echoDirectory, "reviewed-calibration-corpus.json"),
 		"utf8",
 	),
 );
+const echoOutcome = JSON.parse(
+	await readFile(join(echoDirectory, "runtime-shadow-outcome.json"), "utf8"),
+);
+const echoPacket = JSON.parse(
+	await readFile(join(echoDirectory, "decision-packet.json"), "utf8"),
+);
+if (
+	echoReceipt.classification !== "independently-reviewed-calibration-only" ||
+	echoReceipt.caseId !== echoCase.id ||
+	echoReceipt.corpusDigest !== datasetDigest(echoCorpus) ||
+	echoOutcome.sourceRevision !== echoCase.session.revision ||
+	echoPacket.sessionId !== echoCase.session.id ||
+	echoPacket.sourceDigest !== echoCase.sourceDigest ||
+	datasetDigest(echoOutcome.managerProposal) !==
+		datasetDigest(echoCase.proposal) ||
+	echoOutcome.recovery.packetDigest !==
+		hash(Buffer.from(JSON.stringify(echoPacket)))
+)
+	throw new Error("Echo outcome is not bound to its reviewed source.");
 const twoCaseCorpus = await buildReviewedCorpus([echoCase, reviewedCase]);
 const preparation = await evaluateRecoveryCorpus(twoCaseCorpus);
 if (!preparation.rows.every((row) => row.eligibilityMatches))
 	throw new Error("Calibration labels disagree with controller eligibility.");
-const echoOutcome = JSON.parse(
-	await readFile(
-		join(
-			directory,
-			"..",
-			"observed-echo-recording-gate",
-			"runtime-shadow-outcome.json",
-		),
-		"utf8",
-	),
-);
 const signalOutcome = await read("runtime-shadow-outcome.json");
 const outcomes = [
 	{ case: echoCase, outcome: echoOutcome },
