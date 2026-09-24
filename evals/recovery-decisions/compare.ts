@@ -243,7 +243,9 @@ export async function compareCampaign(
 					const replay = await evaluateRecoveryCorpus(
 						{ ...corpus, cases: [entry] },
 						{
-							async assess() {
+							async assess(_packet, options) {
+								if (!options.reserveAttempt())
+									throw new Error("Replay decision budget exhausted.");
 								return advice;
 							},
 						},
