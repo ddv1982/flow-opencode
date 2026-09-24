@@ -607,6 +607,11 @@ test("live source driver binds credential policy and preserves runtime scope whi
 		managerModel: "openai/gpt-5.6-terra",
 	};
 	f.options.manager.model = "openai/gpt-5.6-terra";
+	const omitted = { ...f.options.host };
+	delete omitted.providerCredentials;
+	await expect(
+		createEpisodeHostDriver({ ...f.options, host: omitted }),
+	).rejects.toThrow("explicit provider credential policy");
 	const driver = await createEpisodeHostDriver(f.options);
 	const inherited = await createEpisodeHostDriver({
 		...f.options,
