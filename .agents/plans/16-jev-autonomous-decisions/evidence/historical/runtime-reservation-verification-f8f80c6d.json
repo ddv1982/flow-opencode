@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "72d9a4d732f9c950852638a17dbd5c50291e188a",
-  "recordedAt": "2026-09-24T05:12:14.292609+00:00",
+  "verifiedCodeHead": "f8f80c6d20cea9bb3c16d4d335f7380b77b479e5",
+  "recordedAt": "2026-09-24T04:10:57.863879+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -15,16 +15,16 @@
       "skipped": 15,
       "failed": 0,
       "assertions": 8037,
-      "logSha256": "5e180d895303d85c8a6c8f32204ed0a8ed7594dc08a156c26c20713f7fb86e91"
+      "logSha256": "211fa5cad999dd954062bdfd27eb469e87a13e062d418be646eee8da1095c2dc"
     },
     {
-      "command": "bun test tests/recovery-episode-runner.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-campaign.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-treatment.test.ts tests/recovery-capture.test.ts tests/host-artifacts-host.test.ts",
+      "command": "bun test tests/recovery-episode-runner.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-campaign.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-treatment.test.ts tests/recovery-capture.test.ts",
       "exitCode": 0,
       "passed": 74,
-      "skipped": 2,
+      "skipped": 1,
       "failed": 0,
       "assertions": 496,
-      "logSha256": "434465f53b6f63205d26fcab18f2186deddafb68b222fe496df3bcb4437f9a5a"
+      "logSha256": "3c811661948402d244d3a3dedb25a8cbc44eee619aa08a07f11915b0edf37198"
     },
     {
       "command": "bun run smoke:live",
@@ -33,11 +33,11 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "600378eb7e22d7e69afb7764d015f9df15ef3d66544faae6b91f004c17e4add2"
+      "logSha256": "c801079fea4c5d5abd1671cccba7ee40274c5fc641a92edb5e8d3751110afc23"
     }
   ],
   "sourceDigests": {
-    "evals/harness.ts": "9f615b30ed599a0b523edac9bfd122d3be3ab79bc909026958e903793e3912ce",
+    "evals/harness.ts": "df6bf24d57618266e6f4d0ed2925fa6e7845e6af337aa40a1f98e9b1c02c911e",
     "evals/recovery-decisions/budget-plugin.ts": "a7df85bfd1bbca3b4465e5a709196ca6d36491def5c7c8210131c2a224f51c2f",
     "evals/recovery-decisions/capture.ts": "0db16805da9cfb1ae5c5eca1c13229b5d1eb53c1122d9f7cfda282867070bf8a",
     "evals/recovery-decisions/compare.ts": "22be5d8b6617b921516e130371222005663632149ba12e66d8e8946bd2a2fa08",
@@ -48,7 +48,6 @@
     "evals/recovery-decisions/request-gate.ts": "7fbe85a7ffa86349ded0f32e336b6f2d74548d1129a91c28ca9408fd31a524aa",
     "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
     "evals/recovery-decisions/treatment-plugin.ts": "7d674357d99525204dceecf0c4f7ee36065fbdd5adf170cee8ae17aca891dd02",
-    "tests/host-artifacts-host.test.ts": "5dad0c84d33ae3394786995ac74d285bb91b7707f3f97f8895c0cb5a7a4e583b",
     "tests/recovery-campaign-host.test.ts": "0b0f131dee4611af823cedbd165a2fa9af4f5e2746b1ddfbe340623fd0aa7346",
     "tests/recovery-campaign-support.ts": "e918b324d6c3c6ba9b887ce71bcacc98bedca5408994b812353f717171308563",
     "tests/recovery-capture.test.ts": "576fa58effc54fd33363cee96a3bcddebbe8615ae6f07fe577315d5ea93af76c",
@@ -61,9 +60,9 @@
     "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-reservation-verification-f8f80c6d.json",
-    "verifiedCodeHead": "f8f80c6d20cea9bb3c16d4d335f7380b77b479e5",
-    "originalSha256": "689c6a686e2781e7ed4edecd2d0a4a35af2ff937a8ed5b849db9adcbada118d3"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-reservation-verification-2784ac0b.json",
+    "verifiedCodeHead": "2784ac0b2075cc26708e77acb9e89ea617438faf",
+    "originalSha256": "0099c402f0883936afcc99c6acf83c2bcd174856d91b1ccdf3640fc56eb34a5c"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
