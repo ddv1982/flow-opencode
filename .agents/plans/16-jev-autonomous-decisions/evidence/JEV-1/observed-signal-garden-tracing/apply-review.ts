@@ -201,7 +201,7 @@ await write("review-receipt.json", {
 	schemaVersion: 1,
 	classification: "independently-reviewed-calibration-only",
 	caseId: reviewedCase.id,
-	corpusDigest: preparation.corpusDigest,
+	corpusDigest: datasetDigest(oneCaseCorpus),
 	files,
 	limits: summary.limits,
 });

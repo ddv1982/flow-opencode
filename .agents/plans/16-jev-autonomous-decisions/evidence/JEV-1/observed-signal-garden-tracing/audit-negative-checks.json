@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "auditScriptSha256": "66352d95bcd68f194bced8d3779a8a649954da8fa5bdbd3e29d45def4f15944c",
+  "auditScriptSha256": "b8dd012d938147ba018b33b233174151e50324e869181b06787d54c7fb4a73d6",
   "checks": [
     {
       "tamperedReviewer": 1,
@@ -15,10 +15,21 @@
       "rawDigestRebound": true,
       "auditRejected": true,
       "expectedFailure": "reviewer 2 complete result binding"
+    },
+    {
+      "tamperedField": "snapshot-proposal",
+      "auditRejected": true,
+      "expectedFailure": "proposal, snapshot, and packet binding"
+    },
+    {
+      "tamperedField": "packet-candidates",
+      "auditRejected": true,
+      "expectedFailure": "proposal, snapshot, and packet binding"
     }
   ],
   "limits": [
     "Mutated private raw files are retained only in temporary negative-test directories.",
-    "These checks prove the verifier rejects two rebounded reviewer-content forgeries; they do not prove remote model execution."
+    "These checks prove the verifier rejects two rebounded reviewer-content forgeries; they do not prove remote model execution.",
+    "Two additional negative checks mutate the snapshot proposal and packet candidates independently and require the new cross-representation binding to reject them."
   ]
 }

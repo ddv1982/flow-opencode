@@ -58,6 +58,15 @@ assert(
 	session.revision === 22 && session.id === snapshot.session.id,
 	"session binding",
 );
+assert(
+	proposal.sessionId === session.id &&
+		proposal.expectedRevision === session.revision &&
+		datasetDigest(proposal) === datasetDigest(snapshot.proposal) &&
+		packet.sessionId === proposal.sessionId &&
+		packet.revision === proposal.expectedRevision &&
+		datasetDigest(packet.candidates) === datasetDigest(proposal.candidates),
+	"proposal, snapshot, and packet binding",
+);
 const baseline = execFileSync(
 	"git",
 	["-C", frozenSource, "rev-parse", "HEAD"],
