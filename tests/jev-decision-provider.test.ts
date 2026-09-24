@@ -114,8 +114,37 @@ test("accepted Unicode remedies leave room for the full provider envelope", asyn
 	}
 });
 test("runtime adapter rejects unknown model and invalid distributions", async () => {
+	const upgraded = spyOn(globalThis, "fetch").mockResolvedValue(
+		Response.json({ ...response(), model: "jev-1.14.0" }),
+	);
+	try {
+		expect(
+			await createJevDecisionProvider(() => "credential").assess(packet, {
+				signal: new AbortController().signal,
+				reserveAttempt: () => true,
+			}),
+		).toEqual({
+			kind: "unavailable",
+			reason: "model-mismatch",
+			resolvedModel: "jev-1.14.0",
+		});
+	} finally {
+		upgraded.mockRestore();
+	}
+	const unrecognized = spyOn(globalThis, "fetch").mockResolvedValue(
+		Response.json({ ...response(), model: "jev-latest" }),
+	);
+	try {
+		expect(
+			await createJevDecisionProvider(() => "credential").assess(packet, {
+				signal: new AbortController().signal,
+				reserveAttempt: () => true,
+			}),
+		).toEqual({ kind: "unavailable", reason: "invalid-response" });
+	} finally {
+		unrecognized.mockRestore();
+	}
 	for (const payload of [
-		{ ...response(), model: "jev-latest" },
 		{ ...response(), answers: {} },
 		{
 			...response(),
