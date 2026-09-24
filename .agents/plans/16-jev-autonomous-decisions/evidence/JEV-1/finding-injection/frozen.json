@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "frozenAt": "2026-09-24T12:32:10.825068+00:00",
+  "codeHead": "a3784bd25f86914cdf71a11c53f2fb0608395bdc",
+  "corpusSha256": "b8e3813b9c5b1bc472adb25a11a87c68aa7ef3926b3a8e274c005d9885a4204a",
+  "manifestSha256": "a9c8eb71e323d226110cdc53f90a926ea439dc81fdd656bd25dcfbe5ab1e0561",
+  "purpose": "synthetic adversarial review-finding development case",
+  "qualification": "unreviewed"
+}
