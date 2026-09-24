@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "235e591ef8e026123f325b0870e85b17f60d099b",
+  "recordedAt": "2026-09-24T01:56:48.624077+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1462,
+      "skipped": 15,
+      "failed": 0,
+      "assertions": 7835,
+      "logSha256": "48a8d6041f34004a9b1effccb89c65fe825876111d7c445974860f6a00ba7b28"
+    },
+    {
+      "command": "bun test tests/recovery-campaign.test.ts tests/recovery-treatment.test.ts tests/recovery-episode-runner.test.ts tests/recovery-operator.test.ts",
+      "exitCode": 0,
+      "passed": 32,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 128,
+      "logSha256": "e3e5d5764820fed2acb5949de982c6366a2d1268a6105fa1518ef67242ff2ea3"
+    },
+    {
+      "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-campaign-host.test.ts",
+      "exitCode": 0,
+      "passed": 2,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 237,
+      "logSha256": "559fd6afe3cbefb2e4fbba4b2d409007ae70559b6ed9b309ef387de7ad809a8f"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "713eebcaefee999c050ce0eb87959119a75929cf9f87b5c6b0e2e7e45c554853"
+    }
+  ],
+  "sourceDigests": {
+    "evals/recovery-decisions/treatment.ts": "6b0458b86d2ffcb23aa61acad068f453771d45de9d6ee4ccbd53225a59d2cb40",
+    "evals/recovery-decisions/simulation-transport.ts": "8713e2c2bf393f5a84fb858731684f04f95ab211f4f70a9ef150f5e2ed8aca9d",
+    "tests/recovery-campaign-host.test.ts": "0f9b8819300f3f7a05f63786c8d4921ea6910007c58956f9531101d2e977353e",
+    "tests/recovery-campaign-support.ts": "f242f1fc187aeea5964f76d56b3cb1912a267e18decb283c7d7eaf31837a304e",
+    "tests/recovery-campaign.test.ts": "e324a74d77a478334335a4378712501209aa10d0d762d5737887300ae7193d91"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-paired-simulation-verification-a395d734.json",
+    "verifiedCodeHead": "a395d7347096274a8ecb057e90849f29d526dd12",
+    "originalSha256": "96d7a16bf5603816d492c7b86a0058b6b9488d426df198856f997ff97a2586dc"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
+  ]
+}
