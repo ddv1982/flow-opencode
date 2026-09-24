@@ -590,8 +590,8 @@ smoke(
 				expect(report.diagnostics.declaredLiveTerminalPairs).toBe(0);
 				expect(report.arms.manager.completed).toBe(0);
 				expect(report.arms.jev.completed).toBe(0);
-				expect(report.arms.manager.reservedUsd.mean).toBeNull();
-				expect(report.arms.jev.reservedUsd.mean).toBeNull();
+				expect(report.arms.manager.reservedUsd.mean).toBe(0.025);
+				expect(report.arms.jev.reservedUsd.mean).toBe(0.033);
 				evidenceFiles.push(await retain(directory, "report.json", report));
 				expect(
 					await reportEpisodes(
