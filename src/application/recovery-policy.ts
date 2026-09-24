@@ -112,6 +112,8 @@ type Host = {
 	fenced: boolean;
 };
 export type RecoveryGuard = Readonly<{
+	checkClose(session: Session): void;
+	retireClosedSession(sessionId: string): void;
 	check(
 		session: Session,
 		source: SourceDigest | null,
@@ -291,14 +293,14 @@ export class RecoveryController {
 	#bind(lease: Lease, session: Session) {
 		const binding = this.#binding(session);
 		if (lease.session === null) {
-			lease.session = session.id;
-			lease.binding = binding;
 			if (
 				this.#protectedSessions.size >= 128 &&
 				!this.#protectedSessions.has(session.id)
 			)
 				throw new Error("Recovery session capacity reached.");
 			this.#protectedSessions.add(session.id);
+			lease.session = session.id;
+			lease.binding = binding;
 		}
 		if (lease.session !== session.id || lease.binding !== binding) {
 			this.revoke(lease.host);
@@ -350,6 +352,11 @@ export class RecoveryController {
 	guard(context: RecoveryContext): RecoveryGuard {
 		const identity = this.#lease;
 		return {
+			checkClose: (session) => this.#checkClose(context, session),
+			retireClosedSession: (sessionId) => {
+				if (this.#lease?.session === sessionId) this.revoke();
+				this.#protectedSessions.delete(sessionId);
+			},
 			check: (s, source, m) => this.#check(context, s, source, m),
 			accepted: (s, m, replayed) => this.#accepted(context, s, m, replayed),
 			propose: (s, source, p) => this.#propose(context, s, source, p),
@@ -363,6 +370,32 @@ export class RecoveryController {
 				}
 			},
 		};
+	}
+	#checkProtectedSession(context: RecoveryContext, session: Session): void {
+		if (
+			this.#protectedSessions.has(session.id) &&
+			!this.#hosts.get(context.hostSessionId)?.fenced
+		) {
+			const host = this.#hosts.get(context.hostSessionId);
+			if (
+				!host?.manual ||
+				host.parents.get(context.messageId) !== host.manual ||
+				["flow-worker", "flow-reviewer", "flow-planner"].includes(context.agent)
+			)
+				throw new Error("Recovery belongs to a different host session.");
+		}
+	}
+	#checkClose(context: RecoveryContext, session: Session): void {
+		this.#expireLease();
+		this.#checkProtectedSession(context, session);
+		const lease = this.#origin(context);
+		if (!lease) return;
+		this.#bind(lease, session);
+		const parent = this.#hosts
+			.get(context.hostSessionId)
+			?.parents.get(context.messageId);
+		if (lease.direction === null || parent !== lease.direction)
+			throw new Error("Session closure requires fresh real user direction.");
 	}
 	#check(
 		context: RecoveryContext,
@@ -382,18 +415,7 @@ export class RecoveryController {
 			throw new Error(
 				"Recovery operation requires its original live host grant.",
 			);
-		if (
-			this.#protectedSessions.has(session.id) &&
-			!this.#hosts.get(context.hostSessionId)?.fenced
-		) {
-			const host = this.#hosts.get(context.hostSessionId);
-			if (
-				!host?.manual ||
-				host.parents.get(context.messageId) !== host.manual ||
-				["flow-worker", "flow-reviewer", "flow-planner"].includes(context.agent)
-			)
-				throw new Error("Recovery belongs to a different host session.");
-		}
+		this.#checkProtectedSession(context, session);
 		const lease = this.#origin(context);
 		if (!lease) return;
 		this.#bind(lease, session);

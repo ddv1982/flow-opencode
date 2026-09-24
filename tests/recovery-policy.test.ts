@@ -281,6 +281,126 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 	});
+	test("revoked recovery turn cannot abandon a session before fresh direction", async () => {
+		const s = await setup("shadow");
+		const session = s.repository.session;
+		if (!session) throw new Error("fixture session missing");
+		await s.flow.status({
+			request: { view: "compact" },
+			recoveryProposal: s.proposal(),
+		});
+		s.controller.revoke("host");
+		const request = {
+			request: {
+				operationId: "abandon-after-stop",
+				expectedRevision: session.revision,
+				sessionId: session.id,
+				kind: "abandoned" as const,
+				summary: "Stop this work",
+			},
+		};
+		expect((await s.flow.sessionClose(request)).status).toBe("error");
+		expect(s.repository.session?.id).toBe(session.id);
+		expect(s.repository.archives.size).toBe(0);
+		s.controller.observeMessage("host", "fresh-user", false);
+		s.controller.observeAssistant("host", "fresh-assistant", "fresh-user");
+		const directed = createFlowService(
+			s.repository,
+			s.env,
+			s.controller.guard({ ...context, messageId: "fresh-assistant" }),
+		);
+		expect((await directed.sessionClose(request)).status).toBe("ok");
+	});
+	test("closed protected sessions free capacity without bypassing failed binds", async () => {
+		const s = await setup("shadow");
+		const base = s.repository.session;
+		if (!base) throw new Error("fixture session missing");
+		const controller = new RecoveryController(provider, {
+			profiles: [profile],
+		});
+		for (let index = 0; index <= 128; index++) {
+			s.repository.session = { ...base, id: `protected-${index}` };
+			const host = `protected-host-${index}`;
+			controller.activate(host, { mode: "shadow", maxCalls: 1, maxUsd: 0.01 });
+			controller.observeMessage(host, `user-${index}`, false);
+			controller.observeAssistant(host, `assistant-${index}`, `user-${index}`);
+			const flow = createFlowService(
+				s.repository,
+				s.env,
+				controller.guard({
+					hostSessionId: host,
+					messageId: `assistant-${index}`,
+					agent: "build",
+				}),
+			);
+			const result = await flow.status({
+				request: { view: "compact" },
+				recoveryProposal: s.proposal(),
+			});
+			expect(result.status).toBe(index === 128 ? "error" : "ok");
+		}
+		s.repository.session = { ...base, id: "protected-127" };
+		controller.observeMessage("protected-host-127", "fresh-user", false);
+		controller.observeAssistant(
+			"protected-host-127",
+			"fresh-assistant",
+			"fresh-user",
+		);
+		const directed = createFlowService(
+			s.repository,
+			s.env,
+			controller.guard({
+				hostSessionId: "protected-host-127",
+				messageId: "fresh-assistant",
+				agent: "build",
+			}),
+		);
+		expect(
+			(
+				await directed.sessionClose({
+					request: {
+						operationId: "close-protected-127",
+						expectedRevision: base.revision,
+						sessionId: "protected-127",
+						kind: "abandoned",
+						summary: "Explicitly stop",
+					},
+				})
+			).status,
+		).toBe("ok");
+		s.repository.session = { ...base, id: "protected-128" };
+		const last = controller.guard({
+			hostSessionId: "protected-host-128",
+			messageId: "assistant-128",
+			agent: "build",
+		});
+		expect(
+			(
+				await createFlowService(s.repository, s.env, last).status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		const lastSession = s.repository.session;
+		if (!lastSession) throw new Error("fixture session missing");
+		expect(() =>
+			controller
+				.guard({
+					hostSessionId: "unobserved-host",
+					messageId: "unobserved-assistant",
+					agent: "build",
+				})
+				.check(lastSession, null, {
+					kind: "feature-reset",
+					request: {
+						operationId: "cross-host",
+						expectedRevision: base.revision,
+						featureId: FEATURE,
+					},
+				}),
+		).toThrow("different host session");
+	});
 	test("wrong host and worker cannot consume the pending operation", async () => {
 		const s = await setup(),
 			mutation = await recommend(s);
