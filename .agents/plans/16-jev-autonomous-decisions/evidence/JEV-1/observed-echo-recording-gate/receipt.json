@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "classification": "observed-case-awaiting-independent-review",
+  "capturedAt": "2026-09-24T18:42:36.044Z",
+  "packetDigest": "ea6869f415c671fd9e6be607606012b2c0e0d86659d2da7954d8976d710d0b12",
+  "sourceHead": "92e86160de66ca40381437b7531aae2ce02b47da",
+  "draftStatus": "awaiting-label-review",
+  "files": {
+    "checkpoint.json": "3df9cbe51bafb619c3461b3e734968d1b39c8780e54c2b4eb63746af2d289091",
+    "manager-proposal.json": "cef8a7c22e9a4263cd7006dba732763462e048ae3c60bbeb5d40eb98ec38438c",
+    "decision-packet.json": "c699b889296bead544c18dfaae7c67425b1281cdb3c800c34bdf67ec679b0ce4",
+    "review-findings.json": "8803830d157674e01595f8f6bfe231075df5a2b02acc80b30524f934809c07f9",
+    "runtime-shadow-outcome.json": "8d1de8fe3ee728b83fcbbddd0616d910f85d2d3b4bbb424b81d3d33c143a6eba",
+    "source-provenance.json": "4552812ed5bb370e04a0d101ac90c1686009e97e0a97459ef1b35a5300ab35ac",
+    "snapshot.json": "f9cf1f3db2c43985021ca26255c29e716632675c7aa920ee1c92e16ea0c6a61c",
+    "draft.json": "69b196df242e56c5f250560663ceb1a33eb22512df47fa9c8662c94f0bbae339",
+    "label-proposal-unreviewed.json": "ec70069e52859c51e18db5a2c10bfde24bb29ddc15170a3d8128fa45552f44bd",
+    "README.md": "3cc8e3f32a57fc6e236b2452171a8571ce0fb4ac0c3dc9dd15813fd967ddf7f9",
+    "reconstruct-packet.ts": "d5d87609803a733a6f67b4063c8f0b54e8c77764c73512d5556a8f1d8096ee00",
+    "build-draft.ts": "a7cea1ba93a4a7afd93bac32946fd41cb7bac3f99ae20de1bc7f05a63ff836fb",
+    "dataset-import.log": "e2354ce650b1fa4394f8009a909214892dfab665f4dc3f3d941ea36be9bece6f"
+  },
+  "limits": [
+    "One observed Echo task history; it does not satisfy sample-size, manager-only comparison, or delegated qualification gates.",
+    "The label is author-proposed and unreviewed. The raw OpenCode sessions remain private; source authenticity is an operator attestation, not a cryptographic proof.",
+    "The Jev runtime retained abstention and model identity, not the full response distribution; this draft does not score calibration."
+  ]
+}

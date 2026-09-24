@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "hostSessionId": "ses_f2b4dbadaffeBq6v8EJjp1fMHk",
+  "messageId": "msg_0d4b9ea3a001i9WjZKNRK2TPn9",
+  "at": "2026-09-24T18:42:36.044Z",
+  "managerProposal": {
+    "id": "recovery:recording-gate-preedit-evidence",
+    "sessionId": "session:ad5e0546-7203-4354-b873-2e939274f597",
+    "expectedRevision": 19,
+    "candidates": [
+      {
+        "id": "retry-recording-gate-with-retained-preedit-receipt",
+        "action": "retry",
+        "featureId": "recording-gate-restart-repair",
+        "remedy": "Resume only if an existing, authentic pre-edit reproduction receipt for the documented failure can be supplied and attached as evidence; do not fabricate or replace evidence.",
+        "changedFromPreviousAttempt": "The second attempt resolved deterministic retry-path coverage, current-source focused validation, retry-exhaustion coverage, and a full-output workspace gate; only the absent pre-edit receipt remains.",
+        "findingIds": [
+          "recording-gate-restart-repair.R12-03"
+        ]
+      }
+    ]
+  },
+  "recovery": {
+    "kind": "abstain",
+    "mode": "shadow",
+    "packetDigest": "ea6869f415c671fd9e6be607606012b2c0e0d86659d2da7954d8976d710d0b12",
+    "model": "jev-1.13.0",
+    "requestedModel": "jev-1.13.0",
+    "selectedCandidateId": null,
+    "action": null,
+    "featureId": null,
+    "reason": null
+  },
+  "sourceRevision": 19,
+  "executionMutationObserved": false
+}
