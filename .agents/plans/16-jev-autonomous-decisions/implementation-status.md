@@ -459,9 +459,9 @@ The pinned native campaign exercised four hosts and recorded one scripted operat
 intervention in each arm. Both manager reports correctly show zero completed arms:
 the control remains blocked, and treatment's granted reset does not by itself
 complete a reviewed workflow. The request-budget ledger retains each arm's
-reservations, while the report leaves reserved-dollar means unavailable for these
-failed outcomes. It records zero live pairs and inconclusive qualification. No
-paid inference occurred.
+reservations. The later live-runner reconciliation reports them even when the
+workflow outcome fails. The campaign records zero live pairs and inconclusive
+qualification. No paid inference occurred.
 
 The current-head [verification receipt](evidence/runtime-paired-simulation-verification.json)
 records the repository, focused, pinned native campaign, and packaged-smoke checks
