@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "auditScriptSha256": "66352d95bcd68f194bced8d3779a8a649954da8fa5bdbd3e29d45def4f15944c",
+  "checks": [
+    {
+      "tamperedReviewer": 1,
+      "tamperedField": "firstFinding.evidence",
+      "rawDigestRebound": true,
+      "auditRejected": true,
+      "expectedFailure": "reviewer 1 complete result binding"
+    },
+    {
+      "tamperedReviewer": 2,
+      "tamperedField": "finalFinding.severity",
+      "rawDigestRebound": true,
+      "auditRejected": true,
+      "expectedFailure": "reviewer 2 complete result binding"
+    }
+  ],
+  "limits": [
+    "Mutated private raw files are retained only in temporary negative-test directories.",
+    "These checks prove the verifier rejects two rebounded reviewer-content forgeries; they do not prove remote model execution."
+  ]
+}

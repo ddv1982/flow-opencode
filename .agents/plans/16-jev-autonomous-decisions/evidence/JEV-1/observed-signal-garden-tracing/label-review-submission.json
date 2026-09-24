@@ -19,9 +19,9 @@
   },
   "review": {
     "reviewedBy": "openai-gpt-5-6-sol-signal-label-review",
-    "reviewedAt": "2026-09-24T22:20:51.000Z",
+    "reviewedAt": "2026-09-24T23:03:40.000Z",
     "labelDigest": "27da01264eae3fd9e4d7f23f3662ce61681451140f9cd5cd8154c2edd7cd9a2e",
     "verdict": "approved",
-    "notes": "At Session v5 revision 22, runner-managed and manual tracing conflict is the sole unresolved blocking finding. The proposed retry directly removes that conflict, preserves the approved verification scope, and requires focused browser validation, current-source gates, and independent review. The added audit adequately resolves the prior source-attestation limitation for this calibration case by replaying the frozen patch to the recorded source digest, recomputing retained raw-source hashes, binding the manager proposal and both reviewer submissions to the checkpoint, and matching the runtime packet digest. Limitations: Private raw source bytes were not provided to this reviewer. The audit depends on retained private files and the stated execution environment. Digest and structural consistency are not cryptographic proof that a remote provider executed the recorded calls. The candidate's eventual implementation and successful browser traces remain subject to the required retry validation and independent review."
+    "notes": "At revision 22, runner-managed versus manual tracing is the sole unresolved blocking issue. The retry directly removes that conflict and requires renewed focused browser validation, current-source gates, and independent review, making it safe and appropriately scoped. The corrected repository-relative audit binds the checkpoint, source state, manager proposal, runtime response, and complete reviewer results while accounting for server-generated finding IDs. Its negative checks demonstrate rejection of rebounded reviewer-evidence and severity tampering. This supports approval under the documented private-source attestation policy. Limitations: Private raw bytes were not supplied to this reviewer Raw-source verification is reproducible only where retained private files are available The attestation does not cryptographically prove remote model execution The eight browser conditions remained skipped at this checkpoint, so effectiveness depends on the required retry validation"
   }
 }

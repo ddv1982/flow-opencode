@@ -39,6 +39,14 @@ if (
 	independent.auditSourceScriptSha256
 )
 	throw new Error("Reviewed source-audit code changed.");
+const negativeChecks = await read("audit-negative-checks.json");
+if (
+	negativeChecks.auditScriptSha256 !== independent.auditSourceScriptSha256 ||
+	!negativeChecks.checks.every(
+		(row: { auditRejected: boolean }) => row.auditRejected === true,
+	)
+)
+	throw new Error("Source-audit negative checks are incomplete.");
 if (
 	independent.model !== "openai/gpt-5.6-sol" ||
 	independent.toolsAllowed !== false ||
@@ -140,6 +148,8 @@ const manifestNames = [
 	"apply-review.ts",
 	"independent-label-review.json",
 	"initial-review-inconclusive.json",
+	"prior-review-before-audit-fix.json",
+	"audit-negative-checks.json",
 	"label-review-submission.json",
 	"reviewed-case.json",
 	"reviewed-calibration-corpus.json",
