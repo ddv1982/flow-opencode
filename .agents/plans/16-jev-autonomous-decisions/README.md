@@ -116,7 +116,7 @@ The [original diagnostic](evidence/JEV-1/development-live/receipt.json) binds la
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Metric. Decision-call p50 and p95 latency, timeout rate, input tokens, and estimated provider spend.
+- [x] Metric. Decision-call p50 and p95 latency, timeout rate, input tokens, and estimated provider spend. The [current-code diagnostic](evidence/JEV-1/current-head/perf-diagnostic.json) derives these from eight bounded official responses and binds its raw input hash. This is a synthetic, unreviewed sample; it does not establish the three-arm benchmark or production performance.
 - [ ] Probe. Benchmark the existing eight-case goal-alignment corpus against trunk and head with identical inputs. Separately benchmark blocker episodes across the new deterministic, manager-only, and Jev-assisted arms. Use the opt-in runner documented in `evals/README.md`.
 - [ ] Baseline. Record trunk goal-alignment measurements first. Mark the blocker baseline unavailable until the three comparator arms exist. Do not feed blocker episodes into the goal-alignment evaluator. Apply the absolute rule to new metrics.
 - [ ] Rule. Reject any request exceeding the proposed 10-second deadline or three total transport attempts. Require p95 below 2 seconds for normal calls and total cost within the pre-approved campaign cap.
