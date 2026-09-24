@@ -1774,3 +1774,82 @@ test("production plugin options cannot supply experimental recovery profiles", a
 		),
 	).rejects.toThrow("No release-owned live qualification");
 });
+
+test("attachment-only user direction can close a stopped recovery session", async () => {
+	const workspace = await createTestWorkspace("flow-recovery-attachment-");
+	const hooks = await loadPlugin(workspace);
+	const planSave = hooks.tool?.flow_plan_save;
+	const sessionClose = hooks.tool?.flow_session_close;
+	const before = hooks["command.execute.before"];
+	const chat = hooks["chat.message"];
+	if (!planSave || !sessionClose || !before || !chat || !hooks.event)
+		throw new Error("Missing recovery hooks.");
+	const saved = JSON.parse(
+		String(
+			await planSave.execute(
+				{
+					request: {
+						operationId: "attachment-plan",
+						expectedRevision: 0,
+						goal: "Honor attachment direction",
+						plan,
+					},
+				},
+				toolContext(workspace, "attachment-host", "initial-user"),
+			),
+		),
+	);
+	const commandOutput = {
+		parts: [{ type: "text", text: "stale" }],
+	} as unknown as Parameters<typeof before>[1];
+	await before(
+		{
+			command: "flow-auto",
+			sessionID: "attachment-host",
+			arguments:
+				"--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Continue",
+		},
+		commandOutput,
+	);
+	await chat({ sessionID: "attachment-host" }, {
+		message: {
+			id: "initial-user",
+			agent: "build",
+			model: { providerID: "test", modelID: "manager" },
+		},
+		parts: commandOutput.parts,
+	} as unknown as Parameters<typeof chat>[1]);
+	await emitAssistant(hooks, "attachment-host", "initial-user");
+	await before(
+		{ command: "flow-auto", sessionID: "attachment-host", arguments: "stop" },
+		{ parts: [] } as Parameters<typeof before>[1],
+	);
+	await chat({ sessionID: "attachment-host" }, {
+		message: {
+			id: "attachment-user",
+			agent: "build",
+			model: { providerID: "test", modelID: "manager" },
+		},
+		parts: [
+			{ type: "file", mime: "image/png", url: "data:image/png;base64,AA==" },
+		],
+	} as unknown as Parameters<typeof chat>[1]);
+	await emitAssistant(hooks, "attachment-host", "attachment-user");
+	const close = JSON.parse(
+		String(
+			await sessionClose.execute(
+				{
+					request: {
+						operationId: "attachment-close",
+						expectedRevision: saved.workflowData.projection.revision,
+						sessionId: saved.workflowData.projection.sessionId,
+						kind: "abandoned",
+						summary: "Directed by the user attachment.",
+					},
+				},
+				toolContext(workspace, "attachment-host", "attachment-user"),
+			),
+		),
+	);
+	expect(close.status).toBe("ok");
+});
