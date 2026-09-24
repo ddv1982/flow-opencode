@@ -434,8 +434,18 @@ export async function runEpisode(options: {
 		const reconciliationController = new AbortController();
 		try {
 			if (options.driver.reconcileReservations) {
-				const timeoutMs =
-					(await options.driver.reconciliationTimeoutMs?.()) ?? 5000;
+				const timeoutMs = options.driver.reconciliationTimeoutMs
+					? await Promise.race([
+							options.driver.reconciliationTimeoutMs(),
+							new Promise<never>((_, reject) => {
+								reconciliationTimer = setTimeout(
+									() => reject(new Error("Reservation deadline unavailable.")),
+									5000,
+								);
+							}),
+						])
+					: 5000;
+				clearTimeout(reconciliationTimer);
 				if (
 					!Number.isSafeInteger(timeoutMs) ||
 					timeoutMs < 5000 ||
