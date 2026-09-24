@@ -53,10 +53,13 @@
         "real TUI screenshot and video for this exact run",
         "complete ten-lane interaction review"
       ],
-      "currentCapture": "worker-10/packed-current/receipt.json",
-      "currentSourceHead": "b063f510d9cfb2a2120ba3f15fd5f7d24a7a0057",
-      "currentVerdict": "pass for status, mode selection, and stop controls; no Jev quality claim"
+      "currentCapture": "worker-10/head-a833/receipt.json",
+      "currentSourceHead": "a8330e8beb7b2a4cc58864aa80282e1974b7afe9",
+      "currentVerdict": "pass for controls at a8330e8; evidence-only descendants must preserve this packaged runtime code",
+      "previousPackedCapture": "worker-10/packed-current/receipt.json",
+      "previousPackedSourceHead": "b063f510d9cfb2a2120ba3f15fd5f7d24a7a0057",
+      "currentSourceTree": "3c2f2269fe471810f3f536e80fd533a81eb0d88a"
     }
   ],
-  "interpretation": "Lane 10 has a packed-plugin TUI controls capture. Lane 5 now has both a packed-plugin shadow stop and a delegated simulated stop under the eval-only treatment bundle, each with a packet digest and unchanged state. The required same-run combination of packed provenance and delegated mutation authority remains open. Neither simulation qualifies Jev decision quality."
+  "interpretation": "Lane 10 was replayed at a8330e8 after review found the earlier capture stale; its packed plugin, media, and trace prove shadow to stop to off controls at that source head. Lane 5 has packed shadow and delegated eval-only stop runs separately; their same-run combination remains open. Neither simulation qualifies Jev decision quality."
 }

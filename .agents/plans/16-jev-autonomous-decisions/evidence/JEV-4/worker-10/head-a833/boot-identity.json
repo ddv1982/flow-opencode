@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "sourceHead": "a8330e8beb7b2a4cc58864aa80282e1974b7afe9",
+  "sourceTree": "3c2f2269fe471810f3f536e80fd533a81eb0d88a",
+  "hostVersion": "OpenCode 1.18.32",
+  "smokeHostVersion": "OpenCode 1.18.6",
+  "package": "opencode-plugin-flow@9.0.2",
+  "tarballSha256": "d35205113e3985d00ebad5531d9ceb144932b6cbc587478deccba11ae0ef97ae",
+  "sourceDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+  "installedDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+  "projectConfigSha256": "485be5bb90688bcf10a273d1d50825ba19ebd14bc1860240def33127b3e5dbc2"
+}
