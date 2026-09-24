@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "classification": "independently-reviewed-calibration-only",
+  "caseId": "echo-recording-gate-preedit-receipt-20260924",
+  "corpusDigest": "697709fa4fdbac69bdbef35aa770be21bf84968d6c6bdb20c16740e539e6d60f",
+  "files": {
+    "checkpoint.json": "3df9cbe51bafb619c3461b3e734968d1b39c8780e54c2b4eb63746af2d289091",
+    "manager-proposal.json": "cef8a7c22e9a4263cd7006dba732763462e048ae3c60bbeb5d40eb98ec38438c",
+    "decision-packet.json": "c699b889296bead544c18dfaae7c67425b1281cdb3c800c34bdf67ec679b0ce4",
+    "review-findings.json": "8803830d157674e01595f8f6bfe231075df5a2b02acc80b30524f934809c07f9",
+    "runtime-shadow-outcome.json": "8d1de8fe3ee728b83fcbbddd0616d910f85d2d3b4bbb424b81d3d33c143a6eba",
+    "source-provenance.json": "4552812ed5bb370e04a0d101ac90c1686009e97e0a97459ef1b35a5300ab35ac",
+    "snapshot.json": "f9cf1f3db2c43985021ca26255c29e716632675c7aa920ee1c92e16ea0c6a61c",
+    "draft.json": "69b196df242e56c5f250560663ceb1a33eb22512df47fa9c8662c94f0bbae339",
+    "label-proposal-unreviewed.json": "ec70069e52859c51e18db5a2c10bfde24bb29ddc15170a3d8128fa45552f44bd",
+    "independent-label-review.json": "e251a27c2119d55d704a3518d4ac386c2a2037506d0138804cc4c3ede0e4c1cf",
+    "label-review-submission.json": "3398010e653609f8017d0208655cc948c9a1f7b6b1b5246f3617c6b46f68a37b",
+    "reviewed-case.json": "4ea267e7dd8aeaf8ae780022a87ef0eefa91d40f8d41b7a99e26ad1a825d4914",
+    "reviewed-calibration-corpus.json": "7c30af0a694b79d0a05e7eea37113077287c3268c25018380bd40486f65be4a2",
+    "README.md": "8140eaa068c97be3b01d60dfa639f00a99849f4339c36403e9cca56178940079",
+    "reconstruct-packet.ts": "d5d87609803a733a6f67b4063c8f0b54e8c77764c73512d5556a8f1d8096ee00",
+    "build-draft.ts": "519ebad205ebcff23b7d5a966984c8d44b99adb5ad9e194d210669fb59f9734d",
+    "apply-review.ts": "3e3c53392f6a054f6682811be6ff1eac3eba9d07065aac9471c002a8858d2c59",
+    "dataset-import.log": "e2354ce650b1fa4394f8009a909214892dfab665f4dc3f3d941ea36be9bece6f",
+    "receipt.json": "01b6dbce1311d93a5c9a1e291a3bd3e7c36611175ab7649880d874a9c176230d"
+  },
+  "limits": [
+    "The reviewer saw sanitized metadata and linked digests, not private raw session bytes.",
+    "One calibration case contributes no holdout or acceptance-volume evidence.",
+    "The Jev shadow call abstained and made no delegated mutation."
+  ]
+}
