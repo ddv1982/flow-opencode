@@ -68,7 +68,10 @@ export type EpisodeDriver = {
 		signal: AbortSignal,
 	): Promise<{ met: boolean; evidence: unknown }>;
 	stop(): Promise<void>;
-	reconcileReservations?(): Promise<ReservationReconciliation>;
+	reconciliationTimeoutMs?(): Promise<number> | number;
+	reconcileReservations?(
+		signal?: AbortSignal,
+	): Promise<ReservationReconciliation>;
 };
 
 const Header = EpisodeReceiptSchema.omit({ events: true });
@@ -457,17 +460,27 @@ export async function runEpisode(options: {
 	) {
 		let reconciliation: ReservationReconciliation | undefined;
 		let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
+		const reconciliationController = new AbortController();
 		try {
 			if (options.driver.reconcileReservations) {
+				const timeoutMs =
+					(await options.driver.reconciliationTimeoutMs?.()) ?? 5000;
+				if (
+					!Number.isSafeInteger(timeoutMs) ||
+					timeoutMs < 5000 ||
+					timeoutMs > 2_005_000
+				)
+					throw new Error("Invalid reservation reconciliation deadline.");
 				const result = ReservationReconciliationSchema.parse(
 					await Promise.race([
-						options.driver.reconcileReservations(),
+						options.driver.reconcileReservations(
+							reconciliationController.signal,
+						),
 						new Promise<never>((_, reject) => {
-							reconciliationTimer = setTimeout(
-								() =>
-									reject(new Error("Reservation reconciliation unavailable.")),
-								5000,
-							);
+							reconciliationTimer = setTimeout(() => {
+								reconciliationController.abort();
+								reject(new Error("Reservation reconciliation unavailable."));
+							}, timeoutMs);
 						}),
 					]),
 				);
@@ -481,6 +494,7 @@ export async function runEpisode(options: {
 		} catch {
 		} finally {
 			clearTimeout(reconciliationTimer);
+			reconciliationController.abort();
 		}
 		if (reconciliation)
 			await append({
