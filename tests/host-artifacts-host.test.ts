@@ -89,6 +89,15 @@ smoke(
 					"openai/gpt-5.6-terra",
 				),
 			).rejects.toThrow("artifact bytes changed");
+			let probeDispatches = 0;
+			await expect(
+				host.probeModel("openai/gpt-5.6-terra", {
+					onDispatch() {
+						probeDispatches++;
+					},
+				}),
+			).rejects.toThrow("artifact bytes changed");
+			expect(probeDispatches).toBe(0);
 			expect(process.env.FLOW_EVAL_AUTHORIZATION).toBeUndefined();
 		} finally {
 			if (previous === undefined) delete process.env.FLOW_EVAL_AUTHORIZATION;
