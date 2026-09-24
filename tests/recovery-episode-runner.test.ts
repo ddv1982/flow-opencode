@@ -560,3 +560,23 @@ test("reconciliation waits do not enter episode timing and failed stops cannot r
 		await rm(broken.root, { recursive: true, force: true });
 	}
 });
+
+test("reconciliation can outlive the small-ledger deadline without losing scoped cost", async () => {
+	const f = await meteredFixture();
+	try {
+		const reconcile = f.options.driver.reconcileReservations;
+		Object.assign(f.options.driver, { reconciliationTimeoutMs: () => 7000 });
+		f.options.driver.reconcileReservations = async () => {
+			await new Promise((resolve) => setTimeout(resolve, 5100));
+			if (!reconcile) throw new Error("Missing reconciliation.");
+			return reconcile();
+		};
+		const result = await runEpisode(f.options);
+		expect(result?.observation).toMatchObject({
+			reservedUsd: 0.005,
+			result: { kind: "terminal", outcome: "completed" },
+		});
+	} finally {
+		await rm(f.root, { recursive: true, force: true });
+	}
+}, 10000);

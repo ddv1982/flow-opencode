@@ -170,10 +170,14 @@ export async function createRequestBudget(directory: string, input: unknown) {
 	return authorization;
 }
 
-async function readRequestLedger(directory: string) {
+async function readRequestLedger(directory: string, signal?: AbortSignal) {
+	const readText = (path: string) =>
+		readFile(path, { encoding: "utf8", ...(signal ? { signal } : {}) });
+	signal?.throwIfAborted();
 	const authorization = RequestAuthorizationSchema.parse(
-		JSON.parse(await readFile(join(directory, "authorization.json"), "utf8")),
+		JSON.parse(await readText(join(directory, "authorization.json"))),
 	);
+	signal?.throwIfAborted();
 	const authorizationDigest = datasetDigest(authorization);
 	const files = (await readdir(directory))
 		.filter(
@@ -186,11 +190,13 @@ async function readRequestLedger(directory: string) {
 	let reservedMicroUsd = 0;
 	const claims: z.infer<typeof Claim>[] = [];
 	for (const [sequence, name] of files.entries()) {
+		signal?.throwIfAborted();
 		if (name !== `request-${String(sequence).padStart(6, "0")}.json`)
 			throw new Error("Invalid request ledger sequence.");
 		const claim = Claim.parse(
-			JSON.parse(await readFile(join(directory, name), "utf8")),
+			JSON.parse(await readText(join(directory, name))),
 		);
+		signal?.throwIfAborted();
 		const bound = authorization.models.find((row) => row.model === claim.model);
 		if (
 			claim.sequence !== sequence ||
@@ -209,9 +215,7 @@ async function readRequestLedger(directory: string) {
 	}
 	let cancelled = false;
 	try {
-		const value = JSON.parse(
-			await readFile(join(directory, "cancelled.json"), "utf8"),
-		);
+		const value = JSON.parse(await readText(join(directory, "cancelled.json")));
 		if (value.authorizationDigest !== authorizationDigest)
 			throw new Error("Cancellation binding changed.");
 		cancelled = true;
@@ -236,9 +240,11 @@ export async function reconcileRequestReservations(
 	directory: string,
 	expectedDigest: string,
 	scopeInput: EpisodeReservationScope,
+	signal?: AbortSignal,
 ): Promise<ReservationReconciliation> {
 	const scope = Object.freeze(EpisodeReservationScopeSchema.parse(scopeInput));
-	const ledger = await readRequestLedger(directory);
+	const ledger = await readRequestLedger(directory, signal);
+	signal?.throwIfAborted();
 	if (ledger.authorizationDigest !== expectedDigest)
 		throw new Error("Request authorization changed.");
 	const scopeDigest = datasetDigest(scope);
