@@ -32,6 +32,7 @@ const scope: EpisodeReservationScope = {
 };
 const directory = join(root, "budget");
 const simulation = scenario === "simulation";
+const retryReplacedFetch = scenario === "retry-replaced-fetch";
 const modelNames =
 	scenario === "control" || scenario === "missing-jev"
 		? [managerModel]
@@ -49,8 +50,8 @@ const authorization = await createRequestBudget(directory, {
 	schemaVersion: 1,
 	origin: simulation ? "simulation" : "live",
 	purpose: "Intercepted test only",
-	maxRequests: 1,
-	maxMicroUsd: 3000,
+	maxRequests: retryReplacedFetch ? 2 : 1,
+	maxMicroUsd: retryReplacedFetch ? 6000 : 3000,
 	expiresAt: new Date(Date.now() + 60000).toISOString(),
 	models: modelNames.map((model) => ({
 		model,
@@ -104,6 +105,13 @@ const intercepted = Object.assign(
 		);
 		if (scenario === "transport-failure")
 			throw new Error("intercepted transport failure");
+		if (retryReplacedFetch && requests === 1) {
+			globalThis.fetch = intercepted as typeof fetch;
+			return new Response("retry", {
+				status: 429,
+				headers: { "retry-after": "0" },
+			});
+		}
 		return Response.json({
 			model: "jev-1.13.0",
 			answers: {
@@ -265,7 +273,7 @@ if (invalid.includes(scenario)) {
 				{
 					command: "flow-auto",
 					sessionID: "host",
-					arguments: `--recovery=${mode} --recovery-calls=1 --recovery-usd=0.01`,
+					arguments: `--recovery=${mode} --recovery-calls=${retryReplacedFetch ? 2 : 1} --recovery-usd=0.01`,
 				},
 				{ parts: [{ type: "text", text: "Flow", synthetic: true } as never] },
 			);
@@ -345,6 +353,10 @@ if (invalid.includes(scenario)) {
 			} else if (scenario === "transport-failure") {
 				assert.equal(requests, 1);
 				assert.match(result as string, /unavailable/);
+			} else if (retryReplacedFetch) {
+				assert.equal(requests, 1);
+				assert.match(result as string, /unavailable/);
+				assert.throws(() => BudgetPlugin.assertInstalledRequestGate(expected));
 			} else {
 				assert.equal(requests, 0);
 				assert.match(result as string, /unavailable/);
@@ -355,7 +367,7 @@ if (invalid.includes(scenario)) {
 				scope,
 			);
 			assert.equal(reconciled.totalMicroUsd, requests ? 3000 : 0);
-			if (requests) {
+			if (requests && !retryReplacedFetch) {
 				await assert.rejects(
 					fetch("https://api.typesafe.ai/v1/systemone", {
 						method: "POST",
