@@ -1,51 +1,56 @@
 {
   "schemaVersion": 1,
-  "scope": "isolated live plugin admission with intercepted transport",
-  "baseCommit": "1beb7d0204be570620e37e467c2d50e00afa0a71",
-  "sourceHashes": {
-    "evals/recovery-decisions/budget-plugin.ts": "f871bd0f2dc820fd87505f5701009a07662c61745ea98bfd3beda47224831103",
-    "evals/recovery-decisions/live-treatment-plugin.ts": "1296283c587e018726cd574a6fcc5c4835e5c9b246a4407133ae31adb979e322",
-    "evals/recovery-decisions/sources.ts": "62e03969ee3cf391ea4ddec4820598e3bde04cb564fb9371baba958d0df56698",
-    "tests/recovery-live-treatment.test.ts": "60531ef618c4954a68df79bf685ada692786d21153a7698ed99006cd8f7d4d47",
-    "tests/recovery-live-treatment-child.ts": "95d179a4c52c9b802eb4c239afe2132e40f837fef319bc7ecd9de6849403501b"
-  },
-  "artifactHashes": {
-    "/tmp/flow-live-treatment-parent-focused.log": "e4079fb8a40ff4bade3061e1d0801eefd4cec86990ae592decc7b036a6133d9c",
-    "/tmp/flow-live-treatment-parent-native.log": "869467cc26b8b29997b5a292e53765297ff294412fc0b81a448ad12d31e27902",
-    "/tmp/flow-live-treatment-parent-artifacts.log": "5849c6ca8109d04f6b9226edb0ade3434b1d51448b56bf518c1217ac8d31e075",
-    "/tmp/flow-live-treatment-parent-native/complete.json": "eb0d8909908a9f59fa9fa4ce832fef1d2bbb0a7a6e1e2840d6be5e08450992af",
-    "/tmp/flow-live-treatment-code-review.md": "6b42935ba586ebedbe956125e2145e081662b2bef0215d0a3d68fa96a23c52f4",
-    "/tmp/flow-live-treatment-judgment.md": "570a07c8aee240330ab18da868d52fce362c975ff6c617660d745510c5106cf3"
-  },
-  "verification": {
-    "parentFocused": {
-      "passed": 72,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "92d343e6984d8ef191c074dfbf8c5ab299823791",
+  "recordedAt": "2026-09-24T02:08:35.904653+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1526,
+      "skipped": 15,
       "failed": 0,
-      "bunAssertions": 225
+      "assertions": 8099,
+      "logSha256": "99aee10b7bbb91ab05bc872f1a49e1ad9a8e2de60e86e5edd7bac284f73cc2de"
     },
-    "newIsolatedScenarios": 46,
-    "independentFocused": {
-      "passed": 46,
+    {
+      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts",
+      "exitCode": 0,
+      "passed": 54,
+      "skipped": 0,
       "failed": 0,
-      "bunAssertions": 92
+      "assertions": 117,
+      "logSha256": "ae51fbed45a7d8442ccab29167768cf3c4e0c6ece25f46988bd02eb068eab0d6"
     },
-    "nativeSimulation": {
-      "opencodeVersion": "1.18.31",
-      "passed": 2,
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
       "failed": 0,
-      "bunAssertions": 233,
-      "managers": [
-        "openai/gpt-5.6-terra",
-        "xai/grok-4.6"
-      ],
-      "retainedHashesChecked": 27
+      "assertions": 133,
+      "logSha256": "7342a231968d918e0a1432ac6dbce3f4823098c07d21cf77903f5eea906b28b2"
     }
+  ],
+  "sourceDigests": {
+    "evals/recovery-decisions/budget-plugin.ts": "f871bd0f2dc820fd87505f5701009a07662c61745ea98bfd3beda47224831103",
+    "evals/recovery-decisions/live-treatment-plugin.ts": "8c9b428a67bd492e3f8d427283442a4e921e4d7c6419427f35a25fb9d18470b0",
+    "evals/recovery-decisions/sources.ts": "62e03969ee3cf391ea4ddec4820598e3bde04cb564fb9371baba958d0df56698",
+    "tests/recovery-live-treatment.test.ts": "866317d3b6dc1487b77942dab9c1d6f485cf8a29544eef78f8e8523b6317f782",
+    "tests/recovery-live-treatment-child.ts": "816909716f27ec8054f888fb0b4a813d29c01dd6214fc06e1702eddd3e550cc0"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-7cc44a2e.json",
+    "verifiedCodeHead": "7cc44a2e744f12b2fbbc450cef56b1725345d8c3",
+    "originalSha256": "cd8121cc88ace4bf7ddb7e6341a086ef7e93e6ab6953704cffaf9b4d2e52c27f"
   },
   "limits": [
-    "Synthetic credential and intercepted transport only. No paid inference.",
-    "Native simulation regression does not verify loading the new live entry.",
-    "Live host integration and episode execution remain incomplete.",
-    "No authentic cost review, campaign approval, operational dataset or qualification is established.",
-    "Independent reviewer model identity is unverified."
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
   ]
 }

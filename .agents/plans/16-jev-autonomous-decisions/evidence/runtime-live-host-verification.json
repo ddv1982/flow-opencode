@@ -1,67 +1,68 @@
 {
   "schemaVersion": 1,
-  "scope": "native live evaluation host startup without inference",
-  "baseCommit": "7cc44a2e744f12b2fbbc450cef56b1725345d8c3",
-  "sourceHashes": {
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "34e76390f47d893703744d77dfdff1142d2b193d",
+  "recordedAt": "2026-09-24T02:12:28.819923+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1529,
+      "skipped": 16,
+      "failed": 0,
+      "assertions": 8111,
+      "logSha256": "e3a46404d677ae6e9a5f23146299340bfff6d619d0bf812f9ef17c725e2a0c59"
+    },
+    {
+      "command": "bun test tests/recovery-live-host.test.ts tests/recovery-live-treatment.test.ts",
+      "exitCode": 0,
+      "passed": 50,
+      "skipped": 1,
+      "failed": 0,
+      "assertions": 100,
+      "logSha256": "b31c766175fa60e3cd49aac22175d61b952a429e64bbadaea2266e75f5109270"
+    },
+    {
+      "command": "FLOW_RECOVERY_LIVE_HOST_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-live-host.test.ts",
+      "exitCode": 0,
+      "passed": 3,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 8,
+      "logSha256": "d71f52d58af9c6bc2710def6629792e0f2b106b4e7d4d482bb0b50c7fe13e6d8"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "38d134eb21b07ff9abd867cd558204c08eaf62029834b17ea5d2b1aaf9067109"
+    }
+  ],
+  "sourceDigests": {
     "evals/harness.ts": "8a169e9bd2b1ee109dda9ac5b776d8083d9807c9e20215ac8207b28d54ffa399",
     "evals/recovery-decisions/episode-host.ts": "2edbf7d73713bc59f8ef4d050d16f82c02ace402b337778b2e784572f202eff4",
     "evals/recovery-decisions/live-treatment-plugin.ts": "459f105519a7fbc9072953a3070459f26ecb7b8fc02b5ef1cb75204bfa710f9d",
     "evals/recovery-decisions/treatment-plugin.ts": "44a5925189e37e43e39ec85bcadde8f27cb181b33b7dd043c5c7e27cd105ccee",
-    "evals/recovery-decisions/treatment.ts": "e586563adfc7bc82a65d7f02c8e873fbf74784027827db2e011ac896655b26a7",
+    "evals/recovery-decisions/treatment.ts": "61950e96c778e2aac7d722d53d371c5e2fef2fe4c3f003a8ae0df95a7fcb1aa8",
     "tests/recovery-episode-host.test.ts": "ee3695531b565866ead27af3e5efee0ba31f54dc8f68d9cc03c82052daadb023",
     "tests/recovery-live-host.test.ts": "3988301538ddb64f8eb36559d34bbea295d1110e4dde5e250b7793ade6a4af4b",
-    "tests/recovery-live-host-child.ts": "b50a12f4f74154001df2228a5759e910222bb42216baacc73c89e9a2be9a4d5d"
+    "tests/recovery-live-host-child.ts": "9af6fad981a54cb048ad7b50ae603bdc98be2b3264de02ebba426c96622b6b71"
   },
-  "artifactHashes": {
-    "/tmp/flow-live-host-parent-focused.log": "ec5b578eda7733665a66b33292efa8796bd7d08cb35a052e601e7252c07dff44",
-    "/tmp/flow-live-host-parent-native.log": "7290355e4a23741f5ee51cc4550a81d8d6ee29daf4f9909ee35e8a29e53fda8c",
-    "/tmp/flow-live-host-parent-native/report.json": "952cf37ebc7fa1aa61315030473d99024ead26be6d659ab366615aefed4dbda6",
-    "/tmp/flow-live-host-parent-simulation.log": "242b18cc1d948ed210f7da8a471ea9ab4baf111bab4b60adc41624a954bc9b87",
-    "/tmp/flow-live-host-parent-simulation/complete.json": "77a03114e9fdab04a927286c9b7228039aba2bf55c0b90673843f5d5e2c53ebd",
-    "/tmp/flow-live-host-parent-artifacts.log": "0445b787645371949d5297b45fe1680f074be1eeb1119c8491de60a25723e8ec",
-    "/tmp/flow-live-host-code-review.md": "646a57c504bb616431cfb34a5460375a84998ccd81ac28bbad95da2d8a5644b9",
-    "/tmp/flow-live-host-comment-review.md": "d6dba3c79691b36972f8133d58c3a3b8a6097f9f5d30799170f858e1c77f302e",
-    "/tmp/flow-live-host-judgment.md": "fd0abf36745262e8f00da405028706207453dab9c4295b6711faee561af4d8b4"
-  },
-  "verification": {
-    "parentFocused": {
-      "passed": 192,
-      "failed": 0,
-      "bunAssertions": 619
-    },
-    "nativeLiveStartup": {
-      "opencodeVersion": "1.18.31",
-      "passed": 3,
-      "failed": 0,
-      "bunAssertions": 8,
-      "nativeHosts": 4,
-      "inferenceClaims": 0,
-      "subprocessAssertions": true
-    },
-    "nativeSimulation": {
-      "opencodeVersion": "1.18.31",
-      "passed": 2,
-      "failed": 0,
-      "bunAssertions": 233,
-      "retainedHashesChecked": 27
-    },
-    "independentFocused": {
-      "passed": 172,
-      "failed": 0,
-      "skipped": 1,
-      "bunAssertions": 509
-    },
-    "commentAudit": {
-      "addedComments": 0,
-      "addedSuppressions": 0,
-      "unresolvedFindings": 0
-    }
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-host-verification-83061927.json",
+    "verifiedCodeHead": "83061927c63c5933e673d90946bb6c50c6b11fc5",
+    "originalSha256": "50a064d2aedb59afc7bdd235df92d728aecfdfc2d4ccfc5a9e1c55dae3d87ed8"
   },
   "limits": [
-    "Synthetic credentials and startup only for live hosts. No paid inference.",
-    "Native startup does not establish real provider inference or OAuth refresh.",
-    "Live runner admission remains disabled; production profiles remain empty.",
-    "No authentic pricing review, campaign approval, operational dataset or qualification is established.",
-    "Independent reviewer model identity is unverified."
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
   ]
 }
