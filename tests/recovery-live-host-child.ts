@@ -116,6 +116,25 @@ const toolchain = bunToolchainFor({
 		TYPESAFE_API_KEY: "synthetic-host-jev-key",
 	},
 });
+const bundle = await Bun.build({
+	entrypoints: [
+		fileURLToPath(
+			new URL(
+				"../evals/recovery-decisions/live-treatment-plugin.ts",
+				import.meta.url,
+			),
+		),
+	],
+	target: "bun",
+	format: "esm",
+	minify: false,
+});
+assert(bundle.success && bundle.outputs.length === 1 && bundle.outputs[0]);
+const bundleBytes = new Uint8Array(await bundle.outputs[0].arrayBuffer());
+const frozenTreatmentBundle = {
+	bytes: bundleBytes,
+	sha256: createHash("sha256").update(bundleBytes).digest("hex"),
+};
 const records = [];
 for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
 	for (const arm of ["manager-only", "manager-plus-jev"] as const) {
@@ -149,6 +168,7 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
 		});
 		const options: Parameters<typeof EvalHost.start>[0] = {
 			toolchain,
+			frozenTreatmentBundle,
 			packageCache: root,
 			opencodeVersion: "1.18.31",
 			files: { "result.txt": "unchanged\n" },
@@ -166,6 +186,16 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
 		};
 		if (mode === "admission") {
 			assert(options.requestBudget);
+			await assert.rejects(
+				EvalHost.start({
+					...options,
+					frozenTreatmentBundle: {
+						...frozenTreatmentBundle,
+						sha256: "0".repeat(64),
+					},
+				}),
+				/Frozen treatment bundle differs from registration/,
+			);
 			const { providerCredentials: _policy, ...missingPolicy } = options;
 			await assert.rejects(
 				EvalHost.start(missingPolicy),
@@ -263,6 +293,7 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
 					? datasetDigest(ExperimentalLiveProfile)
 					: null,
 			);
+			assert.equal(ready.pluginEntrySha256, frozenTreatmentBundle.sha256);
 			assert.equal(
 				ready.pluginEntrySha256,
 				createHash("sha256")

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { EvalHost } from "../harness.js";
 import {
@@ -212,6 +213,24 @@ export async function createEpisodeHostDriver(
 		bunVersion: options.host.toolchain.actualVersion,
 		opencodeVersion: options.host.opencodeVersion,
 	});
+	let frozenTreatmentBundle: { bytes: Uint8Array; sha256: string } | undefined;
+	if (options.host.recoveryTreatment?.origin === "live") {
+		const built = await Bun.build({
+			entrypoints: [
+				fileURLToPath(new URL("./live-treatment-plugin.ts", import.meta.url)),
+			],
+			target: "bun",
+			format: "esm",
+			minify: false,
+		});
+		if (!built.success || built.outputs.length !== 1 || !built.outputs[0])
+			throw new Error("Registered live treatment bundle failed.");
+		const bytes = new Uint8Array(await built.outputs[0].arrayBuffer());
+		frozenTreatmentBundle = {
+			bytes,
+			sha256: bytesDigest(Buffer.from(bytes)),
+		};
+	}
 	const sources = await recoverySourceDigests();
 	const evalSources = (await readdir("evals", { recursive: true }))
 		.filter((path) => path.endsWith(".ts"))
@@ -226,6 +245,7 @@ export async function createEpisodeHostDriver(
 			options.host.requestBudget?.authorizationDigest ?? null,
 		manager,
 		recoveryTreatment: options.host.recoveryTreatment ?? null,
+		treatmentBundleSha256: frozenTreatmentBundle?.sha256 ?? null,
 		providerCredentials: options.host.providerCredentials ?? "inherit",
 		sources,
 		host: {
@@ -351,6 +371,9 @@ export async function createEpisodeHostDriver(
 			lifecycle.signal.throwIfAborted();
 			starting = (options.hostFactory ?? EvalHost.start)({
 				...options.host,
+				...(frozenTreatmentBundle
+					? { frozenTreatmentBundle: structuredClone(frozenTreatmentBundle) }
+					: {}),
 				...(options.host.requestBudget && reservationScope
 					? {
 							requestBudget: {
