@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "classification": "live-synthetic-alignment-baseline",
+  "recordedAt": "2026-09-24T17:31:17.989432+00:00",
+  "trunkHead": "c9813f9a87b9b7438671658cfd523adcd89f3098",
+  "bunVersion": "1.4.0",
+  "corpusSha256": "c8cedf32b70d939687ab1fb59c61226a780e8cdbdb9be49efe645572b911f644",
+  "corpusCases": 8,
+  "semanticInputIdentity": "activeGoal, userRequest, question instructions, and criteria are byte-identical after normalizing only requested model; see normalized-inputs.json",
+  "model": {
+    "trunkRequested": "jev-latest",
+    "jev1Requested": "jev-1.13.0",
+    "resolvedBoth": "jev-1.13.0"
+  },
+  "trunk": {
+    "calls": 8,
+    "p50LatencyMs": 293.32798450000007,
+    "p95LatencyMsNearestRank": 917.36983,
+    "maxLatencyMs": 917.36983,
+    "timeouts": 0,
+    "inputTokens": 3717,
+    "outputTokens": 144,
+    "estimatedInputTokenUsd": 0.000156114
+  },
+  "counts": {
+    "match": 8,
+    "mismatch": 0,
+    "unscored": 0,
+    "continue": 5,
+    "new-scope": 3,
+    "abstain": 0,
+    "error": 0
+  },
+  "veto": {
+    "fired": 3,
+    "correctVeto": 3,
+    "falseVeto": 0,
+    "missedVeto": 0,
+    "correctPass": 5
+  },
+  "absoluteRuleOnJev1AlignmentOnly": {
+    "deadlineUnder10Seconds": true,
+    "attemptsAtMostThree": true,
+    "p95Under2Seconds": true,
+    "reservedSpendWithinLocalCap": true
+  },
+  "limits": [
+    "This eight-case corpus is synthetic goal alignment, not a blocker-decision corpus or a recovery qualification sample.",
+    "A single sequential pass per arm has no variance estimate; the latency difference is descriptive, not causal.",
+    "The trunk evaluator lacks native timing/usage metadata; a temporary fetch wrapper recorded its eight calls with a ten-second timeout and an eight-call boundary.",
+    "The estimated input-token USD applies the research price assumption and is not an invoice. Trunk had no native reservation metric.",
+    "The blocker baseline and deterministic/manager-only/Jev three-arm comparison remain unavailable."
+  ],
+  "jev1Metrics": {
+    "calls": 8,
+    "p50LatencyMs": 255.1848950000001,
+    "p95LatencyMsNearestRank": 637.911291,
+    "maxLatencyMs": 637.911291,
+    "timeouts": 0,
+    "inputTokens": 3717,
+    "outputTokens": 144,
+    "estimatedInputTokenUsd": 0.000156114,
+    "totalAttempts": 8,
+    "reservedUsd": 0.021504
+  },
+  "jev1HeadSha": "5db4e9852492cf671f16534be52a23e00fb655a4"
+}

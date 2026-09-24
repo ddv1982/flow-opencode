@@ -1,0 +1,22 @@
+import { createHash } from "node:crypto";
+import { writeFile } from "node:fs/promises";
+import { runJevAlignment } from "/tmp/flow-jev-overnight-20260924/jev1-trunk/evals/alignment-corpus/jev-run.js";
+const apiKey = process.env.TYPESAFE_API_KEY;
+if (!apiKey) throw new Error("TypeSafe credential unavailable");
+const measurements: Array<Record<string, unknown>> = [];
+const fetchImpl = async (url: string, init: { method: string; headers: Readonly<Record<string,string>>; body: string }) => {
+  if (url !== "https://api.typesafe.ai/v1/systemone" || measurements.length >= 8) throw new Error("Baseline request boundary exceeded");
+  const requestSha256 = createHash("sha256").update(init.body).digest("hex");
+  const start = performance.now();
+  const response = await fetch(url, { method: init.method, headers: init.headers, body: init.body, redirect: "error", signal: AbortSignal.timeout(10000) });
+  const body = await response.json();
+  const latencyMs = performance.now() - start;
+  const value = body && typeof body === "object" ? body as Record<string,unknown> : {};
+  const usage = value.usage && typeof value.usage === "object" ? value.usage as Record<string,unknown> : {};
+  measurements.push({ requestSha256, status: response.status, latencyMs, resolvedModel: value.model ?? null, inputTokens: usage.input_tokens ?? null, outputTokens: usage.output_tokens ?? null });
+  return { ok: response.ok, status: response.status, json: async () => body };
+};
+const resultsPath="/tmp/flow-jev-overnight-20260924/jev1-trunk-baseline-report.json";
+const { report } = await runJevAlignment({ apiKey, fetch: fetchImpl, resultsPath });
+await writeFile("/tmp/flow-jev-overnight-20260924/jev1-trunk-baseline-measurements.json", JSON.stringify({ schemaVersion: 1, requestCount: measurements.length, measurements, counts: report.counts, veto: report.veto }, null, 2)+"\n");
+process.stdout.write(JSON.stringify({ requestCount: measurements.length, counts: report.counts, veto: report.veto, resultsPath })+"\n");
