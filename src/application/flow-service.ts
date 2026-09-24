@@ -550,9 +550,12 @@ export function createFlowService(
 		async sessionClose(input) {
 			try {
 				const request = SessionCloseInputSchema.parse(input).request;
-				return await repository.transact((transaction) =>
-					closeSessionTransaction(transaction, request),
+				const result = await repository.transact((transaction) =>
+					closeSessionTransaction(transaction, request, recovery?.checkClose),
 				);
+				if (result.status === "ok")
+					recovery?.retireClosedSession(request.sessionId);
+				return result;
 			} catch (error) {
 				return errorResponse(error);
 			}
