@@ -917,9 +917,19 @@ for (const failure of [
 		}[failure];
 
 		const before = await requestBudgetStatus(l.directory);
+		const outputDirectory = join(l.f.project, "journal");
+		if (failure === "policy") {
+			await expect(createEpisodeHostDriver(l.f.options)).rejects.toThrow(
+				expectedError,
+			);
+			expect(l.f.starts).toBe(0);
+			expect(l.f.prompts).toEqual([]);
+			expect(await requestBudgetStatus(l.directory)).toEqual(before);
+			await expect(access(outputDirectory)).rejects.toThrow();
+			return;
+		}
 		const driver = await createEpisodeHostDriver(l.f.options);
 		const registration = await l.registration(driver, changes);
-		const outputDirectory = join(l.f.project, "journal");
 		await expect(
 			runEpisode({
 				registration,
