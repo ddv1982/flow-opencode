@@ -282,3 +282,39 @@ test("simulation cites every live blocker of the blocked feature", async () => {
 		},
 	});
 });
+
+test("operator-only simulation writes only its declared result file", async () => {
+	const transport = createSimulationTransport({ kind: "operator-resume-v1" });
+	const response = await transport(
+		new Request("https://api.x.ai/v1/responses", {
+			method: "POST",
+			body: JSON.stringify({
+				model: "grok-4.6",
+				stream: true,
+				tools: [{ name: "flow_status" }],
+				input: [
+					{
+						type: "message",
+						role: "user",
+						content: [
+							{
+								type: "input_text",
+								text: "Write fixed followed by a newline.",
+							},
+						],
+					},
+				],
+			}),
+		}),
+	);
+	const events = (await response.text())
+		.split("\n\n")
+		.filter((line) => line.startsWith("data: "))
+		.map((line) => JSON.parse(line.slice(6)));
+	const done = events.find((event) => event.type === "response.completed");
+	const call = done?.response?.output?.[0];
+	expect(call?.name).toBe("bash");
+	expect(JSON.parse(call?.arguments ?? "{}").command).toBe(
+		"printf 'fixed\\n' > result.txt",
+	);
+});
