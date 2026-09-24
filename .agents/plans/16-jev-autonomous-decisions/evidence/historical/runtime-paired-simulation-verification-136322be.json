@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "63f90c3cf563e7477ffbf75b51895580ee516e2f",
-  "recordedAt": "2026-09-24T05:03:08.082978+00:00",
+  "verifiedCodeHead": "136322beda48f0c67ffbf48f744d4c51c9288a4b",
+  "recordedAt": "2026-09-24T03:48:37.293197+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -15,16 +15,16 @@
       "skipped": 15,
       "failed": 0,
       "assertions": 7846,
-      "logSha256": "d371735fbabf6a04b711b3f8059f6456e004a5c0fd32e67daf632d6923552eac"
+      "logSha256": "7e2cdf454112a7d43e82a2e84b03140b5f88fa0e49c1d0ea8af815fd4cdaa8aa"
     },
     {
-      "command": "bun test tests/recovery-campaign.test.ts tests/recovery-treatment.test.ts tests/recovery-episode-runner.test.ts tests/recovery-operator.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/host-artifacts.test.ts",
+      "command": "bun test tests/recovery-campaign.test.ts tests/recovery-treatment.test.ts tests/recovery-episode-runner.test.ts tests/recovery-operator.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts",
       "exitCode": 0,
-      "passed": 56,
+      "passed": 49,
       "skipped": 1,
       "failed": 0,
-      "assertions": 281,
-      "logSha256": "4ef3655330e3148cca3d09c01530f5be99598700a96ee04a815dff6f14ea99f6"
+      "assertions": 262,
+      "logSha256": "bfd8ce0bbdb3b0fd6fce2ee6f957269029799e99d27f5af861cb04fae980a447"
     },
     {
       "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-campaign-host.test.ts",
@@ -33,7 +33,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 240,
-      "logSha256": "30c32405304620c3d9d36373a08b03f0c9f381ae8bb21b480c778fc64aa3d24b"
+      "logSha256": "e8ba85163a4f705542a287dc30fd2fe0828b22d3a902f45e7cd45e55375efbd0"
     },
     {
       "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/recovery-operator-host.test.ts",
@@ -42,7 +42,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 60,
-      "logSha256": "34f6d3761c8d94ed14c6a357efb8dced057b0f26b7a0972a4d3852265c1915ac"
+      "logSha256": "bca83207dea7af5910d73cb4f58ed34230d90607b7b5a4c61ce8ed0b1c9ef697"
     },
     {
       "command": "bun run smoke:live",
@@ -51,15 +51,13 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "4eb76ea4e6820a54d6822e0075ae7a8da34b96ecf7dcce8da9badad166b44ade"
+      "logSha256": "f1609513451f20ace9efc3ab13fb19c0813fa115ccde272148953392edf5a263"
     }
   ],
   "sourceDigests": {
-    "evals/harness.ts": "639056fa2df7ef077154f2efd4b9220920e009ebdf7db519674193402c4f9e18",
     "evals/recovery-decisions/compare.ts": "22be5d8b6617b921516e130371222005663632149ba12e66d8e8946bd2a2fa08",
     "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
     "evals/recovery-decisions/treatment.ts": "6b0458b86d2ffcb23aa61acad068f453771d45de9d6ee4ccbd53225a59d2cb40",
-    "tests/host-artifacts-host.test.ts": "5dad0c84d33ae3394786995ac74d285bb91b7707f3f97f8895c0cb5a7a4e583b",
     "tests/recovery-campaign-host.test.ts": "b6d9d8b6f9485bee07f674bda0658c1bb53640eac85c5959f134daf84f2a6505",
     "tests/recovery-campaign-support.ts": "e918b324d6c3c6ba9b887ce71bcacc98bedca5408994b812353f717171308563",
     "tests/recovery-campaign.test.ts": "e324a74d77a478334335a4378712501209aa10d0d762d5737887300ae7193d91",
@@ -68,9 +66,9 @@
     "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-paired-simulation-verification-136322be.json",
-    "verifiedCodeHead": "136322beda48f0c67ffbf48f744d4c51c9288a4b",
-    "originalSha256": "e5b091cebf7841813e2db5f4e502e62d8a5a504b7a839861e5e03e6517f4cbb6"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-paired-simulation-verification-f88e80b5.json",
+    "verifiedCodeHead": "f88e80b56b75e1c24887e994b90c5d9788ec0d24",
+    "originalSha256": "94f76a6247486f4a837107261c9690246830e4fb28acdcf24d5d3e0a1ef1e38b"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
