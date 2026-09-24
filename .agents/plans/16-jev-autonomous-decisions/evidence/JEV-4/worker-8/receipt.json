@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "classification": "native-host-simulation-only",
+  "capturedAt": "2026-09-24T20:20:23.636618+00:00",
+  "codeHead": "6ca206a77dc60eefcffd4d077e0c801d5d15eb44",
+  "opencodeVersion": "1.18.31",
+  "command": "FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-treatment-host.test.ts -t model-mismatch",
+  "models": [
+    "openai/gpt-5.6-terra",
+    "xai/grok-4.6"
+  ],
+  "requestedJevModel": "jev-1.13.0",
+  "simulatedResolvedJevModel": "jev-1.14.0",
+  "result": {
+    "passed": 2,
+    "failed": 0,
+    "status": "model-mismatch",
+    "resetGranted": false,
+    "sessionRevisionChanged": false
+  },
+  "sha256": {
+    "native-host.log": "5a997966074b5d4b826fee95d9df31d899058ac992b7b940ffae3b2015d730d0",
+    "tests/recovery-treatment-host.test.ts": "7aac3427d710b979682cbe052db2087a0fbc15831ba5a4e5158f0e284c5fbb09",
+    "evals/recovery-decisions/simulation-transport.ts": "70767ec1b58d2fea485de62f4beb0008f1b18c0cd578769509da50fda68daf10",
+    "src/infrastructure/jev-decision-provider.ts": "27d9440cc4515ea16df8b26fb24621030cd7d3c78f9e7ae6ba693d78744c9080",
+    "src/application/recovery-policy.ts": "4afa96f653bb6d0a7125c4c72a8003c61aec604d6df661a0f099d98bd626e8be"
+  },
+  "limits": [
+    "Simulated manager and Jev replies in real isolated OpenCode hosts; this is not paid live decision-quality evidence.",
+    "The required lane screenshot is not captured, so the plan lane remains open.",
+    "No production delegated profile is qualified or enabled."
+  ]
+}
