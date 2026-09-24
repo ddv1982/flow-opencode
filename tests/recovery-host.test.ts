@@ -249,6 +249,7 @@ test("overlapping command setup cannot revive or revoke a newer invocation", asy
 				if (waitAt === "anchor") {
 					entered();
 					await barrier;
+					throw new Error("old anchor failed");
 				}
 			},
 		};
@@ -292,7 +293,11 @@ test("overlapping command setup cannot revive or revoke a newer invocation", asy
 			output(),
 		);
 		release();
-		expect(await old).toBeInstanceOf(Error);
+		expect((await old).message).toBe(
+			waitAt === "anchor"
+				? "old anchor failed"
+				: "Flow command was superseded.",
+		);
 		expect(recovery.snapshot()).toMatchObject({
 			mode: "shadow",
 			remainingCalls: 5,
@@ -368,4 +373,88 @@ test("same-host stop invalidates a pending request-anchor setup", async () => {
 	expect(await old).toBeInstanceOf(Error);
 	expect(recovery.snapshot()).toEqual({ mode: "off" });
 	expect(auto.compactionContext("A")).toBeNull();
+});
+
+test("failed auto setup revokes its recovery lease", async () => {
+	const { createCommandHook } = await import(
+		"../src/platform/opencode/command-hook.js"
+	);
+	const { createFlowService } = await import(
+		"../src/application/flow-service.js"
+	);
+	const { MemorySessionRepository, deterministicEnvironment } = await import(
+		"./runtime-test-support.js"
+	);
+	const base = createFlowService(
+		new MemorySessionRepository(),
+		deterministicEnvironment(),
+	);
+	const recovery = new RecoveryController(unavailable);
+	const auto = new AutoDriveCoordinator({
+		recovery,
+		readProjection: async () => ({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		}),
+		prompt: async () => {},
+	});
+	const hook = createCommandHook({
+		recovery,
+		autoDrive: auto,
+		flow: {
+			...base,
+			requestAnchor: async () => {
+				throw new Error("anchor failed");
+			},
+		},
+		assertOperational() {},
+	});
+	await expect(
+		hook(
+			{
+				command: "flow-auto",
+				sessionID: "host",
+				arguments:
+					'--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Cover test named "x"',
+			},
+			{ parts: [] } as Parameters<typeof hook>[1],
+		),
+	).rejects.toThrow("anchor failed");
+	expect(recovery.snapshot()).toEqual({ mode: "off" });
+});
+
+test("shadow recovery prompt does not add a second handback at one checkpoint", async () => {
+	const recovery = new RecoveryController(unavailable);
+	recovery.activate("host", { mode: "shadow", maxCalls: 2, maxUsd: 0.01 });
+	const prompts: string[] = [];
+	let revision = 10;
+	const auto = new AutoDriveCoordinator({
+		recovery,
+		readProjection: async () => ({
+			sessionId: "flow",
+			status: "blocked",
+			revision,
+			nextAction: "await-user-direction",
+		}),
+		prompt: async (_host, prompt) => {
+			prompts.push(prompt);
+		},
+	});
+	const metadata = await auto.activate("host");
+	await auto.observeMessage(
+		"host",
+		delivery,
+		[{ type: "text", synthetic: true, metadata }],
+		"initial",
+	);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	revision = 11;
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(2);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(2);
 });

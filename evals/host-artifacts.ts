@@ -143,7 +143,14 @@ async function nativeFile(path: string, signal?: AbortSignal) {
 		if (
 			!(
 				hex === "7f454c46" ||
-				["cffaedfe", "feedfacf", "cafebabe", "bebafeca"].includes(hex) ||
+				[
+					"cffaedfe",
+					"feedfacf",
+					"cafebabe",
+					"bebafeca",
+					"cafebabf",
+					"bfbafeca",
+				].includes(hex) ||
 				hex.startsWith("4d5a")
 			)
 		)

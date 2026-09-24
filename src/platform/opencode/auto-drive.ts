@@ -463,6 +463,7 @@ export class AutoDriveCoordinator {
 					: null;
 			if (proposal && lease.delivery) {
 				this.#waitAt(lease, projection.revision);
+				lease.handbackPromptedRevision = projection.revision;
 				this.#setTiming("active");
 				lease.inFlight = "prompt";
 				await this.#options
