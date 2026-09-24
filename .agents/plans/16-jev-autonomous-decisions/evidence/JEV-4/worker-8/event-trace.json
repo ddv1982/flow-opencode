@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "classification": "simulated-provider-native-host",
+  "hostVersion": "1.18.31",
+  "sourceHead": "0266905a95c71ba2bded83c07f07da9257925c35",
+  "hostSessionId": "ses_f2ad5c6b7ffez5K5N82E6B0bMX",
+  "rawMessagesSha256": "9d5b5f8552459152adf53e0a6e312ffbddc777267c0b7f3ed454103ff50b5e0b",
+  "resetToolCalls": 0,
+  "modelMismatchOutcomes": [
+    {
+      "status": "ok",
+      "revision": 11,
+      "kind": "unavailable",
+      "reason": "model-mismatch",
+      "requestedModel": "jev-1.13.0",
+      "resolvedModel": "jev-1.14.0",
+      "packetDigest": "40a04648f9ede0c261dded670f2a49a3edb330b4fa0b4c5f599bfefb1bf265ca",
+      "selectedCandidateId": null,
+      "hasRecommended": false
+    }
+  ]
+}

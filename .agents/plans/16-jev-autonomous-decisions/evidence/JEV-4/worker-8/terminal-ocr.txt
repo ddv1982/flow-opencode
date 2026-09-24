@@ -1,0 +1,18 @@
+| Flow flow-auto: Repair the blocke
+Jev model changed
+
+@ flow_status
+@ flow_status
+
+Requested jev-1.13.0, received jev-1.14.0. Recovery
+remains blocked pending qualification.
+
+Simulation complete.
+@ Build - GPT-5.6 Terra + 1.2s
+Simulation complete.
+
+@ Build - GPT-5.6 Terra - 108ms
+
+Build - GPT-5.6 Terra OpenAL
+
+/tmp/workspace-jMixFr/project 110 (0%) ctrl+p commands

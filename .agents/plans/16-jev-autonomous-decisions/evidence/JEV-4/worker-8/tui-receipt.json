@@ -1,0 +1,57 @@
+{
+  "schemaVersion": 1,
+  "classification": "native-tui-evaluation-treatment-partial",
+  "recordedAt": "2026-09-24T20:48:32.060437+00:00",
+  "codeHead": "0266905a95c71ba2bded83c07f07da9257925c35",
+  "sourceTree": "5b174f4eff61bd78eb6a0d67c3aafc7a1b4e3a04",
+  "hostVersion": "OpenCode 1.18.31",
+  "tuiClientVersion": "OpenCode 1.18.32",
+  "terminal": "XTerm 390 on isolated Xvfb :99",
+  "capture": {
+    "screenshot": "window-only X11 capture of the attached OpenCode TUI",
+    "screenshotPixels": [
+      1204,
+      724
+    ],
+    "video": "isolated Xvfb display with the TUI as its only window",
+    "videoFrames": 40,
+    "videoSeconds": 20
+  },
+  "observation": {
+    "managerRoutes": [
+      "openai/gpt-5.6-terra",
+      "xai/grok-4.6"
+    ],
+    "provider": "simulated TypeSafe fault response",
+    "requestedModel": "jev-1.13.0",
+    "resolvedModel": "jev-1.14.0",
+    "status": "model-mismatch",
+    "packetDigest": "40a04648f9ede0c261dded670f2a49a3edb330b4fa0b4c5f599bfefb1bf265ca",
+    "resetToolCalls": 0,
+    "selectedCandidateId": null,
+    "hasRecommended": false,
+    "nativeTestsPassed": 2,
+    "nativeTestsFailed": 0,
+    "sessionRevisionChanged": false
+  },
+  "files": {
+    "upgrade.png": "a2fec0e1bad812ebde6b2e7a2761e061884ddddec9326d1873010d6ea120c338",
+    "upgrade.mp4": "fb100720b6ade8018c54629447d24f33a4462ecf02398c8c24ec3d2d890475c0",
+    "capture-test.log": "e35ffe94d8c0d92040ad8b3680d3d1ee735aaac19c809d0f9e80b710e163bd9c",
+    "event-trace.json": "a5dc1422612939e702712957fd1b3614d3f0f8c3bf70386e70422d43057a71d0",
+    "terminal-ocr.txt": "dc6edbe289b59291041ea77cb732678ce6a98d8ba952123d720cb6f08ef9ae0b"
+  },
+  "sourceFiles": {
+    "src/platform/opencode/plugin-composition.ts": "830dc153c19ca2e522030c492720db081240dee25351d06c84f8ab0f69fd110c",
+    "src/platform/opencode/tools.ts": "8f52ad27857fc8937dc6541a5ed63c6aa0577a27e38e25bad3485598d7da52cf",
+    "src/infrastructure/jev-decision-provider.ts": "27d9440cc4515ea16df8b26fb24621030cd7d3c78f9e7ae6ba693d78744c9080",
+    "src/application/recovery-policy.ts": "4afa96f653bb6d0a7125c4c72a8003c61aec604d6df661a0f099d98bd626e8be",
+    "tests/recovery-treatment-host.test.ts": "f6c13aa52c6a26b72544d4ae0e4e2277973d72ec38b57bb146328738dccd6bf6",
+    "evals/recovery-decisions/simulation-transport.ts": "70767ec1b58d2fea485de62f4beb0008f1b18c0cd578769509da50fda68daf10"
+  },
+  "limits": [
+    "The terminal OCR is derived from the screenshot and may contain recognition errors; the screenshot and event trace are primary.",
+    "The OpenCode host loaded the isolated evaluation treatment bundle, not the packed release plugin. This prevents a full JEV-4 lane-8 verdict.",
+    "Manager and Jev replies were simulated. This is transport and interaction evidence, not live model decision-quality or production delegation qualification."
+  ]
+}
