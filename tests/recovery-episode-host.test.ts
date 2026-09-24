@@ -665,6 +665,12 @@ test("live source driver binds credential policy and preserves runtime scope whi
 		arm: "manager-only",
 	});
 	expect(f.startOptions?.frozenArtifacts?.identity.packageCache).toBeNull();
+	const frozenBundle = f.startOptions?.frozenTreatmentBundle;
+	expect(frozenBundle).toBeDefined();
+	if (!frozenBundle) throw new Error("Missing registered treatment bundle.");
+	expect(createHash("sha256").update(frozenBundle.bytes).digest("hex")).toBe(
+		frozenBundle.sha256,
+	);
 	await driver.stop();
 	expect(f.prompts).toEqual([]);
 });

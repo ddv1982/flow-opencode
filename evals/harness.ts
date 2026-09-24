@@ -1464,6 +1464,7 @@ export class EvalHost {
 	static async start(options: {
 		toolchain: BunToolchain;
 		frozenArtifacts?: { opencodeExecutable: string; identity: HostArtifacts };
+		frozenTreatmentBundle?: { bytes: Uint8Array; sha256: string };
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
 		packageVersion?: string;
@@ -1528,6 +1529,21 @@ export class EvalHost {
 		const liveTreatment = options.recoveryTreatment?.origin === "live";
 		const simulationTreatment =
 			options.recoveryTreatment?.origin === "simulation";
+		const frozenTreatmentBundle = options.frozenTreatmentBundle
+			? {
+					bytes: new Uint8Array(options.frozenTreatmentBundle.bytes),
+					sha256: options.frozenTreatmentBundle.sha256,
+				}
+			: undefined;
+		if (frozenTreatmentBundle) {
+			if (
+				!liveTreatment ||
+				createHash("sha256")
+					.update(frozenTreatmentBundle.bytes)
+					.digest("hex") !== frozenTreatmentBundle.sha256
+			)
+				throw new Error("Frozen treatment bundle differs from registration.");
+		}
 		const jevKey =
 			liveTreatment && options.recoveryTreatment?.arm === "manager-plus-jev"
 				? options.toolchain.environment.TYPESAFE_API_KEY
@@ -1727,29 +1743,42 @@ export class EvalHost {
 			let pluginEntry = `opencode-plugin-flow@${version}`;
 			let treatmentBundleDigest: string | undefined;
 			if (options.recoveryTreatment) {
-				const built = await Bun.build({
-					entrypoints: [
-						fileURLToPath(
-							new URL(
-								liveTreatment
-									? "./recovery-decisions/live-treatment-plugin.ts"
-									: "./recovery-decisions/treatment-plugin.ts",
-								import.meta.url,
+				if (frozenTreatmentBundle) {
+					const destination = join(
+						scratch,
+						"treatment",
+						"live-treatment-plugin.js",
+					);
+					await mkdir(dirname(destination), { recursive: true });
+					await writeFile(destination, frozenTreatmentBundle.bytes);
+					checkCancellation(options.signal);
+					pluginEntry = pathToFileURL(destination).href;
+					treatmentBundleDigest = frozenTreatmentBundle.sha256;
+				} else {
+					const built = await Bun.build({
+						entrypoints: [
+							fileURLToPath(
+								new URL(
+									liveTreatment
+										? "./recovery-decisions/live-treatment-plugin.ts"
+										: "./recovery-decisions/treatment-plugin.ts",
+									import.meta.url,
+								),
 							),
-						),
-					],
-					outdir: join(scratch, "treatment"),
-					target: "bun",
-					format: "esm",
-					minify: false,
-				});
-				checkCancellation(options.signal);
-				if (!built.success || !built.outputs[0])
-					throw new Error("Evaluation treatment bundle failed.");
-				pluginEntry = pathToFileURL(built.outputs[0].path).href;
-				treatmentBundleDigest = createHash("sha256")
-					.update(await readFile(built.outputs[0].path))
-					.digest("hex");
+						],
+						outdir: join(scratch, "treatment"),
+						target: "bun",
+						format: "esm",
+						minify: false,
+					});
+					checkCancellation(options.signal);
+					if (!built.success || !built.outputs[0])
+						throw new Error("Evaluation treatment bundle failed.");
+					pluginEntry = pathToFileURL(built.outputs[0].path).href;
+					treatmentBundleDigest = createHash("sha256")
+						.update(await readFile(built.outputs[0].path))
+						.digest("hex");
+				}
 			}
 
 			const reviewer = options.reviewer;
