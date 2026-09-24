@@ -60,17 +60,42 @@ const MAX_RECORD_BYTES = 1024 * 1024;
 const MAX_TOTAL_BYTES = 16 * MAX_RECORD_BYTES;
 const MAX_RECORDS = 128;
 
+async function requireTrustedParents(
+	path: string,
+	owner: number,
+): Promise<void> {
+	let current = path;
+	for (;;) {
+		const stat = await lstat(current);
+		if (
+			!stat.isDirectory() ||
+			stat.isSymbolicLink() ||
+			(stat.uid !== owner && stat.uid !== 0) ||
+			((stat.mode & 0o022) !== 0 && (stat.mode & 0o1000) === 0)
+		)
+			throw new Error("Untrusted capture directory parent.");
+		const next = dirname(current);
+		if (next === current) return;
+		current = next;
+	}
+}
+
 export class CapturingRecoveryController extends RecoveryController {
 	#records = 0;
 	#bytes = 0;
 	readonly #directory: string;
-	private constructor(directory: string) {
+	readonly #identity: { dev: number; ino: number; uid: number };
+	private constructor(
+		directory: string,
+		identity: { dev: number; ino: number; uid: number },
+	) {
 		super({
 			async assess() {
 				return { kind: "unavailable", reason: "capture-only" };
 			},
 		});
 		this.#directory = directory;
+		this.#identity = identity;
 	}
 	static async create(
 		workspace: string,
@@ -85,6 +110,9 @@ export class CapturingRecoveryController extends RecoveryController {
 			const root = await realpath(workspace);
 			const destination = resolve(outputDirectory);
 			const parent = await realpath(dirname(destination));
+			const owner = process.geteuid?.();
+			if (owner === undefined) throw new Error();
+			await requireTrustedParents(parent, owner);
 			const canonical = join(parent, basename(destination));
 			const child = relative(root, canonical);
 			if (
@@ -97,10 +125,15 @@ export class CapturingRecoveryController extends RecoveryController {
 			if (
 				!stat.isDirectory() ||
 				stat.isSymbolicLink() ||
+				stat.uid !== owner ||
 				(stat.mode & 0o777) !== 0o700
 			)
 				throw new Error();
-			return new CapturingRecoveryController(canonical);
+			return new CapturingRecoveryController(canonical, {
+				dev: stat.dev,
+				ino: stat.ino,
+				uid: stat.uid,
+			});
 		} catch {
 			throw new Error(
 				"Recovery capture requires a fresh private directory outside the workspace with an existing parent.",
@@ -138,10 +171,17 @@ export class CapturingRecoveryController extends RecoveryController {
 						throw new Error();
 					this.#records++;
 					this.#bytes += bytes.length;
+					await requireTrustedParents(
+						dirname(this.#directory),
+						this.#identity.uid,
+					);
 					const stat = await lstat(this.#directory);
 					if (
 						!stat.isDirectory() ||
 						stat.isSymbolicLink() ||
+						stat.dev !== this.#identity.dev ||
+						stat.ino !== this.#identity.ino ||
+						stat.uid !== this.#identity.uid ||
 						(stat.mode & 0o777) !== 0o700
 					)
 						throw new Error();
