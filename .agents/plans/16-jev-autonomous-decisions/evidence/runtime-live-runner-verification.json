@@ -1,52 +1,67 @@
 {
   "schemaVersion": 1,
-  "kind": "live-runner-implementation-verification",
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "c4a4fc5c2a2db1b3eee5d657c74477c205a30a3a",
+  "recordedAt": "2026-09-24T02:21:23.230547+00:00",
   "qualification": "inconclusive",
-  "paidInference": false,
-  "sources": {
-    "evals/recovery-decisions/episode-host.ts": "be84204859fd8b0122893d3145c5618c4663489d90fc05a87226c10d8e7ce5eb",
-    "evals/recovery-decisions/episode-runner.ts": "3894fe43c38e707041b56e539422f13d37ee024b4caebbc82a807a26c83ab77c",
-    "tests/recovery-episode-host.test.ts": "ceab8233805ac1d278d0623acb6226fbdc11bf140ada031752a231ab0ba0a3cd"
-  },
-  "localArtifacts": {
-    "/tmp/flow-live-runner-focused.log": "3bcbac6da965917051a6cb54639caa382e3a29c4ec806e149c6b81bd438d843d",
-    "/tmp/flow-live-runner-typecheck.log": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
-    "/tmp/flow-live-runner-lint.log": "79619377b7876f875e7a92fbaeb233d19a8580e62ca7a19980ff5aca2203c4e4",
-    "/tmp/flow-live-runner-simulation.log": "0b0c59b3711b18a6aa155d9370f7aa02c6605586bab09388d69b12438a319c78",
-    "/tmp/flow-live-runner-simulation-composed/complete.json": "9d9830b9d4343a3d0bd6ee9671a5ec989e93f5c95733d4874ecb0a129ef7a47b",
-    "/tmp/flow-live-runner-artifacts.log": "0445b787645371949d5297b45fe1680f074be1eeb1119c8491de60a25723e8ec",
-    "/tmp/flow-live-runner-simulation-first.log": "d1e0c24b0ed7d48259240b5e21629db07cfe0026d61add5f6a3ad40de5b9e877",
-    "/tmp/flow-live-runner-composition-before.log": "37bba75a3b8c15dcfb4c243589ef9b39969e977f58a2f3e396383fee5b3e072d"
-  },
-  "checks": {
-    "focused": {
-      "passed": 107,
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1551,
+      "skipped": 18,
       "failed": 0,
-      "assertions": 399
+      "assertions": 8224,
+      "logSha256": "624c47e24d3af04f33080423ead1f9d09219cbebed557867476f3d8df4cfb645"
     },
-    "typecheck": "passed",
-    "lint": "passed",
-    "nativeSimulation": {
+    {
+      "command": "bun test tests/recovery-campaign-host.test.ts tests/recovery-live-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-live-treatment.test.ts",
+      "exitCode": 0,
+      "passed": 67,
+      "skipped": 2,
+      "failed": 0,
+      "assertions": 184,
+      "logSha256": "8b77787d2b550dbcbd74974b35a041d65f0d297f291b643cd86623461da8f2bf"
+    },
+    {
+      "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-campaign-host.test.ts",
+      "exitCode": 0,
       "passed": 2,
+      "skipped": 0,
       "failed": 0,
-      "assertions": 233,
-      "hosts": 4,
-      "opencodeVersion": "1.18.31",
-      "artifactHashesChecked": 27
+      "assertions": 241,
+      "logSha256": "912a826757cbe3d2edbeca3e3dde597a13b1d736a8edfdeb24f5f60e2eec3855"
     },
-    "composedIdentityRegression": {
-      "before": {
-        "failed": 4
-      },
-      "after": "All four composed live-format cases pass in the focused suite."
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "943d3ce0aa92ac4b5ee08523011f33c701417faa9ecb5c26221bc82e0b278a97"
     }
+  ],
+  "sourceDigests": {
+    "evals/recovery-decisions/episode-host.ts": "3e8fe3765f187f977b0b5f8c39278729d537ebc9eb0989c59a7ea189efdeef93",
+    "evals/recovery-decisions/episode-runner.ts": "d7c84b1757efbe4310edbc23941f19dd9fc33d93a9d29f04af4732f33a681514",
+    "evals/recovery-decisions/simulation-transport.ts": "6b7272ed1d68162b9a875b5c633dc582f33dc05c160287e8a1d751d80236eafe",
+    "evals/recovery-decisions/treatment.ts": "fba6de2f5b16ca856ed4c0d134951cc6f88080000b34aa2bba6ad7c849386b72",
+    "tests/recovery-campaign-host.test.ts": "ff2d5261d46de60aa702c3823cd4e9f2092750a012d906e550d5b00692a28664",
+    "tests/recovery-episode-host.test.ts": "6dcbcdae106321c2bfc1c4e14ea4079b5152ce079e612130bc75d04dfad00457",
+    "tests/recovery-treatment-host.test.ts": "7fa691cb5fc30af118b906203ad70032de67585afa68a99cacc5c3d5ea9f7038"
   },
-  "limitations": [
-    "Positive live-format runner tests use injected local hosts and synthetic reviewed-bound attestations; no provider inference or real pricing review.",
-    "Native coverage is the existing paired simulation, not a live provider comparison.",
-    "Initial native run timed out after episode-runner.ts changed during execution; its source-binding refusal was reproduced. Final unchanged-source rerun passed.",
-    "Driver implementations and reviewer identities are trusted local inputs, not authenticated provenance.",
-    "Real operational data, independent review, approved paid campaign cap and per-manager qualification remain outstanding.",
-    "Local logs may not persist outside this workstation."
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-runner-verification-d49c2386.json",
+    "verifiedCodeHead": "d49c2386391a4ba76ebe92a793ac1ae28ff93ddd",
+    "originalSha256": "7a7ed4ab654d7d499a812e427b3b4893895d57c3639c70878bd1598a8b60a2f2"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
   ]
 }
