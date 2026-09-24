@@ -195,14 +195,15 @@ export async function compareCampaign(
 			target.labelMatch =
 				target.kind !== "forbidden" &&
 				entry.expected.acceptableSelections.includes(selection);
-			target.acceptableSelection =
-				target.kind === "selected" && target.labelMatch;
+			target.acceptableSelection = target.labelMatch === true;
 			target.reviewedOutcome =
 				target.kind === "selected"
 					? (entry.labels.candidateOutcomes?.[selection] ?? null)
 					: null;
 		};
 		if (m) {
+			if (m.packetDigest === null && m.result.kind !== "filtered")
+				throw new Error("Manager observation has no eligible packet.");
 			if (m.result.kind === "selection") {
 				if (m.result.candidateId === "abstain")
 					managerResult.kind = "forbidden";
