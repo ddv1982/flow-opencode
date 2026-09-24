@@ -294,6 +294,7 @@ Each live lane runs in its own isolated environment at the PR head through a det
 - [ ] Lane 10. Exercise status, mode selection, and documented recovery commands. Save `evidence/JEV-4/worker-10/controls.png`. Pass when the visible behavior matches the documentation and no secrets appear.
 
 The [partial lane-10 receipt](evidence/JEV-4/worker-10/receipt.json) records a real OpenCode 1.18.31 TUI at `2d41965`: idle status and `/flow-auto stop` without an active lease. Its screenshots and 45-second window-only video contain no fixture-rendered screen. Mode selection and a blocked checkpoint remain unverified, so lane 10 stays open.
+The [delegated-refusal capture](evidence/JEV-4/delegated-refusal/receipt.json) separately shows that an unqualified delegated request now displays the refusal in the native TUI at `94d08bd`. Shadow activation and the blocked-checkpoint interaction remain unverified.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
