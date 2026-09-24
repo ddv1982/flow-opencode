@@ -5,7 +5,14 @@ const projection = {
 	sessionId: "frozen",
 	revision: 9,
 	blockedFeature: { featureId: "parser" },
-	findingsDigest: [{ findingId: "null-input" }],
+	findingsDigest: [
+		{
+			featureId: "parser",
+			findingId: "null-input",
+			severity: "blocking",
+			live: true,
+		},
+	],
 };
 const request = {
 	operationId: "flow-recovery-exact",
