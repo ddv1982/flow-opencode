@@ -2083,6 +2083,7 @@ export class EvalHost {
 			observeUsage?: (usage: StudyUsage) => void;
 		},
 	): Promise<string | null> {
+		await this.verifyArtifacts();
 		const sessionId = await this.createSession(`flow-eval probe ${model}`);
 		let usage = normalizeStudyUsage({ tokens: {}, costUsd: null });
 		try {
