@@ -8,7 +8,7 @@
       "historicalHead": "0ac5a1dbb415afba932298d2c0b425cea814e6bc",
       "retained": ["TUI video", "screenshot", "terminal transcript", "session revision observation"],
       "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
-      "verdict": "partial; simulated stop proved, packed-plugin identity for the observed TUI host remains open",
+      "verdict": "partial; packed shadow stop and delegated eval stop are proven in separate runs",
       "currentProbe": "worker-5/packed-current/receipt.json",
       "currentSourceHead": "560c7503b43beac66432801a4d3ec04c6c042cea",
       "currentProbeEvidence": [
@@ -21,7 +21,15 @@
         "unchanged session after delayed reply"
       ],
       "currentProbeMissing": [
-        "observed TUI host loading the packed plugin bytes under the approved simulation seam"
+        "one observed run combining packed plugin provenance with pending delegated mutation authority"
+      ],
+      "currentPackedProbe": "worker-5/packed-shadow/receipt.json",
+      "currentPackedSourceHead": "fe1d0665eecb969b3f18cae392084cbd11e4356b",
+      "currentPackedEvidence": [
+        "packed artifact loaded by observed OpenCode host",
+        "real TUI shadow stop during delayed simulated Jev request",
+        "exact outgoing packet digest",
+        "unchanged Session v5 state after delayed reply"
       ]
     },
     {
@@ -50,5 +58,5 @@
       "currentVerdict": "pass for status, mode selection, and stop controls; no Jev quality claim"
     }
   ],
-  "interpretation": "Lane 10 has a packed-plugin TUI controls capture. Lane 5 has a real TUI stop during delayed simulated Jev advice, an exact packet digest, and unchanged Session v5 state, but its observed host used the eval-only treatment bundle rather than the packed plugin. Keep lane 5 open until that boot-provenance requirement is met. Neither controls nor simulated transport evidence qualifies Jev decision quality."
+  "interpretation": "Lane 10 has a packed-plugin TUI controls capture. Lane 5 now has both a packed-plugin shadow stop and a delegated simulated stop under the eval-only treatment bundle, each with a packet digest and unchanged state. The required same-run combination of packed provenance and delegated mutation authority remains open. Neither simulation qualifies Jev decision quality."
 }
