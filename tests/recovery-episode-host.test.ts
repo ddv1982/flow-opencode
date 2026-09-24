@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
 	access,
 	mkdir,
@@ -29,6 +29,26 @@ import {
 	reserveRequest,
 } from "../evals/recovery-decisions/request-budget.js";
 import { datasetDigest } from "../evals/recovery-decisions/schema.js";
+import { verifyRecoverySourceDigests } from "../evals/recovery-decisions/sources.js";
+
+test("registered source bytes are checked again before host preparation", async () => {
+	const root = await mkdtemp(join(tmpdir(), "episode-sources-"));
+	dirs.push(root);
+	await mkdir(join(root, "evals"));
+	const path = join(root, "evals", "live-treatment-plugin.ts");
+	await writeFile(path, "registered");
+	const sources = {
+		"evals/live-treatment-plugin.ts": createHash("sha256")
+			.update("registered")
+			.digest("hex"),
+	};
+	const signal = new AbortController().signal;
+	await verifyRecoverySourceDigests(sources, signal, root);
+	await writeFile(path, "changed");
+	await expect(
+		verifyRecoverySourceDigests(sources, signal, root),
+	).rejects.toThrow("Registered source bytes changed");
+});
 
 const dirs: string[] = [];
 afterEach(async () => {

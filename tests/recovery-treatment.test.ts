@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -101,6 +102,32 @@ test("treatment startup rejects missing, live, cancelled, mismatched and incompl
 	await expect(validateTreatmentBudget(treatment, valid)).rejects.toThrow(
 		"Invalid simulation",
 	);
+});
+
+test("treatment budget admission honors cancellation during ledger reads", async () => {
+	const simulation = await budget();
+	const live = await budget({ live: true });
+	const cancelled = new AbortController();
+	cancelled.abort(new Error("Admission cancelled"));
+	await expect(
+		validateTreatmentBudget(treatment, simulation, cancelled.signal),
+	).rejects.toThrow("Admission cancelled");
+	await expect(
+		validateTreatmentBudget(
+			{ origin: "live", arm: "manager-plus-jev" },
+			{
+				...live,
+				scope: {
+					executionId: randomUUID(),
+					registrationDigest: "a".repeat(64),
+					episodeId: "one",
+					arm: "manager-plus-jev",
+					harnessDigest: "b".repeat(64),
+				},
+			},
+			cancelled.signal,
+		),
+	).rejects.toThrow("Admission cancelled");
 });
 test("host refuses treatment without a gate before any process starts", async () => {
 	await expect(

@@ -232,8 +232,14 @@ async function readRequestLedger(directory: string, signal?: AbortSignal) {
 	};
 }
 
-export async function requestBudgetStatus(directory: string) {
-	const { claims: _claims, ...status } = await readRequestLedger(directory);
+export async function requestBudgetStatus(
+	directory: string,
+	signal?: AbortSignal,
+) {
+	const { claims: _claims, ...status } = await readRequestLedger(
+		directory,
+		signal,
+	);
 	return status;
 }
 export async function reconcileRequestReservations(
@@ -290,7 +296,7 @@ export async function reserveRequest(
 			: Object.freeze(EpisodeReservationScopeSchema.parse(scopeInput));
 	for (;;) {
 		signal?.throwIfAborted();
-		const status = await requestBudgetStatus(directory);
+		const status = await requestBudgetStatus(directory, signal);
 		if (status.authorizationDigest !== expectedDigest)
 			throw new Error("Request authorization changed.");
 		if (
@@ -330,7 +336,7 @@ export async function reserveRequest(
 			throw error;
 		}
 		signal?.throwIfAborted();
-		const after = await requestBudgetStatus(directory);
+		const after = await requestBudgetStatus(directory, signal);
 		if (
 			after.cancelled ||
 			after.authorizationDigest !== expectedDigest ||
