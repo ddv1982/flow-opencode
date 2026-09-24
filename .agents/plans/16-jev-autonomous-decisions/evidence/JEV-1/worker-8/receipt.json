@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "kind": "simulated-provider-fault-lane",
+  "lane": "JEV-1 worker-8",
+  "laneVerdict": "pass",
+  "qualification": "inconclusive",
+  "verifiedCodeHead": "5db4e9852492cf671f16534be52a23e00fb655a4",
+  "recordedAt": "2026-09-24T11:06:04.353126+00:00",
+  "transport": "explicit injected Jev transport seam",
+  "providerCalls": 0,
+  "cases": [
+    {
+      "case": "rate-limit",
+      "injectedHttpStatus": 429,
+      "dispatches": 3,
+      "result": {
+        "kind": "unavailable",
+        "reason": "http"
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": null,
+        "latencyMs": 5.672124000000004,
+        "attempts": 3,
+        "inputTokens": null,
+        "outputTokens": null,
+        "reservedUsd": 0.008064,
+        "estimatedUsd": null
+      },
+      "elapsedMs": 8.588176000000004
+    },
+    {
+      "case": "overload",
+      "injectedHttpStatus": 529,
+      "dispatches": 3,
+      "result": {
+        "kind": "unavailable",
+        "reason": "http"
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": null,
+        "latencyMs": 2.3497100000000017,
+        "attempts": 3,
+        "inputTokens": null,
+        "outputTokens": null,
+        "reservedUsd": 0.008064,
+        "estimatedUsd": null
+      },
+      "elapsedMs": 3.116260000000004
+    },
+    {
+      "case": "timeout",
+      "dispatches": 1,
+      "result": {
+        "kind": "unavailable",
+        "reason": "timeout"
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": null,
+        "latencyMs": 10001.225051,
+        "attempts": 1,
+        "inputTokens": null,
+        "outputTokens": null,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": null
+      },
+      "elapsedMs": 10002.414537999999
+    }
+  ],
+  "capture": {
+    "source": "X11 xterm window showing retained simulated evaluator results",
+    "windowOnly": true
+  },
+  "files": [
+    {
+      "name": "provider-error.png",
+      "sha256": "7e665f72ea7e72135add1862e2e690434af62db9d183f700753bbc148674bf90"
+    },
+    {
+      "name": "fault-results.json",
+      "sha256": "8ae24583544376cc4db112d55ce6c43839eb47623fc48208383eee4838ba3bdd"
+    },
+    {
+      "name": "terminal.txt",
+      "sha256": "3ff3b8e7ad2644abb4e1c34790489081dad60600f1dd1a2893119054a63a52ce"
+    },
+    {
+      "name": "probe.log",
+      "sha256": "6ef535b255886d93a6448a989e92867fa37b6955d9f0ec5a985d8a08c92d228f"
+    },
+    {
+      "name": "probe.ts",
+      "sha256": "db1fe4e7e01d19c3e22493410bc74309dc07d699aec122c4cc1bc611b8feecce"
+    }
+  ],
+  "limits": [
+    "HTTP 429 and 529 are injected responses, not real provider incidents; both stop after three reserved synthetic attempts.",
+    "The no-response transport ends at the collector ten-second deadline with an unavailable timeout.",
+    "These simulations verify bounded error handling only; they do not establish Jev quality, provider uptime, or promotion readiness."
+  ]
+}

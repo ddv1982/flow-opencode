@@ -1,0 +1,8 @@
+JEV-1 provider fault seam at 5db4e9852492cf671f16534be52a23e00fb655a4
+Simulated transport, zero provider calls
+rate-limit injected= 429 attempts= 3 result= unavailable reason= http elapsed_ms= 8.6
+overload injected= 529 attempts= 3 result= unavailable reason= http elapsed_ms= 3.1
+timeout injected= no response attempts= 1 result= unavailable reason= timeout elapsed_ms= 10002.4
+Artifact SHA256: 8ae24583544376cc4db112d55ce6c43839eb47623fc48208383eee4838ba3bdd
+Evidence scope: bounded error handling, no Jev quality claim
+bash-5.2$
