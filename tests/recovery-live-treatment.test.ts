@@ -9,6 +9,7 @@ for (const manager of ["openai", "xai"]) {
 		"control",
 		"control-with-jev",
 		"transport-failure",
+		"retry-replaced-fetch",
 		"replaced-fetch",
 		"replaced-websocket",
 		"simulation",

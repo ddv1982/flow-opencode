@@ -48,15 +48,22 @@ const LiveTreatmentPlugin: Plugin = async (context, input) => {
 		readyPath: options.budgetReadyPath,
 	});
 	BudgetPlugin.assertInstalledRequestGate(expected);
+	const gatedFetch = globalThis.fetch;
 	const hooks = await createFlowPlugin({
 		entryUrl: import.meta.url,
 		createRecovery: () =>
 			new RecoveryController(
 				treatment
-					? createJevDecisionProvider(() => {
-							BudgetPlugin.assertInstalledRequestGate(expected);
-							return process.env.TYPESAFE_API_KEY;
-						})
+					? createJevDecisionProvider(
+							() => {
+								BudgetPlugin.assertInstalledRequestGate(expected);
+								return process.env.TYPESAFE_API_KEY;
+							},
+							(url, init) => {
+								BudgetPlugin.assertInstalledRequestGate(expected);
+								return gatedFetch(url, init);
+							},
+						)
 					: {
 							async assess() {
 								return { kind: "unavailable", reason: "manager-only" };
