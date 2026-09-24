@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "classification": "disabled-mode-idle-routing-microbenchmark",
+  "baselineCommit": "65b3136633068cf05e47276c8c83e68e12ab849e",
+  "headCommit": "4644bef8bf53b3fed2e6be3798f39c09eb2a2b5d",
+  "fixtureDigest": "bc6ca14fa518451a65ea17642b44dbc75e02ffd237a7f906bfe12c60b5175773",
+  "runtime": {
+    "bun": "1.4.0",
+    "platform": "linux",
+    "arch": "x64"
+  },
+  "probeSha256": "21be11652e0700b533f7ace3a7d3cbe44a9707e3747a0b6a8362107745ec5689",
+  "rawFiles": {
+    "baseline.json.gz": "e3ccde80a26e676e93d8579c10696120a43fc6859343b7753a797e9e9950197f",
+    "head.json.gz": "132e1a4808f49b3e2fa49980a0c2bea4dba18beca348576c77c454d9a8c2457f"
+  },
+  "results": [
+    {
+      "scenario": "no-lease",
+      "baselineP95Us": 1.308,
+      "headP95Us": 1.15,
+      "addedP95Us": -0.158,
+      "callsAndRoutesMatch": true
+    },
+    {
+      "scenario": "ready-continuation",
+      "baselineP95Us": 2.567,
+      "headP95Us": 2.518,
+      "addedP95Us": -0.049,
+      "callsAndRoutesMatch": true
+    },
+    {
+      "scenario": "blocked-handback",
+      "baselineP95Us": 2.098,
+      "headP95Us": 2.176,
+      "addedP95Us": 0.078,
+      "callsAndRoutesMatch": true
+    },
+    {
+      "scenario": "inactive",
+      "baselineP95Us": 0.653,
+      "headP95Us": 1.06,
+      "addedP95Us": 0.407,
+      "callsAndRoutesMatch": true
+    }
+  ],
+  "maxAddedP95Us": 0.407,
+  "fetchCalls": 0,
+  "providerCalls": 0,
+  "rssMiB": {
+    "baselineAfterImports": 28.78,
+    "headAfterImports": 44.5,
+    "baselineAfterProbe": 59.66,
+    "headAfterProbe": 70.22
+  },
+  "limits": [
+    "The probe times the in-memory AutoDriveCoordinator.onIdle route with immediate mocked projection and prompt ports, not the full OpenCode plugin host event path.",
+    "The baseline has no recovery controller; the head uses a real inactive RecoveryController with a provider spy. Provider and fetch counters do not cover all possible network APIs.",
+    "Separate process RSS snapshots include module loading and runtime variation and do not isolate a production memory regression.",
+    "Shadow advice latency and the pinned live provider deadline are not measured; the JEV-2 performance gate remains open."
+  ],
+  "expandedSha256": {
+    "baseline.json": "156ff59e1240d147afe7447b00af07e66b7cbeb95c3bdc40b233748b49b243f1",
+    "head.json": "2baf511b9b0849b00ec755c810d34fe44257b077444c1fbd2904df09386237a9"
+  }
+}
