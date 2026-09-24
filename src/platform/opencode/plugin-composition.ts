@@ -159,7 +159,7 @@ export function createFlowPlugin(dependencies: {
 					input.sessionID,
 					output.message.id,
 					output.parts.every(
-						(part) => part.type !== "text" || part.synthetic === true,
+						(part) => part.type === "text" && part.synthetic === true,
 					),
 				);
 			},
