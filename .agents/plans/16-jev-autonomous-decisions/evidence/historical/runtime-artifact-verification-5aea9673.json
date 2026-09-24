@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "be47032ac47e1e3b296a2df17243354d32bceab8",
-  "recordedAt": "2026-09-24T01:37:17.676539+00:00",
+  "verifiedCodeHead": "5aea96734840adf953e46260ca49683c1849c8cf",
+  "recordedAt": "2026-09-24T01:22:19.852778+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -11,11 +11,11 @@
     {
       "command": "bun run check",
       "exitCode": 0,
-      "passed": 1457,
+      "passed": 1456,
       "skipped": 14,
       "failed": 0,
-      "assertions": 7787,
-      "logSha256": "036811606ba0d7e64039104e3dfb91c40b7bafa95939621795a48c87efd51066"
+      "assertions": 7786,
+      "logSha256": "dbedba9c06a3780278ea47b3310d810e70ff3bf53445de84378ea4cd0213eccd"
     },
     {
       "command": "bun test tests/host-artifacts.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-operator.test.ts",
@@ -24,7 +24,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 191,
-      "logSha256": "10faa1ce877ffe5696d09962d7820d044c0a0b62c39899907152d428f9d4f01c"
+      "logSha256": "e43044c44b856e6638db0c6b86cc267dd5e646a59dc93915c91e6ec47b1dcdc6"
     },
     {
       "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode FLOW_HOST_ARTIFACT_SMOKE=1 FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/host-artifacts-host.test.ts tests/recovery-operator-host.test.ts",
@@ -33,7 +33,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 65,
-      "logSha256": "fd2c27792af404c162df55a3858225606c700b86d315c5dfe2b5367b5737b0f9"
+      "logSha256": "2a4a8c3dab13d7547777c4c1bd2f5318d10c67b8362e7da6746d3e50057d1c2a"
     },
     {
       "command": "bun run smoke:live",
@@ -42,7 +42,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "3a75704ec6ecf1723e2364603d54037d202b7db3e55f995cbb5793809768f9e0"
+      "logSha256": "9cae65e387f47ef8b64003fa8f52fdfb6c021024468547496bac7120a4227100"
     }
   ],
   "sourceDigests": {
@@ -59,9 +59,9 @@
     "tests/recovery-operator-host.test.ts": "16d1d2a26892c932fe175d5dcf481a53f49826d7268c9ea8e567e6dd90d650ca"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-artifact-verification-5aea9673.json",
-    "verifiedCodeHead": "5aea96734840adf953e46260ca49683c1849c8cf",
-    "originalSha256": "5278feec5f8cc1a3cd3e59ba67f9de25453000abea58abb9f7040927c66f07d0"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-artifact-verification-a8090bd9.json",
+    "verifiedCodeHead": "a8090bd93cdf9ebad7d11455be1b905523686fe2",
+    "originalSha256": "83537a1e3fd09959f65e29bd37ad5150a10e136fce4117d010d55a243c561d17"
   },
   "limits": [
     "Native host tests use scripted manager and provider responses, not paid decision quality.",
