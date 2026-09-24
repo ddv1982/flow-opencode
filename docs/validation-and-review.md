@@ -56,13 +56,9 @@ broad claim on any other command. Nothing decides whether the declared command i
 a test; [ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
 caller declaration made at planning time.
 
-When OpenCode truncates the displayed Bash output, Flow may use the host's
-`outputPath` metadata to read the complete output from its private `tool-output`
-directory. It accepts only a bounded regular file whose suffix matches the
-host-displayed tail, then records the full-output digest and completeness without
-persisting raw output. A missing, oversized, or mismatched file leaves the
-observation incomplete. The approved command and its structured exit code still
-have to match exactly.
+For truncated Bash output, Flow hashes the host `outputPath` only if its
+bounded regular `tool-output` file matches the visible tail. Missing or
+mismatched files stay incomplete; the exact command and exit code still bind.
 
 `savePlan` requires `evidence`: one gate plus optional extra observations. Every
 entry names its command, `platform`, and `assertions`. One satisfaction rule
