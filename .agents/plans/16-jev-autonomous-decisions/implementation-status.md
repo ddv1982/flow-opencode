@@ -455,37 +455,26 @@ journals, recomputes each manager's report from retained files, and hashes the
 retained evidence before writing a complete index. Wrapper and fixture-support
 source hashes participate in the registered harness identity.
 
-Parent verification completed all four campaign hosts. Both manager reports contain
-one completed control and one completed treatment. Each control reserved five
-manager requests. Each treatment reserved six manager requests and one Jev request.
-Both arms recorded one operator intervention. Reports preserve unknown safety and
-spending measurements, zero live pairs, and inconclusive qualification. These are
-scripted integration results, not evidence of reduced human intervention or model
-quality. No paid inference occurred.
+The pinned native campaign exercised four hosts and recorded one scripted operator
+intervention in each arm. Both manager reports correctly show zero completed arms:
+the control remains blocked, and treatment's granted reset does not by itself
+complete a reviewed workflow. The request-budget ledger retains each arm's
+reservations, while the report leaves reserved-dollar means unavailable for these
+failed outcomes. It records zero live pairs and inconclusive qualification. No
+paid inference occurred.
 
-Final repository checks passed 1,440 tests with 7,528 assertions. The 15 opt-in
-cases were skipped in that default run. Focused episode, transport, and operator
-checks passed 43 tests with 208 assertions. Independent review reported no
-unresolved findings and separately passed four transport cases with 27 assertions.
-
-The final campaign and all six existing treatment host cases passed. Two existing
-xAI operator cases timed out because the selected installed executable reported
-1.18.32 while the registration required 1.18.31. The runner refused preparation
-before any provider request. A diagnostic captured the version error that mailbox
-polling concealed. The cause of the executable update is unknown. All four
-operator cases passed on an isolated verified 1.18.31 executable with 60 assertions.
-Four other opt-in host cases were not rerun in this pass.
-
-This closes the combined paired simulation gap. Representative independently
-reviewed cases, reviewed bounds for actual provider costs, a new explicit paid
-campaign cap, live execution support and qualification, and release review remain
-open. Live
-episodes remain refused and the production qualification registry remains empty.
+The current-head [verification receipt](evidence/runtime-paired-simulation-verification.json)
+records the repository, focused, pinned native campaign, and packaged-smoke checks
+with their source and log hashes. The native campaign establishes scripted host
+sequencing and guard behavior, not successful workflow completion or model quality.
+Representative independently reviewed cases, reviewed bounds for actual provider
+costs, a new explicit paid campaign cap, live execution support and qualification,
+and release review remain open. Live episodes remain refused and the production
+qualification registry remains empty.
 The implementation stack still requires review and merge.
 
 See the [design decision](paired-simulation-design.md) and
-[reproduction command](../../../evals/recovery-decisions/run-episodes.md#run-the-paired-simulation-proof),
-and [verification receipt](evidence/runtime-paired-simulation-verification.json).
+[reproduction command](../../../evals/recovery-decisions/run-episodes.md#run-the-paired-simulation-proof).
 
 ## Private recovery input capture
 
