@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "classification": "no-jev-packet-observed",
+  "sessionId": "ses_f2bf87b42ffeRXSNqc52iVzhO4",
+  "observedPacketCount": 0,
+  "sha256OfConcatenatedPackets": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence": "Sanitized session trace contains no Jev tool event; flow_status recovery.last was null throughout this controls-only run. This is no claim of provider quality or a blocked recovery decision."
+}

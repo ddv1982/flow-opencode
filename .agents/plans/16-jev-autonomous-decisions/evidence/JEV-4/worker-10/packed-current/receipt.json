@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-tui-packed-controls",
+  "lane": "JEV-4 worker-10",
+  "laneVerdict": "pass-controls-only",
+  "sourceHead": "b063f510d9cfb2a2120ba3f15fd5f7d24a7a0057",
+  "recordedAt": "2026-09-24T15:40:35.110460+00:00",
+  "host": "OpenCode 1.18.32",
+  "smokeHost": "OpenCode 1.18.6",
+  "bun": "1.4.0",
+  "sessionId": "ses_f2bf87b42ffeRXSNqc52iVzhO4",
+  "flowSessionId": "session:bae81dc9-1298-451a-8d47-4abd0128c8e5",
+  "packedPlugin": {
+    "package": "opencode-plugin-flow@9.0.2",
+    "tarballSha256": "d35205113e3985d00ebad5531d9ceb144932b6cbc587478deccba11ae0ef97ae",
+    "sourceDistIndexSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+    "installedDistIndexSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+    "projectConfigSha256": "485be5bb90688bcf10a273d1d50825ba19ebd14bc1860240def33127b3e5dbc2"
+  },
+  "capture": {
+    "source": "X11 xterm window attached to the controlled OpenCode TUI",
+    "windowId": "0x1800012",
+    "videoFrames": 75,
+    "videoFrameRate": 1,
+    "videoDurationSeconds": 75,
+    "windowOnly": true
+  },
+  "observations": [
+    "Frozen install, source build, and packed-plugin smoke passed at sourceHead.",
+    "The interactive host loaded the disposable project config and packed Flow 9.0.2 from an isolated package cache.",
+    "A user-entered /flow-auto --recovery=shadow --recovery-calls=1 --recovery-usd=1 selected shadow mode; flow_status returned one remaining call and shadow-only qualification.",
+    "A user-entered /flow-auto stop revoked the process-local lease; a later flow_status returned off.",
+    "The Flow plan remained pending at revision 1; no implementation or recovery action ran."
+  ],
+  "limits": [
+    "This controls lane does not establish Jev decision quality or delegated qualification.",
+    "No blocked recovery checkpoint or Jev packet was observed.",
+    "The smoke host and interactive host versions differ and are named explicitly."
+  ],
+  "files": {
+    "event-trace.json": "65c8f0a7d73f7c309b3941aa3affe2b6771ede1b39cc26ff94de054c94bee96f",
+    "controls.mp4": "f81d72de3b0485a48cc240cf8cdc9ccc816112b1fb5cfe5704aaf4b9205ee14a",
+    "packet-digest.json": "46d203110a21813946cb78fc9a9bf6ba3ae331c1389ef221c190149a451687a9",
+    "host-startup.txt": "372944c9a4aba7e0865bd3c3f1ef169ec0d0fcf08b3fb7a909210087b9cdc12b",
+    "terminal.txt": "9ea5b4ceba4c55aea99bc497e877d908dbda497a16000e7a23b06e5eac3c023c",
+    "controls.png": "a1748d0ced80f9ae34b4528158aa98d5f48c501e90b0bcc8102846ec3536f650",
+    "build.log": "f5b4821c5f7a84e885e1110afbf31623afbdf17f1c6324fdab5af96c142dc567",
+    "frozen-install.log": "b4943f2cb8dbf1028339d18e18464880c6ba02b4eb266e4ea2e370b6d0a263a1",
+    "off.png": "9e117c9797959932236eb9cd24db695c7ff61f32da9ec2acdfbd83255152f823",
+    "pack.log": "e90f0404ec3ad43c5cca989b8b0c52413d8062d2d63ea92bc042c975fd3cca5e",
+    "packed-cache-install.log": "6d9972a05920ef6a03fda0101f4210b908af6fe5082da8f078047283480e9c9f",
+    "packed-smoke.log": "b6f14aabe94893a02cc5fdc9ce8319c9c2c23c1f2c993e2017f36392ef993bd6",
+    "stop.png": "be0f24596e063cba693c98f38a1c9a4d7eef9b8c63db1496ee6301664fe29d5c"
+  }
+}

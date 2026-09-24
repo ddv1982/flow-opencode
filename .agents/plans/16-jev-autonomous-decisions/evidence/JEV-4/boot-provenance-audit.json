@@ -16,7 +16,7 @@
       "historicalHead": "1cb337fbdbf3e44469c14a66f786602c77b702c2",
       "retained": ["TUI video", "screenshots", "terminal transcripts", "session ID"],
       "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
-      "verdict": "partial; new packed probe narrows provenance gap but does not authenticate historical media or satisfy the screenshot requirement",
+      "verdict": "historical media partial; current packed capture passes controls lane",
       "newProbe": "worker-10/packed-probe/receipt.json",
       "newProbeHead": "db70a7c52dacbe3bd2354b15a50d21976bd95ed9",
       "newProbeEvidence": [
@@ -30,8 +30,11 @@
       "newProbeMissing": [
         "real TUI screenshot and video for this exact run",
         "complete ten-lane interaction review"
-      ]
+      ],
+      "currentCapture": "worker-10/packed-current/receipt.json",
+      "currentSourceHead": "b063f510d9cfb2a2120ba3f15fd5f7d24a7a0057",
+      "currentVerdict": "pass for status, mode selection, and stop controls; no Jev quality claim"
     }
   ],
-  "interpretation": "Historical UI media cannot authenticate the packed plugin build. A new lane-10 packed probe confirms startup and command state transitions at its own head, but has no real TUI screenshot or video. Keep lanes 5 and 10 open until each has a complete exact-head live capture; blocked recovery and decision quality are separate gates."
+  "interpretation": "The historical UI media alone does not authenticate a packed plugin build. The current lane-10 capture binds the packed artifact, X11 media, and sanitized event trace to its source head; lane 5 still lacks a complete boot-provenance capture. No controls capture qualifies Jev decision quality."
 }
