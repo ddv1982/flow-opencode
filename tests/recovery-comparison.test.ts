@@ -251,6 +251,26 @@ test("comparison separates missing unavailable filtered and forbidden and uses p
 	).toBe(0);
 });
 
+test("a filtered packet cannot carry a manager answer or provider failure", async () => {
+	const { registration, manager, jev } = await fixture();
+	if (manager.arm !== "manager-only") throw new Error("Wrong arm");
+	for (const result of [
+		{ kind: "abstain" as const },
+		{ kind: "selection" as const, candidateId: "repair" },
+		{ kind: "unavailable" as const, reason: "test" },
+	]) {
+		const changed = structuredClone(manager);
+		const filtered = changed.observations.find(
+			(row) => row.packetDigest === null,
+		);
+		if (!filtered) throw new Error("Missing filtered fixture");
+		filtered.result = result;
+		await expect(compareCampaign(registration, changed, jev)).rejects.toThrow(
+			"Manager observation has no eligible packet",
+		);
+	}
+});
+
 test("replay honors each fixed runtime threshold instead of accepting raw choice", async () => {
 	const { registration, manager, jev } = await fixture();
 	if (jev.arm !== "manager-plus-jev") throw new Error("Bad fixture");
