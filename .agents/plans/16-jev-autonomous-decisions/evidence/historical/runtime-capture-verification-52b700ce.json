@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "kind": "current-head-verification",
-  "verifiedCodeHead": "6e9bb7f98e132a5271f732bf4aa1028f42794dc8",
-  "recordedAt": "2026-09-24T02:00:43.398197+00:00",
+  "verifiedCodeHead": "52b700ce60f51e29c7b7f4f399154341796a7cc3",
+  "recordedAt": "2026-09-24T01:45:53.159100+00:00",
   "qualification": "inconclusive",
   "origin": "simulation",
   "paidInferenceCalls": 0,
@@ -15,7 +15,7 @@
       "skipped": 15,
       "failed": 0,
       "assertions": 7948,
-      "logSha256": "b7168516c96e0e151de5ed6585637034b4618cba496eda7e8b42945ced7f318d"
+      "logSha256": "2496c68eb5adcc55a07636fb1c883ccdd7df2cfe996245599a1261dd73d8dcb0"
     },
     {
       "command": "bun test tests/recovery-capture.test.ts tests/recovery-policy.test.ts tests/distribution-and-surface.test.ts",
@@ -24,7 +24,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 851,
-      "logSha256": "f190b81dbf9242c900577f845464a5969051772949df0ec87c8f2c6772306a97"
+      "logSha256": "ae2b33df0333606c82aac9a4291d1ea685c9ba3e2faf0f860ef3edd62b1de667"
     },
     {
       "command": "bun run smoke:live",
@@ -33,7 +33,7 @@
       "skipped": 0,
       "failed": 0,
       "assertions": 133,
-      "logSha256": "d9ea7211f82e0b937a19e5a9726284b19acd91c79e367771a8e3a3279dddc3bb"
+      "logSha256": "d5ab7b3722d177eaa471f5c3bddd331019d27abd13ff6c0c429e60db067d91e9"
     }
   ],
   "sourceDigests": {
@@ -43,9 +43,9 @@
     "tests/recovery-capture.test.ts": "a07dfe714083e6ae67173f7a708a284ac34077b9a674bbec720e2b17f23289f3"
   },
   "historicalReceipt": {
-    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-capture-verification-52b700ce.json",
-    "verifiedCodeHead": "52b700ce60f51e29c7b7f4f399154341796a7cc3",
-    "originalSha256": "d3d3a0ae1bcf046454c79561adc75df54868fcd87fb04286bac224a9917562a6"
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-capture-verification-01b7dde0.json",
+    "verifiedCodeHead": "01b7dde0b3c80281a8d2002cbd4ad9077f22bd5b",
+    "originalSha256": "2b2c2a60f2d11948706a740758537a7741e588e734061ee76ee543609af46c83"
   },
   "limits": [
     "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
@@ -61,8 +61,8 @@
     "rawCaptureOrigin": "unverified",
     "exactPayloadMatches": true,
     "workspaceSourceUnchanged": true,
-    "reportSha256": "f10f44b8383a0c69b82d82b18648459041ba801743a5963f339da12c548b5d66",
-    "logSha256": "a63505a1111c5dbbfdeca037f29a153d76dea705ad1ed01910a6cbacf2faa2ab",
+    "reportSha256": "10dfa4960794050dd09c56ca824b69c0eb0cda65f5c83c64439279ee49df458a",
+    "logSha256": "bc81fdebfc5df078deb05382fb74ee9e46b1225187e7242988ac9269535bd80b",
     "retainedPrivately": true
   }
 }
