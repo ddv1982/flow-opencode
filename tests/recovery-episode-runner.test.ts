@@ -580,3 +580,32 @@ test("reconciliation can outlive the small-ledger deadline without losing scoped
 		await rm(f.root, { recursive: true, force: true });
 	}
 }, 10000);
+
+test("a stalled reconciliation deadline source cannot hold the terminal receipt", async () => {
+	const f = await meteredFixture();
+	let watchdog: ReturnType<typeof setTimeout> | undefined;
+	try {
+		let reconciled = false;
+		f.options.driver.reconciliationTimeoutMs = () => new Promise(() => {});
+		f.options.driver.reconcileReservations = async () => {
+			reconciled = true;
+			throw new Error("Must not reconcile after deadline source stalls.");
+		};
+		const result = await Promise.race([
+			runEpisode(f.options),
+			new Promise<"stalled">((resolve) => {
+				watchdog = setTimeout(() => resolve("stalled"), 5500);
+			}),
+		]);
+		expect(result).not.toBe("stalled");
+		if (result === "stalled") return;
+		expect(reconciled).toBe(false);
+		expect(result?.observation).toMatchObject({
+			reservedUsd: null,
+			result: { kind: "terminal", outcome: "completed" },
+		});
+	} finally {
+		clearTimeout(watchdog);
+		await rm(f.root, { recursive: true, force: true });
+	}
+}, 7000);
