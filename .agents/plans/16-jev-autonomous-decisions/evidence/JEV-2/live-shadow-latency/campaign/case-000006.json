@@ -1,0 +1,15 @@
+{
+  "id": "unknown-finding",
+  "packet": null,
+  "packetDigest": null,
+  "advice": null,
+  "decision": null,
+  "rejection": "No proposed recovery action is permitted by current history and dependencies.",
+  "eligibilityMatches": true,
+  "labelMatches": null,
+  "schemaVersion": 1,
+  "origin": "live",
+  "latencyMs": 0.9497750000000451,
+  "attempts": 0,
+  "reservedUsd": 0
+}

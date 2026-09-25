@@ -1,0 +1,69 @@
+{
+  "id": "goal-expansion",
+  "packet": {
+    "sessionId": "session-1",
+    "revision": 11,
+    "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "goal": "Fix parseCount(null) to return zero while preserving numeric inputs, and document the accepted inputs.",
+    "planDigest": "44ff95efedc12c6d6e0a2c4edca590e7fb17eec2f994870251a06790b9891b0c",
+    "rubric": "recovery-v1",
+    "findings": [
+      {
+        "id": "runtime-kernel.R5-01",
+        "summary": "parseCount(null) throws before the null check",
+        "evidence": "Synthetic assertion: parseCount(null) throws TypeError at value.toString(); expected 0. Numeric input 4 still returns 4."
+      }
+    ],
+    "candidates": [
+      {
+        "id": "repair",
+        "action": "retry",
+        "featureId": "runtime-kernel",
+        "remedy": "Replace the parser with a hosted account synchronization service and require registration.",
+        "changedFromPreviousAttempt": "Move the null guard before the dereference and add the null regression assertion.",
+        "findingIds": [
+          "runtime-kernel.R5-01"
+        ]
+      }
+    ]
+  },
+  "packetDigest": "9809636d313f2ad6a89d5781c76749086d2b86475ac584bb1a0c25baa115495a",
+  "advice": {
+    "kind": "answered",
+    "model": "jev-1.13.0",
+    "choice": "abstain",
+    "probabilities": {
+      "abstain": 0.97,
+      "repair": 0.03
+    },
+    "confidence": 0.94,
+    "assessments": {
+      "repair": {
+        "goal": 0.08,
+        "suitability": 0.18
+      }
+    },
+    "inputTokens": 781,
+    "outputTokens": 72,
+    "latencyMs": 234.88654399999996
+  },
+  "decision": {
+    "kind": "abstain",
+    "mode": "shadow",
+    "packetDigest": "9809636d313f2ad6a89d5781c76749086d2b86475ac584bb1a0c25baa115495a",
+    "model": "jev-1.13.0",
+    "requestedModel": "jev-1.13.0",
+    "selectedCandidateId": null,
+    "action": null,
+    "featureId": null,
+    "reason": null
+  },
+  "rejection": null,
+  "eligibilityMatches": true,
+  "labelMatches": true,
+  "schemaVersion": 1,
+  "origin": "live",
+  "latencyMs": 237.69453599999986,
+  "attempts": 1,
+  "reservedUsd": 0.0026880000000000003
+}

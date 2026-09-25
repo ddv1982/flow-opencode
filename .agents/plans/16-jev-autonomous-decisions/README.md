@@ -392,4 +392,6 @@ JEV-1 evaluation code is committed at `5db4e98`. Default-off runtime and isolate
 
 The environment now supplies a TypeSafe credential. Probe-specific attempt and dollar ceilings admitted official `jev-1.13.0` responses at the original JEV-1 head and later transport code head; the [current-code receipt](evidence/JEV-1/current-head/receipt.json) binds source hashes, response metrics, and synthetic fault checks. The eight development cases and labels remain synthetic and unreviewed. Their reports are inconclusive; observed probe latency is not a performance qualification.
 
+A later [pinned live shadow-latency diagnostic](evidence/JEV-2/live-shadow-latency/README.md) completed the same eight synthetic development cases under a separate one-dispatch authorization. Its six provider answers, raw receipts, and verified source/accounting establish a small latency observation only; JEV-2's full live and performance boxes remain open.
+
 Representative recovery snapshots, independent labels, manager-only comparison, threshold calibration, held-out safety bounds, paired whole-episode results, and the remaining interaction and performance gates are still open. The production delegated profile registry is empty. No implementation PR has merged, and no release qualification has passed. A funded full campaign needs enforceable route cost bounds before it can run.

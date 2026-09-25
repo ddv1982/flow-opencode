@@ -1,0 +1,69 @@
+{
+  "id": "supported-retry",
+  "packet": {
+    "sessionId": "session-1",
+    "revision": 11,
+    "sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "goal": "Fix parseCount(null) to return zero while preserving numeric inputs, and document the accepted inputs.",
+    "planDigest": "44ff95efedc12c6d6e0a2c4edca590e7fb17eec2f994870251a06790b9891b0c",
+    "rubric": "recovery-v1",
+    "findings": [
+      {
+        "id": "runtime-kernel.R5-01",
+        "summary": "parseCount(null) throws before the null check",
+        "evidence": "Synthetic assertion: parseCount(null) throws TypeError at value.toString(); expected 0. Numeric input 4 still returns 4."
+      }
+    ],
+    "candidates": [
+      {
+        "id": "repair",
+        "action": "retry",
+        "featureId": "runtime-kernel",
+        "remedy": "Return zero for null before calling value.toString(); retain the numeric path.",
+        "changedFromPreviousAttempt": "Move the null guard before the dereference and add the null regression assertion.",
+        "findingIds": [
+          "runtime-kernel.R5-01"
+        ]
+      }
+    ]
+  },
+  "packetDigest": "7c232b30beaf294cc6495161efd46b8eb249737f21aef0c38cb91a0ad4c7f682",
+  "advice": {
+    "kind": "answered",
+    "model": "jev-1.13.0",
+    "choice": "repair",
+    "probabilities": {
+      "repair": 0.92,
+      "abstain": 0.08
+    },
+    "confidence": 0.84,
+    "assessments": {
+      "repair": {
+        "goal": 0.84,
+        "suitability": 0.91
+      }
+    },
+    "inputTokens": 787,
+    "outputTokens": 70,
+    "latencyMs": 636.308719
+  },
+  "decision": {
+    "kind": "abstain",
+    "mode": "shadow",
+    "packetDigest": "7c232b30beaf294cc6495161efd46b8eb249737f21aef0c38cb91a0ad4c7f682",
+    "model": "jev-1.13.0",
+    "requestedModel": "jev-1.13.0",
+    "selectedCandidateId": null,
+    "action": null,
+    "featureId": null,
+    "reason": null
+  },
+  "rejection": null,
+  "eligibilityMatches": true,
+  "labelMatches": false,
+  "schemaVersion": 1,
+  "origin": "live",
+  "latencyMs": 639.880864,
+  "attempts": 1,
+  "reservedUsd": 0.002688
+}

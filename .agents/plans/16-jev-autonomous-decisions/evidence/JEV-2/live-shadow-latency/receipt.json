@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Pinned live shadow-latency diagnostic on eight synthetic development cases; performance evidence only",
+  "sourceHead": "764779645168bcbbb80ed2d0421c98a3de5dfbff",
+  "approval": {
+    "model": "typesafe/jev-1.13.0",
+    "dispatches": 1,
+    "maxAttempts": 24,
+    "maxUsd": 0.1,
+    "expiresAt": "2026-09-27T03:00:00Z"
+  },
+  "accounting": {
+    "attempts": 6,
+    "reservedUsd": 0.016128,
+    "basis": "conservative local reservation; provider invoice unavailable"
+  },
+  "usage": {
+    "inputTokens": 4672,
+    "outputTokens": 428
+  },
+  "latency": {
+    "providerP50Ms": 242.6344684999999,
+    "providerP95Ms": 636.308719,
+    "controllerP50Ms": 245.24391399999996,
+    "controllerP95Ms": 639.880864
+  },
+  "limitations": [
+    "Synthetic author-proposed labels are not a quality or delegated recovery qualification.",
+    "Six provider responses are too few for a production p95 reliability claim.",
+    "No paired real episodes, human attribution, packed-plugin delegation, or screenshot/video review is established."
+  ],
+  "files": {
+    "campaign/attempt-000001.json": "dee77bc35e4c109bc6ae1a0c8a411100b776205d6878b153c0d2797bfd329971",
+    "campaign/attempt-000002.json": "3826246aa51cb7879c8923a58276b7cbf2b89bb52711499bc2cb44dd9a73c7e4",
+    "campaign/attempt-000003.json": "5b67348dc47eab059377a53620b3f80b0ad671f1cd74f0607fd83cd689fe3f38",
+    "campaign/attempt-000004.json": "fffa2d5e1b4059496f0cfaa9a7f817341cf2afb7d9e6b780bc92bc8e25cc3376",
+    "campaign/attempt-000005.json": "a5050b9a51f0f87474bef36208cc12242971441b3db95bd3f876999b23e4c329",
+    "campaign/attempt-000006.json": "80738d524674a9acab5bc75da7850ab1c8391cb3e66ad19105561fb316e8707f",
+    "campaign/case-000001.json": "ff457063e23c5d8148f4f740d5a563df6403f7a5e1a94612ff0b75c1e76d347c",
+    "campaign/case-000002.json": "074796f9e0291939ea5ade85a5efcb502f3dc4e63fa5646bfb6d27ceb513a172",
+    "campaign/case-000003.json": "4f5b87c613a22ddb0524722c9d3b81c604851325e0b67968f195c881ca046068",
+    "campaign/case-000004.json": "f72f858b03eb7e45fbc62d3ab28211141ca4bd016e2dc936d74e6e261114167c",
+    "campaign/case-000005.json": "2db16ba55038ed3e809bcda8e7b9c22bf2368396118d2c132bb7f58e0aa1ef74",
+    "campaign/case-000006.json": "47bd657d3a3339a59811ea7468e764753594de31ebe2569025a5544aa075761d",
+    "campaign/case-000007.json": "c7cd3ba5e430b7166e384c6e21c22cc546754e8358546169ec3a4ceba062078c",
+    "campaign/case-000008.json": "51a093152d2051ef1e1c80ab4d03f09cfc40a994f0af0532606d2f7814308244",
+    "campaign/manifest.json": "4eab79184e9f1234d124897b66b7cb4f1e9ec8f63ca5ec6ea5ef313e53d7e370",
+    "campaign/summary.json": "c36d18d7b2596a40e0740d7052825b583785785c44ef0bfc172e2f9df08986b3"
+  }
+}

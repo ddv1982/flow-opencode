@@ -1,0 +1,15 @@
+{
+  "id": "unmet-dependency",
+  "packet": null,
+  "packetDigest": null,
+  "advice": null,
+  "decision": null,
+  "rejection": "No proposed recovery action is permitted by current history and dependencies.",
+  "eligibilityMatches": true,
+  "labelMatches": null,
+  "schemaVersion": 1,
+  "origin": "live",
+  "latencyMs": 1.3421699999998964,
+  "attempts": 0,
+  "reservedUsd": 0
+}
