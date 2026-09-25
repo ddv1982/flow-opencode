@@ -159,6 +159,15 @@ if (privateRoot) {
 			),
 		),
 	);
+	const blockedRunIndex = checkpoint.runs.length - 1;
+	const checkpointPrefix = {
+		...session,
+		revision: checkpoint.revision,
+		operations: session.operations.slice(0, checkpoint.operations.length),
+		runs: session.runs.slice(0, checkpoint.runs.length).map((run, index) =>
+			index === blockedRunIndex ? { ...run, state: "blocked" } : run,
+		),
+	};
 	const authorization = JSON.parse(
 		await readFile(
 			join(privateRoot, "retry-dispatch/authorization.json"),
@@ -341,6 +350,12 @@ if (privateRoot) {
 			checkpoint.id === session.id &&
 			checkpoint.revision === outcome.checkpointRevision &&
 			JSON.stringify(checkpoint) === JSON.stringify(lead.snapshot.session) &&
+			blockedRunIndex >= 0 &&
+			checkpoint.runs[blockedRunIndex]?.state === "blocked" &&
+			session.runs[blockedRunIndex]?.state === "superseded" &&
+			session.operations.length >= checkpoint.operations.length &&
+			session.runs.length > checkpoint.runs.length &&
+			JSON.stringify(checkpointPrefix) === JSON.stringify(checkpoint) &&
 			session.revision === outcome.continuation.recordedRevision &&
 			remedy?.state === "completed" &&
 			remedy.featureId === outcome.remedy.featureId &&
