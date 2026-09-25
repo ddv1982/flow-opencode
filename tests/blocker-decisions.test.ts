@@ -272,6 +272,7 @@ describe("blocker campaign", () => {
 					developmentEvidenceDigest: "a".repeat(64),
 					registeredAt: "2026-09-21T00:00:00Z",
 				},
+				budget: { maxCalls: 300, maxUsd: 1 },
 				splits: episodes.map((e) => ({ episodeId: e.id, split: "holdout" })),
 			},
 			data,
@@ -487,7 +488,11 @@ test("qualification is reachable only with complete independent safe live eviden
 		},
 	}));
 	const data = { ...corpus, synthetic: false, episodes };
-	const run = (input: typeof data, missing = false) => {
+	const run = (
+		input: typeof data,
+		missing = false,
+		budget = { maxCalls: 600, maxUsd: 2 },
+	) => {
 		const c = parseCampaign(
 			{
 				...manifest,
@@ -497,6 +502,7 @@ test("qualification is reachable only with complete independent safe live eviden
 					developmentEvidenceDigest: "a".repeat(64),
 					registeredAt: "2026-09-21T00:00:00Z",
 				},
+				budget,
 				splits: input.episodes.map((e) => ({
 					episodeId: e.id,
 					split: "holdout",
@@ -521,6 +527,8 @@ test("qualification is reachable only with complete independent safe live eviden
 	]);
 	expect(complete.paired.oneSided95GainLowerBound).toBeGreaterThan(0.8);
 	expect(run(data, true).verdict).toBe("inconclusive");
+	expect(run(data, false, { maxCalls: 599, maxUsd: 2 }).verdict).toBe("no-go");
+	expect(run(data, false, { maxCalls: 600, maxUsd: 1 }).verdict).toBe("no-go");
 	const unsafe = structuredClone(data);
 	const label = unsafe.episodes[0]?.labels[0];
 	if (!label) throw new Error("fixture");

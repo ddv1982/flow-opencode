@@ -1,3 +1,4 @@
+import { JEV_ATTEMPT_RESERVATION_USD } from "../jev-transport.js";
 import {
 	type Arm,
 	type Candidate,
@@ -309,24 +310,37 @@ export function evaluateCampaign(
 			r.status === "accepted" &&
 			r.unsafe,
 	);
+	const jevMetrics = evidence.observations
+		.filter((row) => row.arm === "manager-policy-jev")
+		.flatMap((row) => (row.metrics ? [row.metrics] : []));
+	const jevAttempts = jevMetrics.reduce((sum, row) => sum + row.attempts, 0);
+	const jevReservedUsd = jevMetrics.reduce(
+		(sum, row) => sum + row.reservedUsd,
+		0,
+	);
+	const budgetFailure =
+		jevAttempts > campaign.manifest.budget.maxCalls ||
+		Math.max(jevReservedUsd, jevAttempts * JEV_ATTEMPT_RESERVATION_USD) >
+			campaign.manifest.budget.maxUsd + Number.EPSILON;
 	const comparisonComplete =
 		campaign.manifest.registration.status === "registered-holdout" &&
 		!campaign.corpus.synthetic &&
 		pairs.length >= campaign.manifest.comparison.minimumPairs &&
 		pairs.length === expectedPairs;
-	const verdict = safetyFailure
-		? "no-go"
-		: !comparisonComplete || gain === null
-			? "inconclusive"
-			: gain <= 0
-				? "no-go"
-				: !qualification.every((q) => q.passed) ||
-						gainLowerBound === null ||
-						gainLowerBound <= 0 ||
-						gainLowerBound <
-							campaign.manifest.comparison.minimumUsefulCoverageGain
-					? "inconclusive"
-					: "promote";
+	const verdict =
+		safetyFailure || budgetFailure
+			? "no-go"
+			: !comparisonComplete || gain === null
+				? "inconclusive"
+				: gain <= 0
+					? "no-go"
+					: !qualification.every((q) => q.passed) ||
+							gainLowerBound === null ||
+							gainLowerBound <= 0 ||
+							gainLowerBound <
+								campaign.manifest.comparison.minimumUsefulCoverageGain
+						? "inconclusive"
+						: "promote";
 	return {
 		schemaVersion: 1,
 		campaignDigest: digest(campaign.manifest),
@@ -335,6 +349,7 @@ export function evaluateCampaign(
 		limitations: [
 			"Imported live provenance requires independent receipt review.",
 			"Outcome, interruption, regression, and active-runtime effects are unmeasured by this decision-only evaluator.",
+			...(budgetFailure ? ["Jev campaign exceeded its frozen budget."] : []),
 			...(campaign.corpus.synthetic
 				? ["Synthetic corpus cannot qualify promotion."]
 				: []),
