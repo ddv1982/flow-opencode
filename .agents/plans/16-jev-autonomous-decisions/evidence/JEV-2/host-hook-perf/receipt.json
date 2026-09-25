@@ -5,72 +5,85 @@
   "headCommit": "f798dc5b1c0c4ac86f3269068346a47b699f8b2b",
   "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
   "fixtureDigest": "7cd9e111b24a66485a4cd23c73fef7cd1f3db3fa5aa8579e698febd57dd39df1",
-  "probeSha256": "ecfef60159f7d8501b567e20456ecc8ab5e71786c9078ef8a8b10bb96676deaa",
+  "probeSha256": "275693279c1922e7fc7522b89679c0fb01ebe7ceaf9bf9dd380990dfa5c25d6b",
   "runs": [
     {
       "trunk": {
         "file": "trunk-1.json.gz",
-        "gzipSha256": "f8711460132e3e30e87e4974ace38daa164ff1e0f9a4fd0a46d6a209f0444ffb",
-        "expandedSha256": "9d34babb2343e2418a541f2e04b1f9b79e231f4eca677bd7ad6f95fae1df2502",
+        "gzipSha256": "781492c5dadbf63fc6f87568eadad0ce888144a486647162bb7ed4374c71521d",
+        "expandedSha256": "4944a393867d308a1a31dd9c6c0b35c40b5e6333951a8f4da8c8288b01db761d",
         "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
-        "p95Us": 29.288,
-        "rssAfterProbeMiB": 83.97
+        "sourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
+        "sourceFileCount": 59,
+        "p95Us": 26.887,
+        "rssAfterProbeMiB": 83.74
       },
       "head": {
         "file": "head-1.json.gz",
-        "gzipSha256": "a1c4810c4711b5260ee7b3121f24bfab987708195862f42ce2e45ca40826ca3b",
-        "expandedSha256": "33a90de1bddd81fcbc368a006551c3a3e6e8da1e00aced478d7e16e88a487695",
+        "gzipSha256": "1b66c68c52bb14c805a94ef33734417bea7deac76c6d1ebec6e1d95637908ae1",
+        "expandedSha256": "d943ccff5bb99b044a04c00d77a4fef588cb52952752b03372a3e359655d2371",
         "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
-        "p95Us": 43.968,
-        "rssAfterProbeMiB": 86.8
+        "sourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
+        "sourceFileCount": 64,
+        "p95Us": 48.623,
+        "rssAfterProbeMiB": 87.59
       },
-      "addedP95Us": 14.68
+      "addedP95Us": 21.736
     },
     {
       "trunk": {
         "file": "trunk-2.json.gz",
-        "gzipSha256": "777ae4a9a997c14529c7010cf6e05fdb137145a0c5faaf9334c456df2c0d7d53",
-        "expandedSha256": "548b1af79afa9ef1f2d1b4335cb61fa5247008fd4a4afb80e9e396ef2c7f771d",
+        "gzipSha256": "11e82f43fe09ee2610a374036c0cb38b3ba69d46dce47cf31c03b2663f4220eb",
+        "expandedSha256": "8ef15273e962559c0b75f6a0eff726447664aad4c82d7311fa6301944e94e5f1",
         "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
-        "p95Us": 26.227,
-        "rssAfterProbeMiB": 83.29
+        "sourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
+        "sourceFileCount": 59,
+        "p95Us": 27.91,
+        "rssAfterProbeMiB": 82.49
       },
       "head": {
         "file": "head-2.json.gz",
-        "gzipSha256": "ee9068abbe6bead300dae8a8abe31dba49a59ccd2887d8fd29af0294c05fa2c9",
-        "expandedSha256": "00d67b9be4f87b5a1d568126f342caeaf8f4209037785c4d6a405e9bca88a20d",
+        "gzipSha256": "a55c768a8a962a3e88351a79f5c0ebf18e8bb3093614fd986a4a9b632866efc6",
+        "expandedSha256": "e8f85945dc15d7db8e00cd38170da32503bcf83c47c88379139f48d4c443c889",
         "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
-        "p95Us": 28.508,
-        "rssAfterProbeMiB": 84.72
+        "sourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
+        "sourceFileCount": 64,
+        "p95Us": 27.048,
+        "rssAfterProbeMiB": 86.21
       },
-      "addedP95Us": 2.281
+      "addedP95Us": -0.862
     },
     {
       "trunk": {
         "file": "trunk-3.json.gz",
-        "gzipSha256": "a98149dbfd6055989dfffd99cf26fd5b2fb72ba10c05d61533e7306d2bf74e57",
-        "expandedSha256": "e739188b5c3040bac41932fda06219b124d37cd079227e863c916e938f9db523",
+        "gzipSha256": "31065a97e58b67ebf2ea63a1a791b312d19869fb8aceff64ab4b8f37e810e311",
+        "expandedSha256": "ab0029f3a8c552d1309b3639c19d6c8400bddcb78d6adab49ca1a48fc2bfe70c",
         "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
-        "p95Us": 27.619,
-        "rssAfterProbeMiB": 83.12
+        "sourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
+        "sourceFileCount": 59,
+        "p95Us": 48.417,
+        "rssAfterProbeMiB": 84.31
       },
       "head": {
         "file": "head-3.json.gz",
-        "gzipSha256": "1352a381f9e04c73914d1bec0b300d9239c7badd10267705c72e87d73c915d82",
-        "expandedSha256": "01da554362ab4a23ad2ac92e8e0f33b44ed30d4b21924d18b076fa80e2cf6cdd",
+        "gzipSha256": "cb932c32be28c729358acb829f206d573450b9623316a986d096b7be8b5ba9dd",
+        "expandedSha256": "aaffe82c150110507d80ca8e0e0f3730f28a3ce664783a8efb16a489e6a7bbbb",
         "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
-        "p95Us": 44.167,
-        "rssAfterProbeMiB": 86.23
+        "sourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
+        "sourceFileCount": 64,
+        "p95Us": 52.031,
+        "rssAfterProbeMiB": 86.5
       },
-      "addedP95Us": 16.548
+      "addedP95Us": 3.614
     }
   ],
-  "maxAddedP95Us": 16.548,
+  "maxAddedP95Us": 21.736,
   "limits": [
+    "Each raw run binds the complete on-disk src/ tree by path, file length and bytes; the verifier reconstructs that digest from the pinned Git commit.",
     "The production plugin event hook and file-backed Flow status run in process with a disposable mocked OpenCode client, not in a real OpenCode server process.",
     "The fixed event is an empty-workspace initial prompt. The separate idle routing probe covers a blocked recovery checkpoint and inactive controller lookup.",
     "A fetch guard observes direct fetch attempts but not every possible network API. No provider request was configured or expected.",
     "No live Jev shadow call is timed here; the JEV-2 performance gate remains open."
   ],
-  "verifySha256": "7e51a220028d83b7c855a829ca334c9a32533cf3364cb9552b8e5442ff9d097f"
+  "verifySha256": "99646b22834ae6e85f57ab32cfadf92b95bad1d0cd54b65b37bae1396d0c31eb"
 }

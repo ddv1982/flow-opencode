@@ -56,6 +56,30 @@ const sourceHash = {
 	),
 };
 assert(sourceHash.trunk !== sourceHash.head, "different plugin sources");
+function sourceTreeAt(commit: string) {
+	const files = git("ls-tree", "-r", "-z", "--name-only", commit, "src")
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean)
+		.sort();
+	assert(files.length > 0, "nonempty source tree");
+	const hash = createHash("sha256");
+	for (const path of files) {
+		const bytes = git("show", `${commit}:${path}`);
+		const length = Buffer.alloc(8);
+		length.writeBigUInt64BE(BigInt(bytes.length));
+		hash.update(path).update("\0").update(length).update(bytes);
+	}
+	return { digest: hash.digest("hex"), fileCount: files.length };
+}
+const sourceTree = {
+	trunk: sourceTreeAt(receipt.trunkCommit),
+	head: sourceTreeAt(receipt.headCommit),
+};
+assert(
+	sourceTree.trunk.digest !== sourceTree.head.digest,
+	"different transitive source trees",
+);
 const fixture = {
 	event: "session.idle",
 	command: "flow-auto",
@@ -88,6 +112,13 @@ for (const [index, pair] of receipt.runs.entries()) {
 			raw.moduleSha256 === sourceHash[arm] &&
 				raw.moduleSha256 === retained.moduleSha256,
 			`${name} source`,
+		);
+		assert(
+			raw.sourceTreeDigest === sourceTree[arm].digest &&
+				raw.sourceFileCount === sourceTree[arm].fileCount &&
+				raw.sourceTreeDigest === retained.sourceTreeDigest &&
+				raw.sourceFileCount === retained.sourceFileCount,
+			`${name} transitive source tree`,
 		);
 		const runtime = JSON.stringify(raw.runtime);
 		if (firstRuntime === null) firstRuntime = runtime;

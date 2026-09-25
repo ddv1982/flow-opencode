@@ -4,11 +4,11 @@ The production plugin's `session.idle` event hook was replayed at pre-JEV-2 trun
 
 | Pair | Trunk p95 (µs) | Head p95 (µs) | Added p95 (µs) |
 | --- | ---: | ---: | ---: |
-| 1 | 29.288 | 43.968 | +14.680 |
-| 2 | 26.227 | 28.508 | +2.281 |
-| 3 | 27.619 | 44.167 | +16.548 |
+| 1 | 26.887 | 48.623 | +21.736 |
+| 2 | 27.910 | 27.048 | -0.862 |
+| 3 | 48.417 | 52.031 | +3.614 |
 
-The largest observed p95 increase was 16.548 microseconds, below the proposed 5 ms disabled-mode routing limit in this replay. The raw process RSS snapshots and every latency sample are retained in six deterministic gzip files. `verify.ts` checks their hashes, recomputes the latency and RSS summaries, verifies source identity and phase ancestry, and refuses a changed current runtime. The three pairs alternate run order to expose startup and scheduler variation.
+The largest observed p95 increase was 21.736 microseconds, below the proposed 5 ms disabled-mode routing limit in this replay. The raw process RSS snapshots and every latency sample are retained in six deterministic gzip files. `verify.ts` checks their hashes, recomputes the latency and RSS summaries, verifies the complete transitive `src/` tree against the pinned commits and checks phase ancestry, and refuses a changed current runtime. The three pairs alternate run order to expose startup and scheduler variation.
 
 This probe exercises the production plugin hook and real file-backed Flow status, but it uses a mocked OpenCode client rather than a running OpenCode server. It measures the empty-workspace initial-prompt route. The separate `../idle-perf/` probe covers a blocked recovery checkpoint and the inactive-controller proposal lookup. Neither measures pinned live shadow advice latency, so the JEV-2 performance gate remains open.
 
