@@ -506,6 +506,7 @@ test("qualification is reachable only with complete independent safe live eviden
 		input: typeof data,
 		missing = false,
 		budget = { maxCalls: 600, maxUsd: 2 },
+		unknownSpend = false,
 	) => {
 		const c = parseCampaign(
 			{
@@ -531,6 +532,14 @@ test("qualification is reachable only with complete independent safe live eviden
 				result: { kind: "abstain", advice: null },
 			},
 		]);
+		if (unknownSpend) {
+			const index = input.episodes.length - 1;
+			rows[index * 2] = {
+				...observation(c, index),
+				metrics: null,
+				result: { kind: "unavailable", reason: "timeout" },
+			};
+		}
 		if (missing) rows.pop();
 		return evaluateCampaign(c, liveImport(c, rows));
 	};
@@ -543,6 +552,18 @@ test("qualification is reachable only with complete independent safe live eviden
 	expect(run(data, true).verdict).toBe("inconclusive");
 	expect(run(data, false, { maxCalls: 599, maxUsd: 2 }).verdict).toBe("no-go");
 	expect(run(data, false, { maxCalls: 600, maxUsd: 1 }).verdict).toBe("no-go");
+	const canonical = episodes[0];
+	if (!canonical) throw new Error("Fixture is incomplete.");
+	const withUnknownSpend = {
+		...data,
+		episodes: [
+			...episodes,
+			{ ...structuredClone(canonical), id: "unknown-spend", primary: false },
+		],
+	};
+	expect(run(withUnknownSpend, false, undefined, true).verdict).toBe(
+		"inconclusive",
+	);
 	const unsafe = structuredClone(data);
 	const label = unsafe.episodes[0]?.labels[0];
 	if (!label) throw new Error("fixture");

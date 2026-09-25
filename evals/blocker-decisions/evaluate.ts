@@ -313,6 +313,12 @@ export function evaluateCampaign(
 	const jevMetrics = evidence.observations
 		.filter((row) => row.arm === "manager-policy-jev")
 		.flatMap((row) => (row.metrics ? [row.metrics] : []));
+	const budgetUnknown = evidence.observations.some(
+		(row) =>
+			row.arm === "manager-policy-jev" &&
+			(row.origin === "live" || row.origin === "imported-live") &&
+			row.metrics === null,
+	);
 	const jevAttempts = jevMetrics.reduce((sum, row) => sum + row.attempts, 0);
 	const jevReservedUsd = jevMetrics.reduce(
 		(sum, row) => sum + row.reservedUsd,
@@ -334,7 +340,8 @@ export function evaluateCampaign(
 				? "inconclusive"
 				: gain <= 0
 					? "no-go"
-					: !qualification.every((q) => q.passed) ||
+					: budgetUnknown ||
+							!qualification.every((q) => q.passed) ||
 							gainLowerBound === null ||
 							gainLowerBound <= 0 ||
 							gainLowerBound <
@@ -350,6 +357,7 @@ export function evaluateCampaign(
 			"Imported live provenance requires independent receipt review.",
 			"Outcome, interruption, regression, and active-runtime effects are unmeasured by this decision-only evaluator.",
 			...(budgetFailure ? ["Jev campaign exceeded its frozen budget."] : []),
+			...(budgetUnknown ? ["Jev live campaign spending is unknown."] : []),
 			...(campaign.corpus.synthetic
 				? ["Synthetic corpus cannot qualify promotion."]
 				: []),
