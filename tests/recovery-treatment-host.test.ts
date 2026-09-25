@@ -83,10 +83,7 @@ async function retainHostIdentity(
 	if (directory) {
 		await mkdir(directory, { recursive: true, mode: 0o700 });
 		const bytes = `${JSON.stringify({ schemaVersion: 1, caseId, identity, verification }, null, 2)}\n`;
-		await writeFile(
-			join(directory, `${caseId}.json`),
-			bytes,
-		);
+		await writeFile(join(directory, `${caseId}.json`), bytes);
 		console.log(
 			`host-artifact ${caseId}.json ${createHash("sha256").update(bytes).digest("hex")}`,
 		);
