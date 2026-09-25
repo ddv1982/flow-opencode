@@ -1,9 +1,20 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, open, readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
 import {
+	type EpisodeQuestion,
+	EpisodeQuestionSchema,
+	type OperatorPolicy,
+	OperatorPolicySchema,
+	type OperatorRequest,
+	waitForOperatorReply,
+} from "./episode-operator.js";
+import {
+	advanceEpisodeWait,
 	EpisodeReceiptSchema,
+	type EpisodeWaitState,
 	reduceEpisodeReceipt,
 } from "./episode-receipts.js";
 import { validateEpisodeRegistration } from "./episodes.js";
@@ -15,12 +26,14 @@ type Transition = { kind: "wait-start" | "wait-end" | "intervention" };
 export type EpisodeDriver = {
 	harnessDigest: string;
 	origin: "simulation" | "live";
+	operatorPolicy?: OperatorPolicy;
 	prepare(
 		signal: AbortSignal,
 	): Promise<{ task: unknown; initialState: unknown }>;
 	run(context: {
 		signal: AbortSignal;
 		record(event: Transition): Promise<void>;
+		waitForOperator(question: EpisodeQuestion): Promise<string>;
 	}): Promise<void>;
 	evaluate(
 		criteria: string,
@@ -80,6 +93,9 @@ export async function runEpisode(options: {
 		throw new Error(
 			"Live episodes still require reviewed route cost bounds and an isolated Jev treatment. The request-level gate alone does not qualify live execution.",
 		);
+	const operatorPolicy = OperatorPolicySchema.parse(
+		options.driver.operatorPolicy ?? { kind: "disabled" },
+	);
 	const registration = await validateEpisodeRegistration(options.registration);
 	const episode = registration.protocol.episodes.find(
 		(entry) => entry.id === options.episodeId,
@@ -143,7 +159,12 @@ export async function runEpisode(options: {
 	};
 	let started = false;
 	let accepting = false;
-	let waiting = false;
+	let waitState: EpisodeWaitState = {
+		wait: null,
+		nextIndex: 0,
+		interventions: 0,
+	};
+	let journalHeader: z.infer<typeof Header>;
 	let sequence = 0;
 	let previous = "";
 	let start = 0;
@@ -151,6 +172,7 @@ export async function runEpisode(options: {
 	let persistenceFailed = false;
 	let outcome: "completed" | "failed" | null = null;
 	const append = (event: Event) => {
+		waitState = advanceEpisodeWait(waitState, event, journalHeader);
 		const next = queue.then(async () => {
 			const record = Record.parse({ sequence, previous, event });
 			await writeExclusive(
@@ -202,8 +224,10 @@ export async function runEpisode(options: {
 			recordedBy: options.recordedBy,
 			startedAt: new Date().toISOString(),
 			reservationCoverage: "unknown",
+			operatorPolicy,
 		});
 		await writeExclusive(join(options.outputDirectory, "header.json"), header);
+		journalHeader = header;
 		previous = datasetDigest(header);
 		await append({ kind: "start", atMs: 0 });
 		controller.signal.throwIfAborted();
@@ -215,8 +239,73 @@ export async function runEpisode(options: {
 		await bounded(() =>
 			options.driver.run({
 				signal: controller.signal,
+				async waitForOperator(question) {
+					controller.signal.throwIfAborted();
+					if (!accepting || waitState.wait)
+						throw new Error("Episode cannot open operator wait.");
+					const request: OperatorRequest = {
+						headerDigest: datasetDigest(header),
+						episodeId: episode.id,
+						arm: options.arm,
+						index: waitState.nextIndex,
+						nonce: randomUUID(),
+						question: EpisodeQuestionSchema.parse(question),
+					};
+					await append({ kind: "wait-start", atMs: elapsed(), request });
+					controller.signal.throwIfAborted();
+					if (
+						operatorPolicy.kind === "disabled" ||
+						waitState.interventions >= operatorPolicy.maxInterventions
+					) {
+						await new Promise<never>((_resolve, reject) => {
+							controller.signal.addEventListener(
+								"abort",
+								() => reject(new Error("Operator wait cancelled.")),
+								{ once: true },
+							);
+						});
+					}
+					await mkdir(join(options.outputDirectory, "operator", "requests"), {
+						recursive: true,
+						mode: 0o700,
+					});
+					await mkdir(join(options.outputDirectory, "operator", "replies"), {
+						recursive: true,
+						mode: 0o700,
+					});
+					controller.signal.throwIfAborted();
+					await writeExclusive(
+						join(
+							options.outputDirectory,
+							"operator",
+							"requests",
+							`${datasetDigest(request)}.json`,
+						),
+						request,
+					);
+					const reply = await waitForOperatorReply(
+						options.outputDirectory,
+						request,
+						controller.signal,
+					);
+					controller.signal.throwIfAborted();
+					await append({ kind: "intervention", atMs: elapsed(), reply });
+					controller.signal.throwIfAborted();
+					await append({
+						kind: "wait-end",
+						atMs: elapsed(),
+						requestDigest: datasetDigest(request),
+					});
+					controller.signal.throwIfAborted();
+					return reply.text;
+				},
 				record(event) {
-					if (!accepting || controller.signal.aborted)
+					if (
+						!accepting ||
+						controller.signal.aborted ||
+						waitState.wait?.kind === "bound" ||
+						operatorPolicy.kind === "file-mailbox-v1"
+					)
 						return Promise.reject(new Error("Episode is stopping."));
 					const parsed = z
 						.object({
@@ -228,24 +317,17 @@ export async function runEpisode(options: {
 						controller.abort();
 						return Promise.reject(new Error("Invalid transition."));
 					}
-					if (event.kind === "wait-start") {
-						if (waiting) {
-							controller.abort();
-							return Promise.reject(new Error("Already waiting."));
-						}
-						waiting = true;
-					} else if (event.kind === "wait-end") {
-						if (!waiting) {
-							controller.abort();
-							return Promise.reject(new Error("Not waiting."));
-						}
-						waiting = false;
+
+					try {
+						return append({ kind: event.kind, atMs: elapsed() });
+					} catch (error) {
+						controller.abort();
+						return Promise.reject(error);
 					}
-					return append({ kind: event.kind, atMs: elapsed() });
 				},
 			}),
 		);
-		if (waiting)
+		if (waitState.wait)
 			throw new Error("Cannot evaluate while waiting for the operator.");
 		accepting = false;
 		await queue;
