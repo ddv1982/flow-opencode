@@ -94,8 +94,9 @@ All reports still have `qualification: inconclusive`.
 
 Run this offline workflow before requesting a live campaign budget:
 
-1. Export the exact `session`, `sourceDigest`, and `proposal` at the recovery
-   boundary. Remove private data before bringing the snapshot into this dataset.
+1. [Capture the recovery input](run-capture.md) to retain the exact `session`,
+   `sourceDigest`, and `proposal` at the recovery boundary. Remove private data
+   before bringing the snapshot into this dataset.
    Preserve internally consistent session IDs, revision, candidate IDs, and
    evidence references. Keep a private mapping to the original source if needed.
 2. Create a snapshot JSON with `id`, those three payload fields, and `provenance`.

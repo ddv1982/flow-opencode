@@ -476,3 +476,50 @@ The implementation stack still requires review and merge.
 
 See the [design decision](paired-simulation-design.md) and
 [reproduction command](../../../evals/recovery-decisions/run-episodes.md#run-the-paired-simulation-proof).
+
+## Private recovery input capture
+
+Operators can explicitly select an evaluation-only capture plugin to retain the
+exact session, source digest, and proposal supplied to the recovery guard. The
+controller wrapper records a cloned payload before asynchronous publication and
+uses that same clone for assessment. Ordinary plugin composition is unchanged.
+The capture provider always returns unavailable and cannot send Jev requests.
+
+Each recorder claims a fresh private directory outside the canonical workspace.
+Exclusive files preserve complete records. Synchronous reservations enforce
+128 records, 1 MiB per encoded record, and 16 MiB total per recorder. Write failures
+and exhausted limits stop the opted-in proposal before assessment. Rejected
+proposals can still produce records because capture precedes controller checks.
+
+The raw schema explicitly records unverified origin and unreviewed state. Its
+payload digest provides an integrity check, not authenticated provenance. Raw
+records cannot enter the existing dataset importer. Operators must sanitize
+separate copies, establish provenance, and obtain independent label review.
+
+Parent focused checks passed 66 tests with 840 assertions. Full repository checks
+passed 1,448 tests with 7,640 assertions and skipped 15 opt-in tests. Independent
+review reported no unresolved findings and separately passed eight capture tests
+with 112 assertions. The comment audit found no added comments or suppressions.
+
+A parent-run native OpenCode 1.18.31 check loaded the documented source plugin
+entry and invoked the actual `flow_status` tool through a loopback scripted
+manager. It retained one exact input record with private permissions and left
+the source digest unchanged. The proposal then received the expected inactive
+recovery error. Capture precedes that controller check. Three requests reached
+the local responder. This is integration proof, not operational model evidence.
+
+Earlier native setup attempts stalled before any model request. Bundling and
+preinstalling the SDK did not resolve that stall. An explicit system PATH and
+normal package-registry access produced a working run. Those two changes do not
+isolate the original cause. One later proof request had empty finding IDs and
+failed tool validation. Using a fixture finding ID corrected the proof input.
+Both the bundled run and final documented-source run then passed.
+
+This closes the raw-input export gap. Representative operational cases, independent
+reviews, real provider cost bounds, a new explicit paid campaign cap, live episode
+execution and qualification, and release review remain open. Production profiles
+remain empty. No paid inference occurred.
+
+See the [design decision](recovery-capture-design.md),
+[capture workflow](../../../evals/recovery-decisions/run-capture.md), and
+[verification receipt](evidence/runtime-capture-verification.json).

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "8a9566e0ac459898fc2aaab171085669810c110a",
+  "recordedAt": "2026-09-24T05:07:25.371288+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1475,
+      "skipped": 15,
+      "failed": 0,
+      "assertions": 7982,
+      "logSha256": "71b786759c7090cdf644d13064c6cd68c4d042c7f7d5d8eaf8b030f6cb3b73c0"
+    },
+    {
+      "command": "bun test tests/recovery-capture.test.ts tests/recovery-policy.test.ts tests/distribution-and-surface.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-treatment.test.ts tests/host-artifacts-host.test.ts",
+      "exitCode": 0,
+      "passed": 84,
+      "skipped": 2,
+      "failed": 0,
+      "assertions": 1029,
+      "logSha256": "9f9dcb8b3ec2b7ccd7463989c7a22d1e3d775f430d0a63e88d3b83dd80cbad92"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "83eef2e479fbf0f3dc65ff8bae4c93dc6a989674e5cbb6177ba59c36429935c1"
+    }
+  ],
+  "sourceDigests": {
+    "evals/harness.ts": "639056fa2df7ef077154f2efd4b9220920e009ebdf7db519674193402c4f9e18",
+    "evals/recovery-decisions/capture-plugin.ts": "005c13672196b828b48bfaa2e5113ea97d15c2dc051e4127fedd21c2848aa7d3",
+    "evals/recovery-decisions/capture.ts": "0db16805da9cfb1ae5c5eca1c13229b5d1eb53c1122d9f7cfda282867070bf8a",
+    "evals/recovery-decisions/compare.ts": "22be5d8b6617b921516e130371222005663632149ba12e66d8e8946bd2a2fa08",
+    "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
+    "evals/recovery-decisions/sources.ts": "ef42242c631e4e9579400fbc497c47dcae1e9a710cc211a17f64cae53d92d492",
+    "tests/host-artifacts-host.test.ts": "5dad0c84d33ae3394786995ac74d285bb91b7707f3f97f8895c0cb5a7a4e583b",
+    "tests/recovery-campaign-host.test.ts": "b6d9d8b6f9485bee07f674bda0658c1bb53640eac85c5959f134daf84f2a6505",
+    "tests/recovery-campaign-support.ts": "e918b324d6c3c6ba9b887ce71bcacc98bedca5408994b812353f717171308563",
+    "tests/recovery-capture.test.ts": "576fa58effc54fd33363cee96a3bcddebbe8615ae6f07fe577315d5ea93af76c",
+    "tests/recovery-comparison.test.ts": "1b57d8098d28c00689e5b8182279ddbbb325a06e007ec6504f2af15c9ec5411a",
+    "tests/recovery-decision-quality.test.ts": "3ce75ab979b6b83b18f8c954c9e039b46e481af693a44fffd1ddc44c2d8c0e44",
+    "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-capture-verification-eefebcb3.json",
+    "verifiedCodeHead": "eefebcb316e44ea1f764f7c0117cf38357a09024",
+    "originalSha256": "6ba0ab7b2ecb942495037383312b62cc909adac76c4f831a8c1010533f625ca5"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
+  ],
+  "nativeProof": {
+    "kind": "local-intercepted-host",
+    "status": "passed",
+    "opencodeVersion": "1.18.31",
+    "records": 1,
+    "localSyntheticProviderRequests": 3,
+    "rawCaptureOrigin": "unverified",
+    "exactPayloadMatches": true,
+    "workspaceSourceUnchanged": true,
+    "reportSha256": "2613bffca8d62168556809d7d99723aa486c466d187e531f286931135ea18c03",
+    "logSha256": "2fbc683e1a75554d25b347b478598806e26a2a6aee00d8b7cebe94e174575c46",
+    "retainedPrivately": true
+  }
+}
