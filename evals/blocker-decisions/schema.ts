@@ -233,6 +233,18 @@ const EvidenceSchema = z
 	.strict()
 	.brand<"BlockerEvidence">();
 export type Observation = DeepReadonly<z.infer<typeof ObservationSchema>>;
+const reviewedLiveEvidence = new WeakSet<object>();
+export function assertReviewedLiveEvidence(evidence: ValidatedEvidence): void {
+	if (
+		evidence.observations.some(
+			(row) => row.origin === "live" || row.origin === "imported-live",
+		)
+	)
+		requireInvariant(
+			reviewedLiveEvidence.has(evidence),
+			"unverified-live-import",
+		);
+}
 export type ValidatedEvidence = DeepReadonly<z.infer<typeof EvidenceSchema>>;
 export type Advice = DeepReadonly<z.infer<typeof AdviceSchema>>;
 
@@ -356,6 +368,10 @@ export function validateEvidence(
 	input: unknown,
 ): ValidatedEvidence {
 	const value = parse(EvidenceSchema, input);
+	requireInvariant(
+		value.receipts.every((receipt) => receipt.producer !== receipt.reviewedBy),
+		"independent-import-review",
+	);
 	const campaignDigest = digest(campaign.manifest);
 	requireInvariant(value.campaignDigest === campaignDigest, "campaign-digest");
 	const seen = new Set<string>();
@@ -448,6 +464,10 @@ export function importLiveEvidence(
 		z.object({ artifactDigest: Digest, producer: Id, reviewedBy: Id }).strict(),
 		receipt,
 	);
+	requireInvariant(
+		checked.producer !== checked.reviewedBy,
+		"independent-import-review",
+	);
 	requireInvariant(digest(input) === checked.artifactDigest, "import-receipt");
 	const value = validateEvidence(campaign, input);
 	requireInvariant(
@@ -456,7 +476,7 @@ export function importLiveEvidence(
 		),
 		"non-live-import",
 	);
-	return validateEvidence(campaign, {
+	const imported = validateEvidence(campaign, {
 		...value,
 		receipts: [...value.receipts, checked],
 		observations: value.observations.map((row) => ({
@@ -464,6 +484,8 @@ export function importLiveEvidence(
 			origin: "imported-live",
 		})),
 	});
+	reviewedLiveEvidence.add(imported);
+	return imported;
 }
 export function observationBase(
 	campaign: ValidatedCampaign,
@@ -487,7 +509,8 @@ export function mergeEvidence(
 	...inputs: readonly ValidatedEvidence[]
 ): ValidatedEvidence {
 	const rows = new Map<string, Observation>();
-	for (const input of inputs)
+	for (const input of inputs) {
+		assertReviewedLiveEvidence(input);
 		for (const row of input.observations) {
 			const key = `${row.episodeId}/${row.arm}`;
 			const previous = rows.get(key);
@@ -497,10 +520,14 @@ export function mergeEvidence(
 			);
 			rows.set(key, row);
 		}
-	return validateEvidence(campaign, {
+	}
+	const merged = validateEvidence(campaign, {
 		schemaVersion: 1,
 		campaignDigest: digest(campaign.manifest),
 		receipts: inputs.flatMap((input) => [...input.receipts]),
 		observations: [...rows.values()],
 	});
+	if (inputs.some((input) => reviewedLiveEvidence.has(input)))
+		reviewedLiveEvidence.add(merged);
+	return merged;
 }

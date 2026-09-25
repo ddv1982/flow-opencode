@@ -67,6 +67,14 @@ test("reads only bounded OpenCode tool-output files", async () => {
 		expect(await readHostToolOutput(path, dataHome)).toBe(
 			"complete cargo output\n",
 		);
+		const textPath = join(directory, "tool_ABC123.txt");
+		await writeFile(textPath, "complete text output\n");
+		expect(await readHostToolOutput(textPath, dataHome)).toBe(
+			"complete text output\n",
+		);
+		const otherExtension = join(directory, "tool_ABC123.log");
+		await writeFile(otherExtension, "unsupported output\n");
+		expect(await readHostToolOutput(otherExtension, dataHome)).toBeNull();
 		const outside = join(dataHome, "tool_outside");
 		await writeFile(outside, "not host output\n");
 		await symlink(outside, join(directory, "tool_link"));
