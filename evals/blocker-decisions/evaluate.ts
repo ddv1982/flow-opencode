@@ -177,7 +177,9 @@ export function evaluateCampaign(
 		const metrics = evidence.observations
 			.filter((r) => r.arm === arm)
 			.flatMap((r) => (r.metrics ? [r.metrics] : []));
-		const latency = metrics.map((m) => m.latencyMs);
+		const latency = attempted.flatMap((r) =>
+			r.metrics ? [r.metrics.latencyMs] : [],
+		);
 		const calibrated = evidence.observations
 			.filter(
 				(r) =>

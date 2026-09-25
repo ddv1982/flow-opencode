@@ -318,7 +318,11 @@ describe("blocker campaign", () => {
 		};
 		const noAttempt = {
 			...observation(campaign, 1),
-			metrics: { ...observation(campaign, 1).metrics, attempts: 0 },
+			metrics: {
+				...observation(campaign, 1).metrics,
+				attempts: 0,
+				latencyMs: 0,
+			},
 			result: { kind: "unavailable", reason: "budget" },
 		};
 		const report = evaluateCampaign(
@@ -328,12 +332,22 @@ describe("blocker campaign", () => {
 		expect(
 			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.timeoutRate,
 		).toBe(1);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.latencyP50Ms,
+		).toBe(20);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.latencyP95Ms,
+		).toBe(20);
 		const noCalls = evaluateCampaign(
 			campaign,
 			parseEvidence(campaign, bundle(campaign, [noAttempt])),
 		);
 		expect(
 			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")?.timeoutRate,
+		).toBeNull();
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")
+				?.latencyP50Ms,
 		).toBeNull();
 	});
 	test("cross-campaign evidence is rejected at evaluation", () => {
