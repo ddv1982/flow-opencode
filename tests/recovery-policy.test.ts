@@ -589,6 +589,26 @@ test("oversized advice does not consume a checkpoint decision slot", async () =>
 	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
 });
 
+test("oversized provider envelope stops before decision dispatch", async () => {
+	let calls = 0;
+	const s = await setup("shadow", {
+		fitsRequest() {
+			return false;
+		},
+		async assess() {
+			calls++;
+			return { kind: "unavailable", reason: "oversize" };
+		},
+	});
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: s.proposal(),
+	});
+	expect(response.status).toBe("error");
+	expect(calls).toBe(0);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
 test("large Unicode remedies stop before the duplicated provider payload", async () => {
 	let calls = 0;
 	const s = await setup("shadow", {

@@ -682,6 +682,8 @@ export class RecoveryController {
 		};
 		if (Buffer.byteLength(JSON.stringify(packet)) > MAX_RECOVERY_PACKET_BYTES)
 			throw new Error("Recovery context exceeds the bounded request size.");
+		if (this.#provider.fitsRequest?.(packet) === false)
+			throw new Error("Recovery provider request exceeds the bounded size.");
 		const packetDigest = hash(packet),
 			remedyDigest = hash(
 				candidates.map((c) => ({

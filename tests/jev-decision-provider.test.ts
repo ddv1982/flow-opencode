@@ -113,6 +113,22 @@ test("accepted Unicode remedies leave room for the full provider envelope", asyn
 		spy.mockRestore();
 	}
 });
+test("encoded provider envelope rejects escaped remedies before an attempt", () => {
+	const candidate = packet.candidates[0];
+	if (!candidate) throw new Error("Fixture is incomplete.");
+	const candidates = [1000, 1000, 500].map((length, index) => ({
+		...candidate,
+		id: `escaped-${index}`,
+		remedy: "\u0000".repeat(length),
+	}));
+	const oversized: DecisionPacket = { ...packet, candidates };
+	expect(Buffer.byteLength(JSON.stringify(oversized))).toBeLessThanOrEqual(
+		16000,
+	);
+	expect(
+		createJevDecisionProvider(() => "credential").fitsRequest?.(oversized),
+	).toBe(false);
+});
 test("runtime adapter rejects unknown model and invalid distributions", async () => {
 	for (const payload of [
 		{ ...response(), model: "jev-latest" },

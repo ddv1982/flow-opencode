@@ -5,7 +5,7 @@ import { JEV_ATTEMPT_RESERVATION_USD } from "../application/ports/decision-provi
 
 export { JEV_ATTEMPT_RESERVATION_USD };
 
-const JEV_MAX_REQUEST_BYTES = 32_000;
+export const JEV_MAX_REQUEST_BYTES = 32_000;
 const JEV_MAX_RESPONSE_BYTES = 128_000;
 export type JevTransport = (
 	url: string,
