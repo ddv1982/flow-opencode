@@ -67,9 +67,8 @@ to the selected manager, and restricts enabled providers to that manager's provi
 Startup verifies that the gate wrote its receipt from the server's process group.
 Ordinary hosts remain unchanged when `requestBudget` is absent.
 
-The episode runner still refuses live episodes. Reviewed monetary bounds, the
-isolated experimental Jev treatment, operator-resume support, and qualification
-remain separate requirements. Wiring this budget does not populate release profiles.
+The episode runner still refuses live episodes. Reviewed monetary bounds, live
+experimental treatment support, and qualification remain separate requirements. Wiring this budget does not populate release profiles.
 
 ## Understand request accounting
 
@@ -84,7 +83,9 @@ Before forwarding, the gate publishes an exclusive, synced `request-NNNNNN.json`
 claim. Concurrent processes compete for the same next slot; a losing writer
 reloads the ledger and checks both remaining caps. Claims bind the exact
 authorization, model, sequence, time, and integer reservation. Requests, credentials,
-headers, responses, and task text are not retained in the ledger.
+headers, responses, and task text are not retained in the ledger. Budgeted episode
+hosts also bind each claim to a unique execution, registration, episode, arm, and
+registered driver. Historical claims without that binding remain unattributed.
 
 Timeouts, transport failures, crashes, and retries never refund a claim. Every
 retry needs another reservation. No response-side usage estimate can increase the

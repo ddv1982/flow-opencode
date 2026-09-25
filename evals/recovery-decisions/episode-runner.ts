@@ -24,6 +24,12 @@ import {
 	reduceEpisodeReceipt,
 } from "./episode-receipts.js";
 import { validateEpisodeRegistration } from "./episodes.js";
+import {
+	type EpisodeReservationScope,
+	EpisodeReservationScopeSchema,
+	type ReservationReconciliation,
+	ReservationReconciliationSchema,
+} from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
 
 type Receipt = z.infer<typeof EpisodeReceiptSchema>;
@@ -34,7 +40,10 @@ export type EpisodeDriver = {
 	origin: "simulation" | "live";
 	operatorPolicy?: OperatorPolicy;
 	expectedHostArtifacts?: HostArtifacts;
-	prepare(signal: AbortSignal): Promise<{
+	prepare(
+		signal: AbortSignal,
+		scope?: EpisodeReservationScope,
+	): Promise<{
 		task: unknown;
 		initialState: unknown;
 		artifactVerification?: HostArtifactVerification;
@@ -49,6 +58,10 @@ export type EpisodeDriver = {
 		signal: AbortSignal,
 	): Promise<{ met: boolean; evidence: unknown }>;
 	stop(): Promise<void>;
+	reconciliationTimeoutMs?(): Promise<number> | number;
+	reconcileReservations?(
+		signal?: AbortSignal,
+	): Promise<ReservationReconciliation>;
 };
 
 const Header = EpisodeReceiptSchema.omit({ events: true });
@@ -121,6 +134,15 @@ export async function runEpisode(options: {
 		throw new Error("Unknown episode or changed driver.");
 	if (registration.protocol.execution.timeoutMs > 2_147_483_647)
 		throw new Error("Episode timeout exceeds runner timer range.");
+	const reservationScope = Object.freeze(
+		EpisodeReservationScopeSchema.parse({
+			executionId: randomUUID(),
+			registrationDigest: datasetDigest(registration),
+			episodeId: episode.id,
+			arm: options.arm,
+			harnessDigest: arm.harnessDigest,
+		}),
+	);
 	options.signal?.throwIfAborted();
 	await mkdir(options.outputDirectory, { mode: 0o700 });
 	if (process.platform !== "win32") {
@@ -213,7 +235,7 @@ export async function runEpisode(options: {
 	try {
 		armDeadline();
 		const reset = await bounded(() =>
-			options.driver.prepare(controller.signal),
+			options.driver.prepare(controller.signal, reservationScope),
 		);
 		validateHostArtifactVerification(
 			expectedHostArtifacts,
@@ -247,6 +269,7 @@ export async function runEpisode(options: {
 			recordedBy: options.recordedBy,
 			startedAt: new Date().toISOString(),
 			reservationCoverage: "unknown",
+			reservationScope,
 			operatorPolicy,
 		});
 		await writeExclusive(join(options.outputDirectory, "header.json"), header);
@@ -405,12 +428,67 @@ export async function runEpisode(options: {
 		stopConfirmed &&
 		!persistenceFailed &&
 		(reason || outcome)
-	)
+	) {
+		let reconciliation: ReservationReconciliation | undefined;
+		let reconciliationTimer: ReturnType<typeof setTimeout> | undefined;
+		const reconciliationController = new AbortController();
+		try {
+			if (options.driver.reconcileReservations) {
+				const timeoutMs = options.driver.reconciliationTimeoutMs
+					? await Promise.race([
+							options.driver.reconciliationTimeoutMs(),
+							new Promise<never>((_, reject) => {
+								reconciliationTimer = setTimeout(
+									() => reject(new Error("Reservation deadline unavailable.")),
+									5000,
+								);
+							}),
+						])
+					: 5000;
+				clearTimeout(reconciliationTimer);
+				if (
+					!Number.isSafeInteger(timeoutMs) ||
+					timeoutMs < 5000 ||
+					timeoutMs > 2_005_000
+				)
+					throw new Error("Invalid reservation reconciliation deadline.");
+				const result = ReservationReconciliationSchema.parse(
+					await Promise.race([
+						options.driver.reconcileReservations(
+							reconciliationController.signal,
+						),
+						new Promise<never>((_, reject) => {
+							reconciliationTimer = setTimeout(() => {
+								reconciliationController.abort();
+								reject(new Error("Reservation reconciliation unavailable."));
+							}, timeoutMs);
+						}),
+					]),
+				);
+				if (
+					datasetDigest(result.scope) !== datasetDigest(reservationScope) ||
+					result.authorization.origin !== options.origin
+				)
+					throw new Error("Reservation scope mismatch.");
+				reconciliation = result;
+			}
+		} catch {
+		} finally {
+			clearTimeout(reconciliationTimer);
+			reconciliationController.abort();
+		}
+		if (reconciliation)
+			await append({
+				kind: "reservation-reconciliation",
+				atMs: terminalAtMs,
+				reconciliation,
+			});
 		await append({
 			kind: "terminal",
 			atMs: terminalAtMs,
 			outcome: reason ?? outcome ?? "failed",
 		});
+	}
 	await writeExclusive(join(options.outputDirectory, "status.json"), {
 		schemaVersion: 1,
 		qualification: "inconclusive",

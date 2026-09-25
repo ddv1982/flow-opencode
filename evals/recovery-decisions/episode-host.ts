@@ -14,6 +14,11 @@ import {
 } from "./episode-operator.js";
 import type { EpisodeDriver } from "./episode-runner.js";
 import { ManagerPrompt } from "./episodes.js";
+import {
+	type EpisodeReservationScope,
+	EpisodeReservationScopeSchema,
+	reconcileRequestReservations,
+} from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
 import { recoverySourceDigests } from "./sources.js";
 
@@ -229,6 +234,9 @@ export async function createEpisodeHostDriver(
 	let state: "new" | "starting" | "prepared" | "running" | "ran" | "stopped" =
 		"new";
 	let stopping: Promise<void> | undefined;
+	let stopped = false;
+	let prepared = false;
+	let reservationScope: EpisodeReservationScope | undefined;
 	return {
 		harnessDigest,
 		get expectedHostArtifacts() {
@@ -236,11 +244,18 @@ export async function createEpisodeHostDriver(
 		},
 		operatorPolicy,
 		origin: options.host.recoveryTreatment ? "simulation" : "live",
-		async prepare(signal) {
+		async prepare(signal, scopeInput) {
 			if (state !== "new")
 				throw new Error("An episode host can only prepare once.");
 			signal.throwIfAborted();
 			state = "starting";
+			if (options.host.requestBudget) {
+				reservationScope = Object.freeze(
+					EpisodeReservationScopeSchema.parse(scopeInput),
+				);
+				if (reservationScope.arm !== options.arm)
+					throw new Error("Reservation scope arm mismatch.");
+			}
 			await verifyHostArtifacts(
 				{
 					bun: options.host.toolchain.executable,
@@ -256,6 +271,14 @@ export async function createEpisodeHostDriver(
 			lifecycle.signal.throwIfAborted();
 			starting = (options.hostFactory ?? EvalHost.start)({
 				...options.host,
+				...(options.host.requestBudget && reservationScope
+					? {
+							requestBudget: {
+								...options.host.requestBudget,
+								scope: reservationScope,
+							},
+						}
+					: {}),
 				frozenArtifacts: {
 					opencodeExecutable: options.host.opencodeExecutable,
 					identity: structuredClone(hostArtifacts),
@@ -291,6 +314,7 @@ export async function createEpisodeHostDriver(
 				throw new Error("Seeded fixture differs from its definition.");
 			lifecycle.signal.throwIfAborted();
 			state = "prepared";
+			prepared = true;
 			return {
 				task: fixture.task,
 				initialState: actual,
@@ -350,12 +374,34 @@ export async function createEpisodeHostDriver(
 				evidence: { kind: "exact-file-checks", checks },
 			};
 		},
+		async reconciliationTimeoutMs() {
+			if (!options.host.requestBudget) return 5000;
+			const names = await readdir(options.host.requestBudget.directory);
+			const claims = names.filter((name) => /^request-\d{6}\.json$/.test(name));
+			return 5000 + Math.min(claims.length, 100000) * 20;
+		},
+		async reconcileReservations(signal?: AbortSignal) {
+			if (
+				!stopped ||
+				!prepared ||
+				!options.host.requestBudget ||
+				!reservationScope
+			)
+				throw new Error("Episode reservations are not complete.");
+			return reconcileRequestReservations(
+				options.host.requestBudget.directory,
+				options.host.requestBudget.authorizationDigest,
+				reservationScope,
+				signal,
+			);
+		},
 		stop() {
 			stopping ??= (async () => {
 				lifecycle.abort();
 				state = "stopped";
 				const active = host ?? (await starting?.catch(() => undefined));
 				if (active) await active.stop();
+				stopped = true;
 			})();
 			return stopping;
 		},

@@ -1,9 +1,13 @@
 import { expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JevConfiguration } from "../evals/recovery-decisions/campaign.js";
-import { reduceEpisodeReceipt } from "../evals/recovery-decisions/episode-receipts.js";
+import {
+	EpisodeReceiptSchema,
+	reduceEpisodeReceipt,
+} from "../evals/recovery-decisions/episode-receipts.js";
 import {
 	registerEpisodes,
 	reportEpisodes,
@@ -235,4 +239,138 @@ test("artifact verification requires its exact recorded manifest and matching ob
 		await expect(reduceEpisodeReceipt(registration, invalid)).rejects.toThrow(
 			"does not match",
 		);
+});
+
+async function reconciledFixture() {
+	const f = await fixture();
+	const scope = {
+		executionId: randomUUID(),
+		registrationDigest: hash(f.registration),
+		episodeId: "one",
+		arm: "manager-only",
+		harnessDigest: f.registration.protocol.arms.managerOnly.harnessDigest,
+	};
+	const authorization = {
+		schemaVersion: 1,
+		origin: "simulation",
+		purpose: "receipt test",
+		maxRequests: 4,
+		maxMicroUsd: 20000,
+		expiresAt: "2026-09-30T00:00:00.000Z",
+		models: [
+			{
+				model: "xai/grok-4.6",
+				reservationMicroUsd: 5000,
+				basis: { kind: "simulation" },
+			},
+		],
+	};
+	const claims = [
+		{
+			schemaVersion: 2,
+			authorizationDigest: hash(authorization),
+			sequence: 1,
+			model: "xai/grok-4.6",
+			reservationMicroUsd: 5000,
+			at: "2026-09-22T00:00:00.000Z",
+			scope,
+		},
+	];
+	const reconciliation = {
+		scope,
+		authorization,
+		authorizationDigest: hash(authorization),
+		claims,
+		claimsDigest: hash(claims),
+		totalMicroUsd: 5000,
+	};
+	const receipt = EpisodeReceiptSchema.parse({
+		...f.receipt,
+		reservationCoverage: "unknown",
+		reservationScope: scope,
+		events: [
+			{ kind: "start", atMs: 0 },
+			{ kind: "reservation-reconciliation", atMs: 100, reconciliation },
+			{ kind: "terminal", atMs: 100, outcome: "completed" },
+		],
+	});
+	return { ...f, receipt };
+}
+test("reconciled receipts verify every binding, amount, ordered claim and final event", async () => {
+	const { registration, receipt } = await reconciledFixture();
+	expect(
+		(await reduceEpisodeReceipt(registration, receipt)).observation,
+	).toMatchObject({ reservedUsd: 0.005, activeRuntimeMs: 100, humanWaitMs: 0 });
+	const variants: Array<(copy: typeof receipt) => void> = [
+		(copy) => {
+			copy.reservationScope = undefined;
+		},
+		(copy) => {
+			if (copy.reservationScope)
+				copy.reservationScope.executionId = randomUUID();
+		},
+		(copy) => {
+			copy.reservationCoverage = "complete";
+		},
+		(copy) => {
+			copy.events.splice(1, 0, {
+				kind: "reservation",
+				id: "legacy",
+				usd: 1,
+				atMs: 0,
+			});
+		},
+		(copy) => {
+			copy.events.splice(2, 0, { kind: "wait-start", atMs: 100 });
+		},
+		(copy) => {
+			copy.events.push({ kind: "terminal", atMs: 100, outcome: "completed" });
+		},
+		(copy) => {
+			const end = copy.events.at(-1);
+			if (end) end.atMs = 101;
+		},
+	];
+	for (const mutate of variants) {
+		const copy = structuredClone(receipt);
+		mutate(copy);
+		await expect(reduceEpisodeReceipt(registration, copy)).rejects.toThrow();
+	}
+	for (const change of [
+		"scope",
+		"authorization",
+		"amount",
+		"sum",
+		"digest",
+		"duplicate",
+		"omitted",
+	]) {
+		const copy = structuredClone(receipt),
+			event = copy.events[1];
+		if (event?.kind !== "reservation-reconciliation")
+			throw new Error("Missing fixture reconciliation.");
+		const row = event.reconciliation,
+			claim = row.claims[0];
+		if (!claim) throw new Error("Missing fixture claim.");
+		if (change === "scope") claim.scope.episodeId = "other";
+		if (change === "authorization") claim.authorizationDigest = "f".repeat(64);
+		if (change === "amount") {
+			claim.reservationMicroUsd = 6000;
+			row.totalMicroUsd = 6000;
+			row.claimsDigest = hash(row.claims);
+		}
+		if (change === "sum") row.totalMicroUsd++;
+		if (change === "digest") row.claimsDigest = "f".repeat(64);
+		if (change === "duplicate") {
+			row.claims.push(claim);
+			row.totalMicroUsd *= 2;
+			row.claimsDigest = hash(row.claims);
+		}
+		if (change === "omitted") row.claims = [];
+		await expect(reduceEpisodeReceipt(registration, copy)).rejects.toThrow();
+	}
+	receipt.events.pop();
+	expect(
+		(await reduceEpisodeReceipt(registration, receipt)).observation.reservedUsd,
+	).toBeNull();
 });

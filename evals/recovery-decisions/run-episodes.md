@@ -171,6 +171,9 @@ A receipt has these fields (unknown fields are rejected):
 - `declaredOrigin: "simulation" | "live"`, `recordedBy`, and ISO `startedAt`.
 - `reservationCoverage: "complete" | "unknown"`. Declare complete only when every
   paid dispatch reservation, including retries and manager calls, was recorded.
+- Optional `reservationScope` for automated accounting. It contains `executionId`,
+  `registrationDigest`, `episodeId`, `arm`, and `harnessDigest`. Scoped headers use
+  unknown coverage until a final reconciliation supplies the total.
 - `events`, an ordered array of the objects below. `atMs` is a nonnegative integer
   elapsed time from a monotonic clock, in milliseconds; equal timestamps are
   allowed and array order resolves ties.
@@ -182,6 +185,7 @@ A receipt has these fields (unknown fields are rejected):
 | `wait-end` | `atMs` | Operator wait ends and execution resumes. |
 | `intervention` | `atMs` | One human recovery intervention, excluding initial instructions. |
 | `reservation` | `atMs`, unique `id`, positive `usd` | One conservative dispatch reservation; retries have distinct IDs. |
+| `reservation-reconciliation` | `atMs`, bound `reconciliation` | Automated scoped claims and integer total after confirmed shutdown. The terminal event follows at the same timestamp. |
 | `terminal` | `atMs`, `outcome` | Last event; completed, failed, cancelled, or timed-out. |
 
 The harness must emit transitions when they happen. Every interval is active
@@ -195,8 +199,9 @@ For example, start at 0, wait-start at 20, intervention at 30, wait-end at 70, a
 terminal at 100 produces 50 ms active runtime, 50 ms operator wait, and one
 interruption. Failed, cancelled, and timed-out runs retain their measurements.
 Without a terminal event, the observation is unavailable and aggregate fields are
-null; the retained receipt still contains the partial timeline. Unknown spending
-coverage remains null even when some reservation events exist. Reservations do
+null; the retained receipt still contains the partial timeline. Without final
+reconciliation, unknown spending coverage remains null even when individual
+reservation events exist. Reservations do
 not prove invoiced costs or authorize paid execution.
 
 Review the retained receipt before copying `observation` into an arm evidence
@@ -205,14 +210,41 @@ counts and safety review are always null until separately reviewed. A declared
 live origin never creates an imported-live attestation automatically. Follow the
 arm and safety review digest procedures above after assembling the observations.
 Receipt hashes bind declared content; they do not authenticate execution, clocks,
-reviewer identities, or the absence of omitted events. Production harness hooks
-and durable event capture remain to be implemented.
+reviewer identities, or the absence of omitted events. Live execution and
+independent source review remain outstanding.
+
+## Understand episode reservation totals
+
+A budgeted native episode gives every request claim the same execution scope.
+The scope binds a unique execution ID, registration, episode, arm, and registered
+driver. Concurrent hosts can share one campaign ledger without assigning each
+other's reservations to their reports.
+
+After confirmed shutdown, the driver validates the ledger and selects claims with
+its exact scope. The runner embeds the reconciliation in its event journal before
+the terminal event. Recovery checks the retained scope, authorization, claim order,
+amounts, digest, and integer sum. It does not need the original campaign directory.
+
+A valid reconciliation and terminal event produce `reservedUsd`. A missing gate,
+failed shutdown, failed reconciliation, or incomplete journal leaves that value
+null. Historical unscoped claims cannot be assigned to an episode. Existing
+manually supplied receipts retain their declared coverage semantics.
+
+Reservations include requests whose transport failed after admission. They also
+include claims published just before cancellation. No claim is refunded. The
+report converts the integer microdollar sum to dollars once. Accounting after
+shutdown does not add to the measured episode runtime.
+
+These records describe conservative reservations, not actual invoices. Simulation
+prices are synthetic. Content hashes do not authenticate an actor who can rewrite
+both the ledger and journal. Live execution and qualification remain separate.
 
 ## Capture and recover a durable episode journal
 
 The TypeScript `runEpisode` API in `episode-runner.ts` accepts a registered episode,
 arm, fresh output directory, recorder, declared origin, and trusted `EpisodeDriver`.
-The driver exposes `prepare`, `run`, `evaluate`, and `stop`. Its harness digest must
+The driver exposes `prepare`, `run`, `evaluate`, and `stop`, plus optional
+`reconcileReservations`. Its harness digest must
 match the registered arm. The runner hashes the actual task and reset data before
 starting. The driver cannot submit a terminal outcome.
 
@@ -226,7 +258,8 @@ has a separate deadline of the same duration. Stop confirmation has a five-secon
 limit. Cancellation and timeout become terminal outcomes only after confirmed
 cleanup. Execution errors, failed cleanup, and partial journals remain unavailable.
 A failed completion predicate is a measured failed outcome. An evaluator exception
-is unavailable. Spending coverage stays unknown.
+is unavailable. Spending stays unknown unless the budgeted driver completes
+reservation reconciliation after confirmed shutdown.
 
 Recover an interrupted journal without restarting execution.
 
@@ -406,6 +439,6 @@ recomputes the report from retained inputs.
 
 This command uses synthetic credentials and scripted provider responses. It makes
 no paid model calls. Each manager has one deterministic pair. Reports remain
-inconclusive with zero live pairs, unknown safety review, and unknown report cost.
-Synthetic reservation arithmetic does not establish provider prices. Keep these
+inconclusive with zero live pairs and unknown safety review. Reports include
+reconciled synthetic reservation totals. These totals do not establish provider prices. Keep these
 artifacts separate from qualification evidence.

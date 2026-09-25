@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { reserveRequest } from "./request-budget.js";
+import {
+	type EpisodeReservationScope,
+	EpisodeReservationScopeSchema,
+	reserveRequest,
+} from "./request-budget.js";
 
 const routes = new Map([
 	[
@@ -39,7 +43,12 @@ export function createRequestGate(options: {
 	transport: BudgetFetch;
 	controlOrigin?: string;
 	signal?: AbortSignal;
+	scope?: EpisodeReservationScope | undefined;
 }) {
+	const scope =
+		options.scope === undefined
+			? undefined
+			: Object.freeze(EpisodeReservationScopeSchema.parse(options.scope));
 	const control = options.controlOrigin ? new URL(options.controlOrigin) : null;
 	if (
 		control &&
@@ -144,6 +153,7 @@ export function createRequestGate(options: {
 			route.budgetModel,
 			options.authorizationDigest,
 			signal,
+			scope,
 		);
 		return send();
 	};

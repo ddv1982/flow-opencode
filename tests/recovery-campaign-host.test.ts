@@ -317,8 +317,8 @@ smoke(
 							sources,
 							scenario: "paired-recovery-operator-v1",
 						}),
-						async prepare(signal) {
-							const prepared = await base.prepare(signal);
+						async prepare(signal, scope) {
+							const prepared = await base.prepare(signal, scope);
 							identities.push(prepared.initialState);
 							preparedInitialState = prepared.initialState;
 							return prepared;
@@ -434,7 +434,6 @@ smoke(
 					const driver = drivers[index];
 					if (!driver) throw new Error("Missing registered arm driver.");
 					const episodeDirectory = join(directory, arm);
-					const beforeClaims = await claims(budget);
 					const controller = new AbortController();
 					const running = runEpisode({
 						registration,
@@ -505,7 +504,9 @@ smoke(
 							closureKind: null,
 						});
 						expect(recovered.observation.interruptions).toBe(1);
-						expect(recovered.observation.reservedUsd).toBeNull();
+						expect(recovered.observation.reservedUsd).toBe(
+							arm === "manager-only" ? 0.025 : 0.033,
+						);
 						expect(recovered.observation.safetyReview).toBeNull();
 						expect(recovered.observation.unsafeAcceptedActions).toBeNull();
 						expect(recovered.observation.forbiddenMutations).toBeNull();
@@ -530,7 +531,19 @@ smoke(
 						expect(completion.evidenceDigest).toBe(
 							datasetDigest(observedRecovery),
 						);
-						const armClaims = (await claims(budget)).slice(beforeClaims.length);
+						const reconciliation = recovered.receipt.events.find(
+							(event) => event.kind === "reservation-reconciliation",
+						);
+						if (reconciliation?.kind !== "reservation-reconciliation")
+							throw new Error("Missing reservation reconciliation.");
+						const armClaims = reconciliation.reconciliation.claims;
+						expect(armClaims).toEqual(
+							(await claims(budget)).filter(
+								(row) =>
+									datasetDigest(row.scope) ===
+									datasetDigest(recovered.receipt.reservationScope),
+							),
+						);
 						expect(
 							armClaims.filter((row) => row.model === "typesafe/jev-1.13.0"),
 						).toHaveLength(arm === "manager-plus-jev" ? 1 : 0);

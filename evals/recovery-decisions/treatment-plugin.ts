@@ -7,6 +7,7 @@ import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
 import { RecoveryController } from "../../src/application/recovery-policy.js";
 import { createJevDecisionProvider } from "../../src/infrastructure/jev-decision-provider.js";
 import { createFlowPlugin } from "../../src/platform/opencode/plugin-composition.js";
+import { EpisodeReservationScopeSchema } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
 import {
 	ExperimentalProfile,
@@ -20,6 +21,7 @@ const Options = z
 		budget: z
 			.object({
 				directory: z.string().min(1),
+				scope: EpisodeReservationScopeSchema.optional(),
 				authorizationDigest: z.string().regex(/^[a-f0-9]{64}$/),
 				managerModel: z.enum(["openai/gpt-5.6-terra", "xai/grok-4.6"]),
 			})
@@ -34,6 +36,7 @@ const TreatmentPlugin: Plugin = async (context, input) => {
 	const gate = z
 		.object({
 			pid: z.number(),
+			scopeDigest: z.string().nullable(),
 			authorizationDigest: z.string(),
 			scriptDigest: z.string(),
 			origin: z.literal("simulation"),
@@ -41,6 +44,8 @@ const TreatmentPlugin: Plugin = async (context, input) => {
 		.parse(JSON.parse(await readFile(options.budgetReadyPath, "utf8")));
 	if (
 		gate.pid !== process.pid ||
+		gate.scopeDigest !==
+			(options.budget.scope ? datasetDigest(options.budget.scope) : null) ||
 		gate.authorizationDigest !== options.budget.authorizationDigest ||
 		gate.scriptDigest !== datasetDigest(options.treatment.script)
 	)

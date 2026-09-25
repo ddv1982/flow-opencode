@@ -1,11 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
+import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
 	cancelRequestBudget,
 	createRequestBudget,
+	type EpisodeReservationScope,
 	RequestAuthorizationSchema,
+	reconcileRequestReservations,
 	requestBudgetStatus,
 	reserveRequest,
 } from "../evals/recovery-decisions/request-budget.js";
@@ -292,4 +296,108 @@ test("control traffic cannot exempt a remote provider and legacy paid features a
 	}
 	expect(sent).toBe(1);
 	expect((await requestBudgetStatus(f.directory)).consumed).toBe(0);
+});
+
+function episodeScope(): EpisodeReservationScope {
+	return {
+		executionId: randomUUID(),
+		registrationDigest: datasetDigest("registration"),
+		episodeId: "one",
+		arm: "manager-only",
+		harnessDigest: datasetDigest("harness"),
+	};
+}
+test("concurrent episode gates retain disjoint immutable scopes in a mixed legacy ledger", async () => {
+	const f = await fixture(10, 50000);
+	const scopes = [episodeScope(), episodeScope()];
+	const gates = scopes.map((scope) =>
+		createRequestGate({
+			...f,
+			scope,
+			transport: async () => new Response("ok"),
+		}),
+	);
+	const frozen = structuredClone(scopes);
+	const first = frozen[0];
+	if (!first) throw new Error("Missing scope fixture.");
+	const pending = Promise.all(
+		gates.flatMap((gate) => [gate(request()), gate(request())]),
+	);
+	for (const scope of scopes) Object.assign(scope, { episodeId: "mutated" });
+	await pending;
+	await reserveRequest(f.directory, "xai/grok-4.6", f.authorizationDigest);
+	const reconciled = await Promise.all(
+		frozen.map((scope) =>
+			reconcileRequestReservations(f.directory, f.authorizationDigest, scope),
+		),
+	);
+	const firstResult = reconciled[0];
+	if (!firstResult) throw new Error("Missing reconciliation.");
+	expect(reconciled.map((row) => row.totalMicroUsd)).toEqual([10000, 10000]);
+	expect(reconciled.map((row) => row.claims.length)).toEqual([2, 2]);
+	expect(
+		new Set(
+			reconciled.flatMap((row) => row.claims.map((claim) => claim.sequence)),
+		).size,
+	).toBe(4);
+	expect((await requestBudgetStatus(f.directory)).reservedMicroUsd).toBe(25000);
+	const later = episodeScope();
+	await reserveRequest(
+		f.directory,
+		"xai/grok-4.6",
+		f.authorizationDigest,
+		undefined,
+		later,
+	);
+	expect(
+		await reconcileRequestReservations(
+			f.directory,
+			f.authorizationDigest,
+			first,
+		),
+	).toEqual(firstResult);
+	await writeFile(join(f.directory, "request-000005.json"), "{}");
+	await expect(
+		reconcileRequestReservations(f.directory, f.authorizationDigest, first),
+	).rejects.toThrow();
+});
+
+test("transport failure and cancellation after publication retain scoped reservations", async () => {
+	const f = await fixture();
+	const scope = episodeScope(),
+		frozen = structuredClone(scope);
+	const gate = createRequestGate({
+		...f,
+		scope,
+		transport: async () => {
+			throw new Error("failed");
+		},
+	});
+	await expect(gate(request())).rejects.toThrow("reservation remains consumed");
+	const controller = new AbortController();
+	const check = controller.signal.throwIfAborted.bind(controller.signal);
+	Object.defineProperty(controller.signal, "throwIfAborted", {
+		value: () => {
+			if (existsSync(join(f.directory, "request-000001.json")))
+				controller.abort(new Error("Cancelled after publication"));
+			check();
+		},
+	});
+	const pending = reserveRequest(
+		f.directory,
+		"xai/grok-4.6",
+		f.authorizationDigest,
+		controller.signal,
+		scope,
+	);
+	Object.assign(scope, { executionId: randomUUID() });
+	await expect(pending).rejects.toThrow("Cancelled after publication");
+	const result = await reconcileRequestReservations(
+		f.directory,
+		f.authorizationDigest,
+		frozen,
+	);
+	expect(result.claims.map((claim) => claim.sequence)).toEqual([0, 1]);
+	expect(result.totalMicroUsd).toBe(10000);
+	expect((await requestBudgetStatus(f.directory)).reservedMicroUsd).toBe(10000);
 });

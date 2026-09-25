@@ -69,7 +69,11 @@ import {
 	packedPackageManifest,
 	tarballSha256,
 } from "./provenance.js";
-import { requestBudgetStatus } from "./recovery-decisions/request-budget.js";
+import {
+	type EpisodeReservationScope,
+	EpisodeReservationScopeSchema,
+	requestBudgetStatus,
+} from "./recovery-decisions/request-budget.js";
 import { datasetDigest } from "./recovery-decisions/schema.js";
 import {
 	type RecoveryTreatment,
@@ -1449,6 +1453,7 @@ export class EvalHost {
 		providerCredentials?: "inherit" | "disabled";
 		recoveryTreatment?: RecoveryTreatment;
 		requestBudget?: {
+			scope?: EpisodeReservationScope;
 			directory: string;
 			authorizationDigest: string;
 			managerModel: "openai/gpt-5.6-terra" | "xai/grok-4.6";
@@ -1462,6 +1467,22 @@ export class EvalHost {
 				...(signal ? { signal } : {}),
 			};
 		}
+		if (options.requestBudget)
+			options = {
+				...options,
+				requestBudget: {
+					...options.requestBudget,
+					...(options.requestBudget.scope
+						? {
+								scope: Object.freeze(
+									EpisodeReservationScopeSchema.parse(
+										options.requestBudget.scope,
+									),
+								),
+							}
+						: {}),
+				},
+			};
 		const frozenArtifacts = options.frozenArtifacts
 			? structuredClone(options.frozenArtifacts)
 			: undefined;
@@ -1703,6 +1724,9 @@ export class EvalHost {
 											).href,
 											{
 												directory: resolve(options.requestBudget.directory),
+												...(options.requestBudget.scope
+													? { scope: options.requestBudget.scope }
+													: {}),
 												authorizationDigest:
 													options.requestBudget.authorizationDigest,
 												readyPath: join(scratch, "budget-ready.json"),
@@ -1828,6 +1852,10 @@ export class EvalHost {
 							await readFile(join(scratch, "budget-ready.json"), "utf8"),
 						);
 						if (
+							receipt.scopeDigest !==
+								(options.requestBudget.scope
+									? datasetDigest(options.requestBudget.scope)
+									: null) ||
 							receipt.authorizationDigest !==
 								options.requestBudget.authorizationDigest ||
 							(receipt.pid !== host.server.pid &&
