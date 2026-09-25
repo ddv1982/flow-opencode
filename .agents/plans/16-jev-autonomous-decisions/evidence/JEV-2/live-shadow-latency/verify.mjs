@@ -59,12 +59,21 @@ const { evaluateRecoveryCorpus } = await import(
 	pathToFileURL(join(repositoryRoot, "evals/recovery-decisions/evaluate.ts"))
 		.href
 );
+const { AdviceSchema } = await import(
+	pathToFileURL(join(repositoryRoot, "evals/recovery-decisions/compare.ts"))
+		.href
+);
 const { JEV_ATTEMPT_RESERVATION_USD } = await import(
 	pathToFileURL(
 		join(repositoryRoot, "src/application/ports/decision-provider.ts"),
 	).href
 );
 const selectedSources = await recoverySourceDigests();
+assert.equal(
+	receipt.sourceHead,
+	"764779645168bcbbb80ed2d0421c98a3de5dfbff",
+	"The diagnostic source differs from the approved and documented run",
+);
 assert.deepEqual(
 	Object.keys(manifest.sourceDigests).sort(),
 	Object.keys(selectedSources).sort(),
@@ -184,6 +193,28 @@ for (const [index, row] of summary.rows.entries()) {
 	close(row.reservedUsd, manifest.attemptReservationUsd);
 	assert.equal(row.advice.kind, "answered");
 	assert.equal(row.advice.model, "jev-1.13.0");
+	AdviceSchema.parse(row.advice);
+	const candidateIds = row.packet.candidates.map((candidate) => candidate.id);
+	const answerIds = [...candidateIds, "abstain"];
+	assert.deepEqual(
+		Object.keys(row.advice.probabilities).sort(),
+		answerIds.sort(),
+	);
+	assert.deepEqual(
+		Object.keys(row.advice.assessments).sort(),
+		candidateIds.sort(),
+	);
+	assert.equal(answerIds.includes(row.advice.choice), true);
+	assert.equal(
+		Math.abs(
+			Object.values(row.advice.probabilities).reduce((a, b) => a + b, 0) - 1,
+		) <= 1e-6,
+		true,
+	);
+	assert.equal(
+		row.advice.probabilities[row.advice.choice],
+		Math.max(...Object.values(row.advice.probabilities)),
+	);
 	assert.equal(
 		typeof row.advice.latencyMs === "number" &&
 			Number.isFinite(row.advice.latencyMs) &&
@@ -198,6 +229,7 @@ for (const [index, row] of summary.rows.entries()) {
 	assert.equal(row.decision.selectedCandidateId, null);
 	assert.equal(row.decision.action, null);
 	assert.equal(row.decision.featureId, null);
+	assert.equal(row.latencyMs >= row.advice.latencyMs, true);
 	assert.equal(
 		row.labelMatches,
 		corpus.cases[index].expected.acceptableSelections.includes("abstain"),
