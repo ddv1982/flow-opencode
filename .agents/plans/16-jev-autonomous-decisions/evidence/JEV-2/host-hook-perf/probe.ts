@@ -4,9 +4,30 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
-const [modulePath, outputPath] = process.argv.slice(2);
-if (!modulePath || !outputPath)
-	throw new Error("Expected plugin module and output paths");
+const [modulePath, outputPath, arm, pairText, ordinalText] =
+	process.argv.slice(2);
+const pairIndex = Number(pairText);
+const sequenceOrdinal = Number(ordinalText);
+const captureOrder = [
+	["trunk", 1],
+	["head", 1],
+	["head", 2],
+	["trunk", 2],
+	["trunk", 3],
+	["head", 3],
+] as const;
+if (
+	!modulePath ||
+	!outputPath ||
+	!Number.isInteger(sequenceOrdinal) ||
+	!Number.isInteger(pairIndex) ||
+	captureOrder[sequenceOrdinal - 1]?.[0] !== arm ||
+	captureOrder[sequenceOrdinal - 1]?.[1] !== pairIndex
+)
+	throw new Error(
+		"Expected plugin module, output, arm, pair, and capture ordinal",
+	);
+const captureStartedAt = new Date().toISOString();
 const fixture = {
 	event: "session.idle",
 	command: "flow-auto",
@@ -119,6 +140,11 @@ try {
 	if (fetchCalls !== 0) throw new Error("Disabled mode made a fetch call");
 	const output = {
 		schemaVersion: 1,
+		arm,
+		pairIndex,
+		sequenceOrdinal,
+		captureStartedAt,
+		captureEndedAt: new Date().toISOString(),
 		fixture,
 		fixtureDigest: sha(JSON.stringify(fixture)),
 		moduleSha256: sha(await readFile(modulePath)),

@@ -97,6 +97,13 @@ const fixture = {
 assert(sha(JSON.stringify(fixture)) === receipt.fixtureDigest, "fixed fixture");
 let firstRuntime: string | null = null;
 const rows = [];
+const captureRows: Array<{
+	ordinal: number;
+	arm: string;
+	pairIndex: number;
+	started: number;
+	ended: number;
+}> = [];
 for (const [index, pair] of receipt.runs.entries()) {
 	const measured: Record<string, { p95Us: number; rssAfterProbeMiB: number }> =
 		{};
@@ -109,6 +116,28 @@ for (const [index, pair] of receipt.runs.entries()) {
 		const expanded = gunzipSync(compressed);
 		assert(sha(expanded) === retained.expandedSha256, `${name} raw hash`);
 		const raw = JSON.parse(expanded.toString("utf8"));
+		const started = Date.parse(raw.captureStartedAt);
+		const ended = Date.parse(raw.captureEndedAt);
+		assert(
+			raw.arm === arm &&
+				raw.pairIndex === index + 1 &&
+				raw.sequenceOrdinal === retained.sequenceOrdinal &&
+				raw.captureStartedAt === retained.captureStartedAt &&
+				raw.captureEndedAt === retained.captureEndedAt &&
+				Number.isFinite(started) &&
+				Number.isFinite(ended) &&
+				new Date(started).toISOString() === raw.captureStartedAt &&
+				new Date(ended).toISOString() === raw.captureEndedAt &&
+				started <= ended,
+			`${name} capture identity and time`,
+		);
+		captureRows.push({
+			ordinal: raw.sequenceOrdinal,
+			arm,
+			pairIndex: index + 1,
+			started,
+			ended,
+		});
 		assert(
 			raw.fixtureDigest === receipt.fixtureDigest &&
 				JSON.stringify(raw.fixture) === JSON.stringify(fixture),
@@ -157,6 +186,27 @@ for (const [index, pair] of receipt.runs.entries()) {
 	assert(addedP95Us === pair.addedP95Us, "paired p95 delta");
 	rows.push(addedP95Us);
 }
+const expectedOrder = [
+	["trunk", 1],
+	["head", 1],
+	["head", 2],
+	["trunk", 2],
+	["trunk", 3],
+	["head", 3],
+] as const;
+captureRows.sort((a, b) => a.ordinal - b.ordinal);
+assert(
+	JSON.stringify(receipt.captureOrder) === JSON.stringify(expectedOrder) &&
+		captureRows.length === expectedOrder.length &&
+		captureRows.every(
+			(row, index) =>
+				row.ordinal === index + 1 &&
+				row.arm === expectedOrder[index]?.[0] &&
+				row.pairIndex === expectedOrder[index]?.[1] &&
+				(index === 0 || row.started >= captureRows[index - 1].ended),
+		),
+	"alternating nonoverlapping capture order",
+);
 assert(
 	Math.max(...rows) === receipt.maxAddedP95Us && receipt.maxAddedP95Us < 5000,
 	"maximum p95 overhead",
