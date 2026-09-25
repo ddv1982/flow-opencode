@@ -423,11 +423,62 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 		s.controller.guard(context).retireClosedSession(session.id);
+		s.controller.observeMessage("host", "ordinary-user", false);
 		const ordinary = { ...session, id: "ordinary-next-session" };
 		expect(() =>
 			s.controller
 				.guard({ ...context, messageId: "synthetic-continuation" })
-				.checkClose(ordinary),
+				.checkClose(ordinary, {
+					operationId: "ordinary-close",
+					expectedRevision: ordinary.revision,
+					sessionId: ordinary.id,
+					kind: "completed",
+					summary: "Done",
+				}),
+		).not.toThrow();
+	});
+	test("unbound revocation permits the next ordinary user turn while completed closure needs no fresh direction", async () => {
+		const s = await setup("shadow");
+		const session = s.repository.session;
+		if (!session) throw new Error("Fixture session missing.");
+		const request = {
+			operationId: "completed-close",
+			expectedRevision: session.revision,
+			sessionId: session.id,
+			kind: "completed" as const,
+			summary: "Done",
+		};
+		expect(() =>
+			s.controller.guard(context).checkClose(session, request),
+		).not.toThrow();
+		expect(() =>
+			s.controller.guard(context).checkClose(session, {
+				...request,
+				kind: "abandoned",
+			}),
+		).toThrow("fresh real user direction");
+		const other = await setup("shadow");
+		const ordinary = other.repository.session;
+		if (!ordinary) throw new Error("Fixture session missing.");
+		other.controller.revoke("host");
+		expect(() =>
+			other.controller
+				.guard({ ...context, messageId: "synthetic-continuation" })
+				.checkClose(ordinary, {
+					...request,
+					sessionId: ordinary.id,
+					expectedRevision: ordinary.revision,
+				}),
+		).toThrow("fresh real user direction");
+		other.controller.observeMessage("host", "ordinary-user", false);
+		expect(() =>
+			other.controller
+				.guard({ ...context, messageId: "synthetic-continuation" })
+				.checkClose(ordinary, {
+					...request,
+					sessionId: ordinary.id,
+					expectedRevision: ordinary.revision,
+				}),
 		).not.toThrow();
 	});
 	test("wrong host and worker cannot consume the pending operation", async () => {

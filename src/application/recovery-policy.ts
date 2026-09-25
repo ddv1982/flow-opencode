@@ -16,6 +16,7 @@ import type {
 	RecoveryCandidate,
 } from "./ports/decision-provider.js";
 import { JEV_ATTEMPT_RESERVATION_USD } from "./ports/decision-provider.js";
+import type { SessionCloseRequest } from "./schema.js";
 import { compactProjection } from "./session-projection.js";
 
 const Text = z.string().trim().min(1).max(2000);
@@ -114,7 +115,7 @@ type Host = {
 	fenced: boolean;
 };
 export type RecoveryGuard = Readonly<{
-	checkClose(session: Session): void;
+	checkClose(session: Session, request: SessionCloseRequest): void;
 	retireClosedSession(sessionId: string): void;
 	check(
 		session: Session,
@@ -169,6 +170,19 @@ export class RecoveryController {
 		}
 		return host;
 	}
+	#unfenceIfUnprotected(hostId: string): void {
+		if (
+			this.#lease?.host === hostId ||
+			[...this.#protectedSessions.values()].includes(hostId)
+		)
+			return;
+		const host = this.#hosts.get(hostId);
+		if (host) {
+			host.fenced = false;
+			host.manual = null;
+			host.parents.clear();
+		}
+	}
 	activate(host: string, settings: RecoverySettings): void {
 		if (
 			!Number.isSafeInteger(settings.maxCalls) ||
@@ -220,8 +234,9 @@ export class RecoveryController {
 	}
 	revoke(host?: string): void {
 		if (this.#lease && (!host || this.#lease.host === host)) {
+			const leaseHost = this.#lease.host;
 			this.#lease.controller.abort();
-			const hostState = this.#hosts.get(this.#lease.host);
+			const hostState = this.#hosts.get(leaseHost);
 			if (hostState) hostState.manual = null;
 			this.#lease = null;
 		}
@@ -237,6 +252,7 @@ export class RecoveryController {
 				? this.#host(hostId)
 				: undefined);
 		if (!host) return;
+		if (!synthetic && host.fenced) this.#unfenceIfUnprotected(hostId);
 		const lease = this.#lease?.host === hostId ? this.#lease : null;
 		if (!synthetic) host.manual = id;
 		if (lease) {
@@ -350,22 +366,15 @@ export class RecoveryController {
 	guard(context: RecoveryContext): RecoveryGuard {
 		const identity = this.#lease;
 		return {
-			checkClose: (session) => this.#checkClose(context, session),
+			checkClose: (session, request) =>
+				this.#checkClose(context, session, request),
 			retireClosedSession: (sessionId) => {
 				const owner = this.#protectedSessions.get(sessionId);
 				if (this.#lease?.session === sessionId) this.revoke();
 				this.#protectedSessions.delete(sessionId);
-				if (
-					owner &&
-					this.#lease?.host !== owner &&
-					![...this.#protectedSessions.values()].includes(owner)
-				) {
+				if (owner) {
 					const host = this.#hosts.get(owner);
-					if (host) {
-						host.fenced = false;
-						host.manual = null;
-						host.parents.clear();
-					}
+					if (host) host.manual = null;
 				}
 			},
 			check: (s, source, m) => this.#check(context, s, source, m),
@@ -396,12 +405,17 @@ export class RecoveryController {
 				throw new Error("Recovery belongs to a different host session.");
 		}
 	}
-	#checkClose(context: RecoveryContext, session: Session): void {
+	#checkClose(
+		context: RecoveryContext,
+		session: Session,
+		request: SessionCloseRequest,
+	): void {
 		this.#expireLease();
 		this.#checkProtectedSession(context, session);
 		const lease = this.#origin(context);
 		if (!lease) return;
 		this.#bind(lease, session);
+		if (request.kind === "completed") return;
 		const parent = this.#hosts
 			.get(context.hostSessionId)
 			?.parents.get(context.messageId);
