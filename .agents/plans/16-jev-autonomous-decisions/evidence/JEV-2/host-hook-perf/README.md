@@ -4,11 +4,11 @@ The production plugin's `session.idle` event hook was replayed at pre-JEV-2 trun
 
 | Pair | Trunk p95 (µs) | Head p95 (µs) | Added p95 (µs) |
 | --- | ---: | ---: | ---: |
-| 1 | 50.656 | 26.543 | -24.113 |
-| 2 | 26.097 | 31.316 | +5.219 |
-| 3 | 27.852 | 46.974 | +19.122 |
+| 1 | 46.905 | 27.381 | -19.524 |
+| 2 | 46.949 | 45.913 | -1.036 |
+| 3 | 29.156 | 48.990 | +19.834 |
 
-The largest observed p95 increase was 19.122 microseconds, below the proposed 5 ms disabled-mode routing limit in this replay. The raw process RSS snapshots and every latency sample are retained in six deterministic gzip files. Source-identity hashing ran after all reported timing and RSS checkpoints. `verify.ts` checks their hashes, recomputes the latency and RSS summaries, verifies the complete runtime inputs (`src/`, `skills/`, `package.json`, and `bun.lock`) against the pinned commits and checks phase ancestry, and refuses a changed current runtime. Each raw process records its arm, pair, ordinal, and UTC start/end times; the verifier checks the alternating, nonoverlapping sequence. These process-reported times expose run order but are not an external time attestation.
+The largest observed p95 increase was 19.834 microseconds, below the proposed 5 ms disabled-mode routing limit in this replay. The raw process RSS snapshots and every latency sample are retained in six deterministic gzip files. Source-identity hashing ran after all reported timing and RSS checkpoints. `verify.ts` checks their hashes, recomputes the latency and RSS summaries, verifies the complete runtime inputs (`src/`, `skills/`, `package.json`, and `bun.lock`) against the pinned commits and checks phase ancestry, and refuses a changed current runtime. Each raw process records its arm, pair, ordinal, UTC start/end times, hashed host identity, CPU model/count, kernel release, and filesystem device ids; the verifier requires identical host fields across all six runs and checks the alternating, nonoverlapping sequence. These process-reported times expose run order but are not an external time attestation.
 
 This probe exercises the production plugin hook and real file-backed Flow status, but it uses a mocked OpenCode client rather than a running OpenCode server. It measures the empty-workspace initial-prompt route. The separate `../idle-perf/` probe covers a blocked recovery checkpoint and the inactive-controller proposal lookup. Neither measures pinned live shadow advice latency, so the JEV-2 performance gate remains open.
 

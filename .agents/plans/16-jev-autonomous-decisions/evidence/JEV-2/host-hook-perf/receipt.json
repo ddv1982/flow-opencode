@@ -5,120 +5,120 @@
   "headCommit": "f798dc5b1c0c4ac86f3269068346a47b699f8b2b",
   "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
   "fixtureDigest": "7cd9e111b24a66485a4cd23c73fef7cd1f3db3fa5aa8579e698febd57dd39df1",
-  "probeSha256": "2b96034524143b3f1f93857dabac14d65d23ed7867f6534f184d5022982c6ffd",
+  "probeSha256": "227565f81eaaaa2d82555b53509927b0567023a4c3aecfa41cb3e8734f8f8965",
   "runs": [
     {
       "trunk": {
         "file": "trunk-1.json.gz",
-        "gzipSha256": "7d2d7b12bc5f21bcf892870f496d412c58fc3b3b18b05b140c8acdc7be6bd743",
-        "expandedSha256": "039c458a4badcc9ba1d83534d84a41cfc3e682f242936c7fffddde003b61d367",
+        "gzipSha256": "a5f1250bdae6a21a58cdbaf1b7a8be400cd582ad8254a1905a8a9a35524eb375",
+        "expandedSha256": "53905ead83b50843fc5fc56a36f50c38df3b8fbc24ac6adb9d0c5eea19ca8a52",
         "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
         "sourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
         "sourceFileCount": 59,
         "runtimeInputDigest": "38e96b9482c585cc70f37d30a3ab0dd224170c752abb63c030dd36252f8df9c2",
         "runtimeInputFileCount": 65,
         "sequenceOrdinal": 1,
-        "captureStartedAt": "2026-09-25T18:47:47.015Z",
-        "captureEndedAt": "2026-09-25T18:47:47.176Z",
-        "p95Us": 50.656,
-        "rssAfterProbeMiB": 86.47
+        "captureStartedAt": "2026-09-25T19:07:33.826Z",
+        "captureEndedAt": "2026-09-25T19:07:33.986Z",
+        "p95Us": 46.905,
+        "rssAfterProbeMiB": 86.06
       },
       "head": {
         "file": "head-1.json.gz",
-        "gzipSha256": "8bacb4f30f6651d1d9b313afd8d916ef3c718bad030f9c79fd5ec7ba425711d5",
-        "expandedSha256": "2342b9a4f0feeb87750579b62c65a737cafed75e22552f11f1dd8bfab2e8ea37",
+        "gzipSha256": "9873b2f39e031861cf46a0373dc14c2e76d2ea1145b598fc43f2a03915cc85f7",
+        "expandedSha256": "630b884791df435f10cba319f5ce3d6daa02a3f49973cbb5fd920c42cacb79e5",
         "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
         "sourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
         "sourceFileCount": 64,
         "runtimeInputDigest": "6f0f1d45b81bd9d1378a2c76498bc4beb00415cdb9f4756746ce1f5b80a2f703",
         "runtimeInputFileCount": 70,
         "sequenceOrdinal": 2,
-        "captureStartedAt": "2026-09-25T18:47:47.250Z",
-        "captureEndedAt": "2026-09-25T18:47:47.388Z",
-        "p95Us": 26.543,
-        "rssAfterProbeMiB": 87.62
+        "captureStartedAt": "2026-09-25T19:07:34.087Z",
+        "captureEndedAt": "2026-09-25T19:07:34.229Z",
+        "p95Us": 27.381,
+        "rssAfterProbeMiB": 87.79
       },
-      "addedP95Us": -24.113
+      "addedP95Us": -19.524
     },
     {
       "trunk": {
         "file": "trunk-2.json.gz",
-        "gzipSha256": "9066da55f830eeef587c105d8d3510a08c872e0bcf74e3b29003efd331b7a135",
-        "expandedSha256": "3625620f9b6fb9eda6a7f1a442279b6d3557ed36994e6f3246e21ff76b6a3a77",
+        "gzipSha256": "3331b3d3bd89c780b0e7680b4f1ea292bf1135df1df4843e1f95880f74b77a90",
+        "expandedSha256": "3f78553e610afb1766843b8e7843e5e1954d328513ae505d5ce516e2475f0e95",
         "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
         "sourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
         "sourceFileCount": 59,
         "runtimeInputDigest": "38e96b9482c585cc70f37d30a3ab0dd224170c752abb63c030dd36252f8df9c2",
         "runtimeInputFileCount": 65,
         "sequenceOrdinal": 4,
-        "captureStartedAt": "2026-09-25T18:47:47.698Z",
-        "captureEndedAt": "2026-09-25T18:47:47.836Z",
-        "p95Us": 26.097,
-        "rssAfterProbeMiB": 84.57
+        "captureStartedAt": "2026-09-25T19:07:34.540Z",
+        "captureEndedAt": "2026-09-25T19:07:34.695Z",
+        "p95Us": 46.949,
+        "rssAfterProbeMiB": 85.38
       },
       "head": {
         "file": "head-2.json.gz",
-        "gzipSha256": "9f26f76436fa88abba729091c72613d5ca6f2cfea198e59c80bf6b139b0b73ed",
-        "expandedSha256": "133b147ae054d82e009800b5176c833a666f0f8a9d803e731b89ed7a1173d897",
+        "gzipSha256": "dca63ae25c39bc52a7bcf0cba8fdf44bd41bf10b1d6f03faa849131263c7e84b",
+        "expandedSha256": "709697aa03031db27db998beec250ec55c183a739641562970b51a47d420652d",
         "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
         "sourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
         "sourceFileCount": 64,
         "runtimeInputDigest": "6f0f1d45b81bd9d1378a2c76498bc4beb00415cdb9f4756746ce1f5b80a2f703",
         "runtimeInputFileCount": 70,
         "sequenceOrdinal": 3,
-        "captureStartedAt": "2026-09-25T18:47:47.469Z",
-        "captureEndedAt": "2026-09-25T18:47:47.621Z",
-        "p95Us": 31.316,
-        "rssAfterProbeMiB": 87.67
+        "captureStartedAt": "2026-09-25T19:07:34.303Z",
+        "captureEndedAt": "2026-09-25T19:07:34.455Z",
+        "p95Us": 45.913,
+        "rssAfterProbeMiB": 88.02
       },
-      "addedP95Us": 5.219
+      "addedP95Us": -1.036
     },
     {
       "trunk": {
         "file": "trunk-3.json.gz",
-        "gzipSha256": "0c9943f6d05e65fa09bb35f2b4a61537beaec738771625e8cdc579d6b916903f",
-        "expandedSha256": "55c9536e10ab75eb9d730808581496ffba0871e3d961a49f117e4a0b97290a50",
+        "gzipSha256": "33937575a6ab1065daded1a9b61fd98175d2de245d4bca93d4e2fc8f49268bc7",
+        "expandedSha256": "b1c5fefcdf0bad39c48829ad660df5885b9953770c82449e8acee92954ac9f5d",
         "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
         "sourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
         "sourceFileCount": 59,
         "runtimeInputDigest": "38e96b9482c585cc70f37d30a3ab0dd224170c752abb63c030dd36252f8df9c2",
         "runtimeInputFileCount": 65,
         "sequenceOrdinal": 5,
-        "captureStartedAt": "2026-09-25T18:47:47.919Z",
-        "captureEndedAt": "2026-09-25T18:47:48.061Z",
-        "p95Us": 27.852,
-        "rssAfterProbeMiB": 85.03
+        "captureStartedAt": "2026-09-25T19:07:34.769Z",
+        "captureEndedAt": "2026-09-25T19:07:34.924Z",
+        "p95Us": 29.156,
+        "rssAfterProbeMiB": 86.73
       },
       "head": {
         "file": "head-3.json.gz",
-        "gzipSha256": "af033865fafbaf2e85cc54f82d7c7c7ee6e46e04ba2c5c80305c0b2d3bc6d008",
-        "expandedSha256": "4e84106f3e0a413f61fa107ebe57c8b936dc95cad11deb7aa08caee23737af55",
+        "gzipSha256": "d40635f056bf35aa0e410aa6d8e8e4ad3526b8407c0575fc4f2a51cea8e92ae3",
+        "expandedSha256": "9114fb6f87bcf591807812ea5dbff96f17e3a0361c6d1cc3283d8b04bbc0d291",
         "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
         "sourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
         "sourceFileCount": 64,
         "runtimeInputDigest": "6f0f1d45b81bd9d1378a2c76498bc4beb00415cdb9f4756746ce1f5b80a2f703",
         "runtimeInputFileCount": 70,
         "sequenceOrdinal": 6,
-        "captureStartedAt": "2026-09-25T18:47:48.132Z",
-        "captureEndedAt": "2026-09-25T18:47:48.288Z",
-        "p95Us": 46.974,
-        "rssAfterProbeMiB": 88.91
+        "captureStartedAt": "2026-09-25T19:07:34.996Z",
+        "captureEndedAt": "2026-09-25T19:07:35.156Z",
+        "p95Us": 48.99,
+        "rssAfterProbeMiB": 87.78
       },
-      "addedP95Us": 19.122
+      "addedP95Us": 19.834
     }
   ],
-  "maxAddedP95Us": 19.122,
+  "maxAddedP95Us": 19.834,
   "limits": [
     "Source and external-runtime identity collection occurs after every reported timing and RSS checkpoint.",
     "The runtime-input digest includes all src/ and skills/ files, package.json, and bun.lock; the verifier rebuilds it from the pinned Git commit and checks the current branch.",
-    "Each raw process records its arm, pair, ordinal, and UTC start/end times. The verifier checks their alternating nonoverlapping sequence; these timestamps remain process-reported evidence, not external time attestation.",
+    "Each raw process records its arm, pair, ordinal, UTC start/end times, hashed host identity, CPU model/count, kernel release, and filesystem device ids. The verifier checks their alternating nonoverlapping sequence; these timestamps remain process-reported evidence, not external time attestation.",
     "Each raw run binds the complete on-disk src/ tree by path, file length and bytes; the verifier reconstructs that digest from the pinned Git commit.",
     "The production plugin event hook and file-backed Flow status run in process with a disposable mocked OpenCode client, not in a real OpenCode server process.",
     "The fixed event is an empty-workspace initial prompt; the mock binds its text marker, target session, delivery, and metadata token to command activation before counting it. The separate idle routing probe covers a blocked recovery checkpoint and inactive controller lookup.",
     "A fetch guard observes direct fetch attempts but not every possible network API. No provider request was configured or expected.",
     "No live Jev shadow call is timed here; the JEV-2 performance gate remains open."
   ],
-  "verifySha256": "0fa89733759fa22d118e27898c836e6885e58b793143065b9099f10c4d41ac9c",
+  "verifySha256": "ecf9b28f402181301f08bcd3ecc7d43d3b9a742d59c30ceed1111d7e54ea8792",
   "captureOrder": [
     [
       "trunk",

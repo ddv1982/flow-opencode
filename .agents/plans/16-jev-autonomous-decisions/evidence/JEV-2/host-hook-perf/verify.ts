@@ -206,6 +206,19 @@ for (const [index, pair] of receipt.runs.entries()) {
 			`${name} external runtime inputs`,
 		);
 		const runtime = JSON.stringify(raw.runtime);
+		assert(
+			typeof raw.runtime.hostDigest === "string" &&
+				/^[a-f0-9]{64}$/.test(raw.runtime.hostDigest) &&
+				typeof raw.runtime.kernelRelease === "string" &&
+				raw.runtime.kernelRelease.length > 0 &&
+				typeof raw.runtime.cpuModel === "string" &&
+				raw.runtime.cpuModel.length > 0 &&
+				Number.isSafeInteger(raw.runtime.cpuCount) &&
+				raw.runtime.cpuCount > 0 &&
+				Number.isSafeInteger(raw.runtime.temporaryDevice) &&
+				Number.isSafeInteger(raw.runtime.repositoryDevice),
+			`${name} benchmark host identity`,
+		);
 		if (firstRuntime === null) firstRuntime = runtime;
 		assert(runtime === firstRuntime, `${name} runtime`);
 		assert(

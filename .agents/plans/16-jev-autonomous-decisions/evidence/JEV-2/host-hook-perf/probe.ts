@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { cpus, hostname, release, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -27,6 +27,7 @@ if (
 	throw new Error(
 		"Expected plugin module, output, arm, pair, and capture ordinal",
 	);
+const measuredRepositoryRoot = resolve(dirname(modulePath), "..", "..", "..");
 const captureStartedAt = new Date().toISOString();
 const fixture = {
 	event: "session.idle",
@@ -219,6 +220,12 @@ try {
 			bun: Bun.version,
 			platform: process.platform,
 			arch: process.arch,
+			hostDigest: sha(hostname()),
+			kernelRelease: release(),
+			cpuModel: cpus()[0]?.model ?? null,
+			cpuCount: cpus().length,
+			temporaryDevice: (await stat(tmpdir())).dev,
+			repositoryDevice: (await stat(measuredRepositoryRoot)).dev,
 		},
 		fetchCalls,
 		promptCalls,
