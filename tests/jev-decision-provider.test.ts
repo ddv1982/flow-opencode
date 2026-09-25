@@ -77,6 +77,7 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 		).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
 		for (const altered of [
 			{ ...packet, goal: '{"password":"hunter2hunter2"}' },
+			{ ...packet, goal: "GITHUB_TOKEN=ghp_secretvalue" },
 			{
 				...packet,
 				findings: [
@@ -85,10 +86,25 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 			},
 			{
 				...packet,
+				findings: [
+					{ ...packet.findings[0], evidence: "AWS_ACCESS_KEY_ID=AKIAEXAMPLE" },
+				],
+			},
+			{
+				...packet,
 				candidates: [
 					{
 						...packet.candidates[0],
 						remedy: '{"client_secret":"othersecret"}',
+					},
+				],
+			},
+			{
+				...packet,
+				candidates: [
+					{
+						...packet.candidates[0],
+						remedy: "DATABASE_URL=postgres://user:pass@host/db",
 					},
 				],
 			},

@@ -20,7 +20,7 @@ const Choice = z
 	.strict();
 const Noul = z.object({ type: z.literal("noul"), noul: Probability }).strict();
 const sensitiveField =
-	/(?:Bearer\s+\S+|(?:api[_ -]?key|password|passwd|secret|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|private[_ -]?key)["']?\s*[:=]\s*["']?\S+)/i;
+	/(?:Bearer\s+\S+|(?:api[_ -]?key|[a-z0-9_-]*(?:token|key(?:[_-]?id)?|secret|password|passwd|credential|database[_-]?url|db[_-]?url))["']?\s*[:=]\s*["']?\S+|(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis):\/\/[^/\s:@]+:[^@\s/]+@)/i;
 function buildRequest(packet: DecisionPacket) {
 	const criteria = Object.fromEntries(
 		packet.candidates.map((c) => [c.id, c.remedy]),
