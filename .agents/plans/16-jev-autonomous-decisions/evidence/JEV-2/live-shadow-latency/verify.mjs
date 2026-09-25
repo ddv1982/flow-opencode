@@ -27,7 +27,13 @@ const close = (actual, expected) =>
 const validCost = (value) =>
 	typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-const receipt = json("receipt.json");
+const receiptBytes = read("receipt.json");
+assert.equal(
+	sha256(receiptBytes),
+	"7b5ff91daadbd6c0d1b2611dde2758e7d02dd744ff4db10de61160e8a9f50dd3",
+	"Retained receipt differs from the reviewed campaign root",
+);
+const receipt = JSON.parse(receiptBytes.toString("utf8"));
 assert.equal(receipt.schemaVersion, 1);
 const recordedFiles = Object.keys(receipt.files).sort();
 const actualFiles = readdirSync(join(directory, "campaign"))
