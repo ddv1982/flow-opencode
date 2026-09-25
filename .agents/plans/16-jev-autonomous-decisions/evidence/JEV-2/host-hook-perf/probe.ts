@@ -89,6 +89,7 @@ const rssAfterImportBytes = process.memoryUsage().rss;
 const workspace = await mkdtemp(join(tmpdir(), "flow-idle-hook-"));
 let promptCalls = 0;
 let fetchCalls = 0;
+let activationToken: string | null = null;
 const originalFetch = globalThis.fetch;
 globalThis.fetch = ((...args: Parameters<typeof fetch>) => {
 	fetchCalls++;
@@ -127,7 +128,7 @@ const context = {
 					!part.text?.startsWith(
 						"Read compact status, load flow-plan, then call flow_plan_save.\n\n",
 					) ||
-					typeof part.metadata?.["opencode-plugin-flow/auto"] !== "string" ||
+					part.metadata?.["opencode-plugin-flow/auto"] !== activationToken ||
 					row.throwOnError !== true
 				)
 					throw new Error("Unexpected initial-route prompt request.");
@@ -163,6 +164,15 @@ try {
 			},
 			commandOutput,
 		);
+		const instruction = commandOutput.parts.find(
+			(part) => (part as { synthetic?: boolean }).synthetic === true,
+		);
+		const token = (
+			instruction as { metadata?: Record<string, unknown> } | undefined
+		)?.metadata?.["opencode-plugin-flow/auto"];
+		if (typeof token !== "string" || !token)
+			throw new Error(`Missing activation token at command ${index}`);
+		activationToken = token;
 		await chat(
 			{ sessionID: fixture.hostSessionId },
 			{
