@@ -9,7 +9,30 @@
       "qualification": "experimental-evaluation",
       "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
       "zeroClaims": true,
-      "opencodeVersion": "1.18.31"
+      "opencodeVersion": "1.18.31",
+      "hostArtifacts": {
+        "schemaVersion": 1,
+        "platform": "linux",
+        "architecture": "x64",
+        "bun": {
+          "version": "1.4.0",
+          "bytes": {
+            "sha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+            "size": 80761952,
+            "executable": true
+          }
+        },
+        "opencode": {
+          "version": "1.18.31",
+          "bytes": {
+            "sha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+            "size": 185030784,
+            "executable": true
+          }
+        },
+        "packageCache": null
+      },
+      "observedOpenCodeVersion": "1.18.31"
     },
     {
       "managerModel": "openai/gpt-5.6-terra",
@@ -18,7 +41,30 @@
       "qualification": "experimental-evaluation",
       "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
       "zeroClaims": true,
-      "opencodeVersion": "1.18.31"
+      "opencodeVersion": "1.18.31",
+      "hostArtifacts": {
+        "schemaVersion": 1,
+        "platform": "linux",
+        "architecture": "x64",
+        "bun": {
+          "version": "1.4.0",
+          "bytes": {
+            "sha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+            "size": 80761952,
+            "executable": true
+          }
+        },
+        "opencode": {
+          "version": "1.18.31",
+          "bytes": {
+            "sha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+            "size": 185030784,
+            "executable": true
+          }
+        },
+        "packageCache": null
+      },
+      "observedOpenCodeVersion": "1.18.31"
     },
     {
       "managerModel": "xai/grok-4.6",
@@ -27,7 +73,30 @@
       "qualification": "experimental-evaluation",
       "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
       "zeroClaims": true,
-      "opencodeVersion": "1.18.31"
+      "opencodeVersion": "1.18.31",
+      "hostArtifacts": {
+        "schemaVersion": 1,
+        "platform": "linux",
+        "architecture": "x64",
+        "bun": {
+          "version": "1.4.0",
+          "bytes": {
+            "sha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+            "size": 80761952,
+            "executable": true
+          }
+        },
+        "opencode": {
+          "version": "1.18.31",
+          "bytes": {
+            "sha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+            "size": 185030784,
+            "executable": true
+          }
+        },
+        "packageCache": null
+      },
+      "observedOpenCodeVersion": "1.18.31"
     },
     {
       "managerModel": "xai/grok-4.6",
@@ -36,7 +105,30 @@
       "qualification": "experimental-evaluation",
       "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
       "zeroClaims": true,
-      "opencodeVersion": "1.18.31"
+      "opencodeVersion": "1.18.31",
+      "hostArtifacts": {
+        "schemaVersion": 1,
+        "platform": "linux",
+        "architecture": "x64",
+        "bun": {
+          "version": "1.4.0",
+          "bytes": {
+            "sha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+            "size": 80761952,
+            "executable": true
+          }
+        },
+        "opencode": {
+          "version": "1.18.31",
+          "bytes": {
+            "sha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+            "size": 185030784,
+            "executable": true
+          }
+        },
+        "packageCache": null
+      },
+      "observedOpenCodeVersion": "1.18.31"
     }
   ]
 }

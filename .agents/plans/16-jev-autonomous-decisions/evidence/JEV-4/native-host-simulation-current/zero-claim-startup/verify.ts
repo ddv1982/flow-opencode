@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { readFile, realpath } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 	cwd: fileURLToPath(new URL(".", import.meta.url)),
@@ -16,6 +17,9 @@ const assert = (condition: unknown, reason: string) => {
 	if (!condition)
 		throw new Error(`Startup simulation receipt invalid: ${reason}`);
 };
+const { HostArtifactsSchema } = await import(
+	pathToFileURL(join(repositoryRoot, "evals/host-artifacts.ts")).href
+);
 const receipt = JSON.parse(await read("receipt.json"));
 assert(/^[a-f0-9]{40}$/.test(receipt.sourceHead), "source commit");
 assert(
@@ -67,6 +71,12 @@ assert(
 	"sanitized report digest",
 );
 const report = JSON.parse(reportBytes.toString("utf8"));
+assert(
+	receipt.trustedExecutableVersion === "1.18.31" &&
+		/^[a-f0-9]{64}$/.test(receipt.trustedExecutableSha256) &&
+		receipt.versionObservation === "post-run-same-sha256-local-binary--version",
+	"pinned executable identity",
+);
 const expected = [
 	["openai/gpt-5.6-terra", "manager-only"],
 	["openai/gpt-5.6-terra", "manager-plus-jev"],
@@ -86,21 +96,45 @@ assert(
 					origin: string;
 					zeroClaims: boolean;
 					opencodeVersion: string;
+					observedOpenCodeVersion: string;
+					hostArtifacts: unknown;
 				},
 				index: number,
-			) =>
-				row.managerModel === expected[index]?.[0] &&
-				row.arm === expected[index]?.[1] &&
-				row.origin === "live" &&
-				row.zeroClaims === true &&
-				row.opencodeVersion === "1.18.31",
+			) => {
+				const artifacts = HostArtifactsSchema.parse(row.hostArtifacts);
+				return (
+					row.managerModel === expected[index]?.[0] &&
+					row.arm === expected[index]?.[1] &&
+					row.origin === "live" &&
+					row.zeroClaims === true &&
+					row.opencodeVersion === receipt.trustedExecutableVersion &&
+					row.observedOpenCodeVersion === receipt.trustedExecutableVersion &&
+					artifacts.opencode.version === receipt.trustedExecutableVersion &&
+					artifacts.opencode.bytes.sha256 === receipt.trustedExecutableSha256 &&
+					artifacts.opencode.bytes.executable === true &&
+					artifacts.packageCache === null
+				);
+			},
 		),
 	"four distinct zero-claim arms",
 );
+const executable = process.env.FLOW_RECOVERY_OPENCODE_EXECUTABLE;
+let localBinaryVerified = false;
+if (executable) {
+	const path = await realpath(executable);
+	const version = spawnSync(path, ["--version"], { encoding: "utf8" });
+	assert(
+		sha(await readFile(path)) === receipt.trustedExecutableSha256 &&
+			version.status === 0 &&
+			version.stdout.trim() === receipt.trustedExecutableVersion,
+		"local pinned executable differs",
+	);
+	localBinaryVerified = true;
+}
 assert(
 	sha(await read("verify.ts")) === receipt.verifySha256,
 	"verifier digest",
 );
 process.stdout.write(
-	`${JSON.stringify({ verdict: "verified-zero-claim-simulation", head: receipt.sourceHead, arms: report.records.length })}\n`,
+	`${JSON.stringify({ verdict: localBinaryVerified ? "verified-zero-claim-simulation" : "verified-captured-host-identity", head: receipt.sourceHead, arms: report.records.length, opencodeSha256: receipt.trustedExecutableSha256 })}\n`,
 );
