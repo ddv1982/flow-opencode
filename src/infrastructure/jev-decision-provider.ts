@@ -6,6 +6,7 @@ import type {
 import {
 	JEV_MAX_REQUEST_BYTES,
 	JEV_PINNED_MODEL,
+	type JevTransport,
 	requestJev,
 } from "./jev-transport.js";
 
@@ -61,6 +62,7 @@ function buildRequest(packet: DecisionPacket) {
 }
 export function createJevDecisionProvider(
 	readApiKey: () => string | undefined,
+	transport?: JevTransport,
 ): DecisionProvider {
 	return {
 		fitsRequest(packet) {
@@ -94,6 +96,7 @@ export function createJevDecisionProvider(
 				apiKey: key,
 				signal: options.signal,
 				budget: { reserve: options.reserveAttempt },
+				...(transport ? { transport } : {}),
 			});
 			if (!response.ok) return { kind: "unavailable", reason: response.reason };
 			const parsed = z
