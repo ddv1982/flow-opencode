@@ -97,7 +97,9 @@ assert.equal(manifest.qualification, "inconclusive");
 assert.equal(manifest.registrationDigest, null);
 assert.equal(receipt.approval.model, `typesafe/${manifest.model}`);
 assert.equal(receipt.approval.dispatches, 1);
-assert.equal(Number.isFinite(Date.parse(receipt.approval.expiresAt)), true);
+assert.equal(receipt.approval.maxAttempts, 24);
+assert.equal(receipt.approval.maxUsd, 0.1);
+assert.equal(receipt.approval.expiresAt, "2026-09-27T03:00:00Z");
 assert.equal(
 	validCost(receipt.approval.maxUsd) && receipt.approval.maxUsd > 0,
 	true,
@@ -109,6 +111,10 @@ assert.equal(
 );
 const corpus = CorpusSchema.parse(manifest.corpus);
 assert.equal(digest(corpus), manifest.corpusDigest);
+assert.equal(
+	manifest.corpusDigest,
+	"4ee3bca9e450d33a38009d08eedb4e316ffc2a14f821daf009571abf58c6e20f",
+);
 assert.deepEqual(
 	JSON.parse(JSON.stringify(await evaluateRecoveryCorpus(corpus))),
 	manifest.preparation,
@@ -253,6 +259,23 @@ assert.equal(totalAttempts, summary.calls);
 assert.equal(totalAttempts, receipt.accounting.attempts);
 close(totalReservedUsd, summary.reservedUsd);
 const answeredRows = summary.rows.filter((row) => row.attempts > 0);
+let replayIndex = 0;
+const replay = await evaluateRecoveryCorpus(corpus, {
+	async assess(packet, options) {
+		assert.equal(options.reserveAttempt(), true);
+		const row = answeredRows[replayIndex++];
+		assert.ok(row);
+		assert.equal(digest(packet), row.packetDigest);
+		return row.advice;
+	},
+});
+assert.equal(replayIndex, answeredRows.length);
+for (const [index, row] of summary.rows.entries()) {
+	assert.deepEqual(replay.rows[index].decision, row.decision);
+	assert.equal(replay.rows[index].labelMatches, row.labelMatches);
+	assert.equal(replay.rows[index].eligibilityMatches, row.eligibilityMatches);
+	assert.equal(replay.rows[index].rejection, row.rejection);
+}
 let precedingReservation = 0;
 let precedingAttemptAt = Date.parse(manifest.createdAt);
 for (let index = 0; index < totalAttempts; index++) {
