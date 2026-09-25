@@ -286,6 +286,12 @@ if (privateRoot) {
 		failedResponseStart + 1,
 		failedResponseEnd,
 	);
+	const normalizedMeasurementBody = (lines: string[]) =>
+		lines
+			.filter((line) => !line.startsWith("+    //"))
+			.map((line) =>
+				line.replace(/\.toBe\((?:9|14)\);$/, ".toBe(COUNT);"),
+			);
 	const validationOutput = (output: string) => {
 		const match = output.match(/\n\n\[flow-validation\] (\{[^\n]+\})$/);
 		return match
@@ -453,7 +459,13 @@ if (privateRoot) {
 			failedMeasurementBody.includes(
 				"+    const appOrigin = new URL(page.url()).origin;",
 			) &&
+			failedMeasurementBody.filter((line) => line.includes("imageUrls.add("))
+				.length === 1 &&
+			failedMeasurementBody.filter((line) => line.includes("imageUrls"))
+				.length === 3 &&
 			JSON.stringify(failedResponseBody) === JSON.stringify(responseBody) &&
+			JSON.stringify(normalizedMeasurementBody(failedMeasurementBody)) ===
+				JSON.stringify(normalizedMeasurementBody(measurementBody)) &&
 			failedMeasurementBody.some((line) =>
 				/^\+    await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(9\);$/.test(
 					line,
