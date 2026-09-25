@@ -36,30 +36,32 @@ type FrozenArtifacts = NonNullable<
 >;
 let frozenArtifacts: Promise<FrozenArtifacts> | undefined;
 function pinnedHost(): Promise<FrozenArtifacts> {
-	return (frozenArtifacts ??= (async () => {
-		const executable = process.env.FLOW_RECOVERY_OPENCODE_EXECUTABLE;
-		if (!executable)
-			throw new Error(
-				"Set FLOW_RECOVERY_OPENCODE_EXECUTABLE for the native treatment smoke.",
-			);
-		const version = execFileSync(executable, ["--version"], {
-			encoding: "utf8",
-		}).trim();
-		if (version !== "1.18.31")
-			throw new Error(`Unexpected OpenCode version: ${version}`);
-		return {
-			opencodeExecutable: executable,
-			identity: await captureHostArtifacts({
-				paths: {
-					bun: process.execPath,
-					opencode: executable,
-					packageCache: null,
-				},
-				bunVersion: Bun.version,
-				opencodeVersion: version,
-			}),
-		};
-	})());
+	if (!frozenArtifacts)
+		frozenArtifacts = (async () => {
+			const executable = process.env.FLOW_RECOVERY_OPENCODE_EXECUTABLE;
+			if (!executable)
+				throw new Error(
+					"Set FLOW_RECOVERY_OPENCODE_EXECUTABLE for the native treatment smoke.",
+				);
+			const version = execFileSync(executable, ["--version"], {
+				encoding: "utf8",
+			}).trim();
+			if (version !== "1.18.31")
+				throw new Error(`Unexpected OpenCode version: ${version}`);
+			return {
+				opencodeExecutable: executable,
+				identity: await captureHostArtifacts({
+					paths: {
+						bun: process.execPath,
+						opencode: executable,
+						packageCache: null,
+					},
+					bunVersion: Bun.version,
+					opencodeVersion: version,
+				}),
+			};
+		})();
+	return frozenArtifacts;
 }
 async function retainHostIdentity(
 	host: EvalHost,
