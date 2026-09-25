@@ -8,6 +8,7 @@ import {
 	OperatorPolicySchema,
 } from "./episode-operator.js";
 import type { EpisodeDriver } from "./episode-runner.js";
+import { ManagerPrompt } from "./episodes.js";
 import { datasetDigest } from "./schema.js";
 import { recoverySourceDigests } from "./sources.js";
 
@@ -157,7 +158,7 @@ export async function createEpisodeHostDriver(
 	const manager = z
 		.object({
 			model: z.string().regex(/^[^\s/]+\/[^\s]+$/),
-			prompt: z.string().trim().min(1),
+			prompt: ManagerPrompt,
 		})
 		.strict()
 		.parse(options.manager);
