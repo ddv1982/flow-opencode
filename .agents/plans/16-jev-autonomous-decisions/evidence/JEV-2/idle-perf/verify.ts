@@ -117,15 +117,58 @@ function sourceTreeAt(commit: string) {
 	}
 	return { digest: hash.digest("hex"), fileCount: files.length };
 }
+function runtimeInputsAt(commit: string) {
+	const files = git(
+		"ls-tree",
+		"-r",
+		"-z",
+		"--name-only",
+		commit,
+		"src",
+		"skills",
+		"package.json",
+		"bun.lock",
+	)
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean)
+		.sort();
+	assert(
+		files.includes("package.json") && files.includes("bun.lock"),
+		"runtime manifests",
+	);
+	const hash = createHash("sha256");
+	for (const path of files) {
+		const bytes = git("show", `${commit}:${path}`);
+		const length = Buffer.alloc(8);
+		length.writeBigUInt64BE(BigInt(bytes.length));
+		hash.update(path).update("\0").update(length).update(bytes);
+	}
+	return { digest: hash.digest("hex"), fileCount: files.length };
+}
 const sourceTree = {
 	baseline: sourceTreeAt(receipt.baselineCommit),
 	head: sourceTreeAt(receipt.headCommit),
+};
+const runtimeInputs = {
+	baseline: runtimeInputsAt(receipt.baselineCommit),
+	head: runtimeInputsAt(receipt.headCommit),
 };
 assert(
 	sourceTree.baseline.digest !== sourceTree.head.digest &&
 		spawnSync(
 			"git",
-			["diff", "--quiet", receipt.headCommit, "HEAD", "--", "src"],
+			[
+				"diff",
+				"--quiet",
+				receipt.headCommit,
+				"HEAD",
+				"--",
+				"src",
+				"skills",
+				"package.json",
+				"bun.lock",
+			],
 			{
 				cwd: repositoryRoot,
 			},
@@ -145,6 +188,13 @@ for (const [name, row, commit] of [
 			row.sourceTreeDigest === receipt[`${name}SourceTreeDigest`] &&
 			row.sourceFileCount === receipt[`${name}SourceFileCount`],
 		`${name} transitive source tree`,
+	);
+	assert(
+		row.runtimeInputDigest === runtimeInputs[name].digest &&
+			row.runtimeInputFileCount === runtimeInputs[name].fileCount &&
+			row.runtimeInputDigest === receipt[`${name}RuntimeInputDigest`] &&
+			row.runtimeInputFileCount === receipt[`${name}RuntimeInputFileCount`],
+		`${name} external runtime inputs`,
 	);
 }
 assert(

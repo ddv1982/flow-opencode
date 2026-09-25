@@ -4,11 +4,11 @@ The production plugin's `session.idle` event hook was replayed at pre-JEV-2 trun
 
 | Pair | Trunk p95 (µs) | Head p95 (µs) | Added p95 (µs) |
 | --- | ---: | ---: | ---: |
-| 1 | 49.863 | 45.758 | -4.105 |
-| 2 | 30.604 | 61.736 | +31.132 |
-| 3 | 26.756 | 25.763 | -0.993 |
+| 1 | 30.304 | 41.711 | +11.407 |
+| 2 | 42.767 | 28.799 | -13.968 |
+| 3 | 41.584 | 43.346 | +1.762 |
 
-The largest observed p95 increase was 31.132 microseconds, below the proposed 5 ms disabled-mode routing limit in this replay. The raw process RSS snapshots and every latency sample are retained in six deterministic gzip files. `verify.ts` checks their hashes, recomputes the latency and RSS summaries, verifies the complete transitive `src/` tree against the pinned commits and checks phase ancestry, and refuses a changed current runtime. Each raw process records its arm, pair, ordinal, and UTC start/end times; the verifier checks the alternating, nonoverlapping sequence. These process-reported times expose run order but are not an external time attestation.
+The largest observed p95 increase was 11.407 microseconds, below the proposed 5 ms disabled-mode routing limit in this replay. The raw process RSS snapshots and every latency sample are retained in six deterministic gzip files. `verify.ts` checks their hashes, recomputes the latency and RSS summaries, verifies the complete runtime inputs (`src/`, `skills/`, `package.json`, and `bun.lock`) against the pinned commits and checks phase ancestry, and refuses a changed current runtime. Each raw process records its arm, pair, ordinal, and UTC start/end times; the verifier checks the alternating, nonoverlapping sequence. These process-reported times expose run order but are not an external time attestation.
 
 This probe exercises the production plugin hook and real file-backed Flow status, but it uses a mocked OpenCode client rather than a running OpenCode server. It measures the empty-workspace initial-prompt route. The separate `../idle-perf/` probe covers a blocked recovery checkpoint and the inactive-controller proposal lookup. Neither measures pinned live shadow advice latency, so the JEV-2 performance gate remains open.
 

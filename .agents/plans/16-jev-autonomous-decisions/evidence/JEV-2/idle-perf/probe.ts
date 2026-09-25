@@ -8,25 +8,44 @@ if (!modulePath || !outputPath)
 	throw new Error("Expected module and output paths");
 async function sourceTreeIdentity() {
 	const sourceRoot = resolve(dirname(modulePath), "..", "..");
-	const files: string[] = [];
-	async function visit(directory: string): Promise<void> {
-		for (const item of await readdir(directory, { withFileTypes: true })) {
-			const path = join(directory, item.name);
-			if (item.isDirectory()) await visit(path);
-			else if (item.isFile()) files.push(`src/${relative(sourceRoot, path)}`);
-			else throw new Error(`Unsupported source entry: ${path}`);
+	const repositoryRoot = resolve(sourceRoot, "..");
+	async function collect(directory: string, prefix: string): Promise<string[]> {
+		const files: string[] = [];
+		async function visit(current: string): Promise<void> {
+			for (const item of await readdir(current, { withFileTypes: true })) {
+				const path = join(current, item.name);
+				if (item.isDirectory()) await visit(path);
+				else if (item.isFile())
+					files.push(`${prefix}/${relative(directory, path)}`);
+				else throw new Error(`Unsupported source entry: ${path}`);
+			}
 		}
+		await visit(directory);
+		return files;
 	}
-	await visit(sourceRoot);
-	files.sort();
-	const hash = createHash("sha256");
-	for (const path of files) {
-		const bytes = await readFile(join(sourceRoot, path.slice(4)));
-		const length = Buffer.alloc(8);
-		length.writeBigUInt64BE(BigInt(bytes.length));
-		hash.update(path).update("\0").update(length).update(bytes);
+	async function digest(files: string[]) {
+		const hash = createHash("sha256");
+		for (const path of files.toSorted()) {
+			const bytes = await readFile(join(repositoryRoot, path));
+			const length = Buffer.alloc(8);
+			length.writeBigUInt64BE(BigInt(bytes.length));
+			hash.update(path).update("\0").update(length).update(bytes);
+		}
+		return hash.digest("hex");
 	}
-	return { digest: hash.digest("hex"), fileCount: files.length };
+	const sourceFiles = await collect(sourceRoot, "src");
+	const runtimeFiles = [
+		...sourceFiles,
+		...(await collect(join(repositoryRoot, "skills"), "skills")),
+		"package.json",
+		"bun.lock",
+	];
+	return {
+		digest: await digest(sourceFiles),
+		fileCount: sourceFiles.length,
+		runtimeDigest: await digest(runtimeFiles),
+		runtimeFileCount: runtimeFiles.length,
+	};
 }
 const rssColdBeforeBytes = process.memoryUsage().rss;
 const { AutoDriveCoordinator } = await import(pathToFileURL(modulePath).href);
@@ -229,6 +248,8 @@ const output = {
 		.digest("hex"),
 	sourceTreeDigest: sourceTree.digest,
 	sourceFileCount: sourceTree.fileCount,
+	runtimeInputDigest: sourceTree.runtimeDigest,
+	runtimeInputFileCount: sourceTree.runtimeFileCount,
 	recoverySha256: recoveryPath
 		? createHash("sha256")
 				.update(await readFile(recoveryPath))

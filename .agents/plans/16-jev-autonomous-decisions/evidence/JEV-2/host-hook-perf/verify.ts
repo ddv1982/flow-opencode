@@ -47,8 +47,18 @@ assert(
 	"pre-JEV-2 trunk and current candidate ancestry",
 );
 assert(
-	gitStatus("diff", "--quiet", receipt.headCommit, "HEAD", "--", "src") === 0,
-	"current candidate source differs from measured head",
+	gitStatus(
+		"diff",
+		"--quiet",
+		receipt.headCommit,
+		"HEAD",
+		"--",
+		"src",
+		"skills",
+		"package.json",
+		"bun.lock",
+	) === 0,
+	"current candidate runtime inputs differ from measured head",
 );
 assert(sha(await read("probe.ts")) === receipt.probeSha256, "probe hash");
 assert(sha(await read("verify.ts")) === receipt.verifySha256, "verifier hash");
@@ -78,9 +88,42 @@ function sourceTreeAt(commit: string) {
 	}
 	return { digest: hash.digest("hex"), fileCount: files.length };
 }
+function runtimeInputsAt(commit: string) {
+	const files = git(
+		"ls-tree",
+		"-r",
+		"-z",
+		"--name-only",
+		commit,
+		"src",
+		"skills",
+		"package.json",
+		"bun.lock",
+	)
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean)
+		.sort();
+	assert(
+		files.includes("package.json") && files.includes("bun.lock"),
+		"runtime manifests",
+	);
+	const hash = createHash("sha256");
+	for (const path of files) {
+		const bytes = git("show", `${commit}:${path}`);
+		const length = Buffer.alloc(8);
+		length.writeBigUInt64BE(BigInt(bytes.length));
+		hash.update(path).update("\0").update(length).update(bytes);
+	}
+	return { digest: hash.digest("hex"), fileCount: files.length };
+}
 const sourceTree = {
 	trunk: sourceTreeAt(receipt.trunkCommit),
 	head: sourceTreeAt(receipt.headCommit),
+};
+const runtimeInputs = {
+	trunk: runtimeInputsAt(receipt.trunkCommit),
+	head: runtimeInputsAt(receipt.headCommit),
 };
 assert(
 	sourceTree.trunk.digest !== sourceTree.head.digest,
@@ -154,6 +197,13 @@ for (const [index, pair] of receipt.runs.entries()) {
 				raw.sourceTreeDigest === retained.sourceTreeDigest &&
 				raw.sourceFileCount === retained.sourceFileCount,
 			`${name} transitive source tree`,
+		);
+		assert(
+			raw.runtimeInputDigest === runtimeInputs[arm].digest &&
+				raw.runtimeInputFileCount === runtimeInputs[arm].fileCount &&
+				raw.runtimeInputDigest === retained.runtimeInputDigest &&
+				raw.runtimeInputFileCount === retained.runtimeInputFileCount,
+			`${name} external runtime inputs`,
 		);
 		const runtime = JSON.stringify(raw.runtime);
 		if (firstRuntime === null) firstRuntime = runtime;
