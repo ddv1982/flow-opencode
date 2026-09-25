@@ -241,7 +241,9 @@ if (privateRoot) {
 			firstMeasurement?.command === browserGate &&
 			firstMeasurement.scope === "focused" &&
 			firstMeasurement.exitCode === 1 &&
+			firstMeasurement.recordedRevision < focusedValidation?.recordedRevision &&
 			passedValidation?.exitCode === 0 &&
+			focusedValidation.recordedRevision <= passedValidation.recordedRevision &&
 			passedValidation.command === broadAtlasGate &&
 			passedValidation.scope === "broad" &&
 			passedValidation.outputComplete === true &&
@@ -283,6 +285,14 @@ if (privateRoot) {
 			sourceManifest.trackedPatchSha256 === sha(Buffer.from(sourcePatch)) &&
 			measurementStart >= 0 &&
 			measurementEnd > measurementStart &&
+			e2ePatch !== undefined &&
+			!e2ePatch.includes("/*") &&
+			!e2ePatch.includes("*/") &&
+			!e2ePatch.includes("`") &&
+			measurementBody.every(
+				(line) =>
+					!line.includes("/*") && !line.includes("*/") && !line.includes("`"),
+			) &&
 			measurementBody.some((line) =>
 				/^\+    await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(14\);$/.test(
 					line,
