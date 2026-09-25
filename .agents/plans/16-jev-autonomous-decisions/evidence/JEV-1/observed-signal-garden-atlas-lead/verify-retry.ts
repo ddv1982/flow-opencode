@@ -26,12 +26,9 @@ const provenance = JSON.parse(provenanceBytes.toString("utf8"));
 const baselineBytes = await readFile(new URL("task-baseline.json", directory));
 const baseline = JSON.parse(baselineBytes.toString("utf8"));
 const baselineNetworkBytes = await readFile(
-	new URL("baseline-network-comparison.json", directory),
+	new URL("baseline-network-light.json", directory),
 );
 const baselineNetwork = JSON.parse(baselineNetworkBytes.toString("utf8"));
-const baselineNetworkArm = baselineNetwork.reports.find(
-	(row: { arm: string }) => row.arm === "baseline",
-);
 const focusedAtlasGate = "pnpm lint && pnpm test";
 const broadAtlasGate =
 	"pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke";
@@ -79,19 +76,21 @@ assert(
 		sha(baselineBytes) === provenance.baselineSha256 &&
 		baseline.sourceHead === provenance.baseHead &&
 		sha(baselineNetworkBytes) ===
-			"9f7b4263a43920f1fa7a7fb496830d646a7d83f4baf97896639b79054b33d7bd" &&
-		baselineNetwork.baselineHead === baseline.sourceHead &&
+			baseline.browserBaseline.networkReportSha256 &&
+		baselineNetwork.sourceHead === baseline.sourceHead &&
+		baselineNetwork.theme === "light" &&
 		baselineNetwork.browserVersion ===
 			baseline.browserBaseline.browserVersion &&
-		baselineNetworkArm.networkImageResponses ===
+		baselineNetwork.networkImageResponses ===
 			baseline.browserBaseline.networkImageResponses &&
-		baselineNetworkArm.uniqueImageUrls ===
+		baselineNetwork.uniqueNetworkImageUrls ===
 			outcome.continuation.recordedBaselineUniqueImageUrls &&
-		baselineNetworkArm.paths.length === baselineNetworkArm.uniqueImageUrls &&
-		new Set(baselineNetworkArm.paths).size ===
-			baselineNetworkArm.uniqueImageUrls &&
+		baselineNetwork.networkPaths.length ===
+			baselineNetwork.uniqueNetworkImageUrls &&
+		new Set(baselineNetwork.networkPaths).size ===
+			baselineNetwork.uniqueNetworkImageUrls &&
 		outcome.continuation.recordedBaselineImageResponses ===
-			baselineNetworkArm.networkImageResponses &&
+			baselineNetwork.networkImageResponses &&
 		outcome.continuation.correctedAssertionExecution ===
 			"not-established-by-this-record" &&
 		outcome.qualification.decisionLabelEvidence === "not-in-this-record" &&
@@ -128,6 +127,14 @@ if (privateRoot) {
 		[
 			"measurement-passed-part.json",
 			outcome.privateEvidence.passedMeasurementPartSha256,
+		],
+		[
+			"retry-private/source-snapshots/revision-00019/manifest.json",
+			outcome.privateEvidence.failedSourceManifestSha256,
+		],
+		[
+			"retry-private/source-snapshots/revision-00019/tracked.patch",
+			outcome.privateEvidence.failedSourcePatchSha256,
 		],
 		[
 			"retry-private/source-snapshots/revision-00021/manifest.json",
@@ -193,6 +200,22 @@ if (privateRoot) {
 	const passedPart = JSON.parse(
 		await readFile(join(privateRoot, "measurement-passed-part.json"), "utf8"),
 	);
+	const failedSourceManifest = JSON.parse(
+		await readFile(
+			join(
+				privateRoot,
+				"retry-private/source-snapshots/revision-00019/manifest.json",
+			),
+			"utf8",
+		),
+	);
+	const failedSourcePatch = await readFile(
+		join(
+			privateRoot,
+			"retry-private/source-snapshots/revision-00019/tracked.patch",
+		),
+		"utf8",
+	);
 	const sourceManifest = JSON.parse(
 		await readFile(
 			join(
@@ -230,6 +253,33 @@ if (privateRoot) {
 	);
 	const responseEnd = measurementBody.indexOf("+    });", responseStart + 1);
 	const responseBody = measurementBody.slice(responseStart + 1, responseEnd);
+	const failedE2ePatch = failedSourcePatch
+		.split("diff --git a/e2e/garden-loop.spec.ts b/e2e/garden-loop.spec.ts")[1]
+		?.split("\ndiff --git ")[0];
+	const failedE2eLines = failedE2ePatch?.split("\n") ?? [];
+	const failedMeasurementStart = failedE2eLines.findIndex((line) =>
+		/^\+  test\('loads the bounded atlas garden image set after onboarding',/.test(
+			line,
+		),
+	);
+	const failedMeasurementEnd = failedE2eLines.findIndex(
+		(line, index) => index > failedMeasurementStart && line === "+  });",
+	);
+	const failedMeasurementBody = failedE2eLines.slice(
+		failedMeasurementStart + 1,
+		failedMeasurementEnd,
+	);
+	const failedResponseStart = failedMeasurementBody.indexOf(
+		"+    page.on('response', (response) => {",
+	);
+	const failedResponseEnd = failedMeasurementBody.indexOf(
+		"+    });",
+		failedResponseStart + 1,
+	);
+	const failedResponseBody = failedMeasurementBody.slice(
+		failedResponseStart + 1,
+		failedResponseEnd,
+	);
 	const validationOutput = (output: string) => {
 		const match = output.match(/\n\n\[flow-validation\] (\{[^\n]+\})$/);
 		return match
@@ -379,6 +429,30 @@ if (privateRoot) {
 			sourceManifest.sourceDigestBefore === passedValidation.sourceDigest &&
 			sourceManifest.sourceDigestAfter === passedValidation.sourceDigest &&
 			sourceManifest.trackedPatchSha256 === sha(Buffer.from(sourcePatch)) &&
+			failedSourceManifest.revision === firstMeasurement.recordedRevision &&
+			failedSourceManifest.stable === true &&
+			failedSourceManifest.sourceDigestBefore ===
+				firstMeasurement.sourceDigest &&
+			failedSourceManifest.sourceDigestAfter ===
+				firstMeasurement.sourceDigest &&
+			failedSourceManifest.trackedPatchSha256 ===
+				sha(Buffer.from(failedSourcePatch)) &&
+			failedMeasurementStart >= 0 &&
+			failedMeasurementEnd > failedMeasurementStart &&
+			failedResponseStart >= 0 &&
+			failedResponseEnd > failedResponseStart &&
+			failedMeasurementBody.includes(
+				"+    const imageUrls = new Set<string>();",
+			) &&
+			failedMeasurementBody.includes(
+				"+    const appOrigin = new URL(page.url()).origin;",
+			) &&
+			JSON.stringify(failedResponseBody) === JSON.stringify(responseBody) &&
+			failedMeasurementBody.some((line) =>
+				/^\+    await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(9\);$/.test(
+					line,
+				),
+			) &&
 			measurementStart >= 0 &&
 			measurementEnd > measurementStart &&
 			measurementBody.includes("+    const imageUrls = new Set<string>();") &&

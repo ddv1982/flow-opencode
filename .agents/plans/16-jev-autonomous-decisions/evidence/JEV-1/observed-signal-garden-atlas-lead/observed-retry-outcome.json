@@ -67,6 +67,8 @@
     "dispatchSha256": "621fef1af0269a0dd705263383d3fb76c94f0b349b92fa2d86a365e5a239ceca",
     "failedMeasurementPartSha256": "9b4557e3ae61f34f29404c633f98203d1db64cf5ba6d02e567830c5fd9bdd239",
     "passedMeasurementPartSha256": "cfcf525e43b5f98bcbd0654bfba82e4891fcca2e62ddf806af1162a04adb4099",
+    "failedSourceManifestSha256": "33956da7de8650b3986161f27f13cc0f821b319cbfa97d8f4a5b6bebdc9d4ea5",
+    "failedSourcePatchSha256": "f994c64c896e4fc48cb20e603707719c14fc332be7047321905d44bf25e74d6e",
     "finalSourceManifestSha256": "9ba8a289094174f5b67130abbf6404380b05d67a08fd5a52d8e7295947b3c50e",
     "finalSourcePatchSha256": "588dfc2c43c1bf1ef1fa5ce79afa167add6de15a6fc6fd0df2f924fcd48ecc30"
   }
