@@ -253,6 +253,12 @@ if (privateRoot) {
 	);
 	const responseEnd = measurementBody.indexOf("+    });", responseStart + 1);
 	const responseBody = measurementBody.slice(responseStart + 1, responseEnd);
+	const expectedResponseBody = [
+		"+      const url = new URL(response.url());",
+		"+      if (url.origin === appOrigin && /\\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(url.pathname)) {",
+		"+        imageUrls.add(url.href);",
+		"+      }",
+	];
 	const failedE2ePatch = failedSourcePatch
 		.split("diff --git a/e2e/garden-loop.spec.ts b/e2e/garden-loop.spec.ts")[1]
 		?.split("\ndiff --git ")[0];
@@ -461,11 +467,8 @@ if (privateRoot) {
 			) &&
 			responseStart >= 0 &&
 			responseEnd > responseStart &&
-			responseBody.includes("+      const url = new URL(response.url());") &&
-			responseBody.includes(
-				"+      if (url.origin === appOrigin && /\\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(url.pathname)) {",
-			) &&
-			responseBody.includes("+        imageUrls.add(url.href);") &&
+			JSON.stringify(responseBody) ===
+				JSON.stringify(expectedResponseBody) &&
 			measurementBody.filter((line) => line.includes("imageUrls.add("))
 				.length === 1 &&
 			measurementBody.filter((line) => line.includes("imageUrls")).length ===
