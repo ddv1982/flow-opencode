@@ -227,7 +227,11 @@ const rows = (baseline.results as SampleRow[]).map((earlier, index) => {
 	const later = (head.results as SampleRow[])[index];
 	if (!later)
 		throw new Error("Idle performance receipt invalid: missing head route");
-	assert(earlier.kind === later.kind, "same route order");
+	assert(
+		earlier.kind === expectedFixture.scenarios[index] &&
+			later.kind === expectedFixture.scenarios[index],
+		"pinned route order",
+	);
 	const expectedPrompts =
 		earlier.kind === "ready-continuation" ||
 		earlier.kind === "blocked-handback" ||
