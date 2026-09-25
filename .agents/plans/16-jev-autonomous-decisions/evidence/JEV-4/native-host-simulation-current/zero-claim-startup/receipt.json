@@ -9,7 +9,7 @@
   "arms": 4,
   "zeroClaimArms": 4,
   "rawPrivateReportSha256": "509c5a590b93818eb26041b7fbb827f725d9fe1aa806e48cde63658162cf770a",
-  "sanitizedReportSha256": "fb7ed20a75f40ccfe3b47e5056b8a0e9fea7e7e2e0b93ba0e3274288fd5a376c",
+  "sanitizedReportSha256": "6f7b3a868abe26c11b99fdd4a7d7aa1d11df826f46f21065c64ec67a96f33a4d",
   "logSha256": "0c4e3327e50477811dfd4dfd8aee325dd79d647fcfec2e5a80010a1cf0f41ae0",
   "testFileSha256": "3988301538ddb64f8eb36559d34bbea295d1110e4dde5e250b7793ade6a4af4b",
   "childTestSha256": "1c413701276735401d04436c217c396e88de51b1d601dc8edd85d09e10cf4e76",
@@ -19,5 +19,8 @@
     "A live-origin request gate started but no manager or Jev decision was dispatched.",
     "The experimental evaluation treatment is not the packed production delegated profile; this does not close the JEV-4 interaction or quality gates."
   ],
-  "verifySha256": "ba0ebb0e39202f24159bcb7fde864114229ac897ac10ccab0c74982e62f8b759"
+  "verifySha256": "1bfaa1df32f4e3cd0354963c44a7e28712873c0d48fb4ffff0ccfcd9e6088b56",
+  "trustedExecutableSha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+  "trustedExecutableVersion": "1.18.31",
+  "versionObservation": "post-run-same-sha256-local-binary--version"
 }
