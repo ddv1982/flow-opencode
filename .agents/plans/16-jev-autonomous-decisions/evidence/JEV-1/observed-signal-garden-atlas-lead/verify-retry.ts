@@ -52,6 +52,7 @@ assert(
 			"not-established-by-this-record" &&
 		outcome.authorization.dispatchModel === "openai/gpt-5.6-terra" &&
 		outcome.authorization.dispatchKind === "command" &&
+		outcome.authorization.models.includes(outcome.authorization.dispatchModel) &&
 		outcome.authorization.models.includes("openai/gpt-5.6-sol") &&
 		Date.parse(outcome.authorization.dispatchAt) <
 			Date.parse(outcome.authorization.expiresAt),
@@ -72,6 +73,8 @@ assert(
 		baseline.sourceHead === provenance.baseHead &&
 		outcome.continuation.recordedBaselineImageUrls ===
 			baseline.browserBaseline.networkImageResponses &&
+		outcome.continuation.correctedAssertionExecution ===
+			"not-established-by-this-record" &&
 		outcome.qualification.decisionLabelEvidence === "not-in-this-record" &&
 		outcome.qualification.typedManagerProposalAtCheckpoint === false &&
 		normalization.status ===
@@ -387,7 +390,7 @@ if (privateRoot) {
 					line,
 				),
 			),
-		"observed measurement and passing assertion at the validated source",
+		"observed measurement, source assertion, and passing named test; assertion execution unproven",
 	);
 	assert(
 		JSON.stringify(authorization.models) ===
@@ -399,6 +402,7 @@ if (privateRoot) {
 			dispatchFiles[0] === "dispatch-0.json" &&
 			authorization.expiresAt === outcome.authorization.expiresAt &&
 			dispatch.model === outcome.authorization.dispatchModel &&
+			authorization.models.includes(dispatch.model) &&
 			dispatch.kind === outcome.authorization.dispatchKind &&
 			dispatch.at === outcome.authorization.dispatchAt,
 		"private authorization and dispatch",
