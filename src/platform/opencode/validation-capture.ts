@@ -93,7 +93,10 @@ export async function readHostToolOutput(
 	dataHome = process.env.XDG_DATA_HOME?.trim() ||
 		join(homedir(), ".local", "share"),
 ): Promise<string | null> {
-	if (!isAbsolute(path) || !/^tool_[a-zA-Z0-9]+$/.test(basename(path)))
+	if (
+		!isAbsolute(path) ||
+		!/^tool_[a-zA-Z0-9]+(?:\.txt)?$/.test(basename(path))
+	)
 		return null;
 	const directory = join(dataHome, "opencode", "tool-output");
 	if (dirname(path) !== directory) return null;
