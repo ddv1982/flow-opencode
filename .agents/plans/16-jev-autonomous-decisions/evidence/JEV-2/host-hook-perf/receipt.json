@@ -1,0 +1,76 @@
+{
+  "schemaVersion": 1,
+  "classification": "mocked-host-hook-disabled-mode-diagnostic",
+  "trunkCommit": "c9813f9a87b9b7438671658cfd523adcd89f3098",
+  "headCommit": "f798dc5b1c0c4ac86f3269068346a47b699f8b2b",
+  "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
+  "fixtureDigest": "7cd9e111b24a66485a4cd23c73fef7cd1f3db3fa5aa8579e698febd57dd39df1",
+  "probeSha256": "ecfef60159f7d8501b567e20456ecc8ab5e71786c9078ef8a8b10bb96676deaa",
+  "runs": [
+    {
+      "trunk": {
+        "file": "trunk-1.json.gz",
+        "gzipSha256": "f8711460132e3e30e87e4974ace38daa164ff1e0f9a4fd0a46d6a209f0444ffb",
+        "expandedSha256": "9d34babb2343e2418a541f2e04b1f9b79e231f4eca677bd7ad6f95fae1df2502",
+        "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
+        "p95Us": 29.288,
+        "rssAfterProbeMiB": 83.97
+      },
+      "head": {
+        "file": "head-1.json.gz",
+        "gzipSha256": "a1c4810c4711b5260ee7b3121f24bfab987708195862f42ce2e45ca40826ca3b",
+        "expandedSha256": "33a90de1bddd81fcbc368a006551c3a3e6e8da1e00aced478d7e16e88a487695",
+        "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
+        "p95Us": 43.968,
+        "rssAfterProbeMiB": 86.8
+      },
+      "addedP95Us": 14.68
+    },
+    {
+      "trunk": {
+        "file": "trunk-2.json.gz",
+        "gzipSha256": "777ae4a9a997c14529c7010cf6e05fdb137145a0c5faaf9334c456df2c0d7d53",
+        "expandedSha256": "548b1af79afa9ef1f2d1b4335cb61fa5247008fd4a4afb80e9e396ef2c7f771d",
+        "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
+        "p95Us": 26.227,
+        "rssAfterProbeMiB": 83.29
+      },
+      "head": {
+        "file": "head-2.json.gz",
+        "gzipSha256": "ee9068abbe6bead300dae8a8abe31dba49a59ccd2887d8fd29af0294c05fa2c9",
+        "expandedSha256": "00d67b9be4f87b5a1d568126f342caeaf8f4209037785c4d6a405e9bca88a20d",
+        "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
+        "p95Us": 28.508,
+        "rssAfterProbeMiB": 84.72
+      },
+      "addedP95Us": 2.281
+    },
+    {
+      "trunk": {
+        "file": "trunk-3.json.gz",
+        "gzipSha256": "a98149dbfd6055989dfffd99cf26fd5b2fb72ba10c05d61533e7306d2bf74e57",
+        "expandedSha256": "e739188b5c3040bac41932fda06219b124d37cd079227e863c916e938f9db523",
+        "moduleSha256": "da81e84c14ed378168bc2a12dca34f2c31c29f690b0f7f51b6a9dca8a8c0b351",
+        "p95Us": 27.619,
+        "rssAfterProbeMiB": 83.12
+      },
+      "head": {
+        "file": "head-3.json.gz",
+        "gzipSha256": "1352a381f9e04c73914d1bec0b300d9239c7badd10267705c72e87d73c915d82",
+        "expandedSha256": "01da554362ab4a23ad2ac92e8e0f33b44ed30d4b21924d18b076fa80e2cf6cdd",
+        "moduleSha256": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
+        "p95Us": 44.167,
+        "rssAfterProbeMiB": 86.23
+      },
+      "addedP95Us": 16.548
+    }
+  ],
+  "maxAddedP95Us": 16.548,
+  "limits": [
+    "The production plugin event hook and file-backed Flow status run in process with a disposable mocked OpenCode client, not in a real OpenCode server process.",
+    "The fixed event is an empty-workspace initial prompt. The separate idle routing probe covers a blocked recovery checkpoint and inactive controller lookup.",
+    "A fetch guard observes direct fetch attempts but not every possible network API. No provider request was configured or expected.",
+    "No live Jev shadow call is timed here; the JEV-2 performance gate remains open."
+  ],
+  "verifySha256": "7e51a220028d83b7c855a829ca334c9a32533cf3364cb9552b8e5442ff9d097f"
+}
