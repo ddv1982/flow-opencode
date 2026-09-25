@@ -48,6 +48,8 @@ assert(
 assert(
 	outcome.authorization.maxDispatches === 1 &&
 		outcome.authorization.consumed === 1 &&
+		outcome.authorization.causalLinkToFlowSession ===
+			"not-established-by-this-record" &&
 		outcome.authorization.dispatchModel === "openai/gpt-5.6-terra" &&
 		outcome.authorization.dispatchKind === "command" &&
 		outcome.authorization.models.includes("openai/gpt-5.6-sol") &&
@@ -201,6 +203,11 @@ if (privateRoot) {
 		measurementStart + 1,
 		measurementEnd,
 	);
+	const responseStart = measurementBody.indexOf(
+		"+    page.on('response', (response) => {",
+	);
+	const responseEnd = measurementBody.indexOf("+    });", responseStart + 1);
+	const responseBody = measurementBody.slice(responseStart + 1, responseEnd);
 	const validationOutput = (output: string) => {
 		const match = output.match(/\n\n\[flow-validation\] (\{[^\n]+\})$/);
 		return match
@@ -352,6 +359,21 @@ if (privateRoot) {
 			sourceManifest.trackedPatchSha256 === sha(Buffer.from(sourcePatch)) &&
 			measurementStart >= 0 &&
 			measurementEnd > measurementStart &&
+			measurementBody.includes("+    const imageUrls = new Set<string>();") &&
+			measurementBody.includes(
+				"+    const appOrigin = new URL(page.url()).origin;",
+			) &&
+			responseStart >= 0 &&
+			responseEnd > responseStart &&
+			responseBody.includes("+      const url = new URL(response.url());") &&
+			responseBody.includes(
+				"+      if (url.origin === appOrigin && /\\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(url.pathname)) {",
+			) &&
+			responseBody.includes("+        imageUrls.add(url.href);") &&
+			measurementBody.filter((line) => line.includes("imageUrls.add("))
+				.length === 1 &&
+			measurementBody.filter((line) => line.includes("imageUrls")).length ===
+				3 &&
 			e2ePatch !== undefined &&
 			!e2ePatch.includes("/*") &&
 			!e2ePatch.includes("*/") &&
@@ -386,7 +408,7 @@ if (privateRoot) {
 console.log(
 	JSON.stringify({
 		verdict: privateRoot
-			? "verified-private-retry-outcome"
+			? "verified-private-evidence-bindings"
 			: "verified-public-retry-bindings",
 		remedyReview: outcome.remedy.independentFeatureReview.verdict,
 		continuationReview: outcome.continuation.independentFeatureReview,

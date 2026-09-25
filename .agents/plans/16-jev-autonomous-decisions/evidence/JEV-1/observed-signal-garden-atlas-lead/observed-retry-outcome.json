@@ -17,7 +17,8 @@
     "consumed": 1,
     "dispatchModel": "openai/gpt-5.6-terra",
     "dispatchKind": "command",
-    "dispatchAt": "2026-09-25T10:05:49.902Z"
+    "dispatchAt": "2026-09-25T10:05:49.902Z",
+    "causalLinkToFlowSession": "not-established-by-this-record"
   },
   "remedy": {
     "candidateId": "atlas-evidence-repair",
