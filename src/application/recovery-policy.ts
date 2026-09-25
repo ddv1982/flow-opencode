@@ -16,6 +16,7 @@ import type {
 	RecoveryCandidate,
 } from "./ports/decision-provider.js";
 import { JEV_ATTEMPT_RESERVATION_USD } from "./ports/decision-provider.js";
+import type { SessionCloseRequest } from "./schema.js";
 import { compactProjection } from "./session-projection.js";
 
 const Text = z.string().trim().min(1).max(2000);
@@ -111,10 +112,11 @@ type Lease = {
 type Host = {
 	parents: Map<string, string>;
 	manual: string | null;
+	ordinaryAutoMessage: string | null;
 	fenced: boolean;
 };
 export type RecoveryGuard = Readonly<{
-	checkClose(session: Session): void;
+	checkClose(session: Session, request: SessionCloseRequest): void;
 	retireClosedSession(sessionId: string): void;
 	check(
 		session: Session,
@@ -138,7 +140,7 @@ export type RecoveryGuard = Readonly<{
 export class RecoveryController {
 	#lease: Lease | null = null;
 	#hosts = new Map<string, Host>();
-	#protectedSessions = new Set<string>();
+	#protectedSessions = new Map<string, string>();
 	readonly #provider: DecisionProvider;
 	readonly #profiles: readonly RecoveryProfile[];
 	readonly #now: () => number;
@@ -164,10 +166,29 @@ export class RecoveryController {
 				throw new Error(
 					"Recovery host capacity reached. Restart with explicit user direction.",
 				);
-			host = { parents: new Map(), manual: null, fenced: false };
+			host = {
+				parents: new Map(),
+				manual: null,
+				ordinaryAutoMessage: null,
+				fenced: false,
+			};
 			this.#hosts.set(id, host);
 		}
 		return host;
+	}
+	#unfenceIfUnprotected(hostId: string): void {
+		if (
+			this.#lease?.host === hostId ||
+			[...this.#protectedSessions.values()].includes(hostId)
+		)
+			return;
+		const host = this.#hosts.get(hostId);
+		if (host) {
+			host.fenced = false;
+			host.manual = null;
+			host.ordinaryAutoMessage = null;
+			host.parents.clear();
+		}
 	}
 	activate(host: string, settings: RecoverySettings): void {
 		if (
@@ -220,16 +241,25 @@ export class RecoveryController {
 	}
 	revoke(host?: string): void {
 		if (this.#lease && (!host || this.#lease.host === host)) {
+			const leaseHost = this.#lease.host;
 			this.#lease.controller.abort();
-			const hostState = this.#hosts.get(this.#lease.host);
-			if (hostState) hostState.manual = null;
+			const hostState = this.#hosts.get(leaseHost);
+			if (hostState) {
+				hostState.manual = null;
+				hostState.ordinaryAutoMessage = null;
+			}
 			this.#lease = null;
 		}
 	}
 	#expireLease(): void {
 		if (this.#lease && this.#now() >= this.#lease.deadline) this.revoke();
 	}
-	observeMessage(hostId: string, id: string, synthetic: boolean): void {
+	observeMessage(
+		hostId: string,
+		id: string,
+		synthetic: boolean,
+		trustedAutoContinuation = false,
+	): void {
 		this.#expireLease();
 		const host =
 			this.#hosts.get(hostId) ??
@@ -237,8 +267,13 @@ export class RecoveryController {
 				? this.#host(hostId)
 				: undefined);
 		if (!host) return;
+		if (!synthetic && host.fenced) this.#unfenceIfUnprotected(hostId);
 		const lease = this.#lease?.host === hostId ? this.#lease : null;
-		if (!synthetic) host.manual = id;
+		if (!synthetic) {
+			host.manual = id;
+			host.ordinaryAutoMessage = null;
+		} else if (trustedAutoContinuation && host.fenced && !lease && host.manual)
+			host.ordinaryAutoMessage = id;
 		if (lease) {
 			if (!synthetic && lease.parent !== null) lease.direction = id;
 			lease.parent = id;
@@ -274,7 +309,10 @@ export class RecoveryController {
 				throw new Error("Recovery lineage expired or cancelled.");
 			return lease;
 		}
-		if (!parent || parent !== host.manual)
+		if (
+			!parent ||
+			(parent !== host.manual && parent !== host.ordinaryAutoMessage)
+		)
 			throw new Error(
 				"Recovery was revoked. A fresh real user direction is required.",
 			);
@@ -296,7 +334,7 @@ export class RecoveryController {
 				!this.#protectedSessions.has(session.id)
 			)
 				throw new Error("Recovery session capacity reached.");
-			this.#protectedSessions.add(session.id);
+			this.#protectedSessions.set(session.id, lease.host);
 			lease.session = session.id;
 			lease.binding = binding;
 		}
@@ -305,10 +343,10 @@ export class RecoveryController {
 			throw new Error("Recovery session or approved plan changed.");
 		}
 	}
-	snapshot() {
+	snapshot(host?: string) {
 		this.#expireLease();
 		const lease = this.#lease;
-		return lease
+		return lease && (host === undefined || lease.host === host)
 			? {
 					mode: lease.settings.mode,
 					remainingCalls: lease.settings.maxCalls - lease.calls,
@@ -350,16 +388,25 @@ export class RecoveryController {
 	guard(context: RecoveryContext): RecoveryGuard {
 		const identity = this.#lease;
 		return {
-			checkClose: (session) => this.#checkClose(context, session),
+			checkClose: (session, request) =>
+				this.#checkClose(context, session, request),
 			retireClosedSession: (sessionId) => {
+				const owner = this.#protectedSessions.get(sessionId);
 				if (this.#lease?.session === sessionId) this.revoke();
 				this.#protectedSessions.delete(sessionId);
+				if (owner) {
+					const host = this.#hosts.get(owner);
+					if (host) {
+						host.manual = null;
+						host.ordinaryAutoMessage = null;
+					}
+				}
 			},
 			check: (s, source, m) => this.#check(context, s, source, m),
 			accepted: (s, m, replayed) => this.#accepted(context, s, m, replayed),
 			propose: (s, source, p) => this.#propose(context, s, source, p),
 			requiresSource: () => this.#lease?.host === context.hostSessionId,
-			snapshot: () => this.snapshot(),
+			snapshot: () => this.snapshot(context.hostSessionId),
 			invalidate: () => {
 				const lease = this.#lease;
 				if (lease === identity && lease?.host === context.hostSessionId) {
@@ -383,12 +430,17 @@ export class RecoveryController {
 				throw new Error("Recovery belongs to a different host session.");
 		}
 	}
-	#checkClose(context: RecoveryContext, session: Session): void {
+	#checkClose(
+		context: RecoveryContext,
+		session: Session,
+		request: SessionCloseRequest,
+	): void {
 		this.#expireLease();
 		this.#checkProtectedSession(context, session);
 		const lease = this.#origin(context);
 		if (!lease) return;
 		this.#bind(lease, session);
+		if (request.kind === "completed") return;
 		const parent = this.#hosts
 			.get(context.hostSessionId)
 			?.parents.get(context.messageId);
@@ -600,6 +652,7 @@ export class RecoveryController {
 				return false;
 			if (candidate.action === "retry")
 				return (
+					currentRun(session, candidate.featureId)?.state !== "completed" &&
 					!session.runs.some(
 						(run) =>
 							run.featureId === candidate.featureId &&
@@ -682,6 +735,8 @@ export class RecoveryController {
 		};
 		if (Buffer.byteLength(JSON.stringify(packet)) > MAX_RECOVERY_PACKET_BYTES)
 			throw new Error("Recovery context exceeds the bounded request size.");
+		if (this.#provider.fitsRequest?.(packet) === false)
+			throw new Error("Recovery provider request exceeds the bounded size.");
 		const packetDigest = hash(packet),
 			remedyDigest = hash(
 				candidates.map((c) => ({
@@ -712,7 +767,7 @@ export class RecoveryController {
 						this.#now() >= lease.deadline ||
 						lease.calls >= lease.settings.maxCalls ||
 						lease.reservedUsd + JEV_ATTEMPT_RESERVATION_USD >
-							lease.settings.maxUsd
+							lease.settings.maxUsd + Number.EPSILON
 					)
 						return false;
 					lease.calls++;
