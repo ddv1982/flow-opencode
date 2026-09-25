@@ -94,7 +94,8 @@ test("blocked campaign fixture has repeatable frozen session bytes", async () =>
 
 const smoke =
 	process.env.FLOW_RECOVERY_CAMPAIGN_SMOKE === "1" ? test : test.skip;
-const SMOKE_TIMEOUT_MS = 4 * (2 * 120_000) + 240_000;
+const EPISODE_TIMEOUT_MS = 120_000;
+const SMOKE_TIMEOUT_MS = 4 * (2 * EPISODE_TIMEOUT_MS) + 240_000;
 const AUTHORIZATION_HEADROOM_MS = 180_000;
 smoke(
 	"paired native campaigns score Flow recovery after operator resumption",
@@ -414,7 +415,7 @@ smoke(
 						},
 					},
 					execution: {
-						timeoutMs: 120000,
+						timeoutMs: EPISODE_TIMEOUT_MS,
 						resetProtocol:
 							"Fresh isolated host with identical declared frozen files including blocked Flow session",
 					},
@@ -449,7 +450,10 @@ smoke(
 					const respond = async () => {
 						const current = await awaitQuestion(
 							episodeDirectory,
-							AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]),
+							AbortSignal.any([
+								controller.signal,
+								AbortSignal.timeout(2 * EPISODE_TIMEOUT_MS + 30_000),
+							]),
 						);
 						expect(
 							current.request.question.calls[0]?.input.questions[0]?.question,
