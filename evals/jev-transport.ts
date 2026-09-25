@@ -39,13 +39,14 @@ export function createJevBudget(maxCalls: number, maxUsd: number) {
 	let reservedUsd = 0;
 	return {
 		reserve(): boolean {
+			const nextReservedUsd = (calls + 1) * JEV_ATTEMPT_RESERVATION_USD;
 			if (
 				calls >= maxCalls ||
-				reservedUsd + JEV_ATTEMPT_RESERVATION_USD > maxUsd + Number.EPSILON
+				nextReservedUsd > maxUsd + Number.EPSILON * Math.max(1, calls + 1)
 			)
 				return false;
 			calls++;
-			reservedUsd += JEV_ATTEMPT_RESERVATION_USD;
+			reservedUsd = nextReservedUsd;
 			return true;
 		},
 		snapshot() {
