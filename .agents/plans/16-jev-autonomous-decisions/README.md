@@ -198,7 +198,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-2/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready.
+- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-2/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready unless the operator explicitly directed the coding agent to merge through the guarded construction gate.
 
 **Merge.**
 
@@ -260,7 +260,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-3/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready.
+- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-3/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready unless the operator explicitly directed the coding agent to merge through the guarded construction gate.
 
 **Merge.**
 
@@ -326,7 +326,7 @@ The earlier [idle-controls receipt](evidence/JEV-4/worker-10/receipt.json) recor
 
 **Review gate.** The operator reviews before merge.
 
-- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-4/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready.
+- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-4/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready unless the operator explicitly directed the coding agent to merge through the guarded construction gate.
 
 **Merge.**
 
