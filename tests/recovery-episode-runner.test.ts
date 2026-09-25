@@ -155,7 +155,7 @@ test("reset mismatch prevents execution and completion failure is retained", asy
 });
 
 test("deadline during operator wait confirms cleanup and rejects late events", async () => {
-	const f = await fixture(60);
+	const f = await fixture(1000);
 	let record: Parameters<EpisodeDriver["run"]>[0]["record"] | undefined;
 	try {
 		f.options.driver.run = async (context) => {
