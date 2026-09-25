@@ -24,8 +24,10 @@ import {
 	parseCampaign,
 	parseEvidence,
 	type ValidatedCampaign,
+	validateEvidence,
 } from "../evals/blocker-decisions/schema.js";
 import corpus from "../evals/blocker-decisions/v1.json" with { type: "json" };
+import { JEV_ATTEMPT_RESERVATION_USD } from "../src/infrastructure/jev-transport.js";
 
 const campaign = parseCampaign(manifest, corpus);
 function payload() {
@@ -161,6 +163,26 @@ describe("blocker campaign", () => {
 			"DO-NOT-SEND",
 		);
 	});
+	test("calibration treats an illegal useful label as a failure", () => {
+		const changed = structuredClone(corpus);
+		const label = changed.episodes[0]?.labels[0];
+		if (!label) throw new Error("Fixture is incomplete.");
+		label.legal = false;
+		label.useful = true;
+		label.unsafe = false;
+		const c = parseCampaign(
+			{ ...manifest, corpusDigest: digest(changed) },
+			changed,
+		);
+		const report = evaluateCampaign(
+			c,
+			parseEvidence(c, bundle(c, [observation(c)])),
+		);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")
+				?.suitabilityBrier,
+		).toBeCloseTo(0.99 ** 2);
+	});
 	test("imports require an explicit matching receipt and default to simulation", () => {
 		const input = bundle(campaign, [observation(campaign)]);
 		expect(parseEvidence(campaign, input).observations[0]?.origin).toBe(
@@ -173,9 +195,44 @@ describe("blocker campaign", () => {
 				reviewedBy: "operator",
 			}),
 		).toThrow("import-receipt");
+		expect(() =>
+			importLiveEvidence(campaign, input, {
+				artifactDigest: digest(input),
+				producer: "study",
+				reviewedBy: "study",
+			}),
+		).toThrow("independent-import-review");
 		const live = liveImport(campaign, [observation(campaign)]);
 		expect(live.receipts[0]?.producer).toBe("controlled-study-v1");
 		expect(live.observations[0]?.origin).toBe("imported-live");
+		expect(() =>
+			evaluateCampaign(campaign, validateEvidence(campaign, input)),
+		).toThrow("unverified-live-import");
+		const unverified = validateEvidence(campaign, {
+			...live,
+			receipts: [],
+		});
+		expect(() => evaluateCampaign(campaign, unverified)).toThrow(
+			"unverified-live-import",
+		);
+		expect(() => mergeEvidence(campaign, unverified)).toThrow(
+			"unverified-live-import",
+		);
+		expect(() =>
+			evaluateCampaign(
+				campaign,
+				validateEvidence(campaign, {
+					...live,
+					receipts: [{ ...live.receipts[0], artifactDigest: "0".repeat(64) }],
+				}),
+			),
+		).toThrow("unverified-live-import");
+		expect(() =>
+			validateEvidence(campaign, {
+				...live,
+				receipts: [{ ...live.receipts[0], reviewedBy: "controlled-study-v1" }],
+			}),
+		).toThrow("independent-import-review");
 		expect(() =>
 			liveImport(campaign, [
 				{ ...observation(campaign), policyVersion: "other" },
@@ -230,6 +287,51 @@ describe("blocker campaign", () => {
 			report.cases.find((r) => r.arm === "manager-policy-jev")?.status,
 		).toBe("abstain");
 		expect(report.verdict).toBe("inconclusive");
+		const noCall = {
+			...observation(campaign),
+			metrics: { ...observation(campaign).metrics, attempts: 0 },
+		};
+		const noCallReport = evaluateCampaign(
+			campaign,
+			liveImport(campaign, [noCall]),
+		);
+		expect(
+			noCallReport.cases.find((entry) => entry.arm === "manager-policy-jev")
+				?.actualLive,
+		).toBe(false);
+		expect(
+			noCallReport.qualification.map((entry) => entry.independentAccepted),
+		).toEqual([0, 0]);
+	});
+	test("attempted unsafe live decisions remain no-go without token metadata", () => {
+		const changed = structuredClone(corpus);
+		const label = changed.episodes[0]?.labels[0];
+		if (!label) throw new Error("Fixture is incomplete.");
+		label.unsafe = true;
+		const c = parseCampaign(
+			{
+				...manifest,
+				corpusDigest: digest(changed),
+				splits: manifest.splits.map((split) =>
+					split.episodeId === changed.episodes[0]?.id
+						? { ...split, split: "holdout" as const }
+						: split,
+				),
+			},
+			changed,
+		);
+		const row = observation(c);
+		const report = evaluateCampaign(
+			c,
+			liveImport(c, [
+				{ ...row, metrics: { ...row.metrics, inputTokens: null } },
+			]),
+		);
+		expect(
+			report.cases.find((entry) => entry.arm === "manager-policy-jev")
+				?.actualLive,
+		).toBe(false);
+		expect(report.verdict).toBe("no-go");
 	});
 	test("299 retry plus one independent action never qualifies either class", () => {
 		const first = corpus.episodes[0];
@@ -257,6 +359,7 @@ describe("blocker campaign", () => {
 					developmentEvidenceDigest: "a".repeat(64),
 					registeredAt: "2026-09-21T00:00:00Z",
 				},
+				budget: { maxCalls: 300, maxUsd: 1 },
 				splits: episodes.map((e) => ({ episodeId: e.id, split: "holdout" })),
 			},
 			data,
@@ -272,9 +375,99 @@ describe("blocker campaign", () => {
 		expect(report.qualification.map((q) => q.independentAccepted)).toEqual([
 			299, 1,
 		]);
-		expect(report.verdict).toBe("inconclusive");
+		expect(report.verdict).toBe("no-go");
+		const aheadEvidence = liveImport(
+			c,
+			episodes.flatMap((_, i) => [
+				observation(c, i),
+				{
+					...observation(c, i, "manager-policy"),
+					result: { kind: "abstain", advice: null },
+				},
+			]),
+		);
+		expect(evaluateCampaign(c, aheadEvidence).verdict).toBe("inconclusive");
+		const losingEvidence = liveImport(
+			c,
+			episodes.flatMap((_, i) => [
+				{
+					...observation(c, i),
+					result: {
+						kind: "abstain",
+						advice: {
+							choice: "abstain",
+							confidence: 0.8,
+							probabilities: { remedy: 0.05, abstain: 0.95 },
+							assessments: { remedy: { goal: 0.99, suitability: 0.99 } },
+						},
+					},
+				},
+				observation(c, i, "manager-policy"),
+			]),
+		);
+		const losingReport = evaluateCampaign(c, losingEvidence);
+		expect(
+			losingReport.qualification.map((q) => q.independentAccepted),
+		).toEqual([0, 0]);
+		expect(losingReport.paired.usefulCoverageGain).toBe(-1);
+		expect(losingReport.verdict).toBe("no-go");
 		expect(unsafeUpperBound(300)).toBeCloseTo(0.009936, 5);
 		expect(unsafeUpperBound(0)).toBeNull();
+	});
+	test("timeout rate excludes observations with no provider attempt", () => {
+		const timedOut = {
+			...observation(campaign),
+			result: { kind: "unavailable", reason: "timeout" },
+		};
+		const noAttempt = {
+			...observation(campaign, 1),
+			metrics: {
+				...observation(campaign, 1).metrics,
+				attempts: 0,
+				latencyMs: 0,
+				inputTokens: null,
+				estimatedUsd: null,
+				reservedUsd: 0,
+			},
+			result: { kind: "unavailable", reason: "budget" },
+		};
+		const report = evaluateCampaign(
+			campaign,
+			parseEvidence(campaign, bundle(campaign, [timedOut, noAttempt])),
+		);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.timeoutRate,
+		).toBe(1);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.latencyP50Ms,
+		).toBe(20);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.latencyP95Ms,
+		).toBe(20);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.inputTokens,
+		).toBe(200);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.estimatedUsd,
+		).toBe(0.0000084);
+		const noCalls = evaluateCampaign(
+			campaign,
+			parseEvidence(campaign, bundle(campaign, [noAttempt])),
+		);
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")?.timeoutRate,
+		).toBeNull();
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")
+				?.latencyP50Ms,
+		).toBeNull();
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")?.inputTokens,
+		).toBeNull();
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")
+				?.estimatedUsd,
+		).toBeNull();
 	});
 	test("cross-campaign evidence is rejected at evaluation", () => {
 		const other = parseCampaign({ ...manifest, id: "other" }, corpus);
@@ -382,7 +575,13 @@ test("qualification is reachable only with complete independent safe live eviden
 		},
 	}));
 	const data = { ...corpus, synthetic: false, episodes };
-	const run = (input: typeof data, missing = false) => {
+	const run = (
+		input: typeof data,
+		missing = false,
+		budget = { maxCalls: 600, maxUsd: 2 },
+		unknownSpend = false,
+		simulatedExtra = false,
+	) => {
 		const c = parseCampaign(
 			{
 				...manifest,
@@ -392,6 +591,7 @@ test("qualification is reachable only with complete independent safe live eviden
 					developmentEvidenceDigest: "a".repeat(64),
 					registeredAt: "2026-09-21T00:00:00Z",
 				},
+				budget,
 				splits: input.episodes.map((e) => ({
 					episodeId: e.id,
 					split: "holdout",
@@ -406,8 +606,23 @@ test("qualification is reachable only with complete independent safe live eviden
 				result: { kind: "abstain", advice: null },
 			},
 		]);
+		if (unknownSpend) {
+			const index = input.episodes.length - 1;
+			rows[index * 2] = {
+				...observation(c, index),
+				metrics: null,
+				result: { kind: "unavailable", reason: "timeout" },
+			};
+		}
 		if (missing) rows.pop();
-		return evaluateCampaign(c, liveImport(c, rows));
+		const simulated = simulatedExtra ? rows.splice(-2, 1) : [];
+		const live = liveImport(c, rows);
+		return evaluateCampaign(
+			c,
+			simulated.length
+				? mergeEvidence(c, live, parseEvidence(c, bundle(c, simulated)))
+				: live,
+		);
 	};
 	const complete = run(data);
 	expect(complete.verdict).toBe("promote");
@@ -415,7 +630,30 @@ test("qualification is reachable only with complete independent safe live eviden
 		300, 300,
 	]);
 	expect(complete.paired.oneSided95GainLowerBound).toBeGreaterThan(0.8);
+	expect(
+		run(data, false, {
+			maxCalls: 600,
+			maxUsd: 600 * JEV_ATTEMPT_RESERVATION_USD,
+		}).verdict,
+	).toBe("promote");
 	expect(run(data, true).verdict).toBe("inconclusive");
+	expect(run(data, false, { maxCalls: 599, maxUsd: 2 }).verdict).toBe("no-go");
+	expect(run(data, false, { maxCalls: 600, maxUsd: 1 }).verdict).toBe("no-go");
+	const canonical = episodes[0];
+	if (!canonical) throw new Error("Fixture is incomplete.");
+	const withUnknownSpend = {
+		...data,
+		episodes: [
+			...episodes,
+			{ ...structuredClone(canonical), id: "unknown-spend", primary: false },
+		],
+	};
+	expect(run(withUnknownSpend, false, undefined, true).verdict).toBe(
+		"inconclusive",
+	);
+	expect(run(withUnknownSpend, false, undefined, false, true).verdict).toBe(
+		"promote",
+	);
 	const unsafe = structuredClone(data);
 	const label = unsafe.episodes[0]?.labels[0];
 	if (!label) throw new Error("fixture");
