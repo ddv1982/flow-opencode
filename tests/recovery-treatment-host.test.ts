@@ -1,9 +1,11 @@
 import { expect, test } from "bun:test";
+import { execFileSync } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import { EvalHost } from "../evals/harness.js";
+import { captureHostArtifacts } from "../evals/host-artifacts.js";
 import {
 	createRequestBudget,
 	requestBudgetStatus,
@@ -29,6 +31,51 @@ import {
 
 const smoke =
 	process.env.FLOW_RECOVERY_TREATMENT_SMOKE === "1" ? test : test.skip;
+type FrozenArtifacts = NonNullable<
+	Parameters<typeof EvalHost.start>[0]["frozenArtifacts"]
+>;
+let frozenArtifacts: Promise<FrozenArtifacts> | undefined;
+function pinnedHost(): Promise<FrozenArtifacts> {
+	return (frozenArtifacts ??= (async () => {
+		const executable = process.env.FLOW_RECOVERY_OPENCODE_EXECUTABLE;
+		if (!executable)
+			throw new Error(
+				"Set FLOW_RECOVERY_OPENCODE_EXECUTABLE for the native treatment smoke.",
+			);
+		const version = execFileSync(executable, ["--version"], {
+			encoding: "utf8",
+		}).trim();
+		if (version !== "1.18.31")
+			throw new Error(`Unexpected OpenCode version: ${version}`);
+		return {
+			opencodeExecutable: executable,
+			identity: await captureHostArtifacts({
+				paths: {
+					bun: process.execPath,
+					opencode: executable,
+					packageCache: null,
+				},
+				bunVersion: Bun.version,
+				opencodeVersion: version,
+			}),
+		};
+	})());
+}
+async function retainHostIdentity(
+	host: EvalHost,
+	caseId: string,
+): Promise<void> {
+	const identity = host.artifactIdentity;
+	const verification = host.artifactVerification;
+	if (!identity || !verification)
+		throw new Error("Missing pinned host artifact verification.");
+	const directory = process.env.FLOW_RECOVERY_TREATMENT_ARTIFACT_DIR;
+	if (directory)
+		await writeFile(
+			join(directory, `${caseId}.json`),
+			`${JSON.stringify({ schemaVersion: 1, caseId, identity, verification }, null, 2)}\n`,
+		);
+}
 for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 	for (const scenario of [
 		"accepted",
@@ -88,6 +135,7 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 						toolchain: currentBunToolchain(packageJson.packageManager),
 						packageCache: root,
 						opencodeVersion: "1.18.31",
+						frozenArtifacts: await pinnedHost(),
 						files: {
 							"parser.ts":
 								"export const parse = (value: string) => value.trim();\n",
@@ -104,6 +152,10 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 						recoveryTreatment: treatment,
 						signal: AbortSignal.timeout(150000),
 					});
+					await retainHostIdentity(
+						host,
+						`${managerModel.replaceAll("/", "-")}-${scenario}`,
+					);
 					const repository = new MemorySessionRepository();
 					repository.sourceDigest = await createFileSourceIdentityProvider(
 						host.project,
@@ -291,6 +343,7 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 					toolchain: currentBunToolchain(packageJson.packageManager),
 					packageCache: root,
 					opencodeVersion: "1.18.31",
+					frozenArtifacts: await pinnedHost(),
 					files: {
 						"parser.ts":
 							"export const parse = (value: string) => value.trim();\n",
@@ -315,6 +368,10 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 					},
 					signal: AbortSignal.timeout(150000),
 				});
+				await retainHostIdentity(
+					host,
+					`${managerModel.replaceAll("/", "-")}-delayed-stop`,
+				);
 				const repository = new MemorySessionRepository();
 				repository.sourceDigest = await createFileSourceIdentityProvider(
 					host.project,
