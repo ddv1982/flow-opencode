@@ -727,7 +727,7 @@ export class RecoveryController {
 						this.#now() >= lease.deadline ||
 						lease.calls >= lease.settings.maxCalls ||
 						lease.reservedUsd + JEV_ATTEMPT_RESERVATION_USD >
-							lease.settings.maxUsd
+							lease.settings.maxUsd + Number.EPSILON
 					)
 						return false;
 					lease.calls++;
