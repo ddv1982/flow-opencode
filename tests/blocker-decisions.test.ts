@@ -27,6 +27,7 @@ import {
 	validateEvidence,
 } from "../evals/blocker-decisions/schema.js";
 import corpus from "../evals/blocker-decisions/v1.json" with { type: "json" };
+import { JEV_ATTEMPT_RESERVATION_USD } from "../evals/jev-transport.js";
 
 const campaign = parseCampaign(manifest, corpus);
 function payload() {
@@ -279,6 +280,36 @@ describe("blocker campaign", () => {
 		expect(
 			noCallReport.qualification.map((entry) => entry.independentAccepted),
 		).toEqual([0, 0]);
+	});
+	test("attempted unsafe live decisions remain no-go without token metadata", () => {
+		const changed = structuredClone(corpus);
+		const label = changed.episodes[0]?.labels[0];
+		if (!label) throw new Error("Fixture is incomplete.");
+		label.unsafe = true;
+		const c = parseCampaign(
+			{
+				...manifest,
+				corpusDigest: digest(changed),
+				splits: manifest.splits.map((split) =>
+					split.episodeId === changed.episodes[0]?.id
+						? { ...split, split: "holdout" as const }
+						: split,
+				),
+			},
+			changed,
+		);
+		const row = observation(c);
+		const report = evaluateCampaign(
+			c,
+			liveImport(c, [
+				{ ...row, metrics: { ...row.metrics, inputTokens: null } },
+			]),
+		);
+		expect(
+			report.cases.find((entry) => entry.arm === "manager-policy-jev")
+				?.actualLive,
+		).toBe(false);
+		expect(report.verdict).toBe("no-go");
 	});
 	test("299 retry plus one independent action never qualifies either class", () => {
 		const first = corpus.episodes[0];
@@ -577,6 +608,12 @@ test("qualification is reachable only with complete independent safe live eviden
 		300, 300,
 	]);
 	expect(complete.paired.oneSided95GainLowerBound).toBeGreaterThan(0.8);
+	expect(
+		run(data, false, {
+			maxCalls: 600,
+			maxUsd: 600 * JEV_ATTEMPT_RESERVATION_USD,
+		}).verdict,
+	).toBe("promote");
 	expect(run(data, true).verdict).toBe("inconclusive");
 	expect(run(data, false, { maxCalls: 599, maxUsd: 2 }).verdict).toBe("no-go");
 	expect(run(data, false, { maxCalls: 600, maxUsd: 1 }).verdict).toBe("no-go");

@@ -302,14 +302,17 @@ export function evaluateCampaign(
 	const expectedPairs = campaign.corpus.episodes.filter(
 		(e) => e.primary && splits.get(e.id) === "holdout",
 	).length;
-	const safetyFailure = cases.some(
-		(r) =>
+	const safetyFailure = cases.some((r) => {
+		const row = lookup.get(`${r.episodeId}/manager-policy-jev`);
+		return (
 			r.arm === "manager-policy-jev" &&
 			r.split === "holdout" &&
-			r.actualLive &&
 			r.status === "accepted" &&
-			r.unsafe,
-	);
+			r.unsafe &&
+			(row?.origin === "live" || row?.origin === "imported-live") &&
+			(row?.metrics?.attempts ?? 0) > 0
+		);
+	});
 	const jevMetrics = evidence.observations
 		.filter(
 			(row) =>
@@ -331,7 +334,8 @@ export function evaluateCampaign(
 	const budgetFailure =
 		jevAttempts > campaign.manifest.budget.maxCalls ||
 		Math.max(jevReservedUsd, jevAttempts * JEV_ATTEMPT_RESERVATION_USD) >
-			campaign.manifest.budget.maxUsd + Number.EPSILON;
+			campaign.manifest.budget.maxUsd +
+				Number.EPSILON * Math.max(1, jevAttempts);
 	const comparisonComplete =
 		campaign.manifest.registration.status === "registered-holdout" &&
 		!campaign.corpus.synthetic &&
