@@ -410,6 +410,130 @@ describe("process-local recovery", () => {
 				}),
 		).toThrow("different host session");
 	});
+	test("closing the last protected session retires its host fence", async () => {
+		const s = await setup("shadow");
+		const session = s.repository.session;
+		if (!session) throw new Error("Fixture session missing.");
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		s.controller.guard(context).retireClosedSession(session.id);
+		s.controller.observeMessage("host", "ordinary-user", false);
+		const ordinary = { ...session, id: "ordinary-next-session" };
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "synthetic-continuation" })
+				.checkClose(ordinary, {
+					operationId: "ordinary-close",
+					expectedRevision: ordinary.revision,
+					sessionId: ordinary.id,
+					kind: "completed",
+					summary: "Done",
+				}),
+		).not.toThrow();
+	});
+	test("unbound revocation permits the next ordinary user turn while completed closure needs no fresh direction", async () => {
+		const s = await setup("shadow");
+		const session = s.repository.session;
+		if (!session) throw new Error("Fixture session missing.");
+		const request = {
+			operationId: "completed-close",
+			expectedRevision: session.revision,
+			sessionId: session.id,
+			kind: "completed" as const,
+			summary: "Done",
+		};
+		expect(() =>
+			s.controller.guard(context).checkClose(session, request),
+		).not.toThrow();
+		expect(() =>
+			s.controller.guard(context).checkClose(session, {
+				...request,
+				kind: "abandoned",
+			}),
+		).toThrow("fresh real user direction");
+		const other = await setup("shadow");
+		const ordinary = other.repository.session;
+		if (!ordinary) throw new Error("Fixture session missing.");
+		other.controller.revoke("host");
+		expect(() =>
+			other.controller
+				.guard({ ...context, messageId: "synthetic-continuation" })
+				.checkClose(ordinary, {
+					...request,
+					sessionId: ordinary.id,
+					expectedRevision: ordinary.revision,
+				}),
+		).toThrow("fresh real user direction");
+		other.controller.observeMessage("host", "ordinary-user", false);
+		expect(() =>
+			other.controller
+				.guard({ ...context, messageId: "synthetic-continuation" })
+				.checkClose(ordinary, {
+					...request,
+					sessionId: ordinary.id,
+					expectedRevision: ordinary.revision,
+				}),
+		).not.toThrow();
+	});
+	test("a fresh ordinary auto continuation can use a bound protected session", async () => {
+		const s = await setup("shadow");
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		const session = s.repository.session;
+		if (!session) throw new Error("Fixture session missing.");
+		const request = {
+			operationId: "ordinary-completed-close",
+			expectedRevision: session.revision,
+			sessionId: session.id,
+			kind: "completed" as const,
+			summary: "Done",
+		};
+		s.controller.revoke("host");
+		expect(() =>
+			s.controller.guard(context).checkClose(session, request),
+		).toThrow("fresh real user direction");
+		s.controller.observeMessage("host", "ordinary-user", false);
+		s.controller.observeAssistant("host", "ordinary-first", "ordinary-user");
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "ordinary-first" })
+				.checkClose(session, request),
+		).not.toThrow();
+		s.controller.observeMessage("host", "ordinary-continuation", true, true);
+		s.controller.observeAssistant(
+			"host",
+			"ordinary-next",
+			"ordinary-continuation",
+		);
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "ordinary-next" })
+				.checkClose(session, request),
+		).not.toThrow();
+		s.controller.observeMessage("host", "untrusted-continuation", true);
+		s.controller.observeAssistant(
+			"host",
+			"untrusted-next",
+			"untrusted-continuation",
+		);
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "untrusted-next" })
+				.checkClose(session, request),
+		).toThrow("fresh real user direction");
+	});
 	test("wrong host and worker cannot consume the pending operation", async () => {
 		const s = await setup(),
 			mutation = await recommend(s);
@@ -589,6 +713,26 @@ test("oversized advice does not consume a checkpoint decision slot", async () =>
 	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
 });
 
+test("oversized provider envelope stops before decision dispatch", async () => {
+	let calls = 0;
+	const s = await setup("shadow", {
+		fitsRequest() {
+			return false;
+		},
+		async assess() {
+			calls++;
+			return { kind: "unavailable", reason: "oversize" };
+		},
+	});
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: s.proposal(),
+	});
+	expect(response.status).toBe("error");
+	expect(calls).toBe(0);
+	expect(s.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
+});
+
 test("large Unicode remedies stop before the duplicated provider payload", async () => {
 	let calls = 0;
 	const s = await setup("shadow", {
@@ -637,6 +781,50 @@ test("packet uses current live finding wording instead of oversized history", as
 	expect(response.status).toBe("ok");
 	if (response.status !== "ok") throw new Error(response.summary);
 	expect(JSON.stringify(response)).toContain('"kind":"selected"');
+});
+
+test("completed inspect features are not eligible retry targets", async () => {
+	const s = await setup("shadow", provider, true);
+	const old = s.repository.session;
+	if (!old?.plan || old.runs.length !== 2) throw new Error("fixture");
+	const proposal = s.proposal();
+	s.repository.session = {
+		...old,
+		plan: {
+			...old.plan,
+			features: old.plan.features.map((feature) =>
+				feature.id === FEATURE
+					? { ...feature, kind: "inspect" as const }
+					: feature,
+			),
+		},
+		runs: [
+			...old.runs.map((run, index) => ({
+				...run,
+				state: index === 1 ? ("completed" as const) : run.state,
+			})),
+			...old.runs.map((run) => ({
+				...run,
+				id: `${run.id}-independent`,
+				featureId: "independent",
+			})),
+		],
+	};
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: proposal,
+	});
+	expect(response.status).toBe("error");
+	expect(response.summary).toContain("No proposed recovery action");
+});
+
+test("recovery snapshots are visible only to their host", async () => {
+	const s = await setup("shadow");
+	expect(s.controller.snapshot("host")).toMatchObject({ mode: "shadow" });
+	expect(s.controller.snapshot("other-host")).toEqual({ mode: "off" });
+	expect(
+		s.controller.guard({ ...context, hostSessionId: "other-host" }).snapshot(),
+	).toEqual({ mode: "off" });
 });
 
 test("candidate must cite the target's live blockers", async () => {
@@ -1039,6 +1227,16 @@ test("registered tools share the controller across file-backed service instances
 			reset = tools.flow_feature_reset,
 			complete = tools.flow_feature_complete;
 		if (!status || !reset || !complete) throw new Error("tools");
+		const otherHostStatus = JSON.parse(
+			String(
+				await status.execute(
+					{ request: { view: "compact" } },
+					{ ...ctx, sessionID: "other-host", messageID: "other-assistant" },
+				),
+			),
+		);
+		expect(otherHostStatus.status).toBe("ok");
+		expect(otherHostStatus.workflowData.recovery).toEqual({ mode: "off" });
 		const before = (await loadSession(directory))?.revision;
 		const advice = JSON.parse(
 			String(
