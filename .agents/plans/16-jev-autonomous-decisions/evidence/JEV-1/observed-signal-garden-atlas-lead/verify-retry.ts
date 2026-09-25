@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { SessionSchema } from "../../../../../../src/application/schema.js";
+import { isValidationEligible } from "../../../../../../src/domain/validation.js";
 
 const sha = (bytes: Uint8Array) =>
 	createHash("sha256").update(bytes).digest("hex");
@@ -102,13 +104,15 @@ if (privateRoot) {
 	for (const [name, digest] of files)
 		assert(sha(await readFile(join(privateRoot, name))) === digest, name);
 
-	const session = JSON.parse(
-		await readFile(join(privateRoot, "final-session.json"), "utf8"),
+	const session = SessionSchema.parse(
+		JSON.parse(await readFile(join(privateRoot, "final-session.json"), "utf8")),
 	);
-	const checkpoint = JSON.parse(
-		await readFile(
-			join(privateRoot, "retry-private/snapshots/revision-00010.json"),
-			"utf8",
+	const checkpoint = SessionSchema.parse(
+		JSON.parse(
+			await readFile(
+				join(privateRoot, "retry-private/snapshots/revision-00010.json"),
+				"utf8",
+			),
 		),
 	);
 	const authorization = JSON.parse(
@@ -223,6 +227,7 @@ if (privateRoot) {
 			JSON.stringify([...review.validationIds].sort()) ===
 				JSON.stringify([...outcome.remedy.passedValidationIds].sort()) &&
 			review.result.findings.length === 0 &&
+			review.result.terminalDisposition === "submitted" &&
 			review.sourceDigest === outcome.remedy.sourceDigest &&
 			review.result.recordedRevision ===
 				outcome.remedy.independentFeatureReview.recordedRevision &&
@@ -239,9 +244,7 @@ if (privateRoot) {
 						row.id === id &&
 						row.command === expectedRemedyGates[index].command &&
 						row.scope === expectedRemedyGates[index].scope &&
-						row.exitCode === 0 &&
-						row.outputComplete &&
-						row.sourceDigest === review.sourceDigest,
+						isValidationEligible(row, review.sourceDigest),
 				),
 			) &&
 			continuation.state === "active" &&
@@ -252,10 +255,18 @@ if (privateRoot) {
 			firstMeasurement.recordedRevision < focusedValidation?.recordedRevision &&
 			passedValidation?.exitCode === 0 &&
 			focusedValidation.recordedRevision <= passedValidation.recordedRevision &&
+			isValidationEligible(
+				passedValidation,
+				outcome.continuation.sourceDigest,
+			) &&
 			passedValidation.command === broadAtlasGate &&
 			passedValidation.scope === "broad" &&
 			passedValidation.outputComplete === true &&
 			focusedValidation?.exitCode === 0 &&
+			isValidationEligible(
+				focusedValidation,
+				outcome.continuation.sourceDigest,
+			) &&
 			focusedValidation.command === browserGate &&
 			focusedValidation.scope === "focused" &&
 			focusedValidation.outputComplete === true &&
