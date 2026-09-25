@@ -1,3 +1,4 @@
+import type { RecoveryController } from "../../application/recovery-policy.js";
 import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
 import {
 	decideOnIdle,
@@ -89,6 +90,7 @@ type Timing = {
 	-readonly [Key in TimingField]: AutoTimingSnapshot[Key];
 } & { since: number };
 type AutoDriveOptions = Readonly<{
+	recovery?: RecoveryController;
 	readProjection: () => Promise<AutoDriveProjection>;
 	prompt: (
 		sessionID: string,
@@ -256,6 +258,7 @@ export class AutoDriveCoordinator {
 		return true;
 	}
 	clear(): void {
+		this.#options.recovery?.revoke();
 		if (this.#lease) this.#setTiming("inactive");
 		this.#lease = null;
 	}
@@ -264,7 +267,7 @@ export class AutoDriveCoordinator {
 		delivery: AutoDriveDelivery,
 		parts: readonly AutoDriveMessagePart[],
 		messageId: string,
-	): Promise<"accepted" | "stale-continuation"> {
+	): Promise<"accepted" | "accepted-continuation" | "stale-continuation"> {
 		const lease = this.#lease;
 		const message = inspectMessage(parts);
 		if (lease?.hostSessionId === hostSessionId && STOP.test(message.text)) {
@@ -286,7 +289,7 @@ export class AutoDriveCoordinator {
 					answered: false,
 				};
 			this.#setTiming("active");
-			return "accepted";
+			return "accepted-continuation";
 		}
 		if (lease?.hostSessionId !== hostSessionId || !message.user)
 			return "accepted";
@@ -368,6 +371,7 @@ export class AutoDriveCoordinator {
 		if (!compaction?.successor || lease.messageId !== compaction.authority)
 			return void this.#rejectOrigin(lease, "compaction");
 		lease.messageId = compaction.successor;
+		this.#options.recovery?.observeMessage(host, compaction.successor, true);
 	}
 	observeMutation(
 		host: string,
@@ -447,6 +451,30 @@ export class AutoDriveCoordinator {
 			);
 			if (lease.pendingReply && projection.status !== "idle")
 				lease.pendingReply = false;
+			const proposal =
+				(projection.status === "blocked" || projection.status === "ready") &&
+				decision.kind === "handback-and-wait"
+					? this.#options.recovery?.proposalPrompt(
+							hostSessionId,
+							projection.sessionId,
+							projection.revision,
+							projection.nextAction,
+						)
+					: null;
+			if (proposal && lease.delivery) {
+				this.#waitAt(lease, projection.revision);
+				lease.handbackPromptedRevision = projection.revision;
+				this.#setTiming("active");
+				lease.inFlight = "prompt";
+				await this.#options
+					.prompt(hostSessionId, proposal, lease.delivery, {
+						[FLOW_AUTO_METADATA_KEY]: lease.token,
+					})
+					.catch((error) =>
+						this.#stop(lease, `Flow recovery prompt failed: ${String(error)}`),
+					);
+				return;
+			}
 			switch (decision.kind) {
 				case "deactivate":
 					return void this.deactivate(hostSessionId);

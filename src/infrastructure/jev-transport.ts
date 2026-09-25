@@ -1,13 +1,17 @@
 export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
 export const JEV_PINNED_MODEL = "jev-1.13.0";
-export const JEV_ATTEMPT_RESERVATION_USD = (64_000 * 0.042) / 1_000_000;
+
+import { JEV_ATTEMPT_RESERVATION_USD } from "../application/ports/decision-provider.js";
+
+export { JEV_ATTEMPT_RESERVATION_USD };
+
 export const JEV_MAX_REQUEST_BYTES = 32_000;
-export const JEV_MAX_RESPONSE_BYTES = 128_000;
+const JEV_MAX_RESPONSE_BYTES = 128_000;
 export type JevTransport = (
 	url: string,
 	init: RequestInit,
 ) => Promise<Response>;
-export type TransportFailure =
+type TransportFailure =
 	| "budget"
 	| "cancelled"
 	| "timeout"
@@ -15,7 +19,7 @@ export type TransportFailure =
 	| "http"
 	| "oversize"
 	| "malformed";
-export type TransportResult = {
+type TransportResult = {
 	readonly attempts: number;
 	readonly latencyMs: number;
 	readonly reservedUsd: number;
@@ -59,7 +63,7 @@ export async function requestJev(
 	body: unknown,
 	options: {
 		readonly apiKey: string;
-		readonly budget: JevBudget;
+		readonly budget: Pick<JevBudget, "reserve">;
 		readonly signal?: AbortSignal;
 		readonly transport?: JevTransport;
 		readonly timeoutMs?: number;

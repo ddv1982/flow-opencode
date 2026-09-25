@@ -1,4 +1,4 @@
-import { JEV_ATTEMPT_RESERVATION_USD } from "../jev-transport.js";
+import { JEV_ATTEMPT_RESERVATION_USD } from "../../src/infrastructure/jev-transport.js";
 import {
 	type Arm,
 	assertReviewedLiveEvidence,

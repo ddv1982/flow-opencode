@@ -205,10 +205,12 @@ describe("Flow OpenCode host schemas", () => {
 		}
 	});
 
-	test("uses one strict request envelope for all nine lifecycle tools", () => {
+	test("keeps strict requests with optional status-only recovery proposals", () => {
 		for (const name of LIFECYCLE_TOOL_NAMES) {
 			const definition = registeredTools[name];
-			expect(Object.keys(definition?.args ?? {}), name).toEqual(["request"]);
+			expect(Object.keys(definition?.args ?? {}), name).toEqual(
+				name === "flow_status" ? ["recoveryProposal", "request"] : ["request"],
+			);
 			const emitted = emittedHostSchema(name);
 			expect(emitted.required, name).toContain("request");
 			expect(emitted.additionalProperties, name).toBe(false);

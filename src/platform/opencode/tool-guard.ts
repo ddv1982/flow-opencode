@@ -93,7 +93,10 @@ export function guardTools(
 							workflowData: {},
 						});
 					const status = runtimeGuard.query();
-					if (!status.operational) return guardRejection(name, status);
+					if (!status.operational) {
+						autoDrive.clear();
+						return guardRejection(name, status);
+					}
 					const output = await definition.execute(...args);
 					const mutation = acceptedMutation(name, String(output));
 					const context = args[1];

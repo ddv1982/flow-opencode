@@ -15,7 +15,7 @@ The program runs the installed Poteto `playbooks/autonomous-run.md`, using `play
 
 Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-All targets and limits below are proposed acceptance criteria. No live decision-quality result or performance baseline exists yet. The first runtime release preserves process-local authority and Session v5. It does not resume autonomous permission after restart.
+All targets and limits below are proposed acceptance criteria. No live decision-quality result or performance baseline exists yet. Continued implementation now permits default-off runtime construction before live qualification. Production delegated activation still requires qualification. The runtime preserves process-local authority and Session v5. It does not resume autonomous permission after restart.
 
 ## Program checklist
 
@@ -35,7 +35,7 @@ All targets and limits below are proposed acceptance criteria. No live decision-
 ### Spawn owners
 
 - [ ] Spawn one owner for the currently eligible PR. Inherit model settings unless an installed profile is verifiable. Give each writable owner its own worktree and evidence directory.
-- [ ] Follow the dependency chain `JEV-1 -> JEV-2 -> JEV-3 -> JEV-4`. Branch each PR from current `main` after its predecessor merges. No implementation PRs are independent. Advance beyond JEV-1 only after its pre-registered Jev promotion gate passes. A reviewed negative or inconclusive result ends this program with a policy-only recommendation. Preserve JEV-2 through JEV-4 as unstarted proposals.
+- [ ] Follow the dependency chain `JEV-1 -> JEV-2 -> JEV-3 -> JEV-4`. Default-off construction may stack on the preceding local commit under the user's continuation instruction. No implementation slice is independent. The coherent runtime commit combines JEV-2 and JEV-3 mechanics. Advance to production delegated activation only after its pre-registered promotion gate passes. A measured negative or inconclusive result blocks promotion. Missing credentials remain unmeasured.
 - [ ] Hold each owner's file boundaries to the Files block. Return out-of-scope discoveries to the parent. Never modify `.flow/**`, `.git` internals, or another owner's worktree as a shortcut.
 - [ ] Hold the interaction review gate for JEV-2, JEV-3, and JEV-4. Save screenshots and video before the merge-ready report.
 
@@ -131,7 +131,7 @@ Each live lane runs in its own isolated environment at the PR head through a det
 
 **Files.**
 
-- [ ] Create `src/application/recovery-policy.ts`, `src/application/decision-advice.ts`, and `src/application/ports/decision-provider.ts`.
+- [ ] Create `src/application/recovery-policy.ts` and `src/application/ports/decision-provider.ts`. Keep advice and grant ownership together in the controller instead of adding a pass-through decision-advice module.
 - [ ] Create `src/infrastructure/jev-decision-provider.ts` with the official endpoint adapter.
 - [ ] Edit `src/application/flow-service.ts`, `src/platform/opencode/tools.ts`, `src/platform/opencode/tool-guard.ts`, and `src/platform/opencode/plugin.ts` to enforce authorization before effects.
 - [ ] Edit `src/platform/opencode/command-hook.ts`, `src/platform/opencode/config.ts`, `src/config-shared.ts`, and `src/platform/opencode/auto-drive.ts` for explicit process-local policy capture and shadow mode.
@@ -193,7 +193,7 @@ Each live lane runs in its own isolated environment at the PR head through a det
 
 **Files.**
 
-- [ ] Edit `src/application/recovery-policy.ts`, `src/application/decision-advice.ts`, and `src/application/flow-service.ts`.
+- [ ] Edit `src/application/recovery-policy.ts` and `src/application/flow-service.ts`.
 - [ ] Edit `src/platform/opencode/auto-drive.ts`, `src/platform/opencode/auto-drive-decision.ts`, `src/platform/opencode/tool-guard.ts`, and `src/application/session-projection.ts`.
 - [ ] Edit `skills/flow/SKILL.md`, `skills/flow-run/SKILL.md`, `skills/flow-plan/SKILL.md`, and affected prompt composition files found by symbol search.
 - [ ] Extend `tests/recovery-policy.test.ts`, `tests/auto-drive.test.ts`, `tests/auto-drive-decision.test.ts`, `tests/runtime-gates.test.ts`, and `tests/domain-transitions.test.ts`.
@@ -373,8 +373,8 @@ All phases use the installed swarm skill for verification and show-me-your-work 
 
 ## Appendix E. Implementation progress
 
-JEV-1 evaluation code is implemented on `feat/jev-blocker-evaluation` in `/Users/vriesd/projects/flow-jev-evaluation`. See [implementation status](implementation-status.md) for exact verification and remaining gates.
+JEV-1 evaluation code is committed at `5db4e98`. JEV-2 and JEV-3 default-off runtime mechanics are implemented on `feat/jev-recovery-runtime` in `/Users/vriesd/projects/flow-jev-evaluation`. See [implementation status](implementation-status.md) and [runtime design](runtime-design.md) for verification and remaining gates.
 
-Checked boxes describe completed tooling, not live model quality. The eight development examples are synthetic. Real holdout collection, threshold calibration, manager comparison, provider availability, and latency measurements remain unverified. No runtime phase has started.
+Checked boxes describe completed tooling, not live model quality. The eight development examples are synthetic. Real holdout collection, threshold calibration, manager comparison, provider availability, and latency measurements remain unverified. Runtime construction is complete. Production delegated activation and live qualification remain blocked.
 
 The user authorized implementation and reports an existing key under an uncertain name. Credential discovery did not locate it in the checked settings. Key location and a live spending cap remain requested. No provider calls were made.

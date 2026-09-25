@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { RecoveryController } from "../../application/recovery-policy.js";
 import {
 	type FlowCodingModel,
 	resolveFlowReviewerConfiguration,
@@ -12,6 +13,7 @@ import {
 	prepareWorkspaceValidation,
 	readWorkspaceTestReport,
 } from "../../infrastructure/fs/workspace-validation.js";
+import { createJevDecisionProvider } from "../../infrastructure/jev-decision-provider.js";
 import { resolveFlowPluginVersion } from "../../version.js";
 import { AutoDriveCoordinator, autoDriveDelivery } from "./auto-drive.js";
 import { createCommandHook, textPart } from "./command-hook.js";
@@ -56,8 +58,12 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 	const initial = runtimeGuard.query();
 	const level = initial.operational ? "info" : "error";
 	log(level, `Flow ${version}: ${initial.message}`);
+	const recovery = new RecoveryController(
+		createJevDecisionProvider(() => process.env.TYPESAFE_API_KEY),
+	);
 	const flow = createWorkspaceFlowService(workspace);
 	const autoDrive = new AutoDriveCoordinator({
+		recovery,
 		readProjection: async () => {
 			const response = await flow.status({ request: { view: "compact" } });
 			if (response.status !== "ok") throw new Error(response.summary);
@@ -93,6 +99,7 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		readReport: readWorkspaceTestReport,
 	});
 	const tools = createTools({
+		recovery,
 		validation,
 		prepareValidation: prepareWorkspaceValidation,
 		autoTimingSnapshot: () => autoDrive.timingSnapshot(),
@@ -118,6 +125,7 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 			assertOperational: (action) => runtimeGuard.assertOperational(action),
 			autoDrive,
 			flow,
+			recovery,
 		}),
 		"chat.message": async (input, output) => {
 			if (
@@ -145,6 +153,14 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 			);
 			if (observed === "stale-continuation")
 				throw new Error("Discarded a stale Flow auto continuation.");
+			recovery.observeMessage(
+				input.sessionID,
+				output.message.id,
+				output.parts.every(
+					(part) => part.type === "text" && part.synthetic === true,
+				),
+				observed === "accepted-continuation",
+			);
 		},
 		"experimental.session.compacting": async (input, output) => {
 			const context = autoDrive.compactionContext(input.sessionID);
@@ -152,6 +168,16 @@ const FlowPlugin: Plugin = async (ctx, pluginOptions) => {
 		},
 		event: async (input) => {
 			const event = input.event;
+			if (
+				event.type === "message.updated" &&
+				event.properties.info.role === "assistant" &&
+				event.properties.info.parentID
+			)
+				recovery.observeAssistant(
+					event.properties.info.sessionID,
+					event.properties.info.id,
+					event.properties.info.parentID,
+				);
 			if (event.type === "message.updated")
 				return autoDrive.observeHostMessage(
 					event.properties.info.sessionID,

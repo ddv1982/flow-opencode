@@ -1,42 +1,51 @@
-# JEV-1 implementation status
+# Implementation status
 
-The user authorized implementation of this plan. JEV-1 evaluation tooling is implemented on `feat/jev-blocker-evaluation` in `/Users/vriesd/projects/flow-jev-evaluation`.
+The evaluation tooling and default-off runtime recovery mechanisms are implemented in `/Users/vriesd/projects/flow-jev-evaluation`. The runtime branch is `feat/jev-recovery-runtime`, based on JEV-1 commit `5db4e98`.
 
-The full plan is not complete. JEV-2 through JEV-4 remain unstarted because the live promotion gate is unmeasured. Flow runtime behavior has not changed.
+The user requested continued implementation after the live gate was explained. Construction proceeded before live qualification. Production delegated activation remains unavailable because the release-owned qualification registry is empty. The whole qualification and release plan is not complete.
 
-## Implemented
+| Phase | Current state |
+| --- | --- |
+| JEV-1 | Evaluation tooling implemented and tested. Real model comparison remains unmeasured. |
+| JEV-2 | Policy, explicit shadow controls, shared guard, strict adapter, and status proposals implemented. |
+| JEV-3 | Exact guarded recovery and continuation implemented and tested with internal qualified fixtures. Production activation refuses. |
+| JEV-4 | Deterministic hardening, replay, documentation, and packed-host smoke completed. Paid model and performance qualification remain open. |
 
-- Strict immutable campaigns and evidence with hidden labels and packet identity checks.
-- Deterministic eligibility and separate manager-only and Jev-assisted comparisons.
-- Per-action independent sample counts, complete pairs, and a conservative uncertainty bound.
-- Explicit live-import attestations and simulation provenance.
-- Bounded official-provider transport with deadlines, cancellation, retries, byte limits, and spending reservations.
-- A CLI for checking inputs, collecting advice, and regrading reports. Output reservation occurs before paid requests.
-- Versioned alignment metadata with the existing scoring and advisory-veto semantics preserved.
-- Eight synthetic development cases, including multiple remedies and an all-bad choice set.
+## Implemented runtime behavior
 
-## Verified
+Ordinary `/flow-auto` remains off for recovery advice. An explicit shadow invocation supplies call and dollar caps. Bare status never calls Jev. A proposal-bearing status call analyzes up to three remedies without mutating Session state.
 
-The parent used Bun 1.4.0 and the frozen lockfile. `bun run check` passed with 1,304 tests, one skipped opt-in live OpenCode smoke, and zero failures. The four focused suites passed all 35 tests.
+The shared controller checks current host lineage, approved plan, source, revision, history, and exact pending action. Existing reset and start tools enforce the grant inside the transaction. Validation and independent review remain mandatory after a retry.
 
-The actual offline CLI reports inconclusive with no qualifying live samples. The missing-key CLI exits 2 with eight unavailable observations and no provider calls.
+Stop, cancellation, replacement, and restart cannot restore a pending grant. Exact accepted operations replay without creating new permission. Provider work has bounded attempts, deadlines, bytes, and spending reservations. No Session v5 field or new public tool was added.
 
-Independent correctness and no-comments reviews passed. The reviewers used inherited, unverified model identities. One reviewer reran focused tests with Bun 1.3.14. The parent receipts on Bun 1.4.0 are authoritative.
+The new command syntax is a development preview, not a published release feature.
 
-The initial full check found the new ADR exceeded the dedicated record budget. The ADR was shortened to 1,980 bytes and received a named 2,000-byte allocation. The final full check passed without changing other ceilings or assertions.
+```text
+/flow-auto --recovery=shadow --recovery-calls=6 --recovery-usd=0.02 <goal>
+```
 
-See [verification provenance](evidence/implementation-verification.json), [focused tests](evidence/implementation-focused-tests.txt), [CLI smoke](evidence/cli-smoke.json), [offline report](evidence/offline-report.json), and [independent reviews](evidence/implementation-reviews.md). Full repository-check logs remain local and are identified by digest in the provenance receipt.
+## Verification
 
-## Remaining gates
+The parent used Bun 1.4.0 and the frozen lockfile.
 
-The user identified `~/.config/secrets/env` as the credential location. The directory and file are absent from this session's filesystem. See [credential discovery](evidence/credential-lookup.md). The key must become available to this process, and the live spending cap remains unspecified.
+- `bun run check` passed 1,333 tests with zero failures. Its one skipped opt-in smoke was run separately.
+- `bun run replay` matched all 13 gated cassettes.
+- `bun run smoke:live` passed all 22 checks against the real packed OpenCode 1.18.6 host. It made no AI provider calls.
+- Independent correctness, coverage, and no-comments reviews passed after four reproduced lifecycle defects were fixed and covered by regression tests.
 
-No TypeSafe model call, availability probe, real holdout campaign, manager comparison, or live latency measurement has run. The documented model pin is not a live availability claim. The synthetic starter data cannot qualify promotion.
+The file-backed integration test reaches recovery, fresh controlled validation evidence, reviewer-owned completion, and the next coordinator prompt through registered tools. Controlled evidence proves mechanics. It does not establish Jev decision quality or actual execution of every validation command.
 
-The plan requires at least 300 independent accepted holdout cases per action class and a complete manager comparison. These observations must be collected and reviewed before advancing. The subsequent runtime and unattended-run gates also remain open.
+See [runtime verification](evidence/runtime-verification.json), [runtime reviews](evidence/runtime-reviews.md), and [construction decisions](runtime-design.md). The [JEV-1 receipts](evidence/implementation-verification.json) remain historical evidence for that commit. Full repository logs remain local and are identified by digest in the receipts.
 
-The accepted plan says "Advance beyond JEV-1 only after its pre-registered Jev promotion gate passes." The implementation preserves that gate. No PR is represented as merge-ready, and no package or release was published.
+## Remaining work
 
-## Design decisions
+The live TypeSafe comparison, independent holdout corpus, calibrated thresholds, latency and cost measurements, unattended model-driven campaign, operator interaction review, and release qualification remain open. The eight starter cases are synthetic and cannot qualify production use.
 
-Model the Domain separated facts, authority, advice, and evidence. Boundary Discipline put parsing and HTTP handling at explicit interfaces. Sequence Work into Verifiable Units kept live authority out of the first phase. Prove It Works required real CLI runs and prevented unavailable evidence from becoming a passing result.
+The supplied credential path `~/.config/secrets/env` was absent from this session's filesystem. A live spending cap remains unspecified. No live TypeSafe call has run. See [credential discovery](evidence/credential-lookup.md).
+
+No caller flag can populate the release-owned qualification registry. The registry must remain empty until the exact model, rubric, packet construction, policy, and thresholds have reviewed evidence. No merge, publication, or release occurred.
+
+## Principles applied
+
+Model the Domain separated proposals, advice, grants, and replay. Boundary Discipline placed authorization after source hashing inside the mutation transaction. Make Operations Idempotent preserved exact replay without creating new permission. Sequence Work into Verifiable Units separated construction from activation. Prove It Works required the full tool-to-review path and a real packed-host smoke while leaving model quality unclaimed.

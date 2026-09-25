@@ -27,7 +27,7 @@ import {
 	validateEvidence,
 } from "../evals/blocker-decisions/schema.js";
 import corpus from "../evals/blocker-decisions/v1.json" with { type: "json" };
-import { JEV_ATTEMPT_RESERVATION_USD } from "../evals/jev-transport.js";
+import { JEV_ATTEMPT_RESERVATION_USD } from "../src/infrastructure/jev-transport.js";
 
 const campaign = parseCampaign(manifest, corpus);
 function payload() {

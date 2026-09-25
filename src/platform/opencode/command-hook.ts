@@ -1,4 +1,8 @@
 import type { FlowService } from "../../application/flow-service.js";
+import type {
+	RecoveryController,
+	RecoverySettings,
+} from "../../application/recovery-policy.js";
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
 import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
 import type { AutoDriveCoordinator } from "./auto-drive.js";
@@ -77,58 +81,134 @@ export function createCommandHook(
 		assertOperational: (action: string) => void;
 		autoDrive: AutoDriveCoordinator;
 		flow: FlowService;
+		recovery?: RecoveryController;
 	}>,
 ): CommandHook {
-	const { assertOperational, autoDrive, flow } = options;
+	const { assertOperational, autoDrive, flow, recovery } = options;
+	let generation = 0;
+	let invocation: { host: string; generation: number } | null = null;
 	return async (input, output) => {
 		const command = input.command.replace(/^\/+/, "");
 		if (!isFlowCommand(command)) return;
 		const action = input.arguments.trim();
+		const stopping =
+			command === "flow-auto" && /^(?:stop|cancel)$/i.test(action);
+		let cancelledPending = false;
+		if (command === "flow-auto" && !stopping) {
+			invocation = { host: input.sessionID, generation: ++generation };
+			autoDrive.clear();
+			recovery?.revoke();
+		} else if (invocation?.host === input.sessionID) {
+			cancelledPending = true;
+			invocation = null;
+			generation++;
+			recovery?.revoke(input.sessionID);
+			autoDrive.deactivate(input.sessionID);
+		}
+		const entryGeneration = generation;
+		const assertCurrent = () => {
+			if (generation !== entryGeneration)
+				throw new Error("Flow command was superseded.");
+		};
+		const parsed =
+			command === "flow-auto"
+				? parseRecoveryCommand(input.arguments)
+				: { goal: input.arguments, settings: null };
 		if (command === "flow-auto" && /^(?:stop|cancel)$/i.test(action)) {
 			const confirmed = output.parts.some(
 				(part) => part.type === "text" && part.text === AUTO_STOPPED,
 			);
+			recovery?.revoke(input.sessionID);
 			const response =
-				autoDrive.deactivate(input.sessionID) || confirmed
+				autoDrive.deactivate(input.sessionID) || cancelledPending || confirmed
 					? AUTO_STOPPED
 					: "No Flow auto lease was active in this OpenCode session.";
 			output.parts[0] = asHostTextPart(textPart(response));
 			output.parts.length = 1;
 			return;
 		}
-		assertOperational(`execute /${command}`);
-		if (command === "flow-auto" || command === "flow-plan") {
-			const evidence = requestEvidenceAnchor(input.arguments, input.sessionID);
-			if (evidence) {
-				await flow.status({ request: { view: "compact" } });
-				await flow.requestAnchor({ goal: input.arguments, evidence });
+		try {
+			assertOperational(`execute /${command}`);
+			if (parsed.settings) {
+				if (!recovery) throw new Error("Recovery is unavailable in this host.");
+				recovery.activate(input.sessionID, parsed.settings);
+			} else recovery?.revoke(input.sessionID);
+			if (command === "flow-auto" || command === "flow-plan") {
+				const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
+				if (evidence) {
+					await flow.status({ request: { view: "compact" } });
+					assertCurrent();
+					await flow.requestAnchor({ goal: parsed.goal, evidence });
+					assertCurrent();
+				}
 			}
-		}
-		rewriteCommand(command, input.arguments, output);
-		if (command !== "flow-auto")
-			return void autoDrive.deactivate(input.sessionID);
-		const metadata = await autoDrive.activate(input.sessionID);
-		// Preflight, not a gate. The lifecycle works either way; what changes is
-		// whether the user is told up front that this host cannot carry the
-		// continuation, instead of watching Flow stop after every feature and
-		// guessing which of the two it is.
-		if (autoDrive.continuationSupport() === "unsupported") {
-			output.parts.unshift(
-				asHostTextPart(
-					textPart(
-						"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+			assertCurrent();
+			rewriteCommand(command, parsed.goal, output);
+			if (command !== "flow-auto")
+				return void autoDrive.deactivate(input.sessionID);
+			const metadata = await autoDrive.activate(input.sessionID);
+			assertCurrent();
+			if (autoDrive.continuationSupport() === "unsupported") {
+				output.parts.unshift(
+					asHostTextPart(
+						textPart(
+							"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+						),
 					),
-				),
+				);
+			}
+			const instruction = output.parts.find(
+				(part): part is TextPart =>
+					part.type === "text" && part.synthetic === true,
 			);
+			if (!instruction) {
+				throw new Error("/flow-auto is missing its synthetic instruction.");
+			}
+			instruction.metadata = { ...instruction.metadata, ...metadata };
+		} catch (error) {
+			if (
+				command === "flow-auto" &&
+				invocation?.host === input.sessionID &&
+				invocation.generation === entryGeneration
+			) {
+				invocation = null;
+				recovery?.revoke(input.sessionID);
+				autoDrive.deactivate(input.sessionID);
+			}
+			throw error;
 		}
-		const instruction = output.parts.find(
-			(part): part is TextPart =>
-				part.type === "text" && part.synthetic === true,
+	};
+}
+
+export function parseRecoveryCommand(args: string): {
+	goal: string;
+	settings: RecoverySettings | null;
+} {
+	let rest = args.trim();
+	const fields = new Map<string, string>();
+	while (rest.startsWith("--recovery")) {
+		const match = /^(--recovery(?:-calls|-usd)?)=([^\s]+)(?:\s+|$)/.exec(rest);
+		if (!match?.[1] || !match[2] || fields.has(match[1]))
+			throw new Error("Invalid recovery command options.");
+		fields.set(match[1], match[2]);
+		rest = rest.slice(match[0].length);
+	}
+	if (!fields.size) return { goal: args, settings: null };
+	const mode = fields.get("--recovery"),
+		calls = fields.get("--recovery-calls"),
+		usd = fields.get("--recovery-usd");
+	if (
+		(mode !== "shadow" && mode !== "delegated") ||
+		!calls ||
+		!/^\d+$/.test(calls) ||
+		!usd ||
+		!/^\d+(\.\d+)?$/.test(usd)
+	)
+		throw new Error(
+			"Recovery requires --recovery=shadow|delegated, --recovery-calls=N and --recovery-usd=X.",
 		);
-		if (!instruction) {
-			autoDrive.deactivate(input.sessionID);
-			throw new Error("/flow-auto is missing its synthetic instruction.");
-		}
-		instruction.metadata = { ...instruction.metadata, ...metadata };
+	return {
+		goal: rest,
+		settings: { mode, maxCalls: Number(calls), maxUsd: Number(usd) },
 	};
 }

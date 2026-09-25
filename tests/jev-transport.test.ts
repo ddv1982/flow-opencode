@@ -3,7 +3,7 @@ import {
 	createJevBudget,
 	JEV_ATTEMPT_RESERVATION_USD,
 	requestJev,
-} from "../evals/jev-transport.js";
+} from "../src/infrastructure/jev-transport.js";
 
 describe("bounded Jev transport", () => {
 	test("an exact 300-call dollar cap admits all 300 reservations", () => {

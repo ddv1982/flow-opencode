@@ -5,7 +5,7 @@ import {
 	createJevBudget,
 	type JevBudget,
 	requestJev,
-} from "../jev-transport.js";
+} from "../../src/infrastructure/jev-transport.js";
 import {
 	type AlignmentLabelVerdict,
 	type AlignmentMappedOutcome,

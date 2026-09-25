@@ -293,6 +293,7 @@ export async function closedArchiveCollisionStatus(
 export async function closeSessionTransaction(
 	transaction: SessionTransaction,
 	request: SessionCloseRequest,
+	checkClose?: (session: Session, request: SessionCloseRequest) => void,
 ): Promise<CloseSessionResponse> {
 	const active = await transaction.load();
 	if (!active || active.id !== request.sessionId) {
@@ -326,6 +327,7 @@ export async function closeSessionTransaction(
 	}
 
 	const result = closeSession(active, request);
+	if (!result.replayed) checkClose?.(active, request);
 	if (result.replayed) {
 		try {
 			await transaction.confirmActiveDurability(result.session);

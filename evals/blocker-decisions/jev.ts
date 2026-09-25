@@ -4,7 +4,7 @@ import {
 	JEV_PINNED_MODEL,
 	type JevTransport,
 	requestJev,
-} from "../jev-transport.js";
+} from "../../src/infrastructure/jev-transport.js";
 import {
 	type Advice,
 	digest,

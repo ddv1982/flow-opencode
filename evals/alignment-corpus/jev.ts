@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { JEV_ENDPOINT, JEV_PINNED_MODEL } from "../jev-transport.js";
+import {
+	JEV_ENDPOINT,
+	JEV_PINNED_MODEL,
+} from "../../src/infrastructure/jev-transport.js";
 import { type DeepReadonly, freezeTree } from "../validated.js";
 
 export { JEV_ENDPOINT };

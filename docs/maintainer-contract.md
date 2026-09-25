@@ -52,8 +52,8 @@ temporal progress in that same session lets a dispatched pending reviewer submit
 its owned result without pretending reviewer submission is manager provenance.
 An unchanged already-ready baseline or replacement session fails closed.
 Planning awaiting `flow_plan_approve` and any
-`await-user-direction`, whether blocked or ready, remain conversational
-checkpoints. A clarification ending at the same recognized checkpoint revision
+`await-user-direction`, blocked or ready, remain checkpoints unless an exact
+qualified host recovery request authorizes the mutation. Shadow advice cannot. A clarification ending at the same recognized checkpoint revision
 re-arms waiting without auto-routing; a reply resumes only after it advances the
 same session to a mechanical state through an accepted non-replayed manager
 mutation observed in that OpenCode host session. The mutation is credited only
@@ -125,7 +125,7 @@ or delivery document.
   eligible. Automatic convergence is bounded by recorded failed review results:
   only `failedReviewCount === 1` without a `scopeBlocker` finding permits one fresh
   full automatic retry. Every scope blocker or count of two or greater projects
-  `await-user-direction` before another user-authorized attempt. When all
+  `await-user-direction` before a directed or qualified host-authorized attempt. When all
   runnable candidates require an explicit retry, status is `ready` and projects
   `await-user-direction`. This includes a blocked run superseded by reset to
   independent work once that work finishes. Detail identifies the failed feature
@@ -255,13 +255,17 @@ manager contract.
 
 ## OpenCode surface
 
-Compact `flow_status` includes the active goal and derived `findingsDigest`, empty
-as `[]`. Blocked status also includes `blockedFeature.featureId`, the latest
-attempt number, and `failedReviewCount` from recorded failed reviews. No intent,
-hold, or retry budget is persisted. The [Session v5 rules](#session-v5) determine
-retry routing. At blocked or ready `await-user-direction`, the manager reads
-detail once and reports `findingsDigest`. A reset-only compatibility request
-never makes a failed feature eligible for default selection.
+Compact `flow_status` includes the goal and derived `findingsDigest`, empty as
+`[]`. Blocked state adds featureId, attempt and failedReviewCount. No intent,
+hold or retry budget is persisted. At blocked or ready `await-user-direction`,
+read detail once and report findings. Reset-only compatibility never restores
+implicit selection. See [Session v5](#session-v5).
+
+In the default-off preview, `flow_status.recoveryProposal` accepts id,
+sessionId, expectedRevision and up to 3 candidates with id, action, featureId,
+remedy, changedFromPreviousAttempt and findingIds. Exact reset/start advice needs
+a live host grant under lock. Replays stay read-only. Production
+qualification is empty. See [ADR 0016](adr/0016-delegated-recovery.md).
 
 ### Commands
 
