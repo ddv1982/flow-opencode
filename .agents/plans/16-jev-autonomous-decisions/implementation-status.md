@@ -434,3 +434,45 @@ inference occurred.
 See the [design decision](artifact-identity-design.md),
 [workflow](../../../evals/recovery-decisions/run-episodes.md#freeze-host-artifact-bytes),
 and [verification receipt](evidence/runtime-artifact-verification.json).
+
+## Paired simulated recovery and operator campaign
+
+The new opt-in campaign check runs both registered arms for each selected manager.
+A deterministic fixture contains the blocked Flow session before registration.
+Its approved parser feature targets `parser.ts` and `result.txt`.
+Both actual hosts verify the same reset bytes and approved source digest before
+dispatch. Generated host configuration is excluded by frozen fixture Git ignore
+rules. The check never inserts session state after reset verification.
+
+The combined simulation follows matched tool calls and results. Treatment applies
+the exact returned reset grant before asking the operator. Control asks the same
+question without a delegated reset or Jev request. Both arms consume one scripted
+operator response and complete through the same manager session.
+
+A local evaluation wrapper retains the observed grant, reset order, persisted Flow
+state, dispatches, and completion checks before cleanup. The episode completion
+record binds that evidence. The test derives arm observations from recovered
+journals, recomputes each manager's report from retained files, and hashes the
+retained evidence before writing a complete index. Wrapper and fixture-support
+source hashes participate in the registered harness identity.
+
+The pinned native campaign exercised four hosts and recorded one scripted operator
+intervention in each arm. Both manager reports correctly show zero completed arms:
+the control remains blocked, and treatment's granted reset does not by itself
+complete a reviewed workflow. The request-budget ledger retains each arm's
+reservations, while the report leaves reserved-dollar means unavailable for these
+failed outcomes. It records zero live pairs and inconclusive qualification. No
+paid inference occurred.
+
+The current-head [verification receipt](evidence/runtime-paired-simulation-verification.json)
+records the repository, focused, pinned native campaign, and packaged-smoke checks
+with their source and log hashes. The native campaign establishes scripted host
+sequencing and guard behavior, not successful workflow completion or model quality.
+Representative independently reviewed cases, reviewed bounds for actual provider
+costs, a new explicit paid campaign cap, live execution support and qualification,
+and release review remain open. Live episodes remain refused and the production
+qualification registry remains empty.
+The implementation stack still requires review and merge.
+
+See the [design decision](paired-simulation-design.md) and
+[reproduction command](../../../evals/recovery-decisions/run-episodes.md#run-the-paired-simulation-proof).

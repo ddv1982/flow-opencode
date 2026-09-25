@@ -378,3 +378,34 @@ FLOW_HOST_ARTIFACT_SMOKE=1 bun test tests/host-artifacts-host.test.ts
 
 The check verifies the copied production cache, changes a copied plugin file,
 and requires prompt dispatch to fail before authorization is consumed.
+
+## Run the paired simulation proof
+
+Run the combined recovery and operator scenario on the pinned native OpenCode
+1.18.31 executable. Set `FLOW_RECOVERY_OPENCODE_EXECUTABLE` if it is not on `PATH`.
+Keep that executable stable for the entire run. A version mismatch refuses host
+startup. Choose a new output directory to retain the evidence.
+
+```sh
+FLOW_RECOVERY_CAMPAIGN_SMOKE=1 \
+FLOW_RECOVERY_CAMPAIGN_OUTPUT=/tmp/flow-paired-proof \
+bun test tests/recovery-campaign-host.test.ts
+```
+
+The check runs both registered arms separately for `openai/gpt-5.6-terra` and
+`xai/grok-4.6`. Each arm starts from the same frozen blocked fixture for its pair.
+The treatment executes a guarded recovery before the operator question. A scripted
+reply continues the same session and completes the exact output-file check.
+
+Inspect `openai/report.json` and `xai/report.json` below the output directory.
+Each manager directory also retains its registration, arm journals, and recovery
+evidence. `complete.json` indexes the verified files after both pairs finish.
+Observations come from recovered journals. The completion record
+binds the retained recovery evidence. The test also checks request claims and
+recomputes the report from retained inputs.
+
+This command uses synthetic credentials and scripted provider responses. It makes
+no paid model calls. Each manager has one deterministic pair. Reports remain
+inconclusive with zero live pairs, unknown safety review, and unknown report cost.
+Synthetic reservation arithmetic does not establish provider prices. Keep these
+artifacts separate from qualification evidence.

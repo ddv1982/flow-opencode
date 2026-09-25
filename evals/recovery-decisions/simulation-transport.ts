@@ -22,18 +22,19 @@ const ToolOutput = z
 const Input = z
 	.object({ type: z.string().optional(), output: z.unknown().optional() })
 	.passthrough();
+const ResetRequest = z
+	.object({
+		operationId: z.string(),
+		expectedRevision: z.number(),
+		featureId: z.string(),
+		nextFeatureId: z.string(),
+	})
+	.strict();
 const Recommended = z
 	.object({
 		recommended: z.object({
 			kind: z.literal("feature-reset"),
-			request: z
-				.object({
-					operationId: z.string(),
-					expectedRevision: z.number(),
-					featureId: z.string(),
-					nextFeatureId: z.string(),
-				})
-				.strict(),
+			request: ResetRequest,
 		}),
 	})
 	.passthrough();
@@ -56,7 +57,7 @@ export function createSimulationTransport(input: unknown) {
 			url.origin === "https://api.typesafe.ai" &&
 			url.pathname === "/v1/systemone"
 		) {
-			if (script.kind !== "guarded-reset-v1")
+			if (script.kind === "operator-resume-v1")
 				throw new Error("Unexpected Jev request in operator script.");
 			if (++jevCalls !== 1) throw new Error("Simulation Jev script exhausted.");
 			const parsed = z
@@ -81,7 +82,11 @@ export function createSimulationTransport(input: unknown) {
 					goal_0: { type: "noul", noul: 1 },
 					fit_0: {
 						type: "noul",
-						noul: script.outcome === "accepted" ? 1 : 0.5,
+						noul:
+							script.kind === "recovery-operator-v1" ||
+							script.outcome === "accepted"
+								? 1
+								: 0.5,
 					},
 				},
 				usage: { input_tokens: 100, output_tokens: 10 },
@@ -104,10 +109,27 @@ export function createSimulationTransport(input: unknown) {
 					.optional(),
 			})
 			.parse(body);
-		if (++managerCalls > 8)
+		if (++managerCalls > (script.kind === "recovery-operator-v1" ? 12 : 8))
 			throw new Error("Simulation manager script exhausted.");
+		const combined = script.kind === "recovery-operator-v1";
+		const calls = new Map(
+			parsed.input
+				.filter(
+					(row) =>
+						row.type === "function_call" && typeof row.call_id === "string",
+				)
+				.map((row) => [row.call_id, row]),
+		);
+		const completed = parsed.input.filter(
+			(row) => row.type === "function_call_output" && calls.has(row.call_id),
+		);
 		const toolResults = parsed.input.filter(
-			(row) => row.type === "function_call_output",
+			(row) =>
+				row.type === "function_call_output" &&
+				(!combined || calls.get(row.call_id)?.name === "flow_status"),
+		);
+		const reset = completed.find(
+			(row) => calls.get(row.call_id)?.name === "flow_feature_reset",
 		);
 		const outputs = toolResults.flatMap((row) => {
 			if (typeof row.output !== "string") return [];
@@ -122,9 +144,43 @@ export function createSimulationTransport(input: unknown) {
 		let tool: { name: string; arguments: unknown } | undefined;
 		const hasFlowTools =
 			parsed.tools?.some((tool) => tool.name === "flow_status") === true;
-		if (hasFlowTools && script.kind === "operator-resume-v1") {
-			const resumed = JSON.stringify(parsed.input).includes(
-				"Write fixed followed by a newline.",
+		const recommendation = Recommended.safeParse(latest?.workflowData.recovery);
+		if (combined && reset) {
+			const result =
+				typeof reset.output === "string"
+					? ToolOutput.parse(JSON.parse(reset.output))
+					: null;
+			const request = recommendation.success
+				? recommendation.data.recommended.request
+				: null;
+			const call = calls.get(reset.call_id);
+			const used = z
+				.object({ request: ResetRequest })
+				.parse(JSON.parse(String(call?.arguments)));
+			if (JSON.stringify(used.request) !== JSON.stringify(request))
+				throw new Error("Simulation reset differs from the observed grant.");
+			if (
+				!request ||
+				result?.workflowData.projection?.revision !==
+					request.expectedRevision + 1
+			)
+				throw new Error(
+					"Simulation reset did not advance the granted revision.",
+				);
+		}
+		if (
+			hasFlowTools &&
+			(script.kind === "operator-resume-v1" ||
+				(combined &&
+					toolResults.length >= 2 &&
+					(!recommendation.success || reset)))
+		) {
+			const resumed = parsed.input.some(
+				(row) =>
+					row.role === "user" &&
+					JSON.stringify(row.content).includes(
+						"Write fixed followed by a newline.",
+					),
 			);
 			const written = parsed.input.some(
 				(row) => row.type === "function_call" && row.name === "bash",
@@ -151,8 +207,12 @@ export function createSimulationTransport(input: unknown) {
 				tool = {
 					name: "bash",
 					arguments: {
-						command: "printf 'fixed\\n' > result.txt",
-						description: "Write the operator selected result",
+						command: combined
+							? "printf '%s\\n' 'export const parse = (value: string | null) => value?.trim() ?? \"\";' > parser.ts && printf 'fixed\\n' > result.txt"
+							: "printf 'fixed\\n' > result.txt",
+						description: combined
+							? "Repair the parser and write the operator selected result"
+							: "Write the operator selected result",
 					},
 				};
 		} else if (hasFlowTools && toolResults.length === 0)
