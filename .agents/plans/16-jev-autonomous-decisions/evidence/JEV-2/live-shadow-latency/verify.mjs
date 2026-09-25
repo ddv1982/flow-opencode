@@ -57,6 +57,11 @@ const { evaluateRecoveryCorpus } = await import(
 	pathToFileURL(join(repositoryRoot, "evals/recovery-decisions/evaluate.ts"))
 		.href
 );
+const { JEV_ATTEMPT_RESERVATION_USD } = await import(
+	pathToFileURL(
+		join(repositoryRoot, "src/application/ports/decision-provider.ts"),
+	).href
+);
 const selectedSources = await recoverySourceDigests();
 assert.deepEqual(
 	Object.keys(manifest.sourceDigests).sort(),
@@ -89,6 +94,8 @@ assert.equal(manifest.preparation.corpusDigest, manifest.corpusDigest);
 assert.equal(manifest.corpusDigest, summary.corpusDigest);
 assert.equal(manifest.maxCalls, receipt.approval.maxAttempts);
 assert.equal(manifest.maxUsd, receipt.approval.maxUsd);
+close(manifest.attemptReservationUsd, JEV_ATTEMPT_RESERVATION_USD);
+assert.equal(manifest.attemptReservationUsd > 0, true);
 assert.equal(
 	Date.parse(manifest.createdAt) < Date.parse(receipt.approval.expiresAt),
 	true,
@@ -120,6 +127,12 @@ for (const [index, row] of summary.rows.entries()) {
 	const number = String(index + 1).padStart(6, "0");
 	assert.deepEqual(json(`campaign/case-${number}.json`), row);
 	assert.equal(row.origin, "live");
+	assert.equal(
+		typeof row.latencyMs === "number" &&
+			Number.isFinite(row.latencyMs) &&
+			row.latencyMs >= 0,
+		true,
+	);
 	assert.equal(row.id, corpus.cases[index].id);
 	assert.deepEqual(row.packet, manifest.preparation.rows[index].packet);
 	assert.equal(row.packetDigest, row.packet ? digest(row.packet) : null);
@@ -136,6 +149,12 @@ for (const [index, row] of summary.rows.entries()) {
 	close(row.reservedUsd, manifest.attemptReservationUsd);
 	assert.equal(row.advice.kind, "answered");
 	assert.equal(row.advice.model, "jev-1.13.0");
+	assert.equal(
+		typeof row.advice.latencyMs === "number" &&
+			Number.isFinite(row.advice.latencyMs) &&
+			row.advice.latencyMs >= 0,
+		true,
+	);
 	assert.equal(row.decision.mode, "shadow");
 	assert.equal(row.decision.kind, "abstain");
 	assert.equal(
@@ -181,6 +200,12 @@ assert.equal(summary.inputTokens, receipt.usage.inputTokens);
 assert.equal(summary.outputTokens, receipt.usage.outputTokens);
 assert.equal(inputTokens, summary.inputTokens);
 assert.equal(outputTokens, summary.outputTokens);
+for (const value of Object.values(receipt.latency)) {
+	assert.equal(
+		typeof value === "number" && Number.isFinite(value) && value >= 0,
+		true,
+	);
+}
 close(median(providerLatency), receipt.latency.providerP50Ms);
 close(percentile(providerLatency, 95), receipt.latency.providerP95Ms);
 close(median(controllerLatency), receipt.latency.controllerP50Ms);
