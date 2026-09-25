@@ -1,8 +1,9 @@
 import { z } from "zod";
+import { JEV_ENDPOINT, JEV_PINNED_MODEL } from "../jev-transport.js";
 import { type DeepReadonly, freezeTree } from "../validated.js";
 
-export const JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone";
-export const JEV_MODEL = "jev-latest";
+export { JEV_ENDPOINT };
+export const JEV_MODEL = JEV_PINNED_MODEL;
 export const SAME_GOAL_QUESTION_ID = "same_goal";
 export const SAME_GOAL_SCORE_MIN = 1.6;
 export const SAME_GOAL_CONFIDENCE_MIN = 0.6;
@@ -172,4 +173,39 @@ export function scoreVetoShadow(
 	if (veto === "veto")
 		return expected === "new-scope" ? "correct-veto" : "false-veto";
 	return expected === "new-scope" ? "missed-veto" : "correct-pass";
+}
+
+const AlignmentMetadataSchema = z.object({
+	model: z.literal(JEV_MODEL),
+	usage: z.object({
+		input_tokens: z.number().int().safe().nonnegative(),
+		output_tokens: z.number().int().safe().nonnegative(),
+	}),
+	answers: z.object({
+		same_goal: ScoreAnswerSchema.extend({
+			probabilities: z
+				.object({
+					"0": z.number().finite().min(0).max(1),
+					"1": z.number().finite().min(0).max(1),
+					"2": z.number().finite().min(0).max(1),
+				})
+				.strict(),
+		}),
+	}),
+});
+export function parseAlignmentMetadata(input: unknown) {
+	const parsed = AlignmentMetadataSchema.safeParse(input);
+	if (!parsed.success) return null;
+	const probabilities = parsed.data.answers.same_goal.probabilities;
+	if (
+		Math.abs(Object.values(probabilities).reduce((sum, p) => sum + p, 0) - 1) >
+		1e-6
+	)
+		return null;
+	return {
+		resolvedModel: parsed.data.model,
+		inputTokens: parsed.data.usage.input_tokens,
+		outputTokens: parsed.data.usage.output_tokens,
+		probabilities,
+	};
 }

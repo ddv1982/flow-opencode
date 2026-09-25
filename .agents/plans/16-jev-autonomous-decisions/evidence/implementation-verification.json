@@ -1,0 +1,54 @@
+{
+  "recordedAt": "2026-09-21T10:11:15.440718+00:00",
+  "worktree": "/Users/vriesd/projects/flow-jev-evaluation",
+  "branch": "feat/jev-blocker-evaluation",
+  "baseRevision": "c9813f9a87b9b7438671658cfd523adcd89f3098",
+  "bun": "1.4.0",
+  "checks": [
+    {
+      "localLog": "implementation-baseline-check.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run check",
+      "result": "PASS;1279 tests;1 opt-in live smoke skipped",
+      "sha256": "5533df77f6e022052e167d04560c6b642eccb7e0b9638d56321d5f6fd2e07ca9"
+    },
+    {
+      "localLog": "implementation-focused-tests.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun test tests/blocker-decisions.test.ts tests/jev-transport.test.ts tests/jev-alignment.test.ts tests/jev-alignment-runner.test.ts",
+      "result": "PASS;35 tests;0 failures",
+      "sha256": "627f845b7f2c5beffe33b327d0a59b2027e7a237e6d76a3814c71c2d114e83b7"
+    },
+    {
+      "localLog": "implementation-check.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run check",
+      "result": "FAIL;new ADR exceeded decision-record byte budget;subsequently corrected",
+      "sha256": "325e1e3ef71ba18ec62513db61e4f9d980e93b3d0690a4b31a77edaddd34042c"
+    },
+    {
+      "localLog": "implementation-final-check.txt",
+      "command": "npx --yes --package=bun@1.4.0 bun run check",
+      "result": "PASS;1304 tests;1 opt-in live smoke skipped;0 failures",
+      "sha256": "0cf58a8bb83bed1313b1529714ec2d9ce94602696c28593a1816cade3d4a095e"
+    }
+  ],
+  "verifiedFileHashes": {
+    "docs/adr/0016-delegated-recovery.md": "fb25da4d3eaf30e43cb72ff70165677062900e5cbc61ca9a0e778c1e4cd75a1d",
+    "evals/README.md": "868499780beda4e8369bacbe755d735937943fb45dfef05e10c9cdd52bdc4e41",
+    "evals/alignment-corpus/jev-run.ts": "fd54c44328ce05de3aee29332548ff4f0ef61437b4e680d4abd37a0ac036e0e9",
+    "evals/alignment-corpus/jev.ts": "9153c5128035d819d468f21c922b718e63dc0f73a80db22f1f1e51e4e3dd51cb",
+    "evals/blocker-decisions/development-manifest.json": "f7f844038af38fdbe064e610a9a994f4f084b2de5258db157121c77a7e7ac41f",
+    "evals/blocker-decisions/evaluate.ts": "ed579ff5e7c5a94a525ddb9191235c7665f59d8479d780318c67c6eb47d8a56a",
+    "evals/blocker-decisions/jev.ts": "791140ac26a7a85b79ea9416851e79fd769f9a17ee828d4eb2644e3397d4e64d",
+    "evals/blocker-decisions/run.ts": "07af5ebe88320e3604d259e992e8f93e7302914b80b3a01d4573a32b997d4ff5",
+    "evals/blocker-decisions/schema.ts": "c881b8b09ac1400c8b832d1b43dac18ba739fd191c9587a87aae0f120197dd2a",
+    "evals/blocker-decisions/v1.json": "3b1bd8462123b27a64a0c5c8463fb6f2e92a67e00f01a3f9aff628211abe088b",
+    "evals/jev-transport.ts": "dbbd057f08d55734be255f24bcb675a1cbdd808e809fb0f4cd020d1e856b8558",
+    "package.json": "f4698c7c405770619399e1562543b1d0544f77454e0cf5bce8e51ad5a0283fe0",
+    "tests/blocker-decisions.test.ts": "44045a653791c44ded4a7f2f4fceb8695aa9cb5d1ccd43db279f8565d19ecdba",
+    "tests/documentation-contract.test.ts": "4e8216e0d1e7526fff2ca7d25f56e08f9cb7e45027223edefea7f9ce4596a22b",
+    "tests/jev-alignment-runner.test.ts": "72d7abf51fde0c9a46d42396f4a54f5d0780fae8285a91db0e6ac385ace39429",
+    "tests/jev-transport.test.ts": "871f0869f827bbc39a51fcdd784d1403d40a0a1b84aaa88ea287d4e2807c435a"
+  },
+  "liveProviderCalls": 0,
+  "qualification": "unmeasured; credentials not located, spending cap not supplied, real holdout and comparator data pending",
+  "rawLogPolicy": "Full repository-check logs remain local. Commands, digests, and outcomes are retained here."
+}
