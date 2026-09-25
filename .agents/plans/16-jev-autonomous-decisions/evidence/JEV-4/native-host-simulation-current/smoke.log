@@ -1,18 +1,18 @@
 bun test v1.4.0 (34cbb9a40)
 
 tests/recovery-treatment-host.test.ts:
-(pass) real openai/gpt-5.6-terra host guarded reset simulation accepted [9836.48ms]
-(pass) real openai/gpt-5.6-terra host guarded reset simulation control [9295.64ms]
-(pass) real openai/gpt-5.6-terra host guarded reset simulation subthreshold [9442.67ms]
-(pass) real openai/gpt-5.6-terra host guarded reset simulation model-mismatch [9569.14ms]
-(pass) real xai/grok-4.6 host guarded reset simulation accepted [9077.55ms]
-(pass) real xai/grok-4.6 host guarded reset simulation control [9095.80ms]
-(pass) real xai/grok-4.6 host guarded reset simulation subthreshold [9877.56ms]
-(pass) real xai/grok-4.6 host guarded reset simulation model-mismatch [9755.38ms]
-(pass) native openai/gpt-5.6-terra stop revokes delayed simulated Jev advice [17808.44ms]
-(pass) native xai/grok-4.6 stop revokes delayed simulated Jev advice [17619.52ms]
+(pass) real openai/gpt-5.6-terra host guarded reset simulation accepted [12764.43ms]
+(pass) real openai/gpt-5.6-terra host guarded reset simulation control [13469.01ms]
+(pass) real openai/gpt-5.6-terra host guarded reset simulation subthreshold [12317.25ms]
+(pass) real openai/gpt-5.6-terra host guarded reset simulation model-mismatch [12757.99ms]
+(pass) real xai/grok-4.6 host guarded reset simulation accepted [12161.16ms]
+(pass) real xai/grok-4.6 host guarded reset simulation control [12490.68ms]
+(pass) real xai/grok-4.6 host guarded reset simulation subthreshold [12715.15ms]
+(pass) real xai/grok-4.6 host guarded reset simulation model-mismatch [12362.02ms]
+(pass) native openai/gpt-5.6-terra stop revokes delayed simulated Jev advice [21883.80ms]
+(pass) native xai/grok-4.6 stop revokes delayed simulated Jev advice [21940.32ms]
 
  10 pass
  0 fail
  162 expect() calls
-Ran 10 tests across 1 file. [111.46s]
+Ran 10 tests across 1 file. [144.93s]

@@ -1,7 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { readFile, readdir, realpath } from "node:fs/promises";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 	cwd: fileURLToPath(new URL(".", import.meta.url)),
@@ -15,6 +16,12 @@ const sha = (value: Uint8Array) =>
 const assert = (condition: unknown, reason: string) => {
 	if (!condition) throw new Error(`Host simulation receipt invalid: ${reason}`);
 };
+const { datasetDigest } = await import(
+	pathToFileURL(join(repositoryRoot, "evals/recovery-decisions/schema.ts")).href
+);
+const { HostArtifactsSchema } = await import(
+	pathToFileURL(join(repositoryRoot, "evals/host-artifacts.ts")).href
+);
 const receipt = JSON.parse(await read("receipt.json"));
 assert(/^[a-f0-9]{40}$/.test(receipt.sourceHead), "source commit");
 assert(
@@ -76,10 +83,67 @@ assert(
 		cases.filter((name) => name.includes("stop revokes delayed")).length === 2,
 	"both manager routes and delayed stop",
 );
+const capturedFiles = (
+	await readdir(new URL("host-artifacts/", import.meta.url))
+).sort();
+assert(
+	receipt.hostArtifactCaptures?.length === 10 &&
+		JSON.stringify(capturedFiles) ===
+			JSON.stringify(
+				receipt.hostArtifactCaptures
+					.map((row: { file: string }) => row.file)
+					.sort(),
+			) &&
+		receipt.trustedExecutableVersion === "1.18.31" &&
+		/^[a-f0-9]{64}$/.test(receipt.trustedExecutableSha256),
+	"complete pinned treatment host captures",
+);
+for (const [index, record] of receipt.hostArtifactCaptures.entries()) {
+	const caseName = cases[index];
+	const model = caseName.match(
+		/(?:real|native) (openai\/gpt-5\.6-terra|xai\/grok-4\.6) /,
+	)?.[1];
+	const scenario = caseName.includes("stop revokes delayed")
+		? "delayed-stop"
+		: caseName.match(
+				/simulation (accepted|control|subthreshold|model-mismatch)$/,
+			)?.[1];
+	assert(model && scenario, `case ${index + 1} identifier`);
+	const file = `${model.replaceAll("/", "-")}-${scenario}.json`;
+	assert(record.file === file, `case ${index + 1} file`);
+	const bytes = await read(`host-artifacts/${file}`);
+	assert(sha(bytes) === record.sha256, `${file} digest`);
+	const capture = JSON.parse(bytes.toString("utf8"));
+	const artifacts = HostArtifactsSchema.parse(capture.identity);
+	assert(
+		capture.schemaVersion === 1 &&
+			capture.caseId === file.slice(0, -5) &&
+			capture.verification.manifestDigest === datasetDigest(artifacts) &&
+			capture.verification.method === "copied-files-and-linux-process" &&
+			artifacts.opencode.version === receipt.trustedExecutableVersion &&
+			artifacts.opencode.bytes.sha256 === receipt.trustedExecutableSha256 &&
+			artifacts.opencode.bytes.executable === true &&
+			artifacts.packageCache === null,
+		`${file} executable identity`,
+	);
+}
+const executable = process.env.FLOW_RECOVERY_OPENCODE_EXECUTABLE;
+let localBinaryVerified = false;
+if (executable) {
+	const path = await realpath(executable);
+	const version = spawnSync(path, ["--version"], { encoding: "utf8" });
+	assert(
+		sha(await readFile(path)) === receipt.trustedExecutableSha256 &&
+			version.status === 0 &&
+			version.stdout.trim() === receipt.trustedExecutableVersion,
+		"local pinned executable differs",
+	);
+	localBinaryVerified = true;
+}
 assert(
 	sha(await read("verify.ts")) === receipt.verifySha256,
 	"verifier digest",
 );
 process.stdout.write(
-	`${JSON.stringify({ verdict: "verified-simulation-only", head: receipt.sourceHead, cases: cases.length })}\n`,
+	`${JSON.stringify({ verdict: localBinaryVerified ? "verified-pinned-host-simulation" : "verified-captured-host-identity", head: receipt.sourceHead, cases: cases.length, opencodeSha256: receipt.trustedExecutableSha256 })}\n`,
 );
