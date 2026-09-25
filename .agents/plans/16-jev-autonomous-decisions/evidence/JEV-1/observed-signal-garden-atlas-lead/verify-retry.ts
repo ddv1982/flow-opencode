@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 
 const sha = (bytes: Uint8Array) =>
@@ -22,12 +22,16 @@ const browserGate =
 
 assert(
 	outcome.classification === "observed-remedy-outcome-not-qualification" &&
+		outcome.sourceReference === lead.snapshot.provenance.sourceReference &&
 		outcome.checkpointRevision === lead.snapshot.session.revision &&
 		outcome.checkpointSourceDigest === lead.snapshot.sourceDigest &&
 		outcome.originatingTaskId === lead.snapshot.provenance.originatingTaskId &&
 		outcome.independenceGroupId ===
 			lead.snapshot.provenance.independenceGroupId &&
-		outcome.remedy.candidateId === lead.snapshot.proposal.candidates[0]?.id,
+		outcome.remedy.candidateId === lead.snapshot.proposal.candidates[0]?.id &&
+		outcome.remedy.featureId === "theme-runtime-atlases" &&
+		outcome.remedy.featureId ===
+			lead.snapshot.proposal.candidates[0]?.featureId,
 	"checkpoint and proposed remedy binding",
 );
 assert(
@@ -50,6 +54,9 @@ assert(
 		outcome.continuation.independentFeatureReview === "pending" &&
 		outcome.continuation.observedDesktopImageUrls === 14 &&
 		outcome.continuation.recordedBaselineImageUrls === 54 &&
+		lead.snapshot.session.plan.requirements.some((requirement: string) =>
+			requirement.includes("54-image baseline"),
+		) &&
 		outcome.qualification.independentDecisionLabel === "pending" &&
 		outcome.qualification.typedManagerProposalAtCheckpoint === false &&
 		outcome.qualification.jevCalled === false &&
@@ -113,6 +120,9 @@ if (privateRoot) {
 	const dispatch = JSON.parse(
 		await readFile(join(privateRoot, "retry-dispatch/dispatch-0.json"), "utf8"),
 	);
+	const dispatchFiles = (await readdir(join(privateRoot, "retry-dispatch")))
+		.filter((name) => /^dispatch-\d+\.json$/.test(name))
+		.sort();
 	const remedy = session.runs.find(
 		(run: { id: string }) => run.id === outcome.remedy.runId,
 	);
@@ -158,6 +168,9 @@ if (privateRoot) {
 		),
 		"utf8",
 	);
+	const e2ePatch = sourcePatch
+		.split("diff --git a/e2e/garden-loop.spec.ts b/e2e/garden-loop.spec.ts")[1]
+		?.split("\ndiff --git ")[0];
 	const validationOutput = (output: string) => {
 		const match = output.match(/\n\n\[flow-validation\] (\{[^\n]+\})$/);
 		return match
@@ -180,8 +193,12 @@ if (privateRoot) {
 			JSON.stringify(checkpoint) === JSON.stringify(lead.snapshot.session) &&
 			session.revision === outcome.continuation.recordedRevision &&
 			remedy?.state === "completed" &&
+			remedy.featureId === outcome.remedy.featureId &&
 			remedy.attempt === outcome.remedy.attempt &&
 			review?.result?.verdict === "passed" &&
+			review.kind === "feature" &&
+			review.featureId === outcome.remedy.featureId &&
+			review.runId === remedy.id &&
 			review.result.findings.length === 0 &&
 			review.sourceDigest === outcome.remedy.sourceDigest &&
 			review.result.recordedRevision ===
@@ -249,10 +266,16 @@ if (privateRoot) {
 			sourceManifest.sourceDigestBefore === passedValidation.sourceDigest &&
 			sourceManifest.sourceDigestAfter === passedValidation.sourceDigest &&
 			sourceManifest.trackedPatchSha256 === sha(Buffer.from(sourcePatch)) &&
-			sourcePatch.includes(
-				"diff --git a/e2e/garden-loop.spec.ts b/e2e/garden-loop.spec.ts",
+			/^\+\s*test\('loads the bounded atlas garden image set after onboarding'/.test(
+				e2ePatch
+					?.split("\n")
+					.find((line) =>
+						line.includes("loads the bounded atlas garden image set"),
+					) ?? "",
 			) &&
-			sourcePatch.includes("toBe(14)"),
+			/^\+\s*await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(14\);$/m.test(
+				e2ePatch ?? "",
+			),
 		"observed measurement and passing assertion at the validated source",
 	);
 	assert(
@@ -260,6 +283,9 @@ if (privateRoot) {
 			JSON.stringify(outcome.authorization.models) &&
 			authorization.purpose === outcome.authorization.purpose &&
 			authorization.maxDispatches === outcome.authorization.maxDispatches &&
+			dispatchFiles.length === outcome.authorization.consumed &&
+			dispatchFiles.length === authorization.maxDispatches &&
+			dispatchFiles[0] === "dispatch-0.json" &&
 			authorization.expiresAt === outcome.authorization.expiresAt &&
 			dispatch.model === outcome.authorization.dispatchModel &&
 			dispatch.kind === outcome.authorization.dispatchKind &&
