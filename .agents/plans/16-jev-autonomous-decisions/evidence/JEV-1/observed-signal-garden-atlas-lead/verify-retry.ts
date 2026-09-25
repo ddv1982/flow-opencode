@@ -171,6 +171,19 @@ if (privateRoot) {
 	const e2ePatch = sourcePatch
 		.split("diff --git a/e2e/garden-loop.spec.ts b/e2e/garden-loop.spec.ts")[1]
 		?.split("\ndiff --git ")[0];
+	const addedE2eLines = e2ePatch?.split("\n") ?? [];
+	const measurementStart = addedE2eLines.findIndex((line) =>
+		/^\+  test\('loads the bounded atlas garden image set after onboarding',/.test(
+			line,
+		),
+	);
+	const measurementEnd = addedE2eLines.findIndex(
+		(line, index) => index > measurementStart && line === "+  });",
+	);
+	const measurementBody = addedE2eLines.slice(
+		measurementStart + 1,
+		measurementEnd,
+	);
 	const validationOutput = (output: string) => {
 		const match = output.match(/\n\n\[flow-validation\] (\{[^\n]+\})$/);
 		return match
@@ -199,6 +212,8 @@ if (privateRoot) {
 			review.kind === "feature" &&
 			review.featureId === outcome.remedy.featureId &&
 			review.runId === remedy.id &&
+			JSON.stringify([...review.validationIds].sort()) ===
+				JSON.stringify([...outcome.remedy.passedValidationIds].sort()) &&
 			review.result.findings.length === 0 &&
 			review.sourceDigest === outcome.remedy.sourceDigest &&
 			review.result.recordedRevision ===
@@ -266,15 +281,12 @@ if (privateRoot) {
 			sourceManifest.sourceDigestBefore === passedValidation.sourceDigest &&
 			sourceManifest.sourceDigestAfter === passedValidation.sourceDigest &&
 			sourceManifest.trackedPatchSha256 === sha(Buffer.from(sourcePatch)) &&
-			/^\+\s*test\('loads the bounded atlas garden image set after onboarding'/.test(
-				e2ePatch
-					?.split("\n")
-					.find((line) =>
-						line.includes("loads the bounded atlas garden image set"),
-					) ?? "",
-			) &&
-			/^\+\s*await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(14\);$/m.test(
-				e2ePatch ?? "",
+			measurementStart >= 0 &&
+			measurementEnd > measurementStart &&
+			measurementBody.some((line) =>
+				/^\+    await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(14\);$/.test(
+					line,
+				),
 			),
 		"observed measurement and passing assertion at the validated source",
 	);
