@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "0192ede787239205f14deb16a58643ca2896d09e",
+  "approvedMaxAttempts": 24,
+  "approvedMaxUsd": 0.1,
+  "actualAttempts": 9,
+  "reservedUsd": 0.024191999999999998,
+  "estimatedUsd": 0.00031802400000000003,
+  "inputTokens": 7572,
+  "outputTokens": 836,
+  "model": "jev-1.13.0",
+  "qualification": "inconclusive",
+  "providerDocs": [
+    "https://docs.typesafe.ai/models",
+    "https://docs.typesafe.ai/api"
+  ],
+  "authorization": {
+    "schemaVersion": 1,
+    "purpose": "User-approved initial Jev probe: shared maximum 24 HTTP attempts and USD 0.10; blocker collector allocated 21 attempts/USD 0.09, runtime adapter allocated 3 attempts/USD 0.01; no automatic repeats",
+    "models": [
+      "typesafe/jev-1.13.0"
+    ],
+    "maxDispatches": 2,
+    "expiresAt": "2026-09-21T13:10:51Z"
+  },
+  "dispatches": [
+    {
+      "model": "typesafe/jev-1.13.0",
+      "kind": "probe",
+      "at": "2026-09-21T12:11:05.367Z"
+    },
+    {
+      "model": "typesafe/jev-1.13.0",
+      "kind": "probe",
+      "at": "2026-09-21T12:11:55.982Z"
+    }
+  ],
+  "evidenceSha256": {
+    "probe-blockers-live.json": "785f7859acdc3e58ac6daf4195ade3c7c77ccf60cfa04f6e3600525731d54c8a",
+    "probe-blockers-report.json": "0b2504865da99f0df6d5a1e57d8d7bdbb003ccbd2d0803bcde645c4eef4c1aac",
+    "runtime-live.json": "9591a76b2282ac4361dfaa1341b7b9bf652b00c87b734720b61fde73c0252d4b"
+  }
+}

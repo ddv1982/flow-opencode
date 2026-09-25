@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-21T21:34:30.050028+00:00",
+  "qualification": "inconclusive",
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1409,
+      "skipped": 3,
+      "failed": 0,
+      "assertions": 7384
+    },
+    {
+      "command": "FLOW_REQUEST_BUDGET_SMOKE=1 bun test tests/recovery-request-host.test.ts",
+      "exitCode": 0,
+      "passed": 2,
+      "failed": 0,
+      "assertions": 8
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "hostVersion": "1.18.31",
+  "hostSimulation": {
+    "credentials": "synthetic OAuth tokens, no inherited credential copy",
+    "providerResponses": "simulated HTTP 503; no provider or token-refresh request forwarded",
+    "cases": [
+      "openai/gpt-5.6-terra",
+      "xai/grok-4.6"
+    ],
+    "reservationsPerCase": 2,
+    "reservedMicroUsdPerCase": 10000,
+    "withFlow": false
+  },
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "sourceDigests": {
+    "evals/harness.ts": "4a20bfd0fe6a7f5a3ecdfefea29ce8522a85fd01edf77c7dc9692321e6884e45",
+    "evals/recovery-decisions/request-budget.ts": "897e174ce44d311a6850bfa078eaf1fb73f35ff97bfd9f87404a9c2c9f81577b",
+    "evals/recovery-decisions/request-gate.ts": "e4260898e5eaa72ad5131b63e93f29132bf5de9a8452b9f22f3195d41d46e0e6",
+    "evals/recovery-decisions/budget-plugin.ts": "bd99009598b54b2125a1b821731d82748f5b923c5752ea4b0f73ad980aa8ab4e",
+    "evals/recovery-decisions/episode-host.ts": "56717f11280ae3c0cee4beadea9b73e3ff03d0a9e2985631fc990de99c57d7a7",
+    "evals/recovery-decisions/episode-runner.ts": "adcdd6f66982467cb678c9bfc79a65af883a63c8c7c1d95894c56cc1487e78e4",
+    "evals/recovery-decisions/run.ts": "34261cbcec0b2c1873473b3f74c98c54159586897b57e8c9039032fd893377cf",
+    "evals/recovery-decisions/sources.ts": "3367118ca007700dbf74b7ef596a5c5bd4c9d3e1d399ccb8ac708179c354f0cb",
+    "tests/recovery-request-budget.test.ts": "c5467359e4af7cf668fc107d82a62fbcd9ee0ad4dce2943ee117e5615f60ad3b",
+    "tests/recovery-request-host.test.ts": "55bb895088440058d551b446edf02b3dcce19f7416ad05aaf2fb816569ba9da7"
+  },
+  "logs": [
+    {
+      "path": "/tmp/flow-request-final-check.log",
+      "sha256": "750c91e36898f040ecf200682699a6da434422466901f0cad641df75165132af"
+    },
+    {
+      "path": "/tmp/flow-request-host-final.log",
+      "sha256": "2e293e42e930404d416e9c6effcb55459c8542379eba43a3371fce5f9a61d81c"
+    }
+  ],
+  "limits": [
+    "Reservation upper bounds for real OAuth billing require review; no invoice-cost guarantee from catalog metadata.",
+    "Verified HTTP provider path only; not an OS egress sandbox.",
+    "New explicit paid campaign cap required.",
+    "Isolated Jev treatment and live episode qualification remain unavailable."
+  ]
+}

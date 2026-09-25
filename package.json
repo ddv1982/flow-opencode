@@ -43,6 +43,7 @@
 		"eval:smoke": "bun run evals/run.ts -- --repeat 1",
 		"eval:canary": "bun run scripts/eval-canary.ts",
 		"eval:jev": "bun run evals/alignment-corpus/jev-run.ts",
+		"eval:recovery": "bun run evals/recovery-decisions/run.ts",
 		"eval:blockers": "bun run evals/blocker-decisions/run.ts",
 		"eval:cheap": "bun run evals/eval-cheap.ts",
 		"benchmark": "bun run evals/benchmark-run.ts",
