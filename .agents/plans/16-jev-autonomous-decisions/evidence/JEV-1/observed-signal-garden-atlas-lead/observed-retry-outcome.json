@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "classification": "observed-remedy-outcome-not-qualification",
+  "sourceReference": "signal-garden-01f6d22-atlas-r10",
+  "originatingTaskId": "signal-garden-runtime-atlas-20260925",
+  "independenceGroupId": "signal-garden-runtime-atlas-20260925",
+  "checkpointRevision": 10,
+  "checkpointSourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+  "authorization": {
+    "purpose": "One fresh user-directed ordinary Signal Garden Flow retry from revision 10 to add an isolated deterministic atlas-generator test, record current-source lint and unit evidence, and obtain independent review; no TypeSafe call or qualification campaign; local only",
+    "models": [
+      "openai/gpt-5.6-terra",
+      "openai/gpt-5.6-sol"
+    ],
+    "maxDispatches": 1,
+    "expiresAt": "2026-09-27T07:00:00Z",
+    "consumed": 1,
+    "dispatchModel": "openai/gpt-5.6-terra",
+    "dispatchKind": "command",
+    "dispatchAt": "2026-09-25T10:05:49.902Z"
+  },
+  "remedy": {
+    "candidateId": "atlas-evidence-repair",
+    "featureId": "theme-runtime-atlases",
+    "attempt": 3,
+    "runId": "run:b773f7f5-8f95-4bdb-93d7-e91ec15c20e8",
+    "state": "completed",
+    "passedValidationIds": [
+      "a58e07b6-ae3e-49e8-a9ca-5e6606d17bdd",
+      "7e45bba4-a2ca-40d8-a792-5cfc03a147d6"
+    ],
+    "sourceDigest": "sha256:6dbd48dcf750afe1f5a516c7029bb9c739192876f9dc18c218ccfc4619169b0b",
+    "independentFeatureReview": {
+      "id": "review:c45737fb-d415-4a04-ab08-14ee03b1a37a",
+      "verdict": "passed",
+      "findingCount": 0,
+      "recordedRevision": 17
+    }
+  },
+  "continuation": {
+    "featureId": "atlas-behavior-and-measurement",
+    "state": "active",
+    "focusedValidationId": "a490b784-da5c-48e1-8343-9b55157b4f09",
+    "fullGateValidationId": "3449fb91-1a27-40e3-81df-891f6f7d944f",
+    "sourceDigest": "sha256:5712864a8a6cf6191969c1755000cf0e32b24bba9cb6d03151ad015225f62eb0",
+    "recordedRevision": 21,
+    "independentFeatureReview": "pending",
+    "observedDesktopImageUrls": 14,
+    "recordedBaselineImageUrls": 54
+  },
+  "qualification": {
+    "independentDecisionLabel": "pending",
+    "typedManagerProposalAtCheckpoint": false,
+    "jevCalled": false,
+    "acceptedCaseCount": 0,
+    "pairedEpisodeCount": 0
+  },
+  "privateEvidence": {
+    "finalSessionSha256": "c1d6fceec3722b7c07aca6d3af458df57884ab0bdcf06f76c8e93246eee0b26d",
+    "checkpointSnapshotSha256": "6ddd4fe3e862fdb58e20240794a2d702b1e47eaa2d6dca315d39d574ac38f9b8",
+    "passedReviewSnapshotSha256": "1a7c5b0f4e7e14935c9f5232191a72c05bc816f200e82d50569a663fac57e0f0",
+    "authorizationSha256": "df1619b74a628688a691b49aeb491584c7a70f9e96ec3b2295ad62997dfac1b2",
+    "dispatchSha256": "621fef1af0269a0dd705263383d3fb76c94f0b349b92fa2d86a365e5a239ceca"
+  }
+}
