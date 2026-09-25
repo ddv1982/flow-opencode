@@ -1,6 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
 type SampleRow = {
@@ -12,6 +13,10 @@ type SampleRow = {
 	warningTotal: number;
 	proposalLookupTotal: number;
 };
+const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+	cwd: fileURLToPath(new URL(".", import.meta.url)),
+	encoding: "utf8",
+}).trim();
 const read = async (name: string) => readFile(new URL(name, import.meta.url));
 const sha = (value: Uint8Array | string) =>
 	createHash("sha256").update(value).digest("hex");
@@ -19,14 +24,13 @@ const assert = (ok: unknown, reason: string) => {
 	if (!ok) throw new Error(`Idle performance receipt invalid: ${reason}`);
 };
 const git = (...args: string[]) =>
-	execFileSync("git", args, { encoding: "buffer" });
+	execFileSync("git", args, { cwd: repositoryRoot, encoding: "buffer" });
 const ancestor = (older: string, newer: string) => {
-	const result = spawnSync("git", [
-		"merge-base",
-		"--is-ancestor",
-		older,
-		newer,
-	]);
+	const result = spawnSync(
+		"git",
+		["merge-base", "--is-ancestor", older, newer],
+		{ cwd: repositoryRoot },
+	);
 	assert(result.status === 0 || result.status === 1, "git ancestry probe");
 	return result.status === 0;
 };

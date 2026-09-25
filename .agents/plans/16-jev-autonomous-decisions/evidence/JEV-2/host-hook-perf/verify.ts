@@ -1,8 +1,13 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
 
+const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+	cwd: fileURLToPath(new URL(".", import.meta.url)),
+	encoding: "utf8",
+}).trim();
 const read = (name: string) => readFile(new URL(name, import.meta.url));
 const sha = (bytes: string | Uint8Array) =>
 	createHash("sha256").update(bytes).digest("hex");
@@ -10,8 +15,9 @@ const assert = (condition: unknown, label: string) => {
 	if (!condition) throw new Error(`Host hook diagnostic invalid: ${label}`);
 };
 const git = (...args: string[]) =>
-	execFileSync("git", args, { encoding: "buffer" });
-const gitStatus = (...args: string[]) => spawnSync("git", args).status;
+	execFileSync("git", args, { cwd: repositoryRoot, encoding: "buffer" });
+const gitStatus = (...args: string[]) =>
+	spawnSync("git", args, { cwd: repositoryRoot }).status;
 const percentile = (samples: number[], fraction: number) => {
 	const sorted = samples.toSorted((a, b) => a - b);
 	return sorted[Math.ceil(fraction * sorted.length) - 1];

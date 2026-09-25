@@ -85,5 +85,5 @@
     "A fetch guard observes direct fetch attempts but not every possible network API. No provider request was configured or expected.",
     "No live Jev shadow call is timed here; the JEV-2 performance gate remains open."
   ],
-  "verifySha256": "99646b22834ae6e85f57ab32cfadf92b95bad1d0cd54b65b37bae1396d0c31eb"
+  "verifySha256": "7546866a1962f190aa4a4a5d8c26dd9e4ca109d9bf809072f93045d4634a714a"
 }
