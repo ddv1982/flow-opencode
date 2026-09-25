@@ -22,9 +22,10 @@
     "The request gate uses simulation origin and fake OAuth replies; no live manager or Jev inference is measured.",
     "The operator reply is a test fixture and its human attribution is unverified.",
     "The suite exercises evaluation episode machinery, not the packed production delegated profile or the required 100 live episode pairs.",
-    "Host artifact headers are redacted captures of test-generated episode headers; the local binary path is not retained, but its SHA-256 and reported version are pinned."
+    "Host artifact headers are redacted captures of test-generated episode headers; the local binary path is not retained, but its SHA-256 and reported version are pinned.",
+    "The measured source head is historical; the verifier checks that the complete relevant runtime and this suite\u2019s test inputs are unchanged at the current branch head."
   ],
-  "verifySha256": "458fbec239a09f3da4d9c216f82651cf07c83096d7ca95a4b91adc0a0786996f",
+  "verifySha256": "1cc108103ece5d3fcafed7baafcbad672bb74d000f7b46dcd0d0a49a44adeaba",
   "trustedExecutableSha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
   "trustedExecutableVersion": "1.18.31",
   "hostArtifactCaptures": [

@@ -17,9 +17,10 @@
   "limits": [
     "Synthetic startup fixture uses fake OAuth and a placeholder TypeSafe key; no inference authorization or request claims occurred.",
     "A live-origin request gate started but no manager or Jev decision was dispatched.",
-    "The experimental evaluation treatment is not the packed production delegated profile; this does not close the JEV-4 interaction or quality gates."
+    "The experimental evaluation treatment is not the packed production delegated profile; this does not close the JEV-4 interaction or quality gates.",
+    "The measured source head is historical; the verifier checks that the complete relevant runtime and this suite\u2019s test inputs are unchanged at the current branch head."
   ],
-  "verifySha256": "1bfaa1df32f4e3cd0354963c44a7e28712873c0d48fb4ffff0ccfcd9e6088b56",
+  "verifySha256": "0e85e5ea7772897d776b710b8f13f2ae6a8244e87e196f3b858e635472ff8213",
   "trustedExecutableSha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
   "trustedExecutableVersion": "1.18.31",
   "versionObservation": "post-run-same-sha256-local-binary--version"
