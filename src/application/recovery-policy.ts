@@ -112,6 +112,7 @@ type Lease = {
 type Host = {
 	parents: Map<string, string>;
 	manual: string | null;
+	ordinaryAutoMessage: string | null;
 	fenced: boolean;
 };
 export type RecoveryGuard = Readonly<{
@@ -165,7 +166,12 @@ export class RecoveryController {
 				throw new Error(
 					"Recovery host capacity reached. Restart with explicit user direction.",
 				);
-			host = { parents: new Map(), manual: null, fenced: false };
+			host = {
+				parents: new Map(),
+				manual: null,
+				ordinaryAutoMessage: null,
+				fenced: false,
+			};
 			this.#hosts.set(id, host);
 		}
 		return host;
@@ -180,6 +186,7 @@ export class RecoveryController {
 		if (host) {
 			host.fenced = false;
 			host.manual = null;
+			host.ordinaryAutoMessage = null;
 			host.parents.clear();
 		}
 	}
@@ -237,14 +244,22 @@ export class RecoveryController {
 			const leaseHost = this.#lease.host;
 			this.#lease.controller.abort();
 			const hostState = this.#hosts.get(leaseHost);
-			if (hostState) hostState.manual = null;
+			if (hostState) {
+				hostState.manual = null;
+				hostState.ordinaryAutoMessage = null;
+			}
 			this.#lease = null;
 		}
 	}
 	#expireLease(): void {
 		if (this.#lease && this.#now() >= this.#lease.deadline) this.revoke();
 	}
-	observeMessage(hostId: string, id: string, synthetic: boolean): void {
+	observeMessage(
+		hostId: string,
+		id: string,
+		synthetic: boolean,
+		trustedAutoContinuation = false,
+	): void {
 		this.#expireLease();
 		const host =
 			this.#hosts.get(hostId) ??
@@ -254,7 +269,11 @@ export class RecoveryController {
 		if (!host) return;
 		if (!synthetic && host.fenced) this.#unfenceIfUnprotected(hostId);
 		const lease = this.#lease?.host === hostId ? this.#lease : null;
-		if (!synthetic) host.manual = id;
+		if (!synthetic) {
+			host.manual = id;
+			host.ordinaryAutoMessage = null;
+		} else if (trustedAutoContinuation && host.fenced && !lease && host.manual)
+			host.ordinaryAutoMessage = id;
 		if (lease) {
 			if (!synthetic && lease.parent !== null) lease.direction = id;
 			lease.parent = id;
@@ -290,7 +309,10 @@ export class RecoveryController {
 				throw new Error("Recovery lineage expired or cancelled.");
 			return lease;
 		}
-		if (!parent || parent !== host.manual)
+		if (
+			!parent ||
+			(parent !== host.manual && parent !== host.ordinaryAutoMessage)
+		)
 			throw new Error(
 				"Recovery was revoked. A fresh real user direction is required.",
 			);
@@ -374,7 +396,10 @@ export class RecoveryController {
 				this.#protectedSessions.delete(sessionId);
 				if (owner) {
 					const host = this.#hosts.get(owner);
-					if (host) host.manual = null;
+					if (host) {
+						host.manual = null;
+						host.ordinaryAutoMessage = null;
+					}
 				}
 			},
 			check: (s, source, m) => this.#check(context, s, source, m),

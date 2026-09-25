@@ -481,6 +481,59 @@ describe("process-local recovery", () => {
 				}),
 		).not.toThrow();
 	});
+	test("a fresh ordinary auto continuation can use a bound protected session", async () => {
+		const s = await setup("shadow");
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		const session = s.repository.session;
+		if (!session) throw new Error("Fixture session missing.");
+		const request = {
+			operationId: "ordinary-completed-close",
+			expectedRevision: session.revision,
+			sessionId: session.id,
+			kind: "completed" as const,
+			summary: "Done",
+		};
+		s.controller.revoke("host");
+		expect(() =>
+			s.controller.guard(context).checkClose(session, request),
+		).toThrow("fresh real user direction");
+		s.controller.observeMessage("host", "ordinary-user", false);
+		s.controller.observeAssistant("host", "ordinary-first", "ordinary-user");
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "ordinary-first" })
+				.checkClose(session, request),
+		).not.toThrow();
+		s.controller.observeMessage("host", "ordinary-continuation", true, true);
+		s.controller.observeAssistant(
+			"host",
+			"ordinary-next",
+			"ordinary-continuation",
+		);
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "ordinary-next" })
+				.checkClose(session, request),
+		).not.toThrow();
+		s.controller.observeMessage("host", "untrusted-continuation", true);
+		s.controller.observeAssistant(
+			"host",
+			"untrusted-next",
+			"untrusted-continuation",
+		);
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "untrusted-next" })
+				.checkClose(session, request),
+		).toThrow("fresh real user direction");
+	});
 	test("wrong host and worker cannot consume the pending operation", async () => {
 		const s = await setup(),
 			mutation = await recommend(s);
