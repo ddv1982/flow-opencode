@@ -304,6 +304,8 @@ The [observed Signal Garden tracing case](evidence/JEV-1/observed-signal-garden-
 
 A [current-head native-host simulation smoke](evidence/JEV-4/native-host-simulation-current/README.md) at `bf07e8f` passed ten real OpenCode host cases across both selected manager routes, including delayed stop. It remains simulation treatment evidence and does not close lane 5's packed-plugin delegated-authority gap. A [zero-claim native startup check](evidence/JEV-4/native-host-simulation-current/zero-claim-startup/README.md) at `343b203` confirms all four selected manager/arm combinations start without an inference claim; it is not a recovery-quality result.
 
+A [current-head operator resume/cancel simulation](evidence/JEV-4/native-host-simulation-current/operator-resume/README.md) at `085fdb2` passed four real OpenCode host tests across both selected manager routes. Its replies are synthetic and its human attribution is unverified; it does not count toward the 100 live paired episodes or interaction review.
+
 The earlier [idle-controls receipt](evidence/JEV-4/worker-10/receipt.json) records idle status and stop without an active lease at `2d41965`. The [delegated-refusal capture](evidence/JEV-4/delegated-refusal/receipt.json) shows that an unqualified delegated request displays its refusal at `94d08bd`. The window-only screenshots and videos remain partial UI observations. Lane 5 remains open after the boot-provenance audit; blocked-checkpoint lanes and the separate operator interaction review remain open.
 
 **Verify, perf.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.

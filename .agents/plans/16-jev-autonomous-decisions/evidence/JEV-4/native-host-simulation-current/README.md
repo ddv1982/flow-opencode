@@ -7,3 +7,5 @@ The host request gate used simulation origin, fake OAuth credentials, and simula
 The opt-in suite is skipped by ordinary `bun run check`. To reproduce it, run the command above from an exact checkout at the receipt's source commit, with the frozen dependencies and OpenCode 1.18.31 available. It needs no real provider credentials or TypeSafe dispatch authorization.
 
 A [pinned native-host zero-claim startup check](zero-claim-startup/README.md) at `343b203` also passed three opt-in no-inference tests and reported zero request claims across the four manager/arm combinations. It is admission safety evidence, not a recovery-quality or interaction pass.
+
+A [current-head operator resume/cancel simulation](operator-resume/README.md) at `085fdb2` passed four real-host test cases. It exercises the evaluation operator interface without real provider inference or verified human attribution.

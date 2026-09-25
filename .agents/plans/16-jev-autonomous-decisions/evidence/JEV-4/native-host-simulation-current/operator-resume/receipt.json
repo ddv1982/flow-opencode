@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "classification": "current-head-real-host-operator-simulation-only",
+  "sourceHead": "085fdb215b7f6ed71b90e918f5b184df96ee77d8",
+  "command": "FLOW_RECOVERY_OPERATOR_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=<pinned 1.18.31 binary> bun test tests/recovery-operator-host.test.ts",
+  "hostVersion": "1.18.31",
+  "passed": 4,
+  "failed": 0,
+  "scenarios": [
+    "real openai/gpt-5.6-terra operator episode resumes",
+    "real openai/gpt-5.6-terra operator episode cancels",
+    "real xai/grok-4.6 operator episode resumes",
+    "real xai/grok-4.6 operator episode cancels"
+  ],
+  "logSha256": "cc09a9f99e85e4d40e377ec1aeb221b2a8a81993717a65b4d6b4990c79b66e4f",
+  "testFileSha256": "16d1d2a26892c932fe175d5dcf481a53f49826d7268c9ea8e567e6dd90d650ca",
+  "supportFileSha256": "be24ec970b84a9bb7228b0a8c6e3658d739d171efcd5a63ffeeccd0e62f7b45f",
+  "harnessSha256": "2fdb37e92c287b21a4c5eca65b7ca47980ce3e56249b43169a90600ab4708b35",
+  "lockSha256": "00872348d141163c992993e1e4ad9076ef44d56aa792ae35a0e9514b588f847c",
+  "recordedAt": "2026-09-25T03:49:48.078918Z",
+  "limits": [
+    "The request gate uses simulation origin and fake OAuth replies; no live manager or Jev inference is measured.",
+    "The operator reply is a test fixture and its human attribution is unverified.",
+    "The suite exercises evaluation episode machinery, not the packed production delegated profile or the required 100 live episode pairs."
+  ],
+  "verifySha256": "6b2bb5ed3c9245cf4f1327fff335f6cd57da69da7faa917773ef8c8d4b934d67"
+}
