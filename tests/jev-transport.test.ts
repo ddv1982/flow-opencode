@@ -16,6 +16,10 @@ describe("bounded Jev transport", () => {
 			calls: 300,
 			reservedUsd: cap,
 		});
+		const belowCap = createJevBudget(300, cap - 1e-9);
+		for (let index = 0; index < 299; index++)
+			expect(belowCap.reserve()).toBe(true);
+		expect(belowCap.reserve()).toBe(false);
 	});
 	test("retries transient responses at most three attempts and reserves each", async () => {
 		let calls = 0;
