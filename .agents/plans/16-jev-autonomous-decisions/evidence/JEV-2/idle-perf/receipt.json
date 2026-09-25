@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "classification": "disabled-mode-idle-routing-microbenchmark",
   "baselineCommit": "c9813f9a87b9b7438671658cfd523adcd89f3098",
-  "headCommit": "4644bef8bf53b3fed2e6be3798f39c09eb2a2b5d",
+  "headCommit": "f798dc5b1c0c4ac86f3269068346a47b699f8b2b",
   "fixtureDigest": "bc6ca14fa518451a65ea17642b44dbc75e02ffd237a7f906bfe12c60b5175773",
   "runtime": {
     "bun": "1.4.0",
@@ -11,47 +11,47 @@
   },
   "probeSha256": "21be11652e0700b533f7ace3a7d3cbe44a9707e3747a0b6a8362107745ec5689",
   "rawFiles": {
-    "baseline.json.gz": "a0f64648cb7dc1ce3d6575aacc2270be53cdb9fc216c8aeebf6aa0556de0aa75",
-    "head.json.gz": "b0548db9f87c9bb458dcb5b4c376cbcfc1a86fd6c276fee6f98fe834a2d401c5"
+    "baseline.json.gz": "5d0fa5809fd565733178f0acbcd73141ded32dba95345ab387c8f04e54f24dbd",
+    "head.json.gz": "d6fa2bf6e461403d3ddad025ddeaaee585e0a7cf81fcabff36437f87c4af72d8"
   },
   "results": [
     {
       "scenario": "no-lease",
-      "baselineP95Us": 1.337,
-      "headP95Us": 1.138,
-      "addedP95Us": -0.199,
+      "baselineP95Us": 1.29,
+      "headP95Us": 1.078,
+      "addedP95Us": -0.212,
       "callsAndRoutesMatch": true
     },
     {
       "scenario": "ready-continuation",
-      "baselineP95Us": 2.577,
-      "headP95Us": 2.3,
-      "addedP95Us": -0.277,
+      "baselineP95Us": 2.686,
+      "headP95Us": 2.439,
+      "addedP95Us": -0.247,
       "callsAndRoutesMatch": true
     },
     {
       "scenario": "blocked-handback",
-      "baselineP95Us": 2.175,
-      "headP95Us": 2.276,
-      "addedP95Us": 0.101,
+      "baselineP95Us": 2.088,
+      "headP95Us": 2.252,
+      "addedP95Us": 0.164,
       "callsAndRoutesMatch": true
     },
     {
       "scenario": "inactive",
-      "baselineP95Us": 0.649,
-      "headP95Us": 0.949,
-      "addedP95Us": 0.3,
+      "baselineP95Us": 0.661,
+      "headP95Us": 1.128,
+      "addedP95Us": 0.467,
       "callsAndRoutesMatch": true
     }
   ],
-  "maxAddedP95Us": 0.3,
+  "maxAddedP95Us": 0.467,
   "fetchCalls": 0,
   "providerCalls": 0,
   "rssMiB": {
-    "baselineAfterImports": 27.81,
-    "headAfterImports": 45.53,
-    "baselineAfterProbe": 58.75,
-    "headAfterProbe": 70.34
+    "baselineAfterImports": 27.94,
+    "headAfterImports": 44.74,
+    "baselineAfterProbe": 58.54,
+    "headAfterProbe": 70.21
   },
   "limits": [
     "The probe times the in-memory AutoDriveCoordinator.onIdle route with immediate mocked projection and prompt ports, not the full OpenCode plugin host event path.",
@@ -60,12 +60,12 @@
     "Shadow advice latency and the pinned live provider deadline are not measured; the JEV-2 performance gate remains open."
   ],
   "expandedSha256": {
-    "baseline.json": "e2d6471ebae96dd29b1bdeb47911f69ab80d1a627020fee14fdc090da4a9c86a",
-    "head.json": "b6b6770dd3ab8804c6ca087fe00c8f775fb8b3688b8851b1cba527111b7dcb00"
+    "baseline.json": "9b2ee37e45233277413bf0d350fc6055e17312be3d3eaae406c7eebb45458427",
+    "head.json": "a9987ed2b82c5ad060d7d5aa05e0f27f2caaf6fa335c2b71be628807f562a0c9"
   },
   "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
   "baselineModuleSha256": "55b15ad6ac2eead7dba5cf06cdf7bcd605c6050f513fee0a8e6abad8f235ddb1",
   "headModuleSha256": "4ad40b994fb47076e899ecb0daa8ea7bb276f32bd057f35f632e665b907ab89f",
-  "headRecoverySha256": "96f9b3561d82fc721ce45df53888e634244f82ec29af47bfdf21375f0d1957b1",
-  "verifySha256": "b635e38f53ac0f8f567e879d9d16213b8f113a0813c60c732b9dee7a3d34266e"
+  "headRecoverySha256": "4afa96f653bb6d0a7125c4c72a8003c61aec604d6df661a0f099d98bd626e8be",
+  "verifySha256": "a881f1f8d3f2a5c620d0e23b0a43d6671fc32fa7cb69d13b35cca7e7624619bc"
 }

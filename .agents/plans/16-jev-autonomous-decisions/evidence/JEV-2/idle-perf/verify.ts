@@ -97,6 +97,13 @@ assert(
 	"head recovery policy source",
 );
 assert(
+	sha(git("show", "HEAD:src/platform/opencode/auto-drive.ts")) ===
+		head.moduleSha256 &&
+		sha(git("show", "HEAD:src/application/recovery-policy.ts")) ===
+			head.recoverySha256,
+	"current candidate runtime differs from measured head",
+);
+assert(
 	baseline.recoverySha256 === null &&
 		receipt.fetchCalls === 0 &&
 		receipt.providerCalls === 0,
@@ -131,13 +138,20 @@ const rows = (baseline.results as SampleRow[]).map((earlier, index) => {
 			earlier.warningTotal === later.warningTotal,
 		"route and prompt counts",
 	);
-	const baselineP95Us = round(percentile(earlier.samplesUs, 0.95));
-	const headP95Us = round(percentile(later.samplesUs, 0.95));
+	const baselineRawP95Us = percentile(earlier.samplesUs, 0.95);
+	const headRawP95Us = percentile(later.samplesUs, 0.95);
+	assert(
+		Math.abs(earlier.p95Us - baselineRawP95Us) < 1e-9 &&
+			Math.abs(later.p95Us - headRawP95Us) < 1e-9,
+		"stored p95 differs from samples",
+	);
+	const baselineP95Us = round(baselineRawP95Us);
+	const headP95Us = round(headRawP95Us);
 	return {
 		scenario: earlier.kind,
 		baselineP95Us,
 		headP95Us,
-		addedP95Us: round(later.p95Us - earlier.p95Us),
+		addedP95Us: round(headRawP95Us - baselineRawP95Us),
 		callsAndRoutesMatch: true,
 	};
 });
