@@ -1,6 +1,13 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+	mkdir,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
@@ -72,11 +79,13 @@ async function retainHostIdentity(
 	if (!identity || !verification)
 		throw new Error("Missing pinned host artifact verification.");
 	const directory = process.env.FLOW_RECOVERY_TREATMENT_ARTIFACT_DIR;
-	if (directory)
+	if (directory) {
+		await mkdir(directory, { recursive: true, mode: 0o700 });
 		await writeFile(
 			join(directory, `${caseId}.json`),
 			`${JSON.stringify({ schemaVersion: 1, caseId, identity, verification }, null, 2)}\n`,
 		);
+	}
 }
 for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 	for (const scenario of [
