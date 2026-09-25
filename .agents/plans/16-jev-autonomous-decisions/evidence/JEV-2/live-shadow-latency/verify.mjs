@@ -28,6 +28,7 @@ const validCost = (value) =>
 	typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 const receipt = json("receipt.json");
+assert.equal(receipt.schemaVersion, 1);
 const recordedFiles = Object.keys(receipt.files).sort();
 const actualFiles = readdirSync(join(directory, "campaign"))
 	.map((name) => `campaign/${name}`)
@@ -43,6 +44,9 @@ for (const [path, digest] of Object.entries(receipt.files)) {
 
 const manifest = json("campaign/manifest.json");
 const summary = json("campaign/summary.json");
+assert.equal(manifest.schemaVersion, 1);
+assert.equal(summary.schemaVersion, 1);
+assert.equal(manifest.preparation.schemaVersion, 1);
 assert.equal(receipt.sourceHead.length, 40);
 const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
 	encoding: "utf8",
@@ -168,6 +172,7 @@ const controllerLatency = [];
 for (const [index, row] of summary.rows.entries()) {
 	const number = String(index + 1).padStart(6, "0");
 	assert.deepEqual(json(`campaign/case-${number}.json`), row);
+	assert.equal(row.schemaVersion, 1);
 	assert.equal(row.origin, "live");
 	assert.equal(validCost(row.reservedUsd), true);
 	assert.equal(
@@ -281,6 +286,7 @@ let precedingAttemptAt = Date.parse(manifest.createdAt);
 for (let index = 0; index < totalAttempts; index++) {
 	const number = String(index + 1).padStart(6, "0");
 	const attempt = json(`campaign/attempt-${number}.json`);
+	assert.equal(attempt.schemaVersion, 1);
 	assert.equal(attempt.calls, index + 1);
 	assert.equal(attempt.caseId, answeredRows[index].id);
 	assert.equal(attempt.packetDigest, answeredRows[index].packetDigest);
