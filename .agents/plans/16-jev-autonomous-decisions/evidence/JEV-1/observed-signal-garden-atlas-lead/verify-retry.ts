@@ -19,6 +19,12 @@ const lead = JSON.parse(
 const normalization = JSON.parse(
 	await readFile(new URL("normalization.json", directory), "utf8"),
 );
+const provenanceBytes = await readFile(
+	new URL("source-provenance.json", directory),
+);
+const provenance = JSON.parse(provenanceBytes.toString("utf8"));
+const baselineBytes = await readFile(new URL("task-baseline.json", directory));
+const baseline = JSON.parse(baselineBytes.toString("utf8"));
 const focusedAtlasGate = "pnpm lint && pnpm test";
 const broadAtlasGate =
 	"pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke";
@@ -58,10 +64,12 @@ assert(
 		outcome.continuation.state === "active" &&
 		outcome.continuation.independentFeatureReview === "pending" &&
 		outcome.continuation.observedDesktopImageUrls === 14 &&
-		outcome.continuation.recordedBaselineImageUrls === 54 &&
-		lead.snapshot.session.plan.requirements.some((requirement: string) =>
-			requirement.includes("54-image baseline"),
-		) &&
+		sha(provenanceBytes) ===
+			"db480bf30866add218179bc30394e082ed817b1b718e2f00ef724bdb12776441" &&
+		sha(baselineBytes) === provenance.baselineSha256 &&
+		baseline.sourceHead === provenance.baseHead &&
+		outcome.continuation.recordedBaselineImageUrls ===
+			baseline.browserBaseline.networkImageResponses &&
 		outcome.qualification.decisionLabelEvidence === "not-in-this-record" &&
 		outcome.qualification.typedManagerProposalAtCheckpoint === false &&
 		normalization.status ===
@@ -217,6 +225,14 @@ if (privateRoot) {
 					failedOutput.body.indexOf("\n  1 failed", namedFailureHeader.index),
 				)
 			: null;
+	const receivedValues = [
+		...(namedFailureBlock?.matchAll(/^\s+Received: (\d+)\s*$/gm) ?? []),
+	];
+	const assertionErrors = [
+		...(namedFailureBlock?.matchAll(
+			/^\s+Error: expect\(received\)\.toBe\(expected\)/gm,
+		) ?? []),
+	];
 	const passedMeasurementLines =
 		passedOutput?.body
 			.split("\n")
@@ -304,7 +320,13 @@ if (privateRoot) {
 			failureHeaders.length === 1 &&
 			namedFailureHeader !== null &&
 			failedOutput?.body.includes("\n  1 failed\n") &&
-			Number(namedFailureBlock?.match(/^\s+Received: (\d+)\s*$/m)?.[1]) ===
+			assertionErrors.length === 1 &&
+			receivedValues.length === 1 &&
+			namedFailureBlock?.includes("Expected: 9") &&
+			/^\s*>\s*\d+ \|\s*await expect\.poll\(\(\) => imageUrls\.size\)\.toBe\(9\);\s*$/m.test(
+				namedFailureBlock ?? "",
+			) &&
+			Number(receivedValues[0][1]) ===
 				outcome.continuation.observedDesktopImageUrls &&
 			failedOutput?.receipt.id === firstMeasurement.id &&
 			failedOutput.receipt.passed === false &&
