@@ -190,3 +190,49 @@ test("CLI writes a draft once and refuses to overwrite it", async () => {
 		await rm(directory, { recursive: true, force: true });
 	}
 });
+
+test("artifact verification requires its exact recorded manifest and matching observation method", async () => {
+	const { registration, receipt } = await fixture();
+	const file = {
+		version: "1.0.0",
+		bytes: { sha256: hash("bytes"), size: 5, executable: true },
+	};
+	const expectedHostArtifacts = {
+		schemaVersion: 1,
+		platform: "linux",
+		architecture: "x64",
+		bun: file,
+		opencode: file,
+		packageCache: null,
+	};
+	const artifactVerification = {
+		manifestDigest: hash(expectedHostArtifacts),
+		method: "copied-files-and-linux-process",
+	};
+	const recorded = { ...receipt, expectedHostArtifacts, artifactVerification };
+	expect(
+		(await reduceEpisodeReceipt(registration, recorded)).observation
+			.receiptDigest,
+	).toBe(hash(recorded));
+	for (const invalid of [
+		{ ...receipt, expectedHostArtifacts },
+		{ ...receipt, artifactVerification },
+		{
+			...recorded,
+			artifactVerification: {
+				...artifactVerification,
+				manifestDigest: hash("other"),
+			},
+		},
+		{
+			...recorded,
+			artifactVerification: {
+				...artifactVerification,
+				method: "copied-files-and-direct-spawn",
+			},
+		},
+	])
+		await expect(reduceEpisodeReceipt(registration, invalid)).rejects.toThrow(
+			"does not match",
+		);
+});

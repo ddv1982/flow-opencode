@@ -266,7 +266,7 @@ real Jev adapter and guarded tools.
 These scripted responses are not model-quality evidence.
 
 Finishing live execution requires reviewed cost bounds for the actual routes,
-independently reviewed execution evidence, and verified package-cache and executable bytes.
+independently reviewed execution evidence, and a new explicit campaign spending cap.
 Simulation treatment support does not authorize live treatment activation or paid
 calls. The production qualification registry remains empty.
 
@@ -340,3 +340,41 @@ The check uses the registered episode runner and actual isolated OpenCode hosts.
 It exercises question capture, response submission, exact-file completion, and
 journal recovery for both managers. It also checks cancellation without a
 continuation request.
+
+## Freeze host artifact bytes
+
+Pass the native OpenCode executable as `host.opencodeExecutable` when creating
+an episode driver. Select the exact version named by `host.opencodeVersion`.
+A shell or JavaScript launcher is not accepted. The driver captures artifact
+identity before you freeze its `harnessDigest` in the episode registration.
+
+The host copies Bun, OpenCode, and the packed Flow cache into private storage.
+It compares their bytes with the captured manifest before direct native startup.
+Source treatment records no production cache because it uses a local bundle.
+Checks also run after startup and before command or prompt dispatch, including
+operator continuation. Changed artifacts stop dispatch.
+
+Keep the selected files stable from driver creation through startup. If you
+replace an executable or modify the cache, create a new driver and registration.
+A matching version string does not make different bytes equivalent.
+
+The manifest covers these selected artifacts. It does not verify publisher
+signatures, operating-system libraries, or arbitrary child programs. It does not
+prevent a malicious process using the same account from racing filesystem writes.
+Live episode execution remains disabled.
+
+The journal retains `expectedHostArtifacts` and `artifactVerification`. The latter
+records the verified manifest digest and whether Linux process verification was
+available. These are host-recorded observations. They do not replace independent
+execution review. Historical receipts without artifact evidence remain readable.
+
+Run the packed-cache check without model calls. The native OpenCode binary must
+report version `1.18.31`. Set `FLOW_RECOVERY_OPENCODE_EXECUTABLE` if it is not on
+`PATH`. The operator smoke uses the same executable selection.
+
+```sh
+FLOW_HOST_ARTIFACT_SMOKE=1 bun test tests/host-artifacts-host.test.ts
+```
+
+The check verifies the copied production cache, changes a copied plugin file,
+and requires prompt dispatch to fail before authorization is consumed.

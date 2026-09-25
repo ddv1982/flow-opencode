@@ -2,6 +2,11 @@ import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
 import {
+	HostArtifactsSchema,
+	HostArtifactVerificationSchema,
+	validateHostArtifactVerification,
+} from "../host-artifacts.js";
+import {
 	OperatorPolicySchema,
 	OperatorReplySchema,
 	OperatorRequestSchema,
@@ -68,6 +73,8 @@ export const EpisodeReceiptSchema = z
 		recordedBy: Text,
 		startedAt: z.iso.datetime(),
 		operatorPolicy: OperatorPolicySchema.optional(),
+		expectedHostArtifacts: HostArtifactsSchema.optional(),
+		artifactVerification: HostArtifactVerificationSchema.optional(),
 		reservationCoverage: z.enum(["complete", "unknown"]),
 		events: z.array(Event).min(1).max(100000),
 	})
@@ -159,6 +166,10 @@ export async function reduceEpisodeReceipt(
 ) {
 	const registration = await validateEpisodeRegistration(registrationInput);
 	const receipt = EpisodeReceiptSchema.parse(input);
+	validateHostArtifactVerification(
+		receipt.expectedHostArtifacts,
+		receipt.artifactVerification,
+	);
 	const episode = registration.protocol.episodes.find(
 		(row) => row.id === receipt.episodeId,
 	);

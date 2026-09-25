@@ -21,13 +21,14 @@ import {
 	mkdtemp,
 	readdir,
 	readFile,
+	realpath,
 	rename,
 	rm,
 	writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { consumePaidDispatch } from "../scripts/paid-budget.js";
@@ -42,6 +43,16 @@ import {
 	providerFailure,
 } from "./failure-origin.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
+import {
+	artifactFile,
+	type HostArtifactPaths,
+	type HostArtifacts,
+	HostArtifactsSchema,
+	type HostArtifactVerification,
+	processArtifactFile,
+	stageHostArtifacts,
+	verifyHostArtifacts,
+} from "./host-artifacts.js";
 import {
 	extractObservedActor,
 	guidanceLoad,
@@ -1377,6 +1388,29 @@ export class EvalHost {
 		return structuredClone(question);
 	}
 
+	private artifacts:
+		| { paths: HostArtifactPaths; identity: HostArtifacts }
+		| undefined;
+	private verifiedArtifacts: HostArtifactVerification | undefined;
+	get artifactVerification(): HostArtifactVerification | undefined {
+		return this.verifiedArtifacts
+			? structuredClone(this.verifiedArtifacts)
+			: undefined;
+	}
+	get artifactIdentity(): HostArtifacts | undefined {
+		return this.artifacts
+			? structuredClone(this.artifacts.identity)
+			: undefined;
+	}
+	private async verifyArtifacts() {
+		if (this.artifacts)
+			await verifyHostArtifacts(
+				this.artifacts.paths,
+				this.artifacts.identity,
+				this.signal,
+				this.server?.pid,
+			);
+	}
 	readonly project: string;
 	private readonly scratch: string;
 	private credentialPaths: CredentialSync | null = null;
@@ -1399,6 +1433,7 @@ export class EvalHost {
 	/** Boots a throwaway OpenCode host over a git fixture. */
 	static async start(options: {
 		toolchain: BunToolchain;
+		frozenArtifacts?: { opencodeExecutable: string; identity: HostArtifacts };
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
 		packageVersion?: string;
@@ -1420,6 +1455,20 @@ export class EvalHost {
 		};
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
+		if (options.frozenArtifacts) {
+			const { signal, ...configuration } = options;
+			options = {
+				...structuredClone(configuration),
+				...(signal ? { signal } : {}),
+			};
+		}
+		const frozenArtifacts = options.frozenArtifacts
+			? structuredClone(options.frozenArtifacts)
+			: undefined;
+		if (frozenArtifacts)
+			frozenArtifacts.identity = HostArtifactsSchema.parse(
+				frozenArtifacts.identity,
+			);
 		checkCancellation(options.signal);
 		if (options.recoveryTreatment) {
 			RecoveryTreatmentSchema.parse(options.recoveryTreatment);
@@ -1529,7 +1578,55 @@ export class EvalHost {
 
 			// Copy rather than race filesystem writes against cancellation: cleanup
 			// must wait until no copy can recreate scratch after its removal.
-			if (options.withFlow !== false && !options.recoveryTreatment) {
+			if (frozenArtifacts) {
+				if (
+					frozenArtifacts.identity.bun.version !==
+						options.toolchain.actualVersion ||
+					frozenArtifacts.identity.opencode.version !==
+						options.opencodeVersion ||
+					(frozenArtifacts.identity.packageCache === null) !==
+						(Boolean(options.recoveryTreatment) || options.withFlow === false)
+				)
+					throw new Error("Host artifact configuration mismatch.");
+				if (
+					options.recoveryTreatment &&
+					JSON.stringify(
+						process.platform === "linux"
+							? await processArtifactFile(process.pid, options.signal)
+							: await artifactFile(
+									await realpath(process.execPath),
+									options.signal,
+								),
+					) !== JSON.stringify(frozenArtifacts.identity.bun.bytes)
+				)
+					throw new Error(
+						"Treatment builder differs from registered Bun bytes.",
+					);
+				const paths = await stageHostArtifacts({
+					paths: {
+						bun: options.toolchain.executable,
+						opencode: frozenArtifacts.opencodeExecutable,
+						packageCache:
+							frozenArtifacts.identity.packageCache === null
+								? null
+								: options.packageCache,
+					},
+					expected: frozenArtifacts.identity,
+					directory: join(scratch, "bin"),
+					packageCache:
+						frozenArtifacts.identity.packageCache === null
+							? null
+							: join(
+									childCache,
+									"opencode",
+									"packages",
+									`opencode-plugin-flow@${version}`,
+								),
+					signal: options.signal,
+				});
+				host.artifacts = { paths, identity: frozenArtifacts.identity };
+				environment.PATH = `${dirname(paths.bun)}${delimiter}${environment.PATH ?? ""}`;
+			} else if (options.withFlow !== false && !options.recoveryTreatment) {
 				const packages = join(childCache, "opencode", "packages");
 				await mkdir(packages, { recursive: true });
 				await cp(
@@ -1645,11 +1742,14 @@ export class EvalHost {
 					const port = await availablePort();
 					checkCancellation(options.signal);
 					host.baseUrl = `http://127.0.0.1:${port}`;
+					await host.verifyArtifacts();
+					checkCancellation(options.signal);
 					host.server = spawn(
-						options.toolchain.executable,
+						host.artifacts?.paths.opencode ?? options.toolchain.executable,
 						[
-							"x",
-							`opencode-ai@${options.opencodeVersion}`,
+							...(host.artifacts
+								? []
+								: ["x", `opencode-ai@${options.opencodeVersion}`]),
 							"serve",
 							"--port",
 							String(port),
@@ -1784,6 +1884,16 @@ export class EvalHost {
 							throw new Error("Simulation credential installation failed.");
 					}
 					checkCancellation(options.signal);
+					await host.verifyArtifacts();
+					checkCancellation(options.signal);
+					if (host.artifacts)
+						host.verifiedArtifacts = {
+							manifestDigest: datasetDigest(host.artifacts.identity),
+							method:
+								process.platform === "linux"
+									? "copied-files-and-linux-process"
+									: "copied-files-and-direct-spawn",
+						};
 					return host;
 				},
 			);
@@ -1866,6 +1976,7 @@ export class EvalHost {
 			observeUsage?: (usage: StudyUsage) => void;
 		},
 	): Promise<string | null> {
+		await this.verifyArtifacts();
 		const sessionId = await this.createSession(`flow-eval probe ${model}`);
 		let usage = normalizeStudyUsage({ tokens: {}, costUsd: null });
 		try {
@@ -1951,6 +2062,8 @@ export class EvalHost {
 		} = {},
 	): Promise<CommandEnd> {
 		checkCancellation(this.signal);
+		await this.verifyArtifacts();
+		checkCancellation(this.signal);
 		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "command" });
 		const { variant, ...waitOptions } = options;
@@ -1989,6 +2102,8 @@ export class EvalHost {
 			variant?: string;
 		} = {},
 	): Promise<CommandEnd> {
+		checkCancellation(this.signal);
+		await this.verifyArtifacts();
 		checkCancellation(this.signal);
 		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "prompt" });

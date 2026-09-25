@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { z } from "zod";
 import { EvalHost } from "../harness.js";
 import {
+	captureHostArtifacts,
+	validateHostArtifactVerification,
+	verifyHostArtifacts,
+} from "../host-artifacts.js";
+import {
 	type OperatorPolicy,
 	OperatorPolicySchema,
 } from "./episode-operator.js";
@@ -79,6 +84,8 @@ export function episodeHostIdentity(input: unknown) {
 }
 type Host = Pick<
 	EvalHost,
+	| "artifactIdentity"
+	| "artifactVerification"
 	| "project"
 	| "createSession"
 	| "runCommand"
@@ -92,7 +99,7 @@ export type EpisodeHostOptions = {
 	operator?: OperatorPolicy;
 	arm: "manager-only" | "manager-plus-jev";
 	manager: { model: string; prompt: string };
-	host: Pick<
+	host: { opencodeExecutable: string } & Pick<
 		StartOptions,
 		| "toolchain"
 		| "packageCache"
@@ -144,6 +151,7 @@ async function workload(
 export async function createEpisodeHostDriver(
 	options: EpisodeHostOptions,
 ): Promise<EpisodeDriver> {
+	options = { ...options, host: structuredClone(options.host) };
 	if (options.arm === "manager-plus-jev" && !options.host.recoveryTreatment)
 		throw new Error("Manager-plus-Jev requires isolated simulation treatment.");
 	if (
@@ -174,6 +182,17 @@ export async function createEpisodeHostDriver(
 		options.host.requestBudget.managerModel !== manager.model
 	)
 		throw new Error("Host budget manager differs from the registered manager.");
+	const hostArtifacts = await captureHostArtifacts({
+		paths: {
+			bun: options.host.toolchain.executable,
+			opencode: options.host.opencodeExecutable,
+			packageCache: options.host.recoveryTreatment
+				? null
+				: options.host.packageCache,
+		},
+		bunVersion: options.host.toolchain.actualVersion,
+		opencodeVersion: options.host.opencodeVersion,
+	});
 	const sources = await recoverySourceDigests();
 	const evalSources = (await readdir("evals", { recursive: true }))
 		.filter((path) => path.endsWith(".ts"))
@@ -181,7 +200,8 @@ export async function createEpisodeHostDriver(
 	for (const path of evalSources)
 		sources[`evals/${path}`] = bytesDigest(await readFile(join("evals", path)));
 	const harnessDigest = datasetDigest({
-		version: "episode-host-v1",
+		version: "episode-host-v2",
+		hostArtifacts,
 		operatorPolicy,
 		requestAuthorizationDigest:
 			options.host.requestBudget?.authorizationDigest ?? null,
@@ -211,6 +231,9 @@ export async function createEpisodeHostDriver(
 	let stopping: Promise<void> | undefined;
 	return {
 		harnessDigest,
+		get expectedHostArtifacts() {
+			return structuredClone(hostArtifacts);
+		},
 		operatorPolicy,
 		origin: options.host.recoveryTreatment ? "simulation" : "live",
 		async prepare(signal) {
@@ -218,8 +241,25 @@ export async function createEpisodeHostDriver(
 				throw new Error("An episode host can only prepare once.");
 			signal.throwIfAborted();
 			state = "starting";
+			await verifyHostArtifacts(
+				{
+					bun: options.host.toolchain.executable,
+					opencode: options.host.opencodeExecutable,
+					packageCache: options.host.recoveryTreatment
+						? null
+						: options.host.packageCache,
+				},
+				hostArtifacts,
+				signal,
+			);
+			signal.throwIfAborted();
+			lifecycle.signal.throwIfAborted();
 			starting = (options.hostFactory ?? EvalHost.start)({
 				...options.host,
+				frozenArtifacts: {
+					opencodeExecutable: options.host.opencodeExecutable,
+					identity: structuredClone(hostArtifacts),
+				},
 				files: fixture.files,
 				withFlow: true,
 				ambientConfig: "disabled",
@@ -232,6 +272,13 @@ export async function createEpisodeHostDriver(
 				await host.stop();
 				throw new Error("Episode host preparation cancelled.");
 			}
+			if (
+				!host.artifactIdentity ||
+				datasetDigest(host.artifactIdentity) !== datasetDigest(hostArtifacts)
+			)
+				throw new Error("Host did not attest registered artifact bytes.");
+			const artifactVerification = host.artifactVerification;
+			validateHostArtifactVerification(hostArtifacts, artifactVerification);
 			const actual = await workload(
 				host.project,
 				new Set(Object.keys(fixture.files)),
@@ -244,7 +291,11 @@ export async function createEpisodeHostDriver(
 				throw new Error("Seeded fixture differs from its definition.");
 			lifecycle.signal.throwIfAborted();
 			state = "prepared";
-			return { task: fixture.task, initialState: actual };
+			return {
+				task: fixture.task,
+				initialState: actual,
+				...(artifactVerification ? { artifactVerification } : {}),
+			};
 		},
 		async run(context) {
 			if (state !== "prepared" || !host)
