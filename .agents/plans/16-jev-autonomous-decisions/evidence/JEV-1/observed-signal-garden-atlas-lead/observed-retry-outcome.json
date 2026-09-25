@@ -47,7 +47,8 @@
     "recordedRevision": 21,
     "independentFeatureReview": "pending",
     "observedDesktopImageUrls": 14,
-    "recordedBaselineImageUrls": 54,
+    "recordedBaselineImageResponses": 54,
+    "recordedBaselineUniqueImageUrls": 54,
     "correctedAssertionExecution": "not-established-by-this-record",
     "firstMeasurementValidationId": "9a4b1a0c-da31-48f2-9c67-08b440840e2d"
   },

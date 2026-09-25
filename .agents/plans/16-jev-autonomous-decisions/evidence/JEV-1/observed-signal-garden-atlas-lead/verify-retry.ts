@@ -25,6 +25,13 @@ const provenanceBytes = await readFile(
 const provenance = JSON.parse(provenanceBytes.toString("utf8"));
 const baselineBytes = await readFile(new URL("task-baseline.json", directory));
 const baseline = JSON.parse(baselineBytes.toString("utf8"));
+const baselineNetworkBytes = await readFile(
+	new URL("baseline-network-comparison.json", directory),
+);
+const baselineNetwork = JSON.parse(baselineNetworkBytes.toString("utf8"));
+const baselineNetworkArm = baselineNetwork.reports.find(
+	(row: { arm: string }) => row.arm === "baseline",
+);
 const focusedAtlasGate = "pnpm lint && pnpm test";
 const broadAtlasGate =
 	"pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke";
@@ -71,8 +78,20 @@ assert(
 			"db480bf30866add218179bc30394e082ed817b1b718e2f00ef724bdb12776441" &&
 		sha(baselineBytes) === provenance.baselineSha256 &&
 		baseline.sourceHead === provenance.baseHead &&
-		outcome.continuation.recordedBaselineImageUrls ===
+		sha(baselineNetworkBytes) ===
+			"9f7b4263a43920f1fa7a7fb496830d646a7d83f4baf97896639b79054b33d7bd" &&
+		baselineNetwork.baselineHead === baseline.sourceHead &&
+		baselineNetwork.browserVersion ===
+			baseline.browserBaseline.browserVersion &&
+		baselineNetworkArm.networkImageResponses ===
 			baseline.browserBaseline.networkImageResponses &&
+		baselineNetworkArm.uniqueImageUrls ===
+			outcome.continuation.recordedBaselineUniqueImageUrls &&
+		baselineNetworkArm.paths.length === baselineNetworkArm.uniqueImageUrls &&
+		new Set(baselineNetworkArm.paths).size ===
+			baselineNetworkArm.uniqueImageUrls &&
+		outcome.continuation.recordedBaselineImageResponses ===
+			baselineNetworkArm.networkImageResponses &&
 		outcome.continuation.correctedAssertionExecution ===
 			"not-established-by-this-record" &&
 		outcome.qualification.decisionLabelEvidence === "not-in-this-record" &&
