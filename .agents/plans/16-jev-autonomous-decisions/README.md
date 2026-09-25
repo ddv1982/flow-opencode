@@ -11,18 +11,24 @@ Read [the research](research.md) for findings, alternatives, sources, and curren
 
 One box is one unit of work. Every box names the evidence that checks it. Check a box only when its evidence exists, a file, a log line, a screenshot, a test run, or a SHA. The body is a how-to. The appendices explain and record.
 
-The program runs the installed Poteto `playbooks/autonomous-run.md`, using `playbooks/feature.md` for each implementation phase and `playbooks/opening-a-pr.md` for review preparation. Resolve those files from the installed skill, not an assumed `pstack/` directory in Flow. The parent owns integration and verification. The operator merges every PR. All PRs stop at merge-ready. JEV-2, JEV-3, and JEV-4 require interaction review.
+The program runs the installed Poteto `playbooks/autonomous-run.md`, using `playbooks/feature.md` for each implementation phase and `playbooks/opening-a-pr.md` for review preparation. Resolve those files from the installed skill, not an assumed `pstack/` directory in Flow. The parent owns integration and verification. The operator merges every PR unless the operator explicitly directs the coding agent to merge. All PRs stop at merge-ready until that direction. JEV-2, JEV-3, and JEV-4 require interaction review.
 
-Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+Tests alone are not sufficient phase verification. JEV-1 through JEV-4 remain unverified until their unit, live, interaction where applicable, and performance boxes have evidence.
 
 All targets and limits below are proposed acceptance criteria. No live decision-quality result or performance baseline exists yet. Continued implementation now permits default-off runtime construction before live qualification. Production delegated activation still requires qualification. The runtime preserves process-local authority and Session v5. It does not resume autonomous permission after restart.
+
+### Guarded construction merge before qualification
+
+On 25 September 2026, the operator directed completion of implementation review and merging the default-off PR stack before delegated-recovery qualification. This authorizes the coding agent to merge construction PRs in dependency order once each PR has green current-head CI, applicable focused unit and packed-host evidence, scoped interaction smoke for changed user-facing behavior, and an independent current-head code review with every finding fixed, dismissed with evidence, or explicitly accepted by the operator. Check the final integrated head against current `main` before the first merge and after any conflict resolution. A green check or historical review alone is insufficient.
+
+This construction merge does not mark the four phases verified, add a production qualification profile, enable delegated recovery by default, authorize paid calls, or publish a release. The ten live lanes, full performance probes, reviewed independent decision cases, paired live campaign, thresholds, and release interaction review remain promotion gates. Keep every unsupported box open and report the merged implementation separately from qualification. A failed construction gate stops the affected PR and its descendants; a failed promotion gate keeps delegated activation off even if all construction PRs merge.
 
 ## Program checklist
 
 ### Arm the program
 
 - [x] State this protocol and plan to the operator. Start implementation only on explicit go. Save that instruction in the execution receipt.
-- [ ] On explicit authorization for an autonomous implementation run, create a goal with this exact text. "Execute .agents/plans/16-jev-autonomous-decisions/README.md through JEV-1, JEV-2, JEV-3, and JEV-4 in order. Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. The operator merges. Finish when all four PRs have merged with evidence, or when JEV-1 produces a reviewed no-go result with its tooling and findings merged. A no-go leaves JEV-2 through JEV-4 unstarted. Report any other unresolved gate without claiming completion."
+- [ ] On explicit authorization for an autonomous implementation run, create a goal with this exact text. "Execute .agents/plans/16-jev-autonomous-decisions/README.md through JEV-1, JEV-2, JEV-3, and JEV-4 in order. Tests alone are not sufficient verification. Construction PRs may merge through the guarded construction gate; phase verification still requires unit, live, interaction where applicable, and performance evidence. The operator or an explicitly directed coding agent merges. Finish when all four phases are verified and their PRs merged, or when JEV-1 produces a reviewed no-go result with its tooling and findings merged. A no-go leaves JEV-2 through JEV-4 unstarted. Report any other unresolved gate without claiming completion."
 - [ ] Read current repository contracts with `git show origin/main:CONTEXT.md`, `git show origin/main:docs/maintainer-contract.md`, and `git show origin/main:.agents/skills/flow-contribution-check/SKILL.md`. Record trunk SHA.
 - [ ] Read the installed runtime contract, Feature, Autonomous run, Opening a PR, swarm, architect, no-comments, technical-writing, unslop, and show-me-your-work skills. Record their paths and versions. Run parallel design exploration before implementing cross-boundary code.
 - [ ] Detect a supported live control capability for OpenCode CLI or TUI. Record its exact commands. Do not substitute direct state edits for user interaction.
@@ -37,7 +43,7 @@ All targets and limits below are proposed acceptance criteria. No live decision-
 - [ ] Spawn one owner for the currently eligible PR. Inherit model settings unless an installed profile is verifiable. Give each writable owner its own worktree and evidence directory.
 - [ ] Follow the dependency chain `JEV-1 -> JEV-2 -> JEV-3 -> JEV-4`. Default-off construction may stack on the preceding local commit under the user's continuation instruction. No implementation slice is independent. The coherent runtime commit combines JEV-2 and JEV-3 mechanics. Advance to production delegated activation only after its pre-registered promotion gate passes. A measured negative or inconclusive result blocks promotion. Missing credentials remain unmeasured.
 - [ ] Hold each owner's file boundaries to the Files block. Return out-of-scope discoveries to the parent. Never modify `.flow/**`, `.git` internals, or another owner's worktree as a shortcut.
-- [ ] Hold the interaction review gate for JEV-2, JEV-3, and JEV-4. Save screenshots and video before the merge-ready report.
+- [ ] Hold the interaction review gate for JEV-2, JEV-3, and JEV-4 phase verification and release. Save screenshots and video before reporting those phases verified.
 
 ### PR mechanics, for every PR
 
@@ -45,15 +51,15 @@ All targets and limits below are proposed acceptance criteria. No live decision-
 - [ ] Run `bun run check` before the PR-facing push with hooks enabled. Save the exact head SHA and output.
 - [ ] Apply deslop before commit when installed. Otherwise remove dead scaffolding, unnecessary abstractions, duplicate rules, and speculative compatibility code. Apply no-comments before review.
 - [ ] Open a ready PR only within implementation authorization. Record the real PR URL. Do not treat this research request as GitHub-write authority.
-- [ ] Triage each automated review finding against the diff. Record fix, dismissal with evidence, or unresolved issue.
+- [ ] Triage each automated review finding against the diff. Record fix, dismissal with evidence, or unresolved issue. An unresolved issue blocks construction merge unless the operator explicitly accepts it.
 - [ ] Rebase on current trunk before babysitting and before the merge-ready report. Revalidate any changed patch.
 
-### Verdict and merge, for every PR
+### Verdict and merge
 
-- [ ] At the exact head SHA, run an independent gates lane, the ten live lanes, one performance lane, and an audit lane. Queue lanes beyond available capacity. Record all results.
+- [ ] For phase verification, at the exact head SHA, run an independent gates lane, the ten live lanes, one performance lane, and an audit lane. Queue lanes beyond available capacity. Record all results. The guarded construction merge uses the narrower gate above and leaves unsupported phase boxes open.
 - [ ] Use a configured fast profile only when it is installed and observable. Otherwise use generic inherited workers and disclose the fallback. Never claim model diversity from role names.
-- [ ] Return findings to the owner. Require a fresh verdict for every changed head. Mark clean only when every required lane passes.
-- [ ] Verify the patch identity and current trunk before handoff. The operator merges. Do not arm auto-merge, publish a package, or create a release under this plan.
+- [ ] Return findings to the owner. Require a fresh verdict for every changed head. Mark construction-ready only when its construction gate passes; mark the phase verified only when every phase lane passes.
+- [ ] Verify the patch identity and current trunk before handoff. The operator or an explicitly directed coding agent merges. Do not arm auto-merge, publish a package, or create a release under this plan.
 
 ### Boot recipe, for every live lane
 
@@ -135,7 +141,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 **Merge.**
 
 - [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
-- [ ] Recheck current trunk and patch identity. The operator merges after required interaction review, if applicable. Save the merge SHA.
+- [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Enforce delegated policy and collect shadow advice (JEV-2)
 
@@ -190,14 +196,14 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 - [ ] Baseline. Record trunk p95 event-handler time, RSS, and Jev call count before the candidate run.
 - [ ] Rule. Fail on any disabled-mode network call, more than 5 ms added p95 routing time, or a provider call exceeding the 10-second total deadline.
 
-**Review gate.** The operator reviews before merge.
+**Review gate.** The operator reviews before phase verification and release.
 
-- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-2/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready.
+- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-2/review.mp4`. Record operator review of the screenshots and video in chat before phase verification. Guarded construction merge may precede this review.
 
 **Merge.**
 
 - [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
-- [ ] Recheck current trunk and patch identity. The operator merges after required interaction review, if applicable. Save the merge SHA.
+- [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Execute bounded recovery without a human turn (JEV-3)
 
@@ -252,14 +258,14 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 - [ ] Baseline. Record trunk outcomes and the manager-only policy arm before interpreting Jev improvement.
 - [ ] Rule. Fail on any forbidden or duplicate mutation, more than one extra retry per feature under the initial policy, or more than two semantic decision calls per checkpoint.
 
-**Review gate.** The operator reviews before merge.
+**Review gate.** The operator reviews before phase verification and release.
 
-- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-3/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready.
+- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-3/review.mp4`. Record operator review of the screenshots and video in chat before phase verification. Guarded construction merge may precede this review.
 
 **Merge.**
 
 - [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
-- [ ] Recheck current trunk and patch identity. The operator merges after required interaction review, if applicable. Save the merge SHA.
+- [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Qualify unattended runs and document the operating limits (JEV-4)
 
@@ -318,14 +324,14 @@ The earlier [idle-controls receipt](evidence/JEV-4/worker-10/receipt.json) recor
 - [ ] Baseline. Record the manager-only policy arm and current default Flow arm before calculating improvements.
 - [ ] Rule. Fail on any unsafe accepted action, less than 20% interruption reduction, more than 5 percentage-point completion loss, more than 15% median active-time growth, or campaign budget overrun. Inconclusive uncertainty blocks promotion.
 
-**Review gate.** The operator reviews before merge.
+**Review gate.** The operator reviews before phase verification and release.
 
-- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-4/review.mp4`. Record operator review of the screenshots and video in chat. Stop at merge-ready.
+- [ ] Post lane screenshots and a 30 to 60 second video at `evidence/JEV-4/review.mp4`. Record operator review of the screenshots and video in chat before phase verification. Guarded construction merge may precede this review.
 
 **Merge.**
 
 - [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
-- [ ] Recheck current trunk and patch identity. The operator merges after required interaction review, if applicable. Save the merge SHA.
+- [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Close the program
 
