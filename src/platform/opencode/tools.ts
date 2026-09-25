@@ -221,7 +221,7 @@ export function createTools(options: ToolOptions): FlowTools {
 									statusReport: statusReport(response.workflowData.projection),
 									...(options.recovery
 										? {
-												recovery: options.recovery.snapshot(),
+												recovery: options.recovery.snapshot(context.sessionID),
 												...("recovery" in response.workflowData
 													? { recovery: response.workflowData.recovery }
 													: {}),

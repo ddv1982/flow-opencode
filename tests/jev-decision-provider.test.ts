@@ -75,7 +75,65 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 				options,
 			),
 		).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
+		for (const altered of [
+			{ ...packet, goal: '{"password":"hunter2hunter2"}' },
+			{ ...packet, goal: "GITHUB_TOKEN=ghp_secretvalue" },
+			{
+				...packet,
+				findings: [
+					{ ...packet.findings[0], evidence: '{"api_key":"othersecret"}' },
+				],
+			},
+			{
+				...packet,
+				findings: [
+					{ ...packet.findings[0], evidence: "AWS_ACCESS_KEY_ID=AKIAEXAMPLE" },
+				],
+			},
+			{
+				...packet,
+				candidates: [
+					{
+						...packet.candidates[0],
+						remedy: '{"client_secret":"othersecret"}',
+					},
+				],
+			},
+			{
+				...packet,
+				candidates: [
+					{
+						...packet.candidates[0],
+						remedy: "DATABASE_URL=postgres://user:pass@host/db",
+					},
+				],
+			},
+		])
+			expect(
+				await createJevDecisionProvider(() => "credential").assess(
+					altered as DecisionPacket,
+					options,
+				),
+			).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
 		expect(spy).toHaveBeenCalledTimes(0);
+	} finally {
+		spy.mockRestore();
+	}
+});
+test("ordinary words ending in key remain eligible for advice", async () => {
+	const spy = spyOn(globalThis, "fetch").mockResolvedValue(
+		Response.json(response()),
+	);
+	try {
+		const result = await createJevDecisionProvider(() => "credential").assess(
+			{
+				...packet,
+				goal: "Fix monkey=true, hockey: game, and turnkey: ready.",
+			},
+			{ signal: new AbortController().signal, reserveAttempt: () => true },
+		);
+		expect(result.kind).toBe("answered");
+		expect(spy).toHaveBeenCalledTimes(1);
 	} finally {
 		spy.mockRestore();
 	}
@@ -112,6 +170,22 @@ test("accepted Unicode remedies leave room for the full provider envelope", asyn
 	} finally {
 		spy.mockRestore();
 	}
+});
+test("encoded provider envelope rejects escaped remedies before an attempt", () => {
+	const candidate = packet.candidates[0];
+	if (!candidate) throw new Error("Fixture is incomplete.");
+	const candidates = [1000, 1000, 500].map((length, index) => ({
+		...candidate,
+		id: `escaped-${index}`,
+		remedy: "\u0000".repeat(length),
+	}));
+	const oversized: DecisionPacket = { ...packet, candidates };
+	expect(Buffer.byteLength(JSON.stringify(oversized))).toBeLessThanOrEqual(
+		16000,
+	);
+	expect(
+		createJevDecisionProvider(() => "credential").fitsRequest?.(oversized),
+	).toBe(false);
 });
 test("runtime adapter rejects unknown model and invalid distributions", async () => {
 	const upgraded = spyOn(globalThis, "fetch").mockResolvedValue(
