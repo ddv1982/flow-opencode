@@ -1,11 +1,7 @@
 {
   "schemaVersion": 1,
-  "captureOrdinal": 1,
-  "headerSha256": "91e5abc6b3727c2b6f5f3e4342e6c8f35dcc3c693c87eb3f775168f4c7cfdb78",
-  "headerStartedAt": "2026-09-25T05:24:03.167Z",
-  "arm": "manager-only",
-  "declaredOrigin": "simulation",
-  "hostArtifacts": {
+  "caseId": "xai-grok-4.6-subthreshold",
+  "identity": {
     "schemaVersion": 1,
     "platform": "linux",
     "architecture": "x64",
@@ -27,7 +23,7 @@
     },
     "packageCache": null
   },
-  "artifactVerification": {
+  "verification": {
     "manifestDigest": "aa6e28718de0478c1a57a0605ebbb0d9935cb097d3ec7ced4d6b10f4de865be1",
     "method": "copied-files-and-linux-process"
   }

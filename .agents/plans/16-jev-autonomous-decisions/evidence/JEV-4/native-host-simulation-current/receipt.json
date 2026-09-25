@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "classification": "current-head-real-host-simulation-only",
-  "sourceHead": "bf07e8f3b6e68e3bb177bd6bf1fdf95abe2562ed",
-  "command": "FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-treatment-host.test.ts",
-  "logSha256": "60fbb42456b14792f6bd94b374f0fe785099c2248b69e663fe634652d9dd06d9",
+  "sourceHead": "e26aa9f1e05c9747fd3a142f40970904e91ddad3",
+  "command": "FLOW_RECOVERY_TREATMENT_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=<pinned-1.18.31-binary> FLOW_RECOVERY_TREATMENT_ARTIFACT_DIR=<private-output> bun test tests/recovery-treatment-host.test.ts",
+  "logSha256": "fb674feee0559aafb2dca53c6990a405a2bad0c232328c70b4ebc017ee6b6457",
   "hostVersion": "1.18.31",
   "passed": 10,
   "failed": 0,
@@ -24,10 +24,54 @@
     "The suite loads an experimental evaluation treatment, not a production delegated profile.",
     "This does not close the lane-5 same-run packed-plugin authority gap or the live holdout/performance gates."
   ],
-  "sourceTreeOid": "78347aa69e86383c8b28289c11ac12a7f90f59b3",
-  "testFileSha256": "f6c13aa52c6a26b72544d4ae0e4e2277973d72ec38b57bb146328738dccd6bf6",
+  "sourceTreeOid": "1ef2cc777dbb3ab6114d04bcdb88922fa24bc938",
+  "testFileSha256": "595e7cf397cbc14ce513dcf0db540cd65a89fed42cc186a9400dbbb072a01951",
   "testHelperSha256": "2fdb37e92c287b21a4c5eca65b7ca47980ce3e56249b43169a90600ab4708b35",
   "lockSha256": "00872348d141163c992993e1e4ad9076ef44d56aa792ae35a0e9514b588f847c",
-  "recordedAt": "2026-09-25T02:59:01.457306Z",
-  "verifySha256": "372eb126aa5ec2166ed1da2740c5149c3d12568fa639cade1abf6d8ef406e354"
+  "recordedAt": "2026-09-25T05:21:34.686512Z",
+  "verifySha256": "0741be3ed0a87a8a4de6ed2a94fb61a6b91da18b7333c528a0fd85198b114352",
+  "trustedExecutableVersion": "1.18.31",
+  "trustedExecutableSha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+  "hostArtifactCaptures": [
+    {
+      "file": "openai-gpt-5.6-terra-accepted.json",
+      "sha256": "893b5dda30dc4b53e7ddbad98d07e9bc609aeb36e8c1c1cdb00a18a20c9f667b"
+    },
+    {
+      "file": "openai-gpt-5.6-terra-control.json",
+      "sha256": "af77b0938db720c429af2ed7a9e36e71f659023e3373d2b446608b5b6857aabc"
+    },
+    {
+      "file": "openai-gpt-5.6-terra-subthreshold.json",
+      "sha256": "058ca37b9d9694d864e26ebf59262d51025d08bc52dc116b5a173db897dd871b"
+    },
+    {
+      "file": "openai-gpt-5.6-terra-model-mismatch.json",
+      "sha256": "fb312b7ce15b4763bbc95cd868664c3e5907f4924a6ac6e985985d5fb587dcd0"
+    },
+    {
+      "file": "xai-grok-4.6-accepted.json",
+      "sha256": "d7a75f1870759d56e037ae476a55c1da58858503feeb01fe84f6d2b174009f20"
+    },
+    {
+      "file": "xai-grok-4.6-control.json",
+      "sha256": "27759e79ad7ec115561a988b99a073d807bd6d1eb51f5ac8d77fae987dc2ab8c"
+    },
+    {
+      "file": "xai-grok-4.6-subthreshold.json",
+      "sha256": "edb4fe5938a4028a4ee4575646abb218f3f298eabc438b5d673cdc80f8ed10a8"
+    },
+    {
+      "file": "xai-grok-4.6-model-mismatch.json",
+      "sha256": "9f0a424c35240b626d8223b2b8888c64ac9c46e277137790d5bd46a50adfe500"
+    },
+    {
+      "file": "openai-gpt-5.6-terra-delayed-stop.json",
+      "sha256": "722c002516b680cb7db5e05ef25fb07f51bfee97f0a861bdd724965c013b1874"
+    },
+    {
+      "file": "xai-grok-4.6-delayed-stop.json",
+      "sha256": "d5c7cdc2b9e59a2e981d238c461893af86ff325930a17733f93ffae65d7a6e98"
+    }
+  ]
 }
