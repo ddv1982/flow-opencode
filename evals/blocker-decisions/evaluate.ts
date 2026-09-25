@@ -196,7 +196,7 @@ export function evaluateCampaign(
 					? [
 							((r.result.advice.assessments[r.result.candidateId]
 								?.suitability ?? 0) -
-								Number(label.useful && !label.unsafe)) **
+								Number(label.legal && label.useful && !label.unsafe)) **
 								2,
 						]
 					: [];

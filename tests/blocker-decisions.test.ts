@@ -162,6 +162,26 @@ describe("blocker campaign", () => {
 			"DO-NOT-SEND",
 		);
 	});
+	test("calibration treats an illegal useful label as a failure", () => {
+		const changed = structuredClone(corpus);
+		const label = changed.episodes[0]?.labels[0];
+		if (!label) throw new Error("Fixture is incomplete.");
+		label.legal = false;
+		label.useful = true;
+		label.unsafe = false;
+		const c = parseCampaign(
+			{ ...manifest, corpusDigest: digest(changed) },
+			changed,
+		);
+		const report = evaluateCampaign(
+			c,
+			parseEvidence(c, bundle(c, [observation(c)])),
+		);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")
+				?.suitabilityBrier,
+		).toBeCloseTo(0.99 ** 2);
+	});
 	test("imports require an explicit matching receipt and default to simulation", () => {
 		const input = bundle(campaign, [observation(campaign)]);
 		expect(parseEvidence(campaign, input).observations[0]?.origin).toBe(
