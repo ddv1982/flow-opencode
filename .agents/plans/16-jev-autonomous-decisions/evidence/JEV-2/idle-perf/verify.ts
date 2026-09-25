@@ -164,6 +164,30 @@ assert(
 		receipt.maxAddedP95Us,
 	"maximum p95 delta",
 );
+const mib = (bytes: number) => Number((bytes / 1024 / 1024).toFixed(2));
+const rssMiB = {
+	baselineAfterImports: mib(baseline.rssAfterImportsBytes),
+	headAfterImports: mib(head.rssAfterImportsBytes),
+	baselineAfterProbe: mib(baseline.rssAfterBytes),
+	headAfterProbe: mib(head.rssAfterBytes),
+};
+assert(
+	JSON.stringify(rssMiB) === JSON.stringify(receipt.rssMiB),
+	"recomputed RSS summary",
+);
+const readme = (await read("README.md")).toString("utf8");
+assert(
+	readme.includes(receipt.baselineCommit) &&
+		readme.includes(receipt.headCommit) &&
+		readme.includes(`${receipt.maxAddedP95Us.toFixed(3)} microseconds`) &&
+		readme.includes(
+			`${rssMiB.headAfterImports.toFixed(2)} MiB versus ${rssMiB.baselineAfterImports.toFixed(2)} MiB`,
+		) &&
+		readme.includes(
+			`${rssMiB.headAfterProbe.toFixed(2)} versus ${rssMiB.baselineAfterProbe.toFixed(2)} MiB`,
+		),
+	"README summary differs from verified receipt",
+);
 assert(
 	receipt.maxAddedP95Us < 5000,
 	"diagnostic exceeds the proposed 5 ms overhead limit",
