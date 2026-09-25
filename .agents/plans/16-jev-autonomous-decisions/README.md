@@ -28,7 +28,7 @@ This construction merge does not mark the four phases verified, add a production
 ### Arm the program
 
 - [x] State this protocol and plan to the operator. Start implementation only on explicit go. Save that instruction in the execution receipt.
-- [ ] On explicit authorization for an autonomous implementation run, create a goal with this exact text. "Execute .agents/plans/16-jev-autonomous-decisions/README.md through JEV-1, JEV-2, JEV-3, and JEV-4 in order. Tests alone are not sufficient verification. Construction PRs may merge through the guarded construction gate; phase verification still requires unit, live, interaction where applicable, and performance evidence. The operator or an explicitly directed coding agent merges. Finish when all four phases are verified and their PRs merged, or when JEV-1 produces a reviewed no-go result with its tooling and findings merged. A no-go leaves JEV-2 through JEV-4 unstarted. Report any other unresolved gate without claiming completion."
+- [ ] On explicit authorization for an autonomous implementation run, create a goal with this exact text. "Execute .agents/plans/16-jev-autonomous-decisions/README.md through JEV-1, JEV-2, JEV-3, and JEV-4 in order. Tests alone are not sufficient verification. Construction PRs may merge through the guarded construction gate; phase verification still requires unit, live, interaction where applicable, and performance evidence. The operator or an explicitly directed coding agent merges. Finish when all four phases are verified and their PRs merged, or when JEV-1 produces a reviewed no-go result with its tooling and findings merged. A no-go blocks delegated activation and later phase verification while preserving any default-off construction already merged. Report any other unresolved gate without claiming completion."
 - [ ] Read current repository contracts with `git show origin/main:CONTEXT.md`, `git show origin/main:docs/maintainer-contract.md`, and `git show origin/main:.agents/skills/flow-contribution-check/SKILL.md`. Record trunk SHA.
 - [ ] Read the installed runtime contract, Feature, Autonomous run, Opening a PR, swarm, architect, no-comments, technical-writing, unslop, and show-me-your-work skills. Record their paths and versions. Run parallel design exploration before implementing cross-boundary code.
 - [ ] Detect a supported live control capability for OpenCode CLI or TUI. Record its exact commands. Do not substitute direct state edits for user interaction.
@@ -140,7 +140,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Merge.**
 
-- [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
+- [ ] Record the parent's construction-ready verdict at the exact head SHA, including any operator-accepted findings and completed review triage.
 - [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Enforce delegated policy and collect shadow advice (JEV-2)
@@ -202,7 +202,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Merge.**
 
-- [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
+- [ ] Record the parent's construction-ready verdict at the exact head SHA, including any operator-accepted findings and completed review triage.
 - [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Execute bounded recovery without a human turn (JEV-3)
@@ -264,7 +264,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Merge.**
 
-- [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
+- [ ] Record the parent's construction-ready verdict at the exact head SHA, including any operator-accepted findings and completed review triage.
 - [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Qualify unattended runs and document the operating limits (JEV-4)
@@ -330,12 +330,12 @@ The earlier [idle-controls receipt](evidence/JEV-4/worker-10/receipt.json) recor
 
 **Merge.**
 
-- [ ] Record the parent's clean verdict at the exact head SHA and completed review triage.
+- [ ] Record the parent's construction-ready verdict at the exact head SHA, including any operator-accepted findings and completed review triage.
 - [ ] Recheck current trunk and patch identity. The operator or explicitly directed coding agent merges after the guarded construction gate. Save the merge SHA without marking the phase verified.
 
 ## Close the program
 
-- [ ] Confirm every required box on the selected branch has its evidence. For the JEV-1 no-go branch, record the reviewed negative finding and mark later phases unstarted. Mark other unmet gates as blocked, not passed.
+- [ ] Confirm every required box on the selected branch has its evidence. For the JEV-1 no-go branch, record the reviewed negative finding, preserve any merged construction, and leave later phase verification unpromoted. Mark other unmet gates as blocked, not passed.
 - [ ] Deliver the actual PR links, merge SHAs, model versions, quality report, cost report, unresolved limits, and rollback instructions.
 - [ ] Reconcile owners and pending provider calls. Close only the authorized program lifecycle. Do not publish a release implicitly.
 
