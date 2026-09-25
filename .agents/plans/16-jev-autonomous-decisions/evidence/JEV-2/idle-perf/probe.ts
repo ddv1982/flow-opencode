@@ -18,6 +18,7 @@ const scenarios = [
 	"no-lease",
 	"ready-continuation",
 	"blocked-handback",
+	"recovery-checkpoint",
 	"inactive",
 ] as const;
 const fixture = {
@@ -52,6 +53,7 @@ async function makeCase(kind: (typeof scenarios)[number]) {
 	let prompts = 0;
 	let warnings = 0;
 	let reads = 0;
+	let proposalLookups = 0;
 	const recovery = RecoveryController
 		? new RecoveryController({
 				decide: () => {
@@ -60,6 +62,18 @@ async function makeCase(kind: (typeof scenarios)[number]) {
 				},
 			})
 		: undefined;
+	if (recovery) {
+		const original = recovery.proposalPrompt.bind(recovery);
+		recovery.proposalPrompt = (
+			host: string,
+			session: string | undefined,
+			revision: number,
+			nextAction: string | null,
+		) => {
+			proposalLookups++;
+			return original(host, session, revision, nextAction);
+		};
+	}
 	const driver = new AutoDriveCoordinator({
 		recovery,
 		readProjection: () => {
@@ -97,12 +111,15 @@ async function makeCase(kind: (typeof scenarios)[number]) {
 				parentID: "command-message",
 			});
 			driver.observeMutation("host-1", 12, undefined, "assistant-1", false);
-		} else if (kind === "blocked-handback") {
+		} else if (kind === "blocked-handback" || kind === "recovery-checkpoint") {
 			projection = {
 				sessionId: "flow-1",
 				status: "blocked",
 				revision: 12,
-				nextAction: "flow_feature_reset",
+				nextAction:
+					kind === "recovery-checkpoint"
+						? "await-user-direction"
+						: "flow_feature_reset",
 			};
 			driver.observeHostMessage("host-1", {
 				id: "assistant-1",
@@ -115,7 +132,10 @@ async function makeCase(kind: (typeof scenarios)[number]) {
 		}
 	}
 	reads = 0;
-	return { driver, counters: () => ({ prompts, warnings, reads }) };
+	return {
+		driver,
+		counters: () => ({ prompts, warnings, reads, proposalLookups }),
+	};
 }
 function percentile(samples: number[], p: number) {
 	const sorted = samples.toSorted((a, b) => a - b);
@@ -128,7 +148,8 @@ for (const kind of scenarios) {
 	const samples = [];
 	let promptTotal = 0,
 		warningTotal = 0,
-		readTotal = 0;
+		readTotal = 0,
+		proposalLookupTotal = 0;
 	for (let i = 0; i < fixture.samplesPerScenario; i++) {
 		const run = await makeCase(kind);
 		const start = performance.now();
@@ -138,16 +159,24 @@ for (const kind of scenarios) {
 		promptTotal += counters.prompts;
 		warningTotal += counters.warnings;
 		readTotal += counters.reads;
+		proposalLookupTotal += counters.proposalLookups;
 	}
 	const expectedPrompts =
-		kind === "ready-continuation" || kind === "blocked-handback"
+		kind === "ready-continuation" ||
+		kind === "blocked-handback" ||
+		kind === "recovery-checkpoint"
 			? fixture.samplesPerScenario
 			: 0;
 	const expectedReads = kind === "no-lease" ? 0 : fixture.samplesPerScenario;
+	const expectedLookups =
+		kind === "recovery-checkpoint" && RecoveryController
+			? fixture.samplesPerScenario
+			: 0;
 	if (
 		promptTotal !== expectedPrompts ||
 		readTotal !== expectedReads ||
-		warningTotal !== 0
+		warningTotal !== 0 ||
+		proposalLookupTotal !== expectedLookups
 	)
 		throw new Error(`Unexpected route outcome: ${kind}`);
 	rssCheckpoints.push(process.memoryUsage().rss);
@@ -159,6 +188,7 @@ for (const kind of scenarios) {
 		promptTotal,
 		warningTotal,
 		readTotal,
+		proposalLookupTotal,
 	});
 }
 globalThis.fetch = originalFetch;
@@ -199,13 +229,22 @@ process.stdout.write(
 		rssBeforeBytes: output.rssBeforeBytes,
 		rssAfterBytes: output.rssAfterBytes,
 		results: results.map(
-			({ kind, p50Us, p95Us, promptTotal, warningTotal, readTotal }) => ({
+			({
 				kind,
 				p50Us,
 				p95Us,
 				promptTotal,
 				warningTotal,
 				readTotal,
+				proposalLookupTotal,
+			}) => ({
+				kind,
+				p50Us,
+				p95Us,
+				promptTotal,
+				warningTotal,
+				readTotal,
+				proposalLookupTotal,
 			}),
 		),
 	})}\n`,

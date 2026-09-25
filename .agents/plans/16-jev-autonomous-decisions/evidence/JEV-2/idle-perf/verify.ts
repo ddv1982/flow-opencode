@@ -10,6 +10,7 @@ type SampleRow = {
 	promptTotal: number;
 	readTotal: number;
 	warningTotal: number;
+	proposalLookupTotal: number;
 };
 const read = async (name: string) => readFile(new URL(name, import.meta.url));
 const sha = (value: Uint8Array | string) =>
@@ -71,6 +72,19 @@ assert(
 	"identical fixture",
 );
 assert(
+	JSON.stringify(baseline.fixture.scenarios) ===
+		JSON.stringify([
+			"no-lease",
+			"ready-continuation",
+			"blocked-handback",
+			"recovery-checkpoint",
+			"inactive",
+		]) &&
+		baseline.results.length === baseline.fixture.scenarios.length &&
+		head.results.length === baseline.fixture.scenarios.length,
+	"required idle routes",
+);
+assert(
 	JSON.stringify(baseline.runtime) === JSON.stringify(head.runtime) &&
 		JSON.stringify(head.runtime) === JSON.stringify(receipt.runtime),
 	"same runtime",
@@ -115,11 +129,17 @@ const rows = (baseline.results as SampleRow[]).map((earlier, index) => {
 		throw new Error("Idle performance receipt invalid: missing head route");
 	assert(earlier.kind === later.kind, "same route order");
 	const expectedPrompts =
-		earlier.kind === "ready-continuation" || earlier.kind === "blocked-handback"
+		earlier.kind === "ready-continuation" ||
+		earlier.kind === "blocked-handback" ||
+		earlier.kind === "recovery-checkpoint"
 			? baseline.fixture.samplesPerScenario
 			: 0;
 	const expectedReads =
 		earlier.kind === "no-lease" ? 0 : baseline.fixture.samplesPerScenario;
+	const expectedHeadLookups =
+		earlier.kind === "recovery-checkpoint"
+			? baseline.fixture.samplesPerScenario
+			: 0;
 	for (const row of [earlier, later]) {
 		assert(
 			row.samplesUs.length === baseline.fixture.samplesPerScenario,
@@ -138,6 +158,11 @@ const rows = (baseline.results as SampleRow[]).map((earlier, index) => {
 			earlier.warningTotal === later.warningTotal,
 		"route and prompt counts",
 	);
+	assert(
+		earlier.proposalLookupTotal === 0 &&
+			later.proposalLookupTotal === expectedHeadLookups,
+		"inactive recovery proposal path coverage",
+	);
 	const baselineRawP95Us = percentile(earlier.samplesUs, 0.95);
 	const headRawP95Us = percentile(later.samplesUs, 0.95);
 	assert(
@@ -153,6 +178,8 @@ const rows = (baseline.results as SampleRow[]).map((earlier, index) => {
 		headP95Us,
 		addedP95Us: round(headRawP95Us - baselineRawP95Us),
 		callsAndRoutesMatch: true,
+		baselineProposalLookups: earlier.proposalLookupTotal,
+		headProposalLookups: later.proposalLookupTotal,
 	};
 });
 assert(

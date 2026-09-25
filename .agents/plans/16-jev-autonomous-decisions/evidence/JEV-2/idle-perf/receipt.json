@@ -3,69 +3,87 @@
   "classification": "disabled-mode-idle-routing-microbenchmark",
   "baselineCommit": "c9813f9a87b9b7438671658cfd523adcd89f3098",
   "headCommit": "f798dc5b1c0c4ac86f3269068346a47b699f8b2b",
-  "fixtureDigest": "bc6ca14fa518451a65ea17642b44dbc75e02ffd237a7f906bfe12c60b5175773",
+  "fixtureDigest": "b1536beed792cc3dd3c1e3c77a20ddd0de0df7be3f7b3f65f35bf018919f724c",
   "runtime": {
     "bun": "1.4.0",
     "platform": "linux",
     "arch": "x64"
   },
-  "probeSha256": "21be11652e0700b533f7ace3a7d3cbe44a9707e3747a0b6a8362107745ec5689",
+  "probeSha256": "ad2d9dbb26efd6ee887adc55696355247d0c528912e412fa4bc09d296a918adb",
   "rawFiles": {
-    "baseline.json.gz": "5d0fa5809fd565733178f0acbcd73141ded32dba95345ab387c8f04e54f24dbd",
-    "head.json.gz": "d6fa2bf6e461403d3ddad025ddeaaee585e0a7cf81fcabff36437f87c4af72d8"
+    "baseline.json.gz": "501932247381c864b2eba03ec8c159ecc2fc8e034d2d65a201c2e8fa7d0f4cfe",
+    "head.json.gz": "81f1ea8b9887d5f806ad2403189bb8365251e51e0544b7da3822ba46b2bf90db"
   },
   "results": [
     {
       "scenario": "no-lease",
-      "baselineP95Us": 1.29,
-      "headP95Us": 1.078,
-      "addedP95Us": -0.212,
-      "callsAndRoutesMatch": true
+      "baselineP95Us": 1.323,
+      "headP95Us": 1.3,
+      "addedP95Us": -0.023,
+      "callsAndRoutesMatch": true,
+      "baselineProposalLookups": 0,
+      "headProposalLookups": 0
     },
     {
       "scenario": "ready-continuation",
       "baselineP95Us": 2.686,
-      "headP95Us": 2.439,
-      "addedP95Us": -0.247,
-      "callsAndRoutesMatch": true
+      "headP95Us": 2.322,
+      "addedP95Us": -0.364,
+      "callsAndRoutesMatch": true,
+      "baselineProposalLookups": 0,
+      "headProposalLookups": 0
     },
     {
       "scenario": "blocked-handback",
-      "baselineP95Us": 2.088,
-      "headP95Us": 2.252,
-      "addedP95Us": 0.164,
-      "callsAndRoutesMatch": true
+      "baselineP95Us": 1.997,
+      "headP95Us": 2.338,
+      "addedP95Us": 0.341,
+      "callsAndRoutesMatch": true,
+      "baselineProposalLookups": 0,
+      "headProposalLookups": 0
+    },
+    {
+      "scenario": "recovery-checkpoint",
+      "baselineP95Us": 1.3,
+      "headP95Us": 1.571,
+      "addedP95Us": 0.271,
+      "callsAndRoutesMatch": true,
+      "baselineProposalLookups": 0,
+      "headProposalLookups": 1500
     },
     {
       "scenario": "inactive",
-      "baselineP95Us": 0.661,
-      "headP95Us": 1.128,
-      "addedP95Us": 0.467,
-      "callsAndRoutesMatch": true
+      "baselineP95Us": 0.962,
+      "headP95Us": 0.638,
+      "addedP95Us": -0.324,
+      "callsAndRoutesMatch": true,
+      "baselineProposalLookups": 0,
+      "headProposalLookups": 0
     }
   ],
-  "maxAddedP95Us": 0.467,
+  "maxAddedP95Us": 0.341,
   "fetchCalls": 0,
   "providerCalls": 0,
   "rssMiB": {
-    "baselineAfterImports": 27.94,
-    "headAfterImports": 44.74,
-    "baselineAfterProbe": 58.54,
-    "headAfterProbe": 70.21
+    "baselineAfterImports": 28.28,
+    "headAfterImports": 44.84,
+    "baselineAfterProbe": 58.91,
+    "headAfterProbe": 69.66
   },
   "limits": [
     "The probe times the in-memory AutoDriveCoordinator.onIdle route with immediate mocked projection and prompt ports, not the full OpenCode plugin host event path.",
     "The baseline has no recovery controller; the head uses a real inactive RecoveryController with a provider spy. Provider and fetch counters do not cover all possible network APIs.",
+    "The head recovery-checkpoint route includes a method wrapper that counts real inactive-controller proposalPrompt calls; this slightly overstates its uninstrumented routing time.",
     "Separate process RSS snapshots include module loading and runtime variation and do not isolate a production memory regression.",
     "Shadow advice latency and the pinned live provider deadline are not measured; the JEV-2 performance gate remains open."
   ],
   "expandedSha256": {
-    "baseline.json": "9b2ee37e45233277413bf0d350fc6055e17312be3d3eaae406c7eebb45458427",
-    "head.json": "a9987ed2b82c5ad060d7d5aa05e0f27f2caaf6fa335c2b71be628807f562a0c9"
+    "baseline.json": "65ae6154dc57063e857356595f64398cf5a42ecd5e7b520277cbdd69bdf2a145",
+    "head.json": "1639bbee6a35b124c477360df4e9f7f36633ed9d43cf040b0d0939d7d92248ef"
   },
   "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
   "baselineModuleSha256": "55b15ad6ac2eead7dba5cf06cdf7bcd605c6050f513fee0a8e6abad8f235ddb1",
   "headModuleSha256": "4ad40b994fb47076e899ecb0daa8ea7bb276f32bd057f35f632e665b907ab89f",
   "headRecoverySha256": "4afa96f653bb6d0a7125c4c72a8003c61aec604d6df661a0f099d98bd626e8be",
-  "verifySha256": "775b350750c6d364606bb905afe99575164e53e9f0d91345ca562bfff43b8825"
+  "verifySha256": "bb972614472227d88650b428d5abea9146eed8dcf6d0f077fdce6f031cd00ac2"
 }
