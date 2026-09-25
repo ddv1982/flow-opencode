@@ -23,7 +23,7 @@ const draft = DraftSchema.parse(await json("draft.json"));
 const provenanceBytes = await bytes("source-provenance.json");
 assert(
 	sha(provenanceBytes) ===
-		"6ff2eb5bb1ec74c5bc75ccb12ec3380fc8ce2f698b70306a08e0159ee69b669a",
+		"db480bf30866add218179bc30394e082ed817b1b718e2f00ef724bdb12776441",
 	"reviewed provenance root",
 );
 const provenance = JSON.parse(provenanceBytes.toString("utf8"));
@@ -106,7 +106,7 @@ let captured: unknown = null;
 const controller = new RecoveryController({
 	async assess(packet) {
 		captured = structuredClone(packet);
-		return { kind: "unavailable", reason: "offline-case-verification" };
+		return { kind: "unavailable", reason: "offline-case-preparation" };
 	},
 });
 controller.activate("offline-case-verification", {
@@ -116,8 +116,9 @@ controller.activate("offline-case-verification", {
 });
 controller.observeMessage("offline-case-verification", "user", false);
 controller.observeAssistant("offline-case-verification", "manager", "user");
+let replayOutcome: unknown;
 try {
-	await controller
+	replayOutcome = await controller
 		.guard({
 			hostSessionId: "offline-case-verification",
 			messageId: "manager",
@@ -129,8 +130,12 @@ try {
 }
 assert(
 	captured !== null &&
-		datasetDigest(captured) === offline.packetDigest &&
+		offline.packetDigestEncoding === "sha256-of-json-stringify-v1" &&
+		sha(Buffer.from(JSON.stringify(captured))) === offline.packetDigest &&
+		datasetDigest(captured) === offline.canonicalPacketDigest &&
 		datasetDigest(captured) === datasetDigest(offline.packet) &&
+		JSON.stringify(replayOutcome) === JSON.stringify(offline.outcome) &&
+		offline.outcome.packetDigest === offline.packetDigest &&
 		offline.error === null &&
 		offline.outcome?.kind === "unavailable",
 	"offline packet replay",

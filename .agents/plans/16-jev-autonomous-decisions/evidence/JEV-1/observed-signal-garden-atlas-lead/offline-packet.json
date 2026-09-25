@@ -45,7 +45,7 @@
       }
     ]
   },
-  "packetDigest": "2b0e23de7ecd8e91bab782dfb2b496e1ce960c78aa858e1271b22038304423ea",
+  "packetDigest": "2f82f59b000821dd59e8317973eaeedb9a24df7bc2d1d419977dc01ba2506e99",
   "outcome": {
     "kind": "unavailable",
     "mode": "shadow",
@@ -57,5 +57,7 @@
     "featureId": null,
     "reason": "provider"
   },
-  "error": null
+  "error": null,
+  "canonicalPacketDigest": "2b0e23de7ecd8e91bab782dfb2b496e1ce960c78aa858e1271b22038304423ea",
+  "packetDigestEncoding": "sha256-of-json-stringify-v1"
 }
