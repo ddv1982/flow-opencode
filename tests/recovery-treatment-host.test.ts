@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	mkdir,
 	mkdtemp,
@@ -81,9 +82,13 @@ async function retainHostIdentity(
 	const directory = process.env.FLOW_RECOVERY_TREATMENT_ARTIFACT_DIR;
 	if (directory) {
 		await mkdir(directory, { recursive: true, mode: 0o700 });
+		const bytes = `${JSON.stringify({ schemaVersion: 1, caseId, identity, verification }, null, 2)}\n`;
 		await writeFile(
 			join(directory, `${caseId}.json`),
-			`${JSON.stringify({ schemaVersion: 1, caseId, identity, verification }, null, 2)}\n`,
+			bytes,
+		);
+		console.log(
+			`host-artifact ${caseId}.json ${createHash("sha256").update(bytes).digest("hex")}`,
 		);
 	}
 }

@@ -86,8 +86,13 @@ assert(
 const capturedFiles = (
 	await readdir(new URL("host-artifacts/", import.meta.url))
 ).sort();
+const loggedArtifacts = log
+	.split("\n")
+	.filter((line) => line.startsWith("host-artifact "))
+	.map((line) => line.slice("host-artifact ".length).trim());
 assert(
 	receipt.hostArtifactCaptures?.length === 10 &&
+		loggedArtifacts.length === 10 &&
 		JSON.stringify(capturedFiles) ===
 			JSON.stringify(
 				receipt.hostArtifactCaptures
@@ -113,6 +118,10 @@ for (const [index, record] of receipt.hostArtifactCaptures.entries()) {
 	assert(record.file === file, `case ${index + 1} file`);
 	const bytes = await read(`host-artifacts/${file}`);
 	assert(sha(bytes) === record.sha256, `${file} digest`);
+	assert(
+		loggedArtifacts[index] === `${file} ${record.sha256}`,
+		`${file} logged capture digest`,
+	);
 	const capture = JSON.parse(bytes.toString("utf8"));
 	const artifacts = HostArtifactsSchema.parse(capture.identity);
 	assert(
