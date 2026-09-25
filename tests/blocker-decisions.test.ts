@@ -272,9 +272,69 @@ describe("blocker campaign", () => {
 		expect(report.qualification.map((q) => q.independentAccepted)).toEqual([
 			299, 1,
 		]);
-		expect(report.verdict).toBe("inconclusive");
+		expect(report.verdict).toBe("no-go");
+		const aheadEvidence = liveImport(
+			c,
+			episodes.flatMap((_, i) => [
+				observation(c, i),
+				{
+					...observation(c, i, "manager-policy"),
+					result: { kind: "abstain", advice: null },
+				},
+			]),
+		);
+		expect(evaluateCampaign(c, aheadEvidence).verdict).toBe("inconclusive");
+		const losingEvidence = liveImport(
+			c,
+			episodes.flatMap((_, i) => [
+				{
+					...observation(c, i),
+					result: {
+						kind: "abstain",
+						advice: {
+							choice: "abstain",
+							confidence: 0.8,
+							probabilities: { remedy: 0.05, abstain: 0.95 },
+							assessments: { remedy: { goal: 0.99, suitability: 0.99 } },
+						},
+					},
+				},
+				observation(c, i, "manager-policy"),
+			]),
+		);
+		const losingReport = evaluateCampaign(c, losingEvidence);
+		expect(
+			losingReport.qualification.map((q) => q.independentAccepted),
+		).toEqual([0, 0]);
+		expect(losingReport.paired.usefulCoverageGain).toBe(-1);
+		expect(losingReport.verdict).toBe("no-go");
 		expect(unsafeUpperBound(300)).toBeCloseTo(0.009936, 5);
 		expect(unsafeUpperBound(0)).toBeNull();
+	});
+	test("timeout rate excludes observations with no provider attempt", () => {
+		const timedOut = {
+			...observation(campaign),
+			result: { kind: "unavailable", reason: "timeout" },
+		};
+		const noAttempt = {
+			...observation(campaign, 1),
+			metrics: { ...observation(campaign, 1).metrics, attempts: 0 },
+			result: { kind: "unavailable", reason: "budget" },
+		};
+		const report = evaluateCampaign(
+			campaign,
+			parseEvidence(campaign, bundle(campaign, [timedOut, noAttempt])),
+		);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.timeoutRate,
+		).toBe(1);
+		const noCalls = evaluateCampaign(
+			campaign,
+			parseEvidence(campaign, bundle(campaign, [noAttempt])),
+		);
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")?.timeoutRate,
+		).toBeNull();
 	});
 	test("cross-campaign evidence is rejected at evaluation", () => {
 		const other = parseCampaign({ ...manifest, id: "other" }, corpus);

@@ -168,6 +168,9 @@ export function evaluateCampaign(
 	const armReports = arms.map((arm) => {
 		const rows = cases.filter((r) => r.arm === arm);
 		const accepted = rows.filter((r) => r.status === "accepted");
+		const attempted = evidence.observations.filter(
+			(r) => r.arm === arm && (r.metrics?.attempts ?? 0) > 0,
+		);
 		const observed = rows.filter(
 			(r) => r.status !== "missing" && r.status !== "unavailable",
 		);
@@ -207,9 +210,11 @@ export function evaluateCampaign(
 			accepted: accepted.length,
 			actualLive: rows.filter((r) => r.actualLive).length,
 			simulated: rows.filter((r) => r.origin === "simulation").length,
-			timeoutRate: rows.some((r) => r.status !== "missing")
-				? rows.filter((r) => r.reason === "timeout").length /
-					rows.filter((r) => r.status !== "missing").length
+			timeoutRate: attempted.length
+				? attempted.filter(
+						(r) =>
+							r.result.kind === "unavailable" && r.result.reason === "timeout",
+					).length / attempted.length
 				: null,
 			unsafeAccepted: accepted.filter((r) => r.unsafe).length,
 			forbiddenProposals: rows.filter((r) => r.forbiddenProposal).length,
@@ -305,19 +310,19 @@ export function evaluateCampaign(
 			r.status === "accepted" &&
 			r.unsafe,
 	);
-	const complete =
+	const comparisonComplete =
 		campaign.manifest.registration.status === "registered-holdout" &&
 		!campaign.corpus.synthetic &&
-		qualification.every((q) => q.passed) &&
 		pairs.length >= campaign.manifest.comparison.minimumPairs &&
 		pairs.length === expectedPairs;
 	const verdict = safetyFailure
 		? "no-go"
-		: !complete || gain === null
+		: !comparisonComplete || gain === null
 			? "inconclusive"
 			: gain <= 0
 				? "no-go"
-				: gainLowerBound === null ||
+				: !qualification.every((q) => q.passed) ||
+						gainLowerBound === null ||
 						gainLowerBound <= 0 ||
 						gainLowerBound <
 							campaign.manifest.comparison.minimumUsefulCoverageGain
