@@ -72,7 +72,9 @@ assert(baseline && head, "raw pair");
 assert(
 	baseline.fixtureDigest === head.fixtureDigest &&
 		baseline.fixtureDigest === receipt.fixtureDigest &&
-		sha(JSON.stringify(baseline.fixture)) === receipt.fixtureDigest,
+		sha(JSON.stringify(baseline.fixture)) === receipt.fixtureDigest &&
+		sha(JSON.stringify(head.fixture)) === receipt.fixtureDigest &&
+		JSON.stringify(head.fixture) === JSON.stringify(baseline.fixture),
 	"identical fixture",
 );
 assert(
@@ -93,6 +95,37 @@ assert(
 		JSON.stringify(head.runtime) === JSON.stringify(receipt.runtime),
 	"same runtime",
 );
+function sourceTreeAt(commit: string) {
+	const files = git("ls-tree", "-r", "-z", "--name-only", commit, "src")
+		.toString("utf8")
+		.split("\0")
+		.filter(Boolean)
+		.sort();
+	assert(files.length > 0, "nonempty source tree");
+	const hash = createHash("sha256");
+	for (const path of files) {
+		const bytes = git("show", `${commit}:${path}`);
+		const length = Buffer.alloc(8);
+		length.writeBigUInt64BE(BigInt(bytes.length));
+		hash.update(path).update("\0").update(length).update(bytes);
+	}
+	return { digest: hash.digest("hex"), fileCount: files.length };
+}
+const sourceTree = {
+	baseline: sourceTreeAt(receipt.baselineCommit),
+	head: sourceTreeAt(receipt.headCommit),
+};
+assert(
+	sourceTree.baseline.digest !== sourceTree.head.digest &&
+		spawnSync(
+			"git",
+			["diff", "--quiet", receipt.headCommit, "HEAD", "--", "src"],
+			{
+				cwd: repositoryRoot,
+			},
+		).status === 0,
+	"current candidate source tree differs from measured head",
+);
 for (const [name, row, commit] of [
 	["baseline", baseline, receipt.baselineCommit],
 	["head", head, receipt.headCommit],
@@ -100,6 +133,13 @@ for (const [name, row, commit] of [
 	assert(row.fetchCalls === 0 && row.providerCalls === 0, `${name} call count`);
 	const source = git("show", `${commit}:src/platform/opencode/auto-drive.ts`);
 	assert(sha(source) === row.moduleSha256, `${name} auto-drive source`);
+	assert(
+		row.sourceTreeDigest === sourceTree[name].digest &&
+			row.sourceFileCount === sourceTree[name].fileCount &&
+			row.sourceTreeDigest === receipt[`${name}SourceTreeDigest`] &&
+			row.sourceFileCount === receipt[`${name}SourceFileCount`],
+		`${name} transitive source tree`,
+	);
 }
 assert(
 	baseline.moduleSha256 === receipt.baselineModuleSha256 &&

@@ -1,15 +1,39 @@
 import { createHash } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const [modulePath, outputPath, recoveryPath] = process.argv.slice(2);
 if (!modulePath || !outputPath)
 	throw new Error("Expected module and output paths");
+async function sourceTreeIdentity() {
+	const sourceRoot = resolve(dirname(modulePath), "..", "..");
+	const files: string[] = [];
+	async function visit(directory: string): Promise<void> {
+		for (const item of await readdir(directory, { withFileTypes: true })) {
+			const path = join(directory, item.name);
+			if (item.isDirectory()) await visit(path);
+			else if (item.isFile()) files.push(`src/${relative(sourceRoot, path)}`);
+			else throw new Error(`Unsupported source entry: ${path}`);
+		}
+	}
+	await visit(sourceRoot);
+	files.sort();
+	const hash = createHash("sha256");
+	for (const path of files) {
+		const bytes = await readFile(join(sourceRoot, path.slice(4)));
+		const length = Buffer.alloc(8);
+		length.writeBigUInt64BE(BigInt(bytes.length));
+		hash.update(path).update("\0").update(length).update(bytes);
+	}
+	return { digest: hash.digest("hex"), fileCount: files.length };
+}
 const rssColdBeforeBytes = process.memoryUsage().rss;
 const { AutoDriveCoordinator } = await import(pathToFileURL(modulePath).href);
 const RecoveryController = recoveryPath
 	? (await import(pathToFileURL(recoveryPath).href)).RecoveryController
 	: null;
+const sourceTree = await sourceTreeIdentity();
 const delivery = {
 	agent: "build",
 	model: { providerID: "provider", modelID: "model" },
@@ -203,6 +227,8 @@ const output = {
 	moduleSha256: createHash("sha256")
 		.update(await readFile(modulePath))
 		.digest("hex"),
+	sourceTreeDigest: sourceTree.digest,
+	sourceFileCount: sourceTree.fileCount,
 	recoverySha256: recoveryPath
 		? createHash("sha256")
 				.update(await readFile(recoveryPath))
