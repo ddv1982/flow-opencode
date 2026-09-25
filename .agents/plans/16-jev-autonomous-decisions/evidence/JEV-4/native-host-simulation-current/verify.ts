@@ -38,6 +38,8 @@ assert(
 			"tests",
 			"package.json",
 			"bun.lock",
+			"tsconfig.json",
+			"tsconfig.types.json",
 		],
 		{ cwd: repositoryRoot },
 	).status === 0,
