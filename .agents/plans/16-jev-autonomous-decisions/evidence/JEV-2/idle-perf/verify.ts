@@ -69,25 +69,31 @@ for (const name of ["baseline", "head"]) {
 }
 const [baseline, head] = data;
 assert(baseline && head, "raw pair");
+const expectedFixture = {
+	scenarios: [
+		"no-lease",
+		"ready-continuation",
+		"blocked-handback",
+		"recovery-checkpoint",
+		"inactive",
+	],
+	warmupPerScenario: 300,
+	samplesPerScenario: 1500,
+	hostSessionId: "host-1",
+	initialRevision: 11,
+	nextRevision: 12,
+};
 assert(
 	baseline.fixtureDigest === head.fixtureDigest &&
 		baseline.fixtureDigest === receipt.fixtureDigest &&
-		sha(JSON.stringify(baseline.fixture)) === receipt.fixtureDigest &&
-		sha(JSON.stringify(head.fixture)) === receipt.fixtureDigest &&
-		JSON.stringify(head.fixture) === JSON.stringify(baseline.fixture),
-	"identical fixture",
+		sha(JSON.stringify(expectedFixture)) === receipt.fixtureDigest &&
+		JSON.stringify(baseline.fixture) === JSON.stringify(expectedFixture) &&
+		JSON.stringify(head.fixture) === JSON.stringify(expectedFixture),
+	"frozen identical fixture",
 );
 assert(
-	JSON.stringify(baseline.fixture.scenarios) ===
-		JSON.stringify([
-			"no-lease",
-			"ready-continuation",
-			"blocked-handback",
-			"recovery-checkpoint",
-			"inactive",
-		]) &&
-		baseline.results.length === baseline.fixture.scenarios.length &&
-		head.results.length === baseline.fixture.scenarios.length,
+	baseline.results.length === expectedFixture.scenarios.length &&
+		head.results.length === expectedFixture.scenarios.length,
 	"required idle routes",
 );
 assert(
