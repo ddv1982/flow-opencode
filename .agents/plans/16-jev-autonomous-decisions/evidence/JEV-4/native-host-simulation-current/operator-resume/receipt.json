@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "classification": "current-head-real-host-operator-simulation-only",
-  "sourceHead": "085fdb215b7f6ed71b90e918f5b184df96ee77d8",
+  "sourceHead": "764779645168bcbbb80ed2d0421c98a3de5dfbff",
   "command": "FLOW_RECOVERY_OPERATOR_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=<pinned 1.18.31 binary> bun test tests/recovery-operator-host.test.ts",
   "hostVersion": "1.18.31",
   "passed": 4,
@@ -12,16 +12,37 @@
     "real xai/grok-4.6 operator episode resumes",
     "real xai/grok-4.6 operator episode cancels"
   ],
-  "logSha256": "cc09a9f99e85e4d40e377ec1aeb221b2a8a81993717a65b4d6b4990c79b66e4f",
+  "logSha256": "1a1d61e8d9cc6048eee1d86cc360185a4b8632d439e8dd7dd3db1bae3798db62",
   "testFileSha256": "16d1d2a26892c932fe175d5dcf481a53f49826d7268c9ea8e567e6dd90d650ca",
   "supportFileSha256": "be24ec970b84a9bb7228b0a8c6e3658d739d171efcd5a63ffeeccd0e62f7b45f",
   "harnessSha256": "2fdb37e92c287b21a4c5eca65b7ca47980ce3e56249b43169a90600ab4708b35",
   "lockSha256": "00872348d141163c992993e1e4ad9076ef44d56aa792ae35a0e9514b588f847c",
-  "recordedAt": "2026-09-25T03:49:48.078918Z",
+  "recordedAt": "2026-09-25T04:19:04.805143Z",
   "limits": [
     "The request gate uses simulation origin and fake OAuth replies; no live manager or Jev inference is measured.",
     "The operator reply is a test fixture and its human attribution is unverified.",
-    "The suite exercises evaluation episode machinery, not the packed production delegated profile or the required 100 live episode pairs."
+    "The suite exercises evaluation episode machinery, not the packed production delegated profile or the required 100 live episode pairs.",
+    "Host artifact headers are redacted captures of test-generated episode headers; the local binary path is not retained, but its SHA-256 and reported version are pinned."
   ],
-  "verifySha256": "c6e1bfbc3e01578d3023498747b8b1ba524ffbeba7369415f9c25947ba4bd1db"
+  "verifySha256": "458fbec239a09f3da4d9c216f82651cf07c83096d7ca95a4b91adc0a0786996f",
+  "trustedExecutableSha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+  "trustedExecutableVersion": "1.18.31",
+  "hostArtifactCaptures": [
+    {
+      "file": "capture-01.json",
+      "sha256": "f1b58eb18f3c0206f3918a1dd3c2d1ba491c11fc93a312f760a507f7b62352f0"
+    },
+    {
+      "file": "capture-02.json",
+      "sha256": "fd53504972bb8800315384da44475bafb88a97ea99e1fe781ccd48eb429f3607"
+    },
+    {
+      "file": "capture-03.json",
+      "sha256": "ce4b8792ad8c0de8c5efc852cec0ae53c8d35680c0db4f7a8a532a4269f287e8"
+    },
+    {
+      "file": "capture-04.json",
+      "sha256": "d1a9804f63d0953e523d62fd27127cbd6f998836b5628d6239712752989a0f1b"
+    }
+  ]
 }

@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "captureOrdinal": 4,
+  "headerSha256": "8f0b7e5d5dc94ab671801f4485cc5d850a2b1c4f0b7bf31f1bae35e395c2d07f",
+  "headerStartedAt": "2026-09-25T04:12:09.953Z",
+  "arm": "manager-only",
+  "declaredOrigin": "simulation",
+  "hostArtifacts": {
+    "schemaVersion": 1,
+    "platform": "linux",
+    "architecture": "x64",
+    "bun": {
+      "version": "1.4.0",
+      "bytes": {
+        "sha256": "33d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b",
+        "size": 80761952,
+        "executable": true
+      }
+    },
+    "opencode": {
+      "version": "1.18.31",
+      "bytes": {
+        "sha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
+        "size": 185030784,
+        "executable": true
+      }
+    },
+    "packageCache": null
+  },
+  "artifactVerification": {
+    "manifestDigest": "aa6e28718de0478c1a57a0605ebbb0d9935cb097d3ec7ced4d6b10f4de865be1",
+    "method": "copied-files-and-linux-process"
+  }
+}

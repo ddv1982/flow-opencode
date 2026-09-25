@@ -8,4 +8,4 @@ The opt-in suite is skipped by ordinary `bun run check`. To reproduce it, run th
 
 A [pinned native-host zero-claim startup check](zero-claim-startup/README.md) at `343b203` also passed three opt-in no-inference tests and reported zero request claims across the four manager/arm combinations. It is admission safety evidence, not a recovery-quality or interaction pass.
 
-A [current-head operator resume/cancel simulation](operator-resume/README.md) at `085fdb2` passed four real-host test cases. It exercises the evaluation operator interface without real provider inference or verified human attribution.
+A [current-head operator resume/cancel simulation](operator-resume/README.md) at `7647796` passed four real-host test cases and retained redacted process-artifact manifests for the pinned executable. It exercises the evaluation operator interface without real provider inference or verified human attribution.

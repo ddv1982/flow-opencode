@@ -1,12 +1,12 @@
 bun test v1.4.0 (34cbb9a40)
 
 tests/recovery-operator-host.test.ts:
-(pass) real openai/gpt-5.6-terra operator episode resumes [17872.18ms]
-(pass) real openai/gpt-5.6-terra operator episode cancels [12918.00ms]
-(pass) real xai/grok-4.6 operator episode resumes [17670.54ms]
-(pass) real xai/grok-4.6 operator episode cancels [14136.58ms]
+(pass) real openai/gpt-5.6-terra operator episode resumes [18426.88ms]
+(pass) real openai/gpt-5.6-terra operator episode cancels [13353.61ms]
+(pass) real xai/grok-4.6 operator episode resumes [17672.20ms]
+(pass) real xai/grok-4.6 operator episode cancels [12891.22ms]
 
  4 pass
  0 fail
  60 expect() calls
-Ran 4 tests across 1 file. [62.68s]
+Ran 4 tests across 1 file. [62.43s]
