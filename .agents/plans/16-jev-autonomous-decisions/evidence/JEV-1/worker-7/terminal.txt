@@ -1,0 +1,14 @@
+JEV-1 official provider availability probe
+Code head: 5db4e9852492cf671f16534be52a23e00fb655a4
+Command: collect-jev --max-calls 1 --max-usd 0.003
+Origin: live  Result: decision
+Requested model: jev-1.13.0
+Resolved model:  jev-1.13.0
+Attempts: 1
+Tokens: input 728 output 72
+Latency ms: 550.9
+Reserved USD: 0.002688
+Other rows: seven unavailable after the one-request cap
+Artifact SHA256: 9386d1207809b0eebdf623cab3e26dfd05ed17305b93a251b2661feee6fcdd08
+Evidence scope: availability/version only; no decision-quality claim
+bash-5.2$

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { SimulationScriptSchema } from "./treatment.js";
 
@@ -46,13 +47,22 @@ const Finding = z
 		live: z.boolean(),
 	})
 	.passthrough();
-export function createSimulationTransport(input: unknown) {
+export function createSimulationTransport(
+	input: unknown,
+	onJevPacket?: (sha256: string) => Promise<void> | void,
+) {
 	const script = SimulationScriptSchema.parse(input);
 	let managerCalls = 0;
 	let jevCalls = 0;
 	return async (request: Request): Promise<Response> => {
-		const body = await request.json();
 		const url = new URL(request.url);
+		const jevPacket =
+			onJevPacket &&
+			url.origin === "https://api.typesafe.ai" &&
+			url.pathname === "/v1/systemone"
+				? await request.clone().text()
+				: null;
+		const body = await request.json();
 		if (
 			url.origin === "https://api.typesafe.ai" &&
 			url.pathname === "/v1/systemone"
@@ -60,6 +70,10 @@ export function createSimulationTransport(input: unknown) {
 			if (script.kind === "operator-resume-v1")
 				throw new Error("Unexpected Jev request in operator script.");
 			if (++jevCalls !== 1) throw new Error("Simulation Jev script exhausted.");
+			if (jevPacket !== null)
+				await onJevPacket?.(
+					createHash("sha256").update(jevPacket).digest("hex"),
+				);
 			const parsed = z
 				.object({
 					model: z.literal("jev-1.13.0"),

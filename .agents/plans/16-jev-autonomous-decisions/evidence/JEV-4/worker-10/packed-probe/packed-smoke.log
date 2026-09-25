@@ -1,0 +1,31 @@
+$ FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts
+bun test v1.4.0 (34cbb9a40)
+
+tests/live-opencode-smoke.test.ts:
+(pass) live smoke readiness deadlines > R19-01 shares one startup budget: ready [0.91ms]
+(pass) live smoke readiness deadlines > R19-01 shares one startup budget: late-health [0.05ms]
+(pass) live smoke readiness deadlines > R19-01 shares one startup budget: unhealthy [0.05ms]
+(pass) live smoke readiness deadlines > R19-01 shares one startup budget: command-timeout [0.06ms]
+(pass) live smoke readiness deadlines > R19-01 identifies http failure without exposing response/server text [0.12ms]
+(pass) live smoke readiness deadlines > R19-01 identifies json failure without exposing response/server text [0.03ms]
+(pass) live smoke readiness deadlines > R19-01 identifies network failure without exposing response/server text [0.02ms]
+(pass) OpenCode eval metadata probe > pins the Phase 0 host, endpoints, and reviewer bound [0.02ms]
+(pass) OpenCode eval metadata probe > redacts compound sensitive keys but keeps identity field labels [0.68ms]
+(pass) OpenCode eval metadata probe > records completed parent and reviewer identities and raw parent linkage as labels [0.96ms]
+(pass) OpenCode eval metadata probe > reports host-version-mismatch [0.12ms]
+(pass) OpenCode eval metadata probe > reports parent-model-field-unavailable [0.11ms]
+(pass) OpenCode eval metadata probe > reports child-model-field-unavailable [0.06ms]
+(pass) OpenCode eval metadata probe > reports endpoint-failure [0.03ms]
+(pass) OpenCode eval metadata probe > reports review-command-failure [0.07ms]
+(pass) OpenCode eval metadata probe > reports mismatched-reviewer-parent [0.05ms]
+(pass) OpenCode eval metadata probe > reports non-reviewer-child [0.04ms]
+(pass) OpenCode eval metadata probe > reports unanswered-reviewer [0.06ms]
+(pass) OpenCode eval metadata probe > reports failed-parent-message [0.06ms]
+(pass) live OpenCode smoke configuration > uses the pinned host unless compatibility monitoring overrides it [0.04ms]
+(pass) live OpenCode 1.18.6 smoke > loads the packed plugin and enforces the small public surface [17777.52ms]
+(pass) planning policy denies arbitrary custom mutations and allows only workspace readers [0.48ms]
+
+ 22 pass
+ 0 fail
+ 133 expect() calls
+Ran 22 tests across 1 file. [17.91s]

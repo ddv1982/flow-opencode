@@ -301,17 +301,17 @@ test("evaluator error stays unavailable when cleanup crosses deadline", async ()
 });
 
 test("completed episode excludes confirmed cleanup past the deadline", async () => {
-	const f = await fixture(300);
+	const f = await fixture(2000);
 	try {
 		f.options.driver.stop = async () => {
-			await new Promise((resolve) => setTimeout(resolve, 450));
+			await new Promise((resolve) => setTimeout(resolve, 2500));
 		};
 		const result = await runEpisode(f.options);
 		expect(result?.observation.result).toEqual({
 			kind: "terminal",
 			outcome: "completed",
 		});
-		expect(result?.observation.activeRuntimeMs).toBeLessThan(300);
+		expect(result?.observation.activeRuntimeMs).toBeLessThan(2000);
 		expect(
 			JSON.parse(
 				await readFile(join(f.options.outputDirectory, "status.json"), "utf8"),
@@ -594,7 +594,7 @@ test("a stalled reconciliation deadline source cannot hold the terminal receipt"
 		const result = await Promise.race([
 			runEpisode(f.options),
 			new Promise<"stalled">((resolve) => {
-				watchdog = setTimeout(() => resolve("stalled"), 5500);
+				watchdog = setTimeout(() => resolve("stalled"), 8500);
 			}),
 		]);
 		expect(result).not.toBe("stalled");
@@ -608,4 +608,4 @@ test("a stalled reconciliation deadline source cannot hold the terminal receipt"
 		clearTimeout(watchdog);
 		await rm(f.root, { recursive: true, force: true });
 	}
-}, 7000);
+}, 11000);

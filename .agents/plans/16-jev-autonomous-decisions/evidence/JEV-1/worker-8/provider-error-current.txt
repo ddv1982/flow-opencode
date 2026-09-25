@@ -1,0 +1,9 @@
+JEV-1 provider faults at final-stack code head
+Code head: 7a1cb596a3a231d8951a8842e43cec6ef70f5c31
+Injected transport, zero provider calls
+rate-limit injected= 429 attempts= 3 reason= http elapsed_ms= 9.8
+overload injected= 529 attempts= 3 reason= http elapsed_ms= 3.1
+timeout injected= no response attempts= 1 reason= timeout elapsed_ms= 10003.5
+Artifact SHA256: b3770e888385d1484367a8d5bb4ad09cc12853f65abb7d1e80062a6c8333bbb5
+Evidence scope: bounded faults, no Jev quality claim
+bash-5.2$

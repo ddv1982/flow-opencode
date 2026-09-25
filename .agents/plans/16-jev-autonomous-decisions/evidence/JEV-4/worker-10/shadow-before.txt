@@ -1,0 +1,38 @@
+     ⚙ flow_status
+                                                                                                    README workspace plan and recovery
+     + Thought: Planning recovery mode reporting · 848ms                                            status
+
+     Recovery mode: shadow (shadow-only, one remaining call). I’ll inspect the workspace to         Context
+     scope the README, then create the Flow draft for approval only.                                14,751 tokens
+                                                                                                    4% used
+     ⚙ flow_guidance [id=flow-plan]                                                                 $0.00 spent
+     ✱ Glob "{AGENTS.md,CONTRIBUTING.md,README*,package.json,pyproject.toml,Cargo.toml,go.mod,
+       Makefile,.github/workflows/*}" in .                                                          LSP
+                                                                                                    LSPs are disabled
+     → Read .
+     → Read opencode.json
+
+     + Thought: Planning README gate validation · 4.2s
+
+     + Thought: Refining README presence gate · 15ms
+
+     ⚙ flow_plan_save
+
+     Recovery mode: shadow (shadow-only).
+
+     Draft plan saved for approval:
+
+     - Add README.md documenting the disposable workspace and its opencode.json Flow plugin
+       configuration.
+     - Validate with test -f README.md and content review against the existing configuration.
+
+     No files were edited. Approve the draft to proceed.
+
+     ▣  Build · GPT-5.6 Terra · 31.1s
+
+  ┃
+  ┃
+  ┃                                                                                                 /tmp/flow-jev-overnight-20260924/tui-
+  ┃  Build · GPT-5.6 Terra OpenAI                                                                   shadow-20260924
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/flow-jev-overnight-20260924/tui-shadow-20260924              14.8K (4%)  ctrl+p commands    • OpenCode 1.18.31

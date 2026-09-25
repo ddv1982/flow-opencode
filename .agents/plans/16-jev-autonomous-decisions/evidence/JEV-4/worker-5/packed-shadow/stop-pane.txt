@@ -1,0 +1,38 @@
+
+  ┃
+  ┃  Flow flow-auto: Repair the blocked parser within its approved plan.
+  ┃
+
+     ⚙ flow_status
+     ⚙ flow_status
+
+  ┃
+  ┃  Flow auto stopped.
+  ┃
+
+     Simulation complete.
+
+     ▣  Build · Grok 4.6 · 148ms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · Grok 4.6 xAI
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/flow-jev-overnight-20260924/jev4-lane5-packed-host/project                   110 (0%) · $0.00  ctrl+p commands

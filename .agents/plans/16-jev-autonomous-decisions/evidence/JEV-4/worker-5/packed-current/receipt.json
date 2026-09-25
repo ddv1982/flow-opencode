@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-tui-delayed-simulation-stop",
+  "lane": "JEV-4 worker-5",
+  "laneVerdict": "pass-simulated-stop",
+  "sourceHead": "560c7503b43beac66432801a4d3ec04c6c042cea",
+  "recordedAt": "2026-09-24T16:35:44.534755+00:00",
+  "origin": "simulation",
+  "paidInference": false,
+  "host": "OpenCode 1.18.31",
+  "client": "OpenCode 1.18.32",
+  "managerModel": "openai/gpt-5.6-terra",
+  "jevModel": "typesafe/jev-1.13.0",
+  "sessionId": "ses_f2bc18369ffeZ2HsJuhbaGMyYS",
+  "flowRevisionBefore": 11,
+  "flowRevisionAfter": 11,
+  "capture": {
+    "source": "X11 xterm attached to disposable OpenCode host",
+    "videoDurationSeconds": 75,
+    "videoFrameRate": 1,
+    "videoFrames": 75,
+    "windowOnly": true
+  },
+  "observations": [
+    "Frozen install, build, and packed-plugin smoke passed at sourceHead; the treatment host separately loaded the explicit simulation seam from the same source head.",
+    "The real TUI /flow-auto invocation reached a delayed simulated Jev request. A digest of its exact outgoing packet was saved in the host private artifact directory.",
+    "The Jev request claim preceded the TUI /flow-auto stop by less than the 9000 ms simulated reply delay.",
+    "Stop was visible in the TUI; after the delayed reply window the blocked Flow session bytes matched the pre-run snapshot and no reset tool call appeared in the host trace."
+  ],
+  "limits": [
+    "The provider reply and manager route were simulated; this is transport/stop evidence, not Jev decision-quality evidence.",
+    "Packed-plugin smoke and the simulated treatment host are distinct launches; the treatment host uses an eval-only bundle and its exact digest is recorded."
+  ],
+  "files": {
+    "boot-identity.json": "261493ab52d7ab77d80e44b73cb17e0320e3779d94695c52d566aecae84ac121",
+    "pending.png": "6d29bd4753558ce14caf1403014e688a721cf2522ebe310358f6afe7a801105b",
+    "event-trace.json": "85a10d00555da3f75407a240ca57fe28cc9b586f076111238fb4061d8d366f44",
+    "pending-pane.txt": "ae0ad5b9b8d4888c4e2ab306b4a085a3c94d114ef23e32bf7c3896d5fd8a5539",
+    "stop.mp4": "26eff75ba278b985964e55d2e74aa8974ddadcca08458e9d48dd189086bad44d",
+    "stop-pane.txt": "a0046f278d44fe031ce4d1203fd4f4bd71c3f835f8bae7c80e569a1637183121",
+    "packet-digest.json": "30cbb011e0ac9eea961f991e049811ed6e32b9038a8d1ca0a7fa7ef9ed70b3ee",
+    "state-comparison.json": "cd2ca107671bf93c0bb7449354ddf72728ea5409365d659da0c2653b83899000",
+    "host-startup.txt": "deac7566dcd5abc4310368c74d92d45fc68013e3e0aaba88e63f88b909d08f7c",
+    "build.log": "6b8f2ba6d1da732d91fbc39a6a0a6a5b16f8016551af845f6502e58528c93920",
+    "frozen-install.log": "f21879d7a8871e7c9edec7755cbbe59c8ffc69659eba55264a13106e2309f73e",
+    "request-claim.json": "adc7121ddde5e9aece36e406fbd96315c7a4256bf301c2a5784c789b659d0b7b",
+    "packed-smoke.log": "894ee571ed7f2fdeca3d42f453edd67e1e258b2f5a1a1fff35b811286c24610e",
+    "stop.png": "81933367b759b4ddf0d5603f43539da968608333838c946e22a12017a5a3f999"
+  }
+}

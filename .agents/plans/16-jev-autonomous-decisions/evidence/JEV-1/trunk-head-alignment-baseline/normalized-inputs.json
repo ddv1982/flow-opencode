@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "identicalGoalAndRubricInputs": true,
+  "rows": [
+    {
+      "id": "compatible-narrowing",
+      "normalizedInputSha256": "801dafe897e69299c401f44b72041e8dc75caa85e7db3e80def12e05f9308d74",
+      "sameInput": true,
+      "trunkRequestSha256": "e798ad49ba6189670162112a2db2379ff3840d61660e4f89070e29fd6e417bee",
+      "observedTrunkRequestSha256": "e798ad49ba6189670162112a2db2379ff3840d61660e4f89070e29fd6e417bee",
+      "headRequestSha256": "8f8373f515939c745c2d55441e4c6fc3ad712a41a8e0591e90ade93d4101494c",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "approve-same-plan",
+      "normalizedInputSha256": "f34d4b45850bc1d8b9832f6d7397b0b7eeca2d8ebd82b9d4b4034d2d78fbc9fb",
+      "sameInput": true,
+      "trunkRequestSha256": "91c2ce6961c8ab3e53473b9f213579ed416e54418e37af9b3dd800056a778321",
+      "observedTrunkRequestSha256": "91c2ce6961c8ab3e53473b9f213579ed416e54418e37af9b3dd800056a778321",
+      "headRequestSha256": "785df624ae3e436696b6d1806b5ec7acb1e4208c551feaa060eb484767fad373",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "unrelated-replacement",
+      "normalizedInputSha256": "46cbaffa5e4b8d1518e7a07b4a8aca903ccf0bb41ec9eaace385a4385f4bc5f6",
+      "sameInput": true,
+      "trunkRequestSha256": "cf1a077e0d10de9af1f73b3439a18b35245f343adf5566167c65a96ec6dda5f0",
+      "observedTrunkRequestSha256": "cf1a077e0d10de9af1f73b3439a18b35245f343adf5566167c65a96ec6dda5f0",
+      "headRequestSha256": "ed577561350aa05b385820251d882de26b1af28353bf97aab002a007473439b1",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "inspect-vs-implement",
+      "normalizedInputSha256": "37e6547da98f4c393529645acc329ddd6776dddef7b8c1a2a085c87a09a18237",
+      "sameInput": true,
+      "trunkRequestSha256": "7db1795d9dabcac5921abd7ff5432a2d3f8c414c7a6c6f3ae03667892edbd7fe",
+      "observedTrunkRequestSha256": "7db1795d9dabcac5921abd7ff5432a2d3f8c414c7a6c6f3ae03667892edbd7fe",
+      "headRequestSha256": "6da597beefe5dca691d9f5618efb823245fc278fd2309f8252933a1318140f52",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "keep-plan-and-add-tui",
+      "normalizedInputSha256": "19060b50fcb16f7894c0f9ca54e514abadc7ae3b1a1dd3025de78a1a4ab68a3a",
+      "sameInput": true,
+      "trunkRequestSha256": "2fba977dd846c53d7ff069391e3edf4455ce53ce40477f136ccd0dae60703e28",
+      "observedTrunkRequestSha256": "2fba977dd846c53d7ff069391e3edf4455ce53ce40477f136ccd0dae60703e28",
+      "headRequestSha256": "524739e12cff2a961da79c4c3f557e2280a386317f09d26ee6a60bf208c3846b",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "method-emphasis-narrowing",
+      "normalizedInputSha256": "2fbe1eb59f2eaa87e6e0efbe2b1e98129dd282dd9225b19a6825b91fa7c55ab4",
+      "sameInput": true,
+      "trunkRequestSha256": "41f09bac38121b42f805b5e665d4b1522516f6a5c873f823c42cd250aba51234",
+      "observedTrunkRequestSha256": "41f09bac38121b42f805b5e665d4b1522516f6a5c873f823c42cd250aba51234",
+      "headRequestSha256": "f30c1e0c80bd3baaf9ed14779a7bb26604594f7a30ccc60bd2b42f922e4d7d37",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "research-then-save-plan",
+      "normalizedInputSha256": "dfa4083f403b9f9b3626371486797591b133fab047a17e12fda3a3cea5786d5e",
+      "sameInput": true,
+      "trunkRequestSha256": "29bfc91b92d303d548841175fba781db58da2bf3e01c0d81494fcc00834ffda4",
+      "observedTrunkRequestSha256": "29bfc91b92d303d548841175fba781db58da2bf3e01c0d81494fcc00834ffda4",
+      "headRequestSha256": "d134db5a7807cbc4e22a5a46a35423a9b06d48df44badec496b3b1e890c4a1b3",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    },
+    {
+      "id": "extra-evidence-request",
+      "normalizedInputSha256": "16451b192e4adb10abaa3c5f193443626414060a3eaa5274c0c624d649b4eeaf",
+      "sameInput": true,
+      "trunkRequestSha256": "07ab2666b5aae7f71b4300df37b47d6ab99d097fc9da7f24747f2841c07b2b76",
+      "observedTrunkRequestSha256": "07ab2666b5aae7f71b4300df37b47d6ab99d097fc9da7f24747f2841c07b2b76",
+      "headRequestSha256": "3d29abd4d81e9e3e0a5b87cdc7ce346a34bc3236eb417563c42b7b79ad6f11f6",
+      "trunkRequestedModel": "jev-latest",
+      "headRequestedModel": "jev-1.13.0"
+    }
+  ]
+}

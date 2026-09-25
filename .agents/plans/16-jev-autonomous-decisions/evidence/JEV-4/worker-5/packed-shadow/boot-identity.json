@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "hostVersion": "OpenCode 1.18.31",
+  "clientVersion": "OpenCode 1.18.32",
+  "package": "opencode-plugin-flow@9.0.2",
+  "tarballSha256": "d35205113e3985d00ebad5531d9ceb144932b6cbc587478deccba11ae0ef97ae",
+  "sourceDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+  "installedDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+  "projectConfigSha256": "c655465090a1d79001aece211a707ef3e3d6980f9576e886950a83987ede9571",
+  "budgetGateOrigin": "simulation",
+  "budgetGateScriptDigest": "71b95241db5941c6edce4a29b224df8cf3b3816f1795b2e75552c583b71722db",
+  "budgetPluginSourceSha256": "de2219a98ebeebdfe7fbc35e58af682946c2e949fa371160c36707bc221b642d",
+  "flowCommands": [
+    "flow-auto",
+    "flow-plan",
+    "flow-run",
+    "flow-review",
+    "flow-status"
+  ]
+}

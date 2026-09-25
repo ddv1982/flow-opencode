@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "id": "blocker-finding-injection-reviewed-head-v1",
+  "corpusDigest": "c3232b6b6ec0da7cd249e72e434cd3cd2d63169daf24980ebbf8e5e79710a1bb",
+  "sourceRevision": "7a1cb59",
+  "policyVersion": "recovery-proposal-v1",
+  "rubricVersion": "blocker-v1",
+  "managerModel": "unmeasured-manager",
+  "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "requestedModel": "jev-1.13.0",
+  "registration": {
+    "status": "development"
+  },
+  "splits": [
+    {
+      "episodeId": "injection-finding",
+      "split": "development"
+    }
+  ],
+  "thresholds": {
+    "retry": {
+      "choice": 0.8,
+      "goal": 0.9,
+      "suitability": 0.9
+    },
+    "independent-feature": {
+      "choice": 0.8,
+      "goal": 0.9,
+      "suitability": 0.9
+    }
+  },
+  "qualifyActions": [
+    "retry",
+    "independent-feature"
+  ],
+  "comparison": {
+    "minimumPairs": 100,
+    "minimumUsefulCoverageGain": 0.05
+  },
+  "budget": {
+    "maxCalls": 3,
+    "maxUsd": 0.01
+  }
+}

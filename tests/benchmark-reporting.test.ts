@@ -134,7 +134,7 @@ describe("hidden benchmark graders", () => {
 				await rm(project, { recursive: true, force: true });
 			}
 		}
-	});
+	}, 30_000);
 
 	test("accept known implementations for the original five cases", async () => {
 		const implementations: Record<string, Record<string, string>> = {

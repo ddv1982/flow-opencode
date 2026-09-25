@@ -1,0 +1,38 @@
+     Action guidance: inspect the repository and save one draft plan with flow_plan_save.
+     Findings digest: none                                                                          Flow status reporting instructions
+
+     Process-local model settings and observations:                                                 Context
+                                                                                                    11,827 tokens
+     Planning uses the coding manager directly; no specialist is requested.                         3% used
+     After plan approval, implementation stays with openai/gpt-5.6-terra. This is the latest        $0.00 spent
+     observed manager message model, not a guarantee for future turns.
+     Review inherits the implementing manager model.                                                LSP
+                                                                                                    LSPs are disabled
+     Process-local reviewer configuration:
+
+     Reviewer selection: shared manager model.
+     Requested reviewer model: none; the reviewer inherits the manager model.
+     Requested reviewer step budget: host default.
+     Reviewer model availability: unverified; configuration proves only what Flow requested
+     from OpenCode.
+
+     Projection: idle; exact next action: flow_plan_save.
+
+     /flow-status made no lifecycle, Git, or release mutation. No lifecycle effect occurred.
+
+     ▣  Build · GPT-5.6 Terra · 9.1s
+
+  ┃
+  ┃  No Flow auto lease was active in this OpenCode session.
+  ┃
+
+     No Flow auto lease was active in this OpenCode session.
+
+     ▣  Build · GPT-5.6 Terra · 5.2s
+
+  ┃
+  ┃
+  ┃                                                                                                 /tmp/flow-jev-overnight-20260924/tui-
+  ┃  Build · GPT-5.6 Terra OpenAI                                                                   controls-20260924
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/flow-jev-overnight-20260924/tui-controls-20260924            11.8K (3%)  ctrl+p commands    • OpenCode 1.18.31

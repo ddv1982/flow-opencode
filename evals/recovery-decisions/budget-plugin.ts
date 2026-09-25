@@ -1,3 +1,4 @@
+import { dirname, join } from "node:path";
 import type { Plugin } from "@opencode-ai/plugin";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
@@ -86,7 +87,16 @@ const BudgetPlugin: Plugin = async (context, input) => {
 	if (options.simulationScript && status.authorization.origin !== "simulation")
 		throw new Error("Simulation script requires simulation authorization.");
 	const simulate = options.simulationScript
-		? createSimulationTransport(options.simulationScript)
+		? createSimulationTransport(options.simulationScript, (sha256) =>
+				writeExclusive(
+					join(dirname(options.readyPath), "simulation-jev-packet.json"),
+					{
+						schemaVersion: 1,
+						model: "typesafe/jev-1.13.0",
+						sha256,
+					},
+				),
+			)
 		: undefined;
 	const original = globalThis.fetch;
 	const gated = createRequestGate({

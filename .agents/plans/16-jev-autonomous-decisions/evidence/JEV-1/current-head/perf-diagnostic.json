@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "classification": "synthetic-unreviewed-diagnostic",
+  "sourceCodeCommit": "7a1cb596a3a231d8951a8842e43cec6ef70f5c31",
+  "sourceArtifact": "collector.json",
+  "sourceArtifactSha256": "67de418217b071d3f47092c8a2307737b4fe2f50de6623e77961e05b41edd10c",
+  "method": "Use the eight live-origin observations in collector.json once each. Median is the mean of the two central sorted values. P95 is nearest rank ceil(0.95 * n). Timeout count includes unavailable timeout results; fault-injection records are excluded.",
+  "sampleCount": 8,
+  "latencyMs": {
+    "p50": 207.529089,
+    "p95NearestRank": 524.74042,
+    "maximum": 524.74042
+  },
+  "timeoutCount": 0,
+  "singleAttemptCount": 8,
+  "inputTokens": 6758,
+  "outputTokens": 764,
+  "estimatedProviderUsd": 0.000283836,
+  "localReservedUsd": 0.021504,
+  "limits": {
+    "callDeadlineMs": 10000,
+    "maxAttemptsPerCall": 3,
+    "normalCallP95TargetMs": 2000,
+    "pilotAttemptCeiling": 24,
+    "pilotDollarCeilingUsd": 0.1
+  },
+  "interpretation": "The observed diagnostic sample stays below the proposed per-call and p95 limits. The eight cases are synthetic and unreviewed; this does not measure manager-only or deterministic comparators, establish a production timeout rate, authenticate invoice spend, or qualify a delegated action."
+}
