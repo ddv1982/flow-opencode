@@ -1,9 +1,9 @@
 {
   "schemaVersion": 1,
   "classification": "current-head-real-host-simulation-only",
-  "sourceHead": "938bedf0f25db6f3634f46ea33686cecb456df94",
+  "sourceHead": "65461f78ac8f4be8cd744d7025e9494a77121e8b",
   "command": "FLOW_RECOVERY_TREATMENT_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=<pinned-1.18.31-binary> FLOW_RECOVERY_TREATMENT_ARTIFACT_DIR=<private-output> bun test tests/recovery-treatment-host.test.ts",
-  "logSha256": "6155493d1a4d5a591878d8d1856b48023bee0ac35dd32e3161caa50f205477c7",
+  "logSha256": "ac34747e93e4829d0752297a237826c0e3edf966b13c418ae1bbf526ee2ddc38",
   "hostVersion": "1.18.31",
   "passed": 10,
   "failed": 0,
@@ -24,12 +24,12 @@
     "The suite loads an experimental evaluation treatment, not a production delegated profile.",
     "This does not close the lane-5 same-run packed-plugin authority gap or the live holdout/performance gates."
   ],
-  "sourceTreeOid": "fe262a3af14ad90d3621b63d8452a89e21fa5305",
-  "testFileSha256": "d121419fbc40276e65d44165ac7a75045e11bcc2bb39997317aed44db847d5b1",
+  "sourceTreeOid": "24bb534c1982277033aa11645b2c54d0182ee8c9",
+  "testFileSha256": "8ae14541edfe42c587cb20621999a55f7539d257f5afb68950e79eff89d5c134",
   "testHelperSha256": "2fdb37e92c287b21a4c5eca65b7ca47980ce3e56249b43169a90600ab4708b35",
   "lockSha256": "00872348d141163c992993e1e4ad9076ef44d56aa792ae35a0e9514b588f847c",
-  "recordedAt": "2026-09-25T19:18:09.799943+00:00",
-  "verifySha256": "0741be3ed0a87a8a4de6ed2a94fb61a6b91da18b7333c528a0fd85198b114352",
+  "recordedAt": "2026-09-25T19:51:31.950045+00:00",
+  "verifySha256": "b9311fd68b776819754dc9c5533eaa1be6141aa05d41211c93ead6d492ffe320",
   "trustedExecutableVersion": "1.18.31",
   "trustedExecutableSha256": "f9dab32248695e9ebd56b16a1921798fd85112cf5a69c7dfd0cabc1e17be4a11",
   "hostArtifactCaptures": [
