@@ -356,6 +356,10 @@ export function validateEvidence(
 	input: unknown,
 ): ValidatedEvidence {
 	const value = parse(EvidenceSchema, input);
+	requireInvariant(
+		value.receipts.every((receipt) => receipt.producer !== receipt.reviewedBy),
+		"independent-import-review",
+	);
 	const campaignDigest = digest(campaign.manifest);
 	requireInvariant(value.campaignDigest === campaignDigest, "campaign-digest");
 	const seen = new Set<string>();
@@ -447,6 +451,10 @@ export function importLiveEvidence(
 	const checked = parse(
 		z.object({ artifactDigest: Digest, producer: Id, reviewedBy: Id }).strict(),
 		receipt,
+	);
+	requireInvariant(
+		checked.producer !== checked.reviewedBy,
+		"independent-import-review",
 	);
 	requireInvariant(digest(input) === checked.artifactDigest, "import-receipt");
 	const value = validateEvidence(campaign, input);

@@ -24,6 +24,7 @@ import {
 	parseCampaign,
 	parseEvidence,
 	type ValidatedCampaign,
+	validateEvidence,
 } from "../evals/blocker-decisions/schema.js";
 import corpus from "../evals/blocker-decisions/v1.json" with { type: "json" };
 
@@ -173,9 +174,22 @@ describe("blocker campaign", () => {
 				reviewedBy: "operator",
 			}),
 		).toThrow("import-receipt");
+		expect(() =>
+			importLiveEvidence(campaign, input, {
+				artifactDigest: digest(input),
+				producer: "study",
+				reviewedBy: "study",
+			}),
+		).toThrow("independent-import-review");
 		const live = liveImport(campaign, [observation(campaign)]);
 		expect(live.receipts[0]?.producer).toBe("controlled-study-v1");
 		expect(live.observations[0]?.origin).toBe("imported-live");
+		expect(() =>
+			validateEvidence(campaign, {
+				...live,
+				receipts: [{ ...live.receipts[0], reviewedBy: "controlled-study-v1" }],
+			}),
+		).toThrow("independent-import-review");
 		expect(() =>
 			liveImport(campaign, [
 				{ ...observation(campaign), policyVersion: "other" },
