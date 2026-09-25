@@ -75,6 +75,30 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 				options,
 			),
 		).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
+		for (const altered of [
+			{ ...packet, goal: '{"password":"hunter2hunter2"}' },
+			{
+				...packet,
+				findings: [
+					{ ...packet.findings[0], evidence: '{"api_key":"othersecret"}' },
+				],
+			},
+			{
+				...packet,
+				candidates: [
+					{
+						...packet.candidates[0],
+						remedy: '{"client_secret":"othersecret"}',
+					},
+				],
+			},
+		])
+			expect(
+				await createJevDecisionProvider(() => "credential").assess(
+					altered as DecisionPacket,
+					options,
+				),
+			).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
 		expect(spy).toHaveBeenCalledTimes(0);
 	} finally {
 		spy.mockRestore();

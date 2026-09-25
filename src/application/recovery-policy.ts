@@ -138,7 +138,7 @@ export type RecoveryGuard = Readonly<{
 export class RecoveryController {
 	#lease: Lease | null = null;
 	#hosts = new Map<string, Host>();
-	#protectedSessions = new Set<string>();
+	#protectedSessions = new Map<string, string>();
 	readonly #provider: DecisionProvider;
 	readonly #profiles: readonly RecoveryProfile[];
 	readonly #now: () => number;
@@ -296,7 +296,7 @@ export class RecoveryController {
 				!this.#protectedSessions.has(session.id)
 			)
 				throw new Error("Recovery session capacity reached.");
-			this.#protectedSessions.add(session.id);
+			this.#protectedSessions.set(session.id, lease.host);
 			lease.session = session.id;
 			lease.binding = binding;
 		}
@@ -352,8 +352,21 @@ export class RecoveryController {
 		return {
 			checkClose: (session) => this.#checkClose(context, session),
 			retireClosedSession: (sessionId) => {
+				const owner = this.#protectedSessions.get(sessionId);
 				if (this.#lease?.session === sessionId) this.revoke();
 				this.#protectedSessions.delete(sessionId);
+				if (
+					owner &&
+					this.#lease?.host !== owner &&
+					![...this.#protectedSessions.values()].includes(owner)
+				) {
+					const host = this.#hosts.get(owner);
+					if (host) {
+						host.fenced = false;
+						host.manual = null;
+						host.parents.clear();
+					}
+				}
 			},
 			check: (s, source, m) => this.#check(context, s, source, m),
 			accepted: (s, m, replayed) => this.#accepted(context, s, m, replayed),

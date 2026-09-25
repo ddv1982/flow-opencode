@@ -410,6 +410,26 @@ describe("process-local recovery", () => {
 				}),
 		).toThrow("different host session");
 	});
+	test("closing the last protected session retires its host fence", async () => {
+		const s = await setup("shadow");
+		const session = s.repository.session;
+		if (!session) throw new Error("Fixture session missing.");
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		s.controller.guard(context).retireClosedSession(session.id);
+		const ordinary = { ...session, id: "ordinary-next-session" };
+		expect(() =>
+			s.controller
+				.guard({ ...context, messageId: "synthetic-continuation" })
+				.checkClose(ordinary),
+		).not.toThrow();
+	});
 	test("wrong host and worker cannot consume the pending operation", async () => {
 		const s = await setup(),
 			mutation = await recommend(s);

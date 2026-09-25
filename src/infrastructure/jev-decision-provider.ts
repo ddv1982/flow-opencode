@@ -19,6 +19,8 @@ const Choice = z
 	})
 	.strict();
 const Noul = z.object({ type: z.literal("noul"), noul: Probability }).strict();
+const sensitiveField =
+	/(?:Bearer\s+\S+|(?:api[_ -]?key|password|passwd|secret|access[_ -]?token|refresh[_ -]?token|client[_ -]?secret|private[_ -]?key)["']?\s*[:=]\s*["']?\S+)/i;
 function buildRequest(packet: DecisionPacket) {
 	const criteria = Object.fromEntries(
 		packet.candidates.map((c) => [c.id, c.remedy]),
@@ -71,9 +73,20 @@ export function createJevDecisionProvider(
 			const key = readApiKey();
 			if (!key) return { kind: "unavailable", reason: "missing-key" };
 			const state = JSON.stringify(packet);
+			const packetText = [
+				packet.goal,
+				...packet.findings.flatMap((finding) => [
+					finding.summary,
+					finding.evidence,
+				]),
+				...packet.candidates.flatMap((candidate) => [
+					candidate.remedy,
+					candidate.changedFromPreviousAttempt,
+				]),
+			];
 			if (
 				state.includes(key) ||
-				/Bearer\s|(?:api[_-]?key|password|secret)\s*[:=]\s*\S+/i.test(state)
+				packetText.some((value) => sensitiveField.test(value))
 			)
 				return { kind: "unavailable", reason: "sensitive-packet" };
 			const { body, answers } = buildRequest(packet);
