@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "classification": "synthetic-startup-zero-claims-only",
+  "records": [
+    {
+      "managerModel": "openai/gpt-5.6-terra",
+      "arm": "manager-only",
+      "origin": "live",
+      "qualification": "experimental-evaluation",
+      "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
+      "zeroClaims": true,
+      "opencodeVersion": "1.18.31"
+    },
+    {
+      "managerModel": "openai/gpt-5.6-terra",
+      "arm": "manager-plus-jev",
+      "origin": "live",
+      "qualification": "experimental-evaluation",
+      "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
+      "zeroClaims": true,
+      "opencodeVersion": "1.18.31"
+    },
+    {
+      "managerModel": "xai/grok-4.6",
+      "arm": "manager-only",
+      "origin": "live",
+      "qualification": "experimental-evaluation",
+      "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
+      "zeroClaims": true,
+      "opencodeVersion": "1.18.31"
+    },
+    {
+      "managerModel": "xai/grok-4.6",
+      "arm": "manager-plus-jev",
+      "origin": "live",
+      "qualification": "experimental-evaluation",
+      "pluginEntrySha256": "4f9d4aec6092ccc10f48ba093d5a477cc8a4c25307ff0e217ac742ff22f8e8fb",
+      "zeroClaims": true,
+      "opencodeVersion": "1.18.31"
+    }
+  ]
+}

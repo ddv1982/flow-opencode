@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "classification": "real-host-synthetic-startup-without-inference",
+  "sourceHead": "343b2032b921af5746279e8a7d02791f87e53255",
+  "command": "FLOW_RECOVERY_LIVE_HOST_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=<pinned 1.18.31 binary> bun test tests/recovery-live-host.test.ts",
+  "hostVersion": "1.18.31",
+  "passed": 3,
+  "failed": 0,
+  "arms": 4,
+  "zeroClaimArms": 4,
+  "rawPrivateReportSha256": "509c5a590b93818eb26041b7fbb827f725d9fe1aa806e48cde63658162cf770a",
+  "sanitizedReportSha256": "fb7ed20a75f40ccfe3b47e5056b8a0e9fea7e7e2e0b93ba0e3274288fd5a376c",
+  "logSha256": "0c4e3327e50477811dfd4dfd8aee325dd79d647fcfec2e5a80010a1cf0f41ae0",
+  "testFileSha256": "3988301538ddb64f8eb36559d34bbea295d1110e4dde5e250b7793ade6a4af4b",
+  "childTestSha256": "1c413701276735401d04436c217c396e88de51b1d601dc8edd85d09e10cf4e76",
+  "harnessSha256": "2fdb37e92c287b21a4c5eca65b7ca47980ce3e56249b43169a90600ab4708b35",
+  "limits": [
+    "Synthetic startup fixture uses fake OAuth and a placeholder TypeSafe key; no inference authorization or request claims occurred.",
+    "A live-origin request gate started but no manager or Jev decision was dispatched.",
+    "The experimental evaluation treatment is not the packed production delegated profile; this does not close the JEV-4 interaction or quality gates."
+  ],
+  "verifySha256": "fb17eee2ff9485ee1476884d0057f00c95c46760a000a25cb1d04dea3c2fbc24"
+}

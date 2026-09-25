@@ -5,3 +5,5 @@ At Flow source `bf07e8f3b6e68e3bb177bd6bf1fdf95abe2562ed`, `FLOW_RECOVERY_TREATM
 The host request gate used simulation origin, fake OAuth credentials, and simulated Jev replies. This run proves that the guarded host paths and delayed-stop behavior still pass at the measured head; it supplies no paid-model decision-quality evidence. The treatment was the experimental evaluation bundle, so it does not close JEV-4 lane 5's same-run packed-plugin delegated-authority gap, nor replace the screenshot/video interaction review or live holdout.
 
 The opt-in suite is skipped by ordinary `bun run check`. To reproduce it, run the command above from an exact checkout at the receipt's source commit, with the frozen dependencies and OpenCode 1.18.31 available. It needs no real provider credentials or TypeSafe dispatch authorization.
+
+A [pinned native-host zero-claim startup check](zero-claim-startup/README.md) at `343b203` also passed three opt-in no-inference tests and reported zero request claims across the four manager/arm combinations. It is admission safety evidence, not a recovery-quality or interaction pass.

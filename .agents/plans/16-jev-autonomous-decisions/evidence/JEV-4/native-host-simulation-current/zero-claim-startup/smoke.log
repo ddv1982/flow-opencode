@@ -1,0 +1,11 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/recovery-live-host.test.ts:
+(pass) isolated live host credentials without inference [80.11ms]
+(pass) isolated live host admission without inference [203.41ms]
+(pass) isolated live host native without inference [34604.94ms]
+
+ 3 pass
+ 0 fail
+ 8 expect() calls
+Ran 3 tests across 1 file. [34.93s]
