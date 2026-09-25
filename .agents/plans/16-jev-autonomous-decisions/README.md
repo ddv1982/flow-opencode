@@ -168,7 +168,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Run `bun test tests/recovery-policy.test.ts tests/jev-decision-provider.test.ts tests/runtime-gates.test.ts tests/auto-drive.test.ts tests/auto-drive-decision.test.ts`. Assert pre-effect refusal and exact replay behavior. With delegated mode off, preserve first-failure reset, user-directed `/flow-run` recovery, and explicit ready-state retry. Save output at the exact head SHA.
+- [x] Run `bun test tests/recovery-policy.test.ts tests/jev-decision-provider.test.ts tests/runtime-gates.test.ts tests/auto-drive.test.ts tests/auto-drive-decision.test.ts`. Assert pre-effect refusal and exact replay behavior. With delegated mode off, preserve first-failure reset, user-directed `/flow-run` recovery, and explicit ready-state retry. Save output at the exact head SHA. The [current-code unit receipt](evidence/unit-current/README.md) records 113 passing tests at `39c144b`; live and performance verification remain open.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on the configured fast profile at the PR head, per the boot recipe. Use the declared inherited-profile fallback when necessary.
 
@@ -230,7 +230,7 @@ An [ordinary Signal Garden atlas task](evidence/JEV-1/observed-signal-garden-atl
 
 **Verify, unit.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
 
-- [ ] Run `bun test tests/recovery-policy.test.ts tests/auto-drive.test.ts tests/auto-drive-decision.test.ts tests/runtime-gates.test.ts tests/domain-transitions.test.ts`. Cover every grant, refusal, invalidation, and replay path. Save output at the exact head SHA.
+- [x] Run `bun test tests/recovery-policy.test.ts tests/auto-drive.test.ts tests/auto-drive-decision.test.ts tests/runtime-gates.test.ts tests/domain-transitions.test.ts`. Cover every grant, refusal, invalidation, and replay path. Save output at the exact head SHA. The [current-code unit receipt](evidence/unit-current/README.md) records 142 passing tests at `39c144b`; live and performance verification remain open.
 
 **Verify, live.** Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked. Ten lanes on the configured fast profile at the PR head, per the boot recipe. Use the declared inherited-profile fallback when necessary.
 

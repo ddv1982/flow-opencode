@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "classification": "exact-code-head-unit-only",
+  "sourceHead": "39c144b193606456a6f5413ba86ecd1f9190608b",
+  "sourceTreeOid": "515320fcfea4388840cd0f7d6ced145aca72e7da",
+  "bunVersion": "1.4.0",
+  "runs": [
+    {
+      "phase": "JEV-2",
+      "command": "bun test tests/recovery-policy.test.ts tests/jev-decision-provider.test.ts tests/runtime-gates.test.ts tests/auto-drive.test.ts tests/auto-drive-decision.test.ts",
+      "log": "jev2.log",
+      "logSha256": "ed41ffc830d3767227c56a81b6304552707bb557863f662edeb51b92f07a758c",
+      "passed": 113,
+      "failed": 0,
+      "files": 5,
+      "expectCalls": 1016
+    },
+    {
+      "phase": "JEV-3",
+      "command": "bun test tests/recovery-policy.test.ts tests/auto-drive.test.ts tests/auto-drive-decision.test.ts tests/runtime-gates.test.ts tests/domain-transitions.test.ts",
+      "log": "jev3.log",
+      "logSha256": "0303a591c150e6fe0b250236ee8bad9ac7a01e027c7c812c35e50d4d2dcde1c8",
+      "passed": 142,
+      "failed": 0,
+      "files": 5,
+      "expectCalls": 1169
+    }
+  ],
+  "sourceDigests": {
+    "tests/recovery-policy.test.ts": "dc829db7efa035810bd4ac0a01c08b3db1b0ab6c044bf4e9937b9619f4a94a24",
+    "tests/jev-decision-provider.test.ts": "d40d9362a517af127ac6e49f2aa6d612e622146dcca52d6d9bb24b246999facc",
+    "tests/runtime-gates.test.ts": "78acd5adf37d3b887862cbd9ce4bcae3f38a6ea198602a17fd48ee867bad39c5",
+    "tests/auto-drive.test.ts": "6640247187322713da75d723efcbc2cfc960645be6baca179dfea3a63bedc3ff",
+    "tests/auto-drive-decision.test.ts": "3bd3ffda3d9d79ec0441a4f58dda89ce2a1dd7a72bafc929328a313dfef4afb4",
+    "tests/domain-transitions.test.ts": "31dc3c6d4166732f0b2b644a8cb3bc6283fa437d186d5caec67de5497e9fbab9",
+    "bun.lock": "00872348d141163c992993e1e4ad9076ef44d56aa792ae35a0e9514b588f847c",
+    "package.json": "9ff111d81a6a1b87b3557a4df6a5387a028d64b3a90458cd8b1788d2b796742c"
+  },
+  "qualification": "unit-only-live-interaction-performance-open",
+  "recordedAt": "2026-09-25T09:31:57.632842Z"
+}
