@@ -50,11 +50,11 @@
     "firstMeasurementValidationId": "9a4b1a0c-da31-48f2-9c67-08b440840e2d"
   },
   "qualification": {
-    "independentDecisionLabel": "pending",
+    "decisionLabelEvidence": "not-in-this-record",
     "typedManagerProposalAtCheckpoint": false,
-    "jevCalled": false,
-    "acceptedCaseCount": 0,
-    "pairedEpisodeCount": 0
+    "jevActivity": "not-assessed-by-this-record",
+    "acceptedCasesContributedByThisRecord": 0,
+    "pairedEpisodesContributedByThisRecord": 0
   },
   "privateEvidence": {
     "finalSessionSha256": "c1d6fceec3722b7c07aca6d3af458df57884ab0bdcf06f76c8e93246eee0b26d",

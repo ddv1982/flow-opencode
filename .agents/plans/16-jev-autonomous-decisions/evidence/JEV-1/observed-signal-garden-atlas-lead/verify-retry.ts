@@ -16,6 +16,9 @@ const outcome = JSON.parse(
 const lead = JSON.parse(
 	await readFile(new URL("draft.json", directory), "utf8"),
 );
+const normalization = JSON.parse(
+	await readFile(new URL("normalization.json", directory), "utf8"),
+);
 const focusedAtlasGate = "pnpm lint && pnpm test";
 const broadAtlasGate =
 	"pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke";
@@ -59,11 +62,13 @@ assert(
 		lead.snapshot.session.plan.requirements.some((requirement: string) =>
 			requirement.includes("54-image baseline"),
 		) &&
-		outcome.qualification.independentDecisionLabel === "pending" &&
+		outcome.qualification.decisionLabelEvidence === "not-in-this-record" &&
 		outcome.qualification.typedManagerProposalAtCheckpoint === false &&
-		outcome.qualification.jevCalled === false &&
-		outcome.qualification.acceptedCaseCount === 0 &&
-		outcome.qualification.pairedEpisodeCount === 0,
+		normalization.status ===
+			"author-normalized-from-manager-prose-unreviewed" &&
+		outcome.qualification.jevActivity === "not-assessed-by-this-record" &&
+		outcome.qualification.acceptedCasesContributedByThisRecord === 0 &&
+		outcome.qualification.pairedEpisodesContributedByThisRecord === 0,
 	"review outcome and qualification limits",
 );
 
@@ -199,6 +204,19 @@ if (privateRoot) {
 	};
 	const failedOutput = validationOutput(failedPart.state.output);
 	const passedOutput = validationOutput(passedPart.state.output);
+	const failureHeaders = [
+		...(failedOutput?.body.matchAll(/^\s+\d+\) \[chromium\] › /gm) ?? []),
+	];
+	const namedFailureHeader = failedOutput?.body.match(
+		/^\s+1\) \[chromium\] › e2e\/garden-loop\.spec\.ts:\d+:\d+ › garden-first lens journey › loads the bounded atlas garden image set after onboarding\s*$/m,
+	);
+	const namedFailureBlock =
+		namedFailureHeader && failedOutput?.body
+			? failedOutput.body.slice(
+					namedFailureHeader.index,
+					failedOutput.body.indexOf("\n  1 failed", namedFailureHeader.index),
+				)
+			: null;
 	const passedMeasurementLines =
 		passedOutput?.body
 			.split("\n")
@@ -279,10 +297,10 @@ if (privateRoot) {
 			failedPart.tool === "bash" &&
 			failedPart.state.input.command === browserGate &&
 			failedPart.state.metadata.exit === 1 &&
-			failedPart.state.output.includes(
-				"loads the bounded atlas garden image set after onboarding",
-			) &&
-			Number(failedOutput?.body.match(/Received: (\d+)/)?.[1]) ===
+			failureHeaders.length === 1 &&
+			namedFailureHeader !== null &&
+			failedOutput?.body.includes("\n  1 failed\n") &&
+			Number(namedFailureBlock?.match(/^\s+Received: (\d+)\s*$/m)?.[1]) ===
 				outcome.continuation.observedDesktopImageUrls &&
 			failedOutput?.receipt.id === firstMeasurement.id &&
 			failedOutput.receipt.passed === false &&
@@ -346,6 +364,6 @@ console.log(
 			: "verified-public-retry-bindings",
 		remedyReview: outcome.remedy.independentFeatureReview.verdict,
 		continuationReview: outcome.continuation.independentFeatureReview,
-		qualification: "none",
+		qualification: "no-qualification-claim",
 	}),
 );
