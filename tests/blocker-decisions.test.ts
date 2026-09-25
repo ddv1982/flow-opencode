@@ -230,6 +230,21 @@ describe("blocker campaign", () => {
 			report.cases.find((r) => r.arm === "manager-policy-jev")?.status,
 		).toBe("abstain");
 		expect(report.verdict).toBe("inconclusive");
+		const noCall = {
+			...observation(campaign),
+			metrics: { ...observation(campaign).metrics, attempts: 0 },
+		};
+		const noCallReport = evaluateCampaign(
+			campaign,
+			liveImport(campaign, [noCall]),
+		);
+		expect(
+			noCallReport.cases.find((entry) => entry.arm === "manager-policy-jev")
+				?.actualLive,
+		).toBe(false);
+		expect(
+			noCallReport.qualification.map((entry) => entry.independentAccepted),
+		).toEqual([0, 0]);
 	});
 	test("299 retry plus one independent action never qualifies either class", () => {
 		const first = corpus.episodes[0];

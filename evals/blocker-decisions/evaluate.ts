@@ -85,6 +85,7 @@ function live(row: Observation, campaign: ValidatedCampaign): boolean {
 	if (
 		row.result.kind === "unavailable" ||
 		!row.metrics ||
+		row.metrics.attempts === 0 ||
 		row.metrics.resolvedModel === null ||
 		row.metrics.inputTokens === null ||
 		row.metrics.outputTokens === null
