@@ -84,6 +84,8 @@ for (const [index, row] of summary.rows.entries()) {
 	controllerLatency.push(row.latencyMs);
 }
 assert.equal(totalAttempts, 6);
+assert.equal(totalAttempts, summary.calls);
+assert.equal(totalAttempts, receipt.accounting.attempts);
 close(totalReservedUsd, summary.reservedUsd);
 for (let index = 0; index < totalAttempts; index++) {
 	const number = String(index + 1).padStart(6, "0");
