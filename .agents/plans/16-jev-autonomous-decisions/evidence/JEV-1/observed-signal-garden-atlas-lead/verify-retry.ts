@@ -195,6 +195,14 @@ if (privateRoot) {
 	};
 	const failedOutput = validationOutput(failedPart.state.output);
 	const passedOutput = validationOutput(passedPart.state.output);
+	const passedMeasurementLines =
+		passedOutput?.body
+			.split("\n")
+			.filter((line) =>
+				line.includes(
+					"loads the bounded atlas garden image set after onboarding",
+				),
+			) ?? [];
 	const expectedRemedyGates = [
 		{ command: focusedAtlasGate, scope: "focused" },
 		{ command: broadAtlasGate, scope: "broad" },
@@ -274,6 +282,10 @@ if (privateRoot) {
 			passedPart.state.input.command === browserGate &&
 			passedPart.state.metadata.exit === 0 &&
 			passedPart.state.output.includes("32 passed") &&
+			passedMeasurementLines.length === 1 &&
+			/^\s*✓\s+\d+ \[chromium\] › e2e\/garden-loop\.spec\.ts:\d+:\d+ › garden-first lens journey › loads the bounded atlas garden image set after onboarding \([\d.]+s\)$/.test(
+				passedMeasurementLines[0],
+			) &&
 			passedOutput?.receipt.id === focusedValidation.id &&
 			passedOutput.receipt.passed === true &&
 			`sha256:${sha(Buffer.from(passedOutput.body))}` ===
