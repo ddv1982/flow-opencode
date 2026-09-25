@@ -267,7 +267,7 @@ export class AutoDriveCoordinator {
 		delivery: AutoDriveDelivery,
 		parts: readonly AutoDriveMessagePart[],
 		messageId: string,
-	): Promise<"accepted" | "stale-continuation"> {
+	): Promise<"accepted" | "accepted-continuation" | "stale-continuation"> {
 		const lease = this.#lease;
 		const message = inspectMessage(parts);
 		if (lease?.hostSessionId === hostSessionId && STOP.test(message.text)) {
@@ -289,7 +289,7 @@ export class AutoDriveCoordinator {
 					answered: false,
 				};
 			this.#setTiming("active");
-			return "accepted";
+			return "accepted-continuation";
 		}
 		if (lease?.hostSessionId !== hostSessionId || !message.user)
 			return "accepted";

@@ -185,6 +185,19 @@ test("host adapter binds actual seeded files, manager request, exact completion 
 	await driver.stop();
 	expect(f.stops).toBe(1);
 });
+test("host adapter refuses manager prompts that parse as recovery options", async () => {
+	const f = await setup();
+	await expect(
+		createEpisodeHostDriver({
+			...f.options,
+			manager: {
+				...f.options.manager,
+				prompt: "--recovery=shadow --recovery-calls=3 --recovery-usd=0.01 Task",
+			},
+		}),
+	).rejects.toThrow("Manager prompt cannot start with recovery options");
+	expect(f.starts).toBe(0);
+});
 
 test("escalated prompts wait for cancellation without inventing an intervention", async () => {
 	const f = await setup("escalated"),
