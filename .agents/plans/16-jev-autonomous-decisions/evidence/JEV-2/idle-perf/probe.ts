@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { cpus, hostname, release, tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const [modulePath, outputPath, recoveryPath] = process.argv.slice(2);
 if (!modulePath || !outputPath)
 	throw new Error("Expected module and output paths");
+const measuredRepositoryRoot = resolve(dirname(modulePath), "..", "..", "..");
 async function sourceTreeIdentity() {
 	const sourceRoot = resolve(dirname(modulePath), "..", "..");
 	const repositoryRoot = resolve(sourceRoot, "..");
@@ -256,7 +258,17 @@ const output = {
 				.update(await readFile(recoveryPath))
 				.digest("hex")
 		: null,
-	runtime: { bun: Bun.version, platform: process.platform, arch: process.arch },
+	runtime: {
+		bun: Bun.version,
+		platform: process.platform,
+		arch: process.arch,
+		hostDigest: createHash("sha256").update(hostname()).digest("hex"),
+		kernelRelease: release(),
+		cpuModel: cpus()[0]?.model ?? null,
+		cpuCount: cpus().length,
+		temporaryDevice: (await stat(tmpdir())).dev,
+		repositoryDevice: (await stat(measuredRepositoryRoot)).dev,
+	},
 	fetchCalls,
 	providerCalls,
 	rssColdBeforeBytes,

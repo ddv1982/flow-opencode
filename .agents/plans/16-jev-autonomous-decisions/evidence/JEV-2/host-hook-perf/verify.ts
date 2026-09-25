@@ -62,6 +62,10 @@ assert(
 );
 assert(sha(await read("probe.ts")) === receipt.probeSha256, "probe hash");
 assert(sha(await read("verify.ts")) === receipt.verifySha256, "verifier hash");
+assert(sha(await read("run-pairs.ts")) === receipt.runnerSha256, "runner hash");
+const processBytes = await read("processes.json");
+assert(sha(processBytes) === receipt.processesSha256, "process log hash");
+const processRows = JSON.parse(processBytes.toString("utf8")).processes;
 assert(receipt.runs.length === 3, "three paired runs");
 const sourceHash = {
 	trunk: sha(
@@ -269,6 +273,37 @@ assert(
 				(index === 0 || row.started >= captureRows[index - 1].ended),
 		),
 	"alternating nonoverlapping capture order",
+);
+assert(
+	processRows.length === expectedOrder.length &&
+		processRows.every((row: {
+			arm: string;
+			pair: number;
+			ordinal: number;
+			startedAt: string;
+			exitedAt: string;
+			outputSha256: string;
+		}, index: number) => {
+			const started = Date.parse(row.startedAt);
+			const exited = Date.parse(row.exitedAt);
+			const capture = captureRows[index];
+			const prior = processRows[index - 1];
+			return (
+				row.arm === expectedOrder[index]?.[0] &&
+				row.pair === expectedOrder[index]?.[1] &&
+				row.ordinal === index + 1 &&
+				row.outputSha256 ===
+					receipt.runs[row.pair - 1]?.[row.arm]?.expandedSha256 &&
+				Number.isFinite(started) &&
+				Number.isFinite(exited) &&
+				new Date(started).toISOString() === row.startedAt &&
+				new Date(exited).toISOString() === row.exitedAt &&
+				started <= capture?.started &&
+				capture.ended <= exited &&
+				(index === 0 || Date.parse(prior.exitedAt) <= started)
+			);
+		}),
+	"sequential process exits cover all evidence bookkeeping",
 );
 assert(
 	Math.max(...rows) === receipt.maxAddedP95Us && receipt.maxAddedP95Us < 5000,

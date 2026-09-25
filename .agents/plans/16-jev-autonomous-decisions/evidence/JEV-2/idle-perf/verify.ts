@@ -101,6 +101,18 @@ assert(
 		JSON.stringify(head.runtime) === JSON.stringify(receipt.runtime),
 	"same runtime",
 );
+assert(
+	/^[a-f0-9]{64}$/.test(receipt.runtime.hostDigest) &&
+		typeof receipt.runtime.kernelRelease === "string" &&
+		receipt.runtime.kernelRelease.length > 0 &&
+		typeof receipt.runtime.cpuModel === "string" &&
+		receipt.runtime.cpuModel.length > 0 &&
+		Number.isSafeInteger(receipt.runtime.cpuCount) &&
+		receipt.runtime.cpuCount > 0 &&
+		Number.isSafeInteger(receipt.runtime.temporaryDevice) &&
+		Number.isSafeInteger(receipt.runtime.repositoryDevice),
+	"benchmark host identity",
+);
 function sourceTreeAt(commit: string) {
 	const files = git("ls-tree", "-r", "-z", "--name-only", commit, "src")
 		.toString("utf8")

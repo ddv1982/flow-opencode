@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "processes": [
+    {
+      "arm": "trunk",
+      "pair": 1,
+      "ordinal": 1,
+      "startedAt": "2026-09-25T19:42:39.651Z",
+      "exitedAt": "2026-09-25T19:42:39.841Z",
+      "outputSha256": "bfff95332d601fdc179b94999474cf66a0b3da2c65cfcfe191cb7849f16b4658"
+    },
+    {
+      "arm": "head",
+      "pair": 1,
+      "ordinal": 2,
+      "startedAt": "2026-09-25T19:42:39.841Z",
+      "exitedAt": "2026-09-25T19:42:40.030Z",
+      "outputSha256": "1be13ca29b6703607d93417106b04673d15baa4caae8dfd040ad6d3009b49df0"
+    },
+    {
+      "arm": "head",
+      "pair": 2,
+      "ordinal": 3,
+      "startedAt": "2026-09-25T19:42:40.030Z",
+      "exitedAt": "2026-09-25T19:42:40.216Z",
+      "outputSha256": "7310504beae4470b7353ed34bf6337d57d47430066cab80dd7cb62cd0db89fef"
+    },
+    {
+      "arm": "trunk",
+      "pair": 2,
+      "ordinal": 4,
+      "startedAt": "2026-09-25T19:42:40.217Z",
+      "exitedAt": "2026-09-25T19:42:40.412Z",
+      "outputSha256": "7114cd4f8b6d573ea3d9829d0de76e61b94fbe3010b4543483453395357f3340"
+    },
+    {
+      "arm": "trunk",
+      "pair": 3,
+      "ordinal": 5,
+      "startedAt": "2026-09-25T19:42:40.412Z",
+      "exitedAt": "2026-09-25T19:42:40.601Z",
+      "outputSha256": "2888dce44556b9d865c1ff36de51c7eb989f8f167f3eb0d28c5dbf3e340d1074"
+    },
+    {
+      "arm": "head",
+      "pair": 3,
+      "ordinal": 6,
+      "startedAt": "2026-09-25T19:42:40.601Z",
+      "exitedAt": "2026-09-25T19:42:40.796Z",
+      "outputSha256": "f7a2c78264aab5b8a810e4a2a07a1a750036baef59fbc23bdb80447ccc177d8e"
+    }
+  ]
+}

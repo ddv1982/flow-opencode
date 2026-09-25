@@ -7,68 +7,74 @@
   "runtime": {
     "bun": "1.4.0",
     "platform": "linux",
-    "arch": "x64"
+    "arch": "x64",
+    "hostDigest": "7a993752fa71b2e6f11885cba09681075f683eaa73d00b8103742bf0b119d3fa",
+    "kernelRelease": "7.0.0-31-generic",
+    "cpuModel": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "cpuCount": 20,
+    "temporaryDevice": 64513,
+    "repositoryDevice": 64513
   },
-  "probeSha256": "57f096eeb022938e407990977111ea19b55536cb491c2e12aef6938fb1e5b50d",
+  "probeSha256": "cbfc4f31af5305cdb3e9d31d088d0b9fc9a4b98a14a250503fbdec3862701fc1",
   "rawFiles": {
-    "baseline.json.gz": "2a72c7e9e8a4ef510f546fe79a6929ea76af0e51dbbc752d948227ff6935186e",
-    "head.json.gz": "b3563461f35c0bf7f9dc4903b244bc6ea985e303f0b4ff8c55272870d40d1651"
+    "baseline.json.gz": "03f40f1820ccd9bd29a305a0fe0b04e8934b549760e4c02b353d5ea21d2b30ca",
+    "head.json.gz": "12d53994e92ff53faab3fda7ab297a7b1c5e7bbd5c47e3e317c7437684312d71"
   },
   "results": [
     {
       "scenario": "no-lease",
-      "baselineP95Us": 1.418,
-      "headP95Us": 1.29,
-      "addedP95Us": -0.128,
+      "baselineP95Us": 1.351,
+      "headP95Us": 1.473,
+      "addedP95Us": 0.122,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     },
     {
       "scenario": "ready-continuation",
-      "baselineP95Us": 2.503,
-      "headP95Us": 2.241,
-      "addedP95Us": -0.262,
+      "baselineP95Us": 2.732,
+      "headP95Us": 2.558,
+      "addedP95Us": -0.174,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     },
     {
       "scenario": "blocked-handback",
-      "baselineP95Us": 2.116,
-      "headP95Us": 2.339,
-      "addedP95Us": 0.223,
+      "baselineP95Us": 2.254,
+      "headP95Us": 2.29,
+      "addedP95Us": 0.036,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     },
     {
       "scenario": "recovery-checkpoint",
-      "baselineP95Us": 1.551,
-      "headP95Us": 1.527,
-      "addedP95Us": -0.024,
+      "baselineP95Us": 1.683,
+      "headP95Us": 1.843,
+      "addedP95Us": 0.16,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 1500
     },
     {
       "scenario": "inactive",
-      "baselineP95Us": 0.618,
-      "headP95Us": 0.635,
-      "addedP95Us": 0.017,
+      "baselineP95Us": 0.907,
+      "headP95Us": 0.886,
+      "addedP95Us": -0.021,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     }
   ],
-  "maxAddedP95Us": 0.223,
+  "maxAddedP95Us": 0.16,
   "fetchCalls": 0,
   "providerCalls": 0,
   "rssMiB": {
-    "baselineAfterImports": 28.25,
-    "headAfterImports": 41.12,
-    "baselineAfterProbe": 58.28,
-    "headAfterProbe": 66.87
+    "baselineAfterImports": 28.62,
+    "headAfterImports": 43.48,
+    "baselineAfterProbe": 59.97,
+    "headAfterProbe": 68.11
   },
   "limits": [
     "Source and external-runtime identity collection occurs after every reported latency and RSS checkpoint; it does not contaminate measured import or routing memory.",
@@ -77,18 +83,18 @@
     "The probe times the in-memory AutoDriveCoordinator.onIdle route with immediate mocked projection and prompt ports, not the full OpenCode plugin host event path.",
     "The baseline has no recovery controller; the head uses a real inactive RecoveryController with a provider spy. Provider and fetch counters do not cover all possible network APIs.",
     "The head recovery-checkpoint route includes a method wrapper that counts real inactive-controller proposalPrompt calls; this slightly overstates its uninstrumented routing time.",
-    "Separate process RSS snapshots include module loading and runtime variation and do not isolate a production memory regression.",
+    "The paired raw runs share a hashed host identity, CPU model/count, kernel release, and filesystem device ids. Separate process RSS snapshots include module loading and runtime variation and do not isolate a production memory regression.",
     "Shadow advice latency and the pinned live provider deadline are not measured; the JEV-2 performance gate remains open."
   ],
   "expandedSha256": {
-    "baseline.json": "bc4f21a4950e1f8bf35465a78f5041382852d0fec5a688f8d2ce9ddd1549dc41",
-    "head.json": "34521e2cfb26c0300704a6c10d707911e46ce62e2aa0c1a44e212354b89a4637"
+    "baseline.json": "6c62a0b430f6498da42807803a54858b5ce4b22f7009a585f9382dcab647e692",
+    "head.json": "a09d944176ddf45a33b376e7362275b2ac05653f0d8b763561af061041fbebc3"
   },
   "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
   "baselineModuleSha256": "55b15ad6ac2eead7dba5cf06cdf7bcd605c6050f513fee0a8e6abad8f235ddb1",
   "headModuleSha256": "4ad40b994fb47076e899ecb0daa8ea7bb276f32bd057f35f632e665b907ab89f",
   "headRecoverySha256": "4afa96f653bb6d0a7125c4c72a8003c61aec604d6df661a0f099d98bd626e8be",
-  "verifySha256": "84a8f8e62580745bd5618edfd85fa4fa3f16de00494b0145c3da53909ed22daf",
+  "verifySha256": "7a3ec37160490159338c6b8fe8ff5a8c52d576f9cded4ffcb6700de5aaf09c28",
   "baselineSourceTreeDigest": "2aac7fe760ea24767013db6d9fdeb23126f8970bfce7af96f39beb9eee3239b6",
   "headSourceTreeDigest": "63e99641f4cb417cfddfe833f8e22a808e08c65338d60e61fac265abd497d311",
   "baselineSourceFileCount": 59,
