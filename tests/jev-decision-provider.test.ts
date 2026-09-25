@@ -120,6 +120,24 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 		spy.mockRestore();
 	}
 });
+test("ordinary words ending in key remain eligible for advice", async () => {
+	const spy = spyOn(globalThis, "fetch").mockResolvedValue(
+		Response.json(response()),
+	);
+	try {
+		const result = await createJevDecisionProvider(() => "credential").assess(
+			{
+				...packet,
+				goal: "Fix monkey=true, hockey: game, and turnkey: ready.",
+			},
+			{ signal: new AbortController().signal, reserveAttempt: () => true },
+		);
+		expect(result.kind).toBe("answered");
+		expect(spy).toHaveBeenCalledTimes(1);
+	} finally {
+		spy.mockRestore();
+	}
+});
 test("accepted Unicode remedies leave room for the full provider envelope", async () => {
 	const finding = packet.findings[0];
 	const candidate = packet.candidates[0];
