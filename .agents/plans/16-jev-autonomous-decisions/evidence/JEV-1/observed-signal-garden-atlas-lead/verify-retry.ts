@@ -267,9 +267,13 @@ if (privateRoot) {
 			) &&
 			continuation.state === "active" &&
 			continuation.reviews.length === 0 &&
+			continuation.startedRevision > review.result.recordedRevision &&
 			firstMeasurement?.command === browserGate &&
 			firstMeasurement.scope === "focused" &&
 			firstMeasurement.exitCode === 1 &&
+			firstMeasurement.outputComplete === true &&
+			firstMeasurement.ineligibleReason === undefined &&
+			firstMeasurement.recordedRevision > review.result.recordedRevision &&
 			firstMeasurement.recordedRevision < focusedValidation?.recordedRevision &&
 			passedValidation?.exitCode === 0 &&
 			focusedValidation.recordedRevision <= passedValidation.recordedRevision &&
