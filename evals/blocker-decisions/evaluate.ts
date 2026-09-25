@@ -175,12 +175,8 @@ export function evaluateCampaign(
 		const observed = rows.filter(
 			(r) => r.status !== "missing" && r.status !== "unavailable",
 		);
-		const metrics = evidence.observations
-			.filter((r) => r.arm === arm)
-			.flatMap((r) => (r.metrics ? [r.metrics] : []));
-		const latency = attempted.flatMap((r) =>
-			r.metrics ? [r.metrics.latencyMs] : [],
-		);
+		const metrics = attempted.flatMap((r) => (r.metrics ? [r.metrics] : []));
+		const latency = metrics.map((m) => m.latencyMs);
 		const calibrated = evidence.observations
 			.filter(
 				(r) =>

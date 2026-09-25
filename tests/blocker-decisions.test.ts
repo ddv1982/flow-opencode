@@ -337,6 +337,9 @@ describe("blocker campaign", () => {
 				...observation(campaign, 1).metrics,
 				attempts: 0,
 				latencyMs: 0,
+				inputTokens: null,
+				estimatedUsd: null,
+				reservedUsd: 0,
 			},
 			result: { kind: "unavailable", reason: "budget" },
 		};
@@ -353,6 +356,12 @@ describe("blocker campaign", () => {
 		expect(
 			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.latencyP95Ms,
 		).toBe(20);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.inputTokens,
+		).toBe(200);
+		expect(
+			report.arms.find((arm) => arm.arm === "manager-policy-jev")?.estimatedUsd,
+		).toBe(0.0000084);
 		const noCalls = evaluateCampaign(
 			campaign,
 			parseEvidence(campaign, bundle(campaign, [noAttempt])),
@@ -363,6 +372,13 @@ describe("blocker campaign", () => {
 		expect(
 			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")
 				?.latencyP50Ms,
+		).toBeNull();
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")?.inputTokens,
+		).toBeNull();
+		expect(
+			noCalls.arms.find((arm) => arm.arm === "manager-policy-jev")
+				?.estimatedUsd,
 		).toBeNull();
 	});
 	test("cross-campaign evidence is rejected at evaluation", () => {
