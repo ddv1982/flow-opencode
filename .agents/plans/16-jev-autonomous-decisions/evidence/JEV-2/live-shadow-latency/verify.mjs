@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const directory = fileURLToPath(new URL(".", import.meta.url));
 const read = (path) => readFileSync(join(directory, path));
@@ -35,13 +35,28 @@ for (const [path, digest] of Object.entries(receipt.files)) {
 const manifest = json("campaign/manifest.json");
 const summary = json("campaign/summary.json");
 assert.equal(receipt.sourceHead.length, 40);
+const repositoryRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], {
+	encoding: "utf8",
+}).trim();
+process.chdir(repositoryRoot);
+const { recoverySourceDigests } = await import(
+	pathToFileURL(join(repositoryRoot, "evals/recovery-decisions/sources.ts")).href
+);
+const selectedSources = await recoverySourceDigests();
+assert.deepEqual(
+	Object.keys(manifest.sourceDigests).sort(),
+	Object.keys(selectedSources).sort(),
+	"Incomplete pinned-source digest set",
+);
 for (const [path, digest] of Object.entries(manifest.sourceDigests)) {
 	const bytes = execFileSync("git", ["show", `${receipt.sourceHead}:${path}`]);
 	assert.equal(sha256(bytes), digest, `Source mismatch: ${path}`);
+	assert.equal(selectedSources[path], digest, `Current source mismatch: ${path}`);
 }
 assert.equal(manifest.origin, "live");
 assert.equal(manifest.controllerMode, "shadow");
 assert.equal(manifest.model, "jev-1.13.0");
+assert.equal(receipt.approval.model, `typesafe/${manifest.model}`);
 assert.equal(manifest.corpusDigest, summary.corpusDigest);
 assert.equal(manifest.maxCalls, receipt.approval.maxAttempts);
 assert.equal(manifest.maxUsd, receipt.approval.maxUsd);
@@ -87,6 +102,7 @@ assert.equal(totalAttempts, 6);
 assert.equal(totalAttempts, summary.calls);
 assert.equal(totalAttempts, receipt.accounting.attempts);
 close(totalReservedUsd, summary.reservedUsd);
+let precedingReservation = 0;
 for (let index = 0; index < totalAttempts; index++) {
 	const number = String(index + 1).padStart(6, "0");
 	const attempt = json(`campaign/attempt-${number}.json`);
@@ -96,6 +112,10 @@ for (let index = 0; index < totalAttempts; index++) {
 	assert.equal(attempt.origin, "live");
 	assert.equal(attempt.maxCalls, receipt.approval.maxAttempts);
 	assert.equal(attempt.maxUsd, receipt.approval.maxUsd);
+	close(attempt.reservedUsd, (index + 1) * manifest.attemptReservationUsd);
+	assert.equal(attempt.reservedUsd >= precedingReservation, true);
+	assert.equal(attempt.reservedUsd <= receipt.approval.maxUsd, true);
+	precedingReservation = attempt.reservedUsd;
 }
 close(json("campaign/attempt-000006.json").reservedUsd, summary.reservedUsd);
 assert.equal(summary.inputTokens, receipt.usage.inputTokens);
