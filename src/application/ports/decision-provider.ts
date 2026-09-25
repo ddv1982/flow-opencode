@@ -35,6 +35,7 @@ export type DecisionAdvice =
 			latencyMs: number;
 	  }>;
 export interface DecisionProvider {
+	fitsRequest?(packet: DecisionPacket): boolean;
 	assess(
 		packet: DecisionPacket,
 		options: Readonly<{ signal: AbortSignal; reserveAttempt: () => boolean }>,

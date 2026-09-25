@@ -161,6 +161,7 @@ export function createFlowPlugin(dependencies: {
 					output.parts.every(
 						(part) => part.type === "text" && part.synthetic === true,
 					),
+					observed === "accepted-continuation",
 				);
 			},
 			"experimental.session.compacting": async (input, output) => {
