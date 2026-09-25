@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -23,6 +23,11 @@ const median = (values) => {
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 0.000001);
 
 const receipt = json("receipt.json");
+const recordedFiles = Object.keys(receipt.files).sort();
+const actualFiles = readdirSync(join(directory, "campaign"))
+	.map((name) => `campaign/${name}`)
+	.sort();
+assert.deepEqual(actualFiles, recordedFiles, "Campaign file set differs from the receipt");
 for (const [path, digest] of Object.entries(receipt.files)) {
 	assert.equal(sha256(read(path)), digest, `Changed evidence: ${path}`);
 }
