@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { z } from "zod";
 import { EvalHost } from "../harness.js";
 import type { EpisodeDriver } from "./episode-runner.js";
+import { ManagerPrompt } from "./episodes.js";
 import { datasetDigest } from "./schema.js";
 import { recoverySourceDigests } from "./sources.js";
 
@@ -72,7 +73,7 @@ export function episodeHostIdentity(input: unknown) {
 		}),
 	};
 }
-type Host = Pick<EvalHost, "project" | "createSession" | "runPrompt" | "stop">;
+type Host = Pick<EvalHost, "project" | "createSession" | "runCommand" | "stop">;
 type StartOptions = Parameters<typeof EvalHost.start>[0];
 export type EpisodeHostOptions = {
 	fixture: unknown;
@@ -86,6 +87,7 @@ export type EpisodeHostOptions = {
 		| "opencodeVersion"
 		| "requestBudget"
 		| "providerCredentials"
+		| "recoveryTreatment"
 	>;
 	hostFactory?: (options: StartOptions) => Promise<Host>;
 };
@@ -129,13 +131,18 @@ async function workload(
 export async function createEpisodeHostDriver(
 	options: EpisodeHostOptions,
 ): Promise<EpisodeDriver> {
-	if (options.arm !== "manager-only")
-		throw new Error("The manager-plus-Jev host treatment is not implemented.");
+	if (options.arm === "manager-plus-jev" && !options.host.recoveryTreatment)
+		throw new Error("Manager-plus-Jev requires isolated simulation treatment.");
+	if (
+		options.host.recoveryTreatment &&
+		options.host.recoveryTreatment.arm !== options.arm
+	)
+		throw new Error("Treatment arm differs from registered arm.");
 	const fixture = EpisodeHostFixtureSchema.parse(options.fixture);
 	const manager = z
 		.object({
 			model: z.string().regex(/^[^\s/]+\/[^\s]+$/),
-			prompt: z.string().trim().min(1),
+			prompt: ManagerPrompt,
 		})
 		.strict()
 		.parse(options.manager);
@@ -162,11 +169,17 @@ export async function createEpisodeHostDriver(
 		requestAuthorizationDigest:
 			options.host.requestBudget?.authorizationDigest ?? null,
 		manager,
+		recoveryTreatment: options.host.recoveryTreatment ?? null,
 		sources,
 		host: {
 			bun: options.host.toolchain.actualVersion,
 			opencodeVersion: options.host.opencodeVersion,
-			packageVersion: options.host.packageVersion ?? null,
+			packageVersion: options.host.recoveryTreatment
+				? null
+				: (options.host.packageVersion ?? null),
+			composition: options.host.recoveryTreatment
+				? "experimental-source-bundle"
+				: "packed-production",
 			withFlow: true,
 			ambientConfig: "disabled",
 			reviewerEnvironment: "disabled",
@@ -181,7 +194,7 @@ export async function createEpisodeHostDriver(
 	let stopping: Promise<void> | undefined;
 	return {
 		harnessDigest,
-		origin: "live",
+		origin: options.host.recoveryTreatment ? "simulation" : "live",
 		async prepare(signal) {
 			if (state !== "new")
 				throw new Error("An episode host can only prepare once.");
@@ -221,9 +234,10 @@ export async function createEpisodeHostDriver(
 			context.signal.throwIfAborted();
 			state = "running";
 			const session = await host.createSession("Frozen recovery episode");
-			const end = await host.runPrompt(
+			const end = await host.runCommand(
 				session,
-				`${manager.prompt}\n\n${fixture.task.instruction}`,
+				"flow-auto",
+				`${options.arm === "manager-plus-jev" ? "--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 " : ""}${manager.prompt}\n\n${fixture.task.instruction}`,
 				manager.model,
 			);
 			context.signal.throwIfAborted();

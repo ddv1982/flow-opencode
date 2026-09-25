@@ -9,6 +9,7 @@
 // Requires provider credentials, so it is never part of `bun run check`.
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	chmod,
 	cp,
@@ -54,6 +55,12 @@ import {
 	tarballSha256,
 } from "./provenance.js";
 import { requestBudgetStatus } from "./recovery-decisions/request-budget.js";
+import { datasetDigest } from "./recovery-decisions/schema.js";
+import {
+	type RecoveryTreatment,
+	RecoveryTreatmentSchema,
+	validateTreatmentBudget,
+} from "./recovery-decisions/treatment.js";
 import { normalizeStudyUsage, type StudyUsage } from "./study-usage.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
@@ -1392,6 +1399,7 @@ export class EvalHost {
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
 		providerCredentials?: "inherit" | "disabled";
+		recoveryTreatment?: RecoveryTreatment;
 		requestBudget?: {
 			directory: string;
 			authorizationDigest: string;
@@ -1400,6 +1408,15 @@ export class EvalHost {
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
 		checkCancellation(options.signal);
+		if (options.recoveryTreatment) {
+			RecoveryTreatmentSchema.parse(options.recoveryTreatment);
+			await validateTreatmentBudget(
+				options.recoveryTreatment,
+				options.requestBudget,
+			);
+			if (options.withFlow === false)
+				throw new Error("Treatment requires Flow composition.");
+		}
 		if (options.requestBudget) {
 			const budget = await requestBudgetStatus(options.requestBudget.directory);
 			if (
@@ -1435,9 +1452,11 @@ export class EvalHost {
 			await mkdir(gitHooks);
 			const environment: NodeJS.ProcessEnv = {
 				...Object.fromEntries(
-					Object.entries(options.toolchain.environment).filter(
-						([name]) => !name.startsWith("GIT_"),
-					),
+					Object.entries(
+						options.recoveryTreatment
+							? { PATH: options.toolchain.environment.PATH }
+							: options.toolchain.environment,
+					).filter(([name]) => !name.startsWith("GIT_")),
 				),
 				GIT_CONFIG_NOSYSTEM: "1",
 				GIT_CONFIG_GLOBAL: gitConfig,
@@ -1457,7 +1476,7 @@ export class EvalHost {
 					delete environment[name];
 			}
 			host.credentialPaths =
-				options.providerCredentials === "disabled"
+				options.providerCredentials === "disabled" || options.recoveryTreatment
 					? null
 					: await evaluationPhase("host", "credential-copy-failed", true, () =>
 							carryProviderCredentials(childData),
@@ -1497,7 +1516,7 @@ export class EvalHost {
 
 			// Copy rather than race filesystem writes against cancellation: cleanup
 			// must wait until no copy can recreate scratch after its removal.
-			if (options.withFlow !== false) {
+			if (options.withFlow !== false && !options.recoveryTreatment) {
 				const packages = join(childCache, "opencode", "packages");
 				await mkdir(packages, { recursive: true });
 				await cp(
@@ -1513,13 +1532,47 @@ export class EvalHost {
 				);
 			}
 			checkCancellation(options.signal);
-			const pluginEntry = `opencode-plugin-flow@${version}`;
+			let pluginEntry = `opencode-plugin-flow@${version}`;
+			let treatmentBundleDigest: string | undefined;
+			if (options.recoveryTreatment) {
+				const built = await Bun.build({
+					entrypoints: [
+						fileURLToPath(
+							new URL(
+								"./recovery-decisions/treatment-plugin.ts",
+								import.meta.url,
+							),
+						),
+					],
+					outdir: join(scratch, "treatment"),
+					target: "bun",
+					format: "esm",
+					minify: false,
+				});
+				checkCancellation(options.signal);
+				if (!built.success || !built.outputs[0])
+					throw new Error("Evaluation treatment bundle failed.");
+				pluginEntry = pathToFileURL(built.outputs[0].path).href;
+				treatmentBundleDigest = createHash("sha256")
+					.update(await readFile(built.outputs[0].path))
+					.digest("hex");
+			}
+
 			const reviewer = options.reviewer;
-			const configuredPlugin =
-				reviewer &&
-				(reviewer.model !== undefined ||
-					reviewer.variant !== undefined ||
-					reviewer.steps !== undefined)
+			const configuredPlugin = options.recoveryTreatment
+				? [
+						pluginEntry,
+						{
+							treatment: options.recoveryTreatment,
+							budget: options.requestBudget,
+							readyPath: join(scratch, "treatment-ready.json"),
+							budgetReadyPath: join(scratch, "budget-ready.json"),
+						},
+					]
+				: reviewer &&
+						(reviewer.model !== undefined ||
+							reviewer.variant !== undefined ||
+							reviewer.steps !== undefined)
 					? [pluginEntry, { reviewer }]
 					: pluginEntry;
 			await writeFile(
@@ -1543,6 +1596,12 @@ export class EvalHost {
 												authorizationDigest:
 													options.requestBudget.authorizationDigest,
 												readyPath: join(scratch, "budget-ready.json"),
+												...(options.recoveryTreatment
+													? {
+															simulationScript:
+																options.recoveryTreatment.script,
+														}
+													: {}),
 											},
 										],
 									]
@@ -1668,6 +1727,48 @@ export class EvalHost {
 							throw new Error(
 								"Request gate did not initialize in the host process.",
 							);
+					}
+					if (options.recoveryTreatment) {
+						const receipt = JSON.parse(
+							await readFile(join(scratch, "treatment-ready.json"), "utf8"),
+						);
+						const budgetReceipt = JSON.parse(
+							await readFile(join(scratch, "budget-ready.json"), "utf8"),
+						);
+						if (
+							receipt.pid !== budgetReceipt.pid ||
+							receipt.authorizationDigest !==
+								options.requestBudget?.authorizationDigest ||
+							receipt.treatmentDigest !==
+								datasetDigest(options.recoveryTreatment) ||
+							receipt.pluginEntrySha256 !== treatmentBundleDigest ||
+							receipt.origin !== "simulation" ||
+							receipt.arm !== options.recoveryTreatment.arm
+						)
+							throw new Error(
+								"Treatment did not initialize with the expected identity.",
+							);
+						const auth = await fetch(
+							`${host.baseUrl}/auth/${options.requestBudget?.managerModel.split("/")[0]}`,
+							{
+								method: "PUT",
+								headers: { "content-type": "application/json" },
+								body: JSON.stringify({
+									type: "oauth",
+									access: "simulation-access",
+									refresh: "simulation-refresh",
+									expires: Date.now() + 3600000,
+								}),
+								signal: options.signal
+									? AbortSignal.any([
+											options.signal,
+											AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+										])
+									: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+							},
+						);
+						if (!auth.ok)
+							throw new Error("Simulation credential installation failed.");
 					}
 					checkCancellation(options.signal);
 					return host;

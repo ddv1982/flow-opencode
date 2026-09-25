@@ -1744,6 +1744,37 @@ test("model handoff distinguishes requested roles from bounded session observati
 	expect((await read("manager")).implementation.observed).toBeNull();
 });
 
+test("production plugin options cannot supply experimental recovery profiles", async () => {
+	const workspace = await createTestWorkspace("flow-production-recovery-");
+	const hooks = await loadPlugin(workspace, workspace, undefined, {
+		recoveryTreatment: { origin: "simulation", arm: "manager-plus-jev" },
+		profiles: [
+			{
+				id: "injected",
+				model: "jev-1.13.0",
+				rubric: "recovery-v1",
+				policy: "bounded-recovery-v1",
+				choice: 0,
+				goal: 0,
+				suitability: 0,
+			},
+		],
+	});
+	const before = hooks["command.execute.before"];
+	if (!before) throw new Error("Missing command hook.");
+	await expect(
+		before(
+			{
+				command: "flow-auto",
+				sessionID: "production-refusal",
+				arguments:
+					"--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 Repair parser",
+			},
+			{ parts: [] },
+		),
+	).rejects.toThrow("No release-owned live qualification");
+});
+
 test("attachment-only user direction can close a stopped recovery session", async () => {
 	const workspace = await createTestWorkspace("flow-recovery-attachment-");
 	const hooks = await loadPlugin(workspace);

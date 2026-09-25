@@ -6,10 +6,14 @@ import { recoverySourceDigests } from "./sources.js";
 
 const Hash = z.string().regex(/^[a-f0-9]{64}$/);
 const Text = z.string().trim().min(1).max(100000);
+export const ManagerPrompt = Text.refine(
+	(prompt) => !prompt.startsWith("--recovery"),
+	"Manager prompt cannot start with recovery options.",
+);
 const Metric = z.number().finite().nonnegative().max(1_000_000_000_000);
 const Count = Metric.int().safe();
 const Manager = z
-	.object({ model: Text, prompt: Text, harnessDigest: Hash })
+	.object({ model: Text, prompt: ManagerPrompt, harnessDigest: Hash })
 	.strict();
 export const EpisodeProtocolSchema = z
 	.object({

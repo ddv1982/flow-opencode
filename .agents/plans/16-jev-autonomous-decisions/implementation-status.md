@@ -311,3 +311,42 @@ opt-in tests were skipped. Both new real-host OAuth budget smokes were then run
 separately and passed with eight assertions. The older packed Flow smoke was not
 rerun in this pass. `git diff --check` passed. See the
 [request-budget verification receipt](evidence/runtime-request-budget-verification.json).
+
+## Isolated simulation treatment
+
+The evaluation host now supports manager-plus-Jev through a separate experimental
+entrypoint. It shares the production plugin composition, command hooks, message
+ancestry checks, tools, and recovery controller. Each plugin instance owns its
+controller. Injected profiles report `experimental-evaluation`; production still
+uses the empty release registry and refuses delegated activation.
+
+Both simulation arms use the same bundled composition and `/flow-auto` command.
+The Jev arm adds explicit recovery limits. Startup requires a simulation budget,
+the selected manager and Jev model entries, and a matching gate receipt from the
+host process. The receipt binds the treatment, response script, and experimental
+bundle. Simulation startup strips inherited credentials and installs synthetic
+OAuth locally. Its provider transport never forwards inference or refresh calls.
+
+The fixed response script supports `openai/gpt-5.6-terra` and `xai/grok-4.6` through
+their actual OAuth Responses routes. It obtains session revisions, finding IDs,
+and the exact recovery mutation from real tool results. Accepted recovery advances
+the revision, supersedes the blocked run, and creates an active replacement.
+Manager-only control and below-threshold rejection leave the session unchanged.
+All requests retain their shared reservations, including auxiliary host requests.
+
+The real-host smoke seeds blocked sessions through existing Flow transitions
+after host configuration establishes source identity. This proves treatment
+wiring against a simulated provider. It does not establish a complete frozen
+episode campaign, model quality, or pricing. The episode runner still refuses live
+execution. Operator wait/resume, representative independently reviewed cases,
+reviewed request-cost bounds, executable and package-cache identity, a new paid
+campaign cap, and live qualification remain open.
+
+See the [design decision](treatment-design.md).
+
+The current-head [verification receipt](evidence/runtime-treatment-verification.json)
+records the full `bun run check` totals and source digests.
+Its nine opt-in tests were skipped. Six treatment host checks passed separately
+with 98 assertions on OpenCode 1.18.31. Both existing OAuth budget checks also
+passed. The packaged production smoke passed on its pinned OpenCode 1.18.6 host.
+No paid inference occurred.
