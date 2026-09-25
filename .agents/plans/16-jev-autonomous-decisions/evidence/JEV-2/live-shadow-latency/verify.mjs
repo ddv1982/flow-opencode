@@ -125,8 +125,13 @@ assert.equal(summary.purpose, "synthetic-development");
 assert.equal(summary.labelStatus, "author-proposed-unreviewed");
 assert.equal(summary.qualification, "inconclusive");
 assert.equal(summary.plannedCases, 8);
+assert.equal(summary.plannedCases, corpus.cases.length);
+assert.equal(manifest.preparation.rows.length, corpus.cases.length);
 assert.equal(summary.completedCases, 8);
+assert.equal(summary.completedCases, summary.plannedCases);
 assert.equal(summary.rows.length, 8);
+assert.equal(summary.maxCalls, manifest.maxCalls);
+assert.equal(summary.maxUsd, manifest.maxUsd);
 assert.equal(summary.calls, 6);
 assert.equal(summary.calls <= receipt.approval.maxAttempts, true);
 assert.equal(summary.reservedUsd <= receipt.approval.maxUsd, true);
@@ -160,11 +165,18 @@ for (const [index, row] of summary.rows.entries()) {
 	assert.deepEqual(row.packet, manifest.preparation.rows[index].packet);
 	assert.equal(row.packetDigest, row.packet ? digest(row.packet) : null);
 	assert.equal(row.packetDigest, manifest.preparation.rows[index].packetDigest);
+	assert.equal(
+		row.eligibilityMatches,
+		manifest.preparation.rows[index].eligibilityMatches,
+	);
+	assert.equal(row.rejection, manifest.preparation.rows[index].rejection);
 	totalAttempts += row.attempts;
 	totalReservedUsd += row.reservedUsd;
 	if (row.attempts === 0) {
 		assert.equal(row.advice, null);
 		assert.equal(row.packet, null);
+		assert.equal(row.decision, null);
+		assert.equal(row.labelMatches, null);
 		assert.equal(row.reservedUsd, 0);
 		continue;
 	}
@@ -180,6 +192,16 @@ for (const [index, row] of summary.rows.entries()) {
 	);
 	assert.equal(row.decision.mode, "shadow");
 	assert.equal(row.decision.kind, "abstain");
+	assert.equal(row.decision.packetDigest, row.packetDigest);
+	assert.equal(row.decision.model, manifest.model);
+	assert.equal(row.decision.requestedModel, manifest.model);
+	assert.equal(row.decision.selectedCandidateId, null);
+	assert.equal(row.decision.action, null);
+	assert.equal(row.decision.featureId, null);
+	assert.equal(
+		row.labelMatches,
+		corpus.cases[index].expected.acceptableSelections.includes("abstain"),
+	);
 	assert.equal(
 		Number.isSafeInteger(row.advice.inputTokens) && row.advice.inputTokens >= 0,
 		true,
@@ -200,6 +222,7 @@ assert.equal(totalAttempts, receipt.accounting.attempts);
 close(totalReservedUsd, summary.reservedUsd);
 const answeredRows = summary.rows.filter((row) => row.attempts > 0);
 let precedingReservation = 0;
+let precedingAttemptAt = Date.parse(manifest.createdAt);
 for (let index = 0; index < totalAttempts; index++) {
 	const number = String(index + 1).padStart(6, "0");
 	const attempt = json(`campaign/attempt-${number}.json`);
@@ -210,6 +233,8 @@ for (let index = 0; index < totalAttempts; index++) {
 		Date.parse(attempt.at) < Date.parse(receipt.approval.expiresAt),
 		true,
 	);
+	assert.equal(Date.parse(attempt.at) >= precedingAttemptAt, true);
+	precedingAttemptAt = Date.parse(attempt.at);
 	assert.equal(attempt.origin, "live");
 	assert.equal(attempt.maxCalls, receipt.approval.maxAttempts);
 	assert.equal(attempt.maxUsd, receipt.approval.maxUsd);
