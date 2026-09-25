@@ -311,7 +311,11 @@ export function evaluateCampaign(
 			r.unsafe,
 	);
 	const jevMetrics = evidence.observations
-		.filter((row) => row.arm === "manager-policy-jev")
+		.filter(
+			(row) =>
+				row.arm === "manager-policy-jev" &&
+				(row.origin === "live" || row.origin === "imported-live"),
+		)
 		.flatMap((row) => (row.metrics ? [row.metrics] : []));
 	const budgetUnknown = evidence.observations.some(
 		(row) =>

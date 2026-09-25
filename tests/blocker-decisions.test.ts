@@ -527,6 +527,7 @@ test("qualification is reachable only with complete independent safe live eviden
 		missing = false,
 		budget = { maxCalls: 600, maxUsd: 2 },
 		unknownSpend = false,
+		simulatedExtra = false,
 	) => {
 		const c = parseCampaign(
 			{
@@ -561,7 +562,14 @@ test("qualification is reachable only with complete independent safe live eviden
 			};
 		}
 		if (missing) rows.pop();
-		return evaluateCampaign(c, liveImport(c, rows));
+		const simulated = simulatedExtra ? rows.splice(-2, 1) : [];
+		const live = liveImport(c, rows);
+		return evaluateCampaign(
+			c,
+			simulated.length
+				? mergeEvidence(c, live, parseEvidence(c, bundle(c, simulated)))
+				: live,
+		);
 	};
 	const complete = run(data);
 	expect(complete.verdict).toBe("promote");
@@ -583,6 +591,9 @@ test("qualification is reachable only with complete independent safe live eviden
 	};
 	expect(run(withUnknownSpend, false, undefined, true).verdict).toBe(
 		"inconclusive",
+	);
+	expect(run(withUnknownSpend, false, undefined, false, true).verdict).toBe(
+		"promote",
 	);
 	const unsafe = structuredClone(data);
 	const label = unsafe.episodes[0]?.labels[0];
