@@ -343,10 +343,10 @@ export class RecoveryController {
 			throw new Error("Recovery session or approved plan changed.");
 		}
 	}
-	snapshot() {
+	snapshot(host?: string) {
 		this.#expireLease();
 		const lease = this.#lease;
-		return lease
+		return lease && (host === undefined || lease.host === host)
 			? {
 					mode: lease.settings.mode,
 					remainingCalls: lease.settings.maxCalls - lease.calls,
@@ -406,7 +406,7 @@ export class RecoveryController {
 			accepted: (s, m, replayed) => this.#accepted(context, s, m, replayed),
 			propose: (s, source, p) => this.#propose(context, s, source, p),
 			requiresSource: () => this.#lease?.host === context.hostSessionId,
-			snapshot: () => this.snapshot(),
+			snapshot: () => this.snapshot(context.hostSessionId),
 			invalidate: () => {
 				const lease = this.#lease;
 				if (lease === identity && lease?.host === context.hostSessionId) {

@@ -818,6 +818,15 @@ test("completed inspect features are not eligible retry targets", async () => {
 	expect(response.summary).toContain("No proposed recovery action");
 });
 
+test("recovery snapshots are visible only to their host", async () => {
+	const s = await setup("shadow");
+	expect(s.controller.snapshot("host")).toMatchObject({ mode: "shadow" });
+	expect(s.controller.snapshot("other-host")).toEqual({ mode: "off" });
+	expect(
+		s.controller.guard({ ...context, hostSessionId: "other-host" }).snapshot(),
+	).toEqual({ mode: "off" });
+});
+
 test("candidate must cite the target's live blockers", async () => {
 	const incomplete = await setup(
 		"shadow",
