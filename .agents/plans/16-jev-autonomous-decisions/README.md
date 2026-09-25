@@ -19,7 +19,7 @@ All targets and limits below are proposed acceptance criteria. No live decision-
 
 ### Guarded construction merge before qualification
 
-On 25 September 2026, the operator directed completion of implementation review and merging the default-off PR stack before delegated-recovery qualification. This authorizes the coding agent to merge construction PRs in dependency order once each PR has green current-head CI, applicable focused unit and packed-host evidence, operator-reviewed interaction evidence for changed user-facing behavior, and an independent current-head code review with every finding fixed or explicitly triaged. Check the final integrated head against current `main` before the first merge and after any conflict resolution. A green check or historical review alone is insufficient.
+On 25 September 2026, the operator directed completion of implementation review and merging the default-off PR stack before delegated-recovery qualification. This authorizes the coding agent to merge construction PRs in dependency order once each PR has green current-head CI, applicable focused unit and packed-host evidence, operator-reviewed interaction evidence for changed user-facing behavior, and an independent current-head code review with every finding fixed, dismissed with evidence, or explicitly accepted by the operator. Check the final integrated head against current `main` before the first merge and after any conflict resolution. A green check or historical review alone is insufficient.
 
 This construction merge does not mark the four phases verified, add a production qualification profile, enable delegated recovery by default, authorize paid calls, or publish a release. The ten live lanes, full performance probes, reviewed independent decision cases, paired live campaign, thresholds, and release interaction review remain promotion gates. Keep every unsupported box open and report the merged implementation separately from qualification. A failed construction gate stops the affected PR and its descendants; a failed promotion gate keeps delegated activation off even if all construction PRs merge.
 
@@ -51,7 +51,7 @@ This construction merge does not mark the four phases verified, add a production
 - [ ] Run `bun run check` before the PR-facing push with hooks enabled. Save the exact head SHA and output.
 - [ ] Apply deslop before commit when installed. Otherwise remove dead scaffolding, unnecessary abstractions, duplicate rules, and speculative compatibility code. Apply no-comments before review.
 - [ ] Open a ready PR only within implementation authorization. Record the real PR URL. Do not treat this research request as GitHub-write authority.
-- [ ] Triage each automated review finding against the diff. Record fix, dismissal with evidence, or unresolved issue.
+- [ ] Triage each automated review finding against the diff. Record fix, dismissal with evidence, or unresolved issue. An unresolved issue blocks construction merge unless the operator explicitly accepts it.
 - [ ] Rebase on current trunk before babysitting and before the merge-ready report. Revalidate any changed patch.
 
 ### Verdict and merge
