@@ -33,6 +33,20 @@ const recordedFiles = Object.keys(receipt.files).sort();
 const actualFiles = readdirSync(join(directory, "campaign"))
 	.map((name) => `campaign/${name}`)
 	.sort();
+const expectedFiles = [
+	"campaign/manifest.json",
+	"campaign/summary.json",
+	...Array.from(
+		{ length: 8 },
+		(_, index) => `campaign/case-${String(index + 1).padStart(6, "0")}.json`,
+	),
+	...Array.from(
+		{ length: 6 },
+		(_, index) => `campaign/attempt-${String(index + 1).padStart(6, "0")}.json`,
+	),
+].sort();
+assert.deepEqual(actualFiles, expectedFiles, "Unexpected campaign file set");
+assert.deepEqual(recordedFiles, expectedFiles, "Unexpected receipt file set");
 assert.deepEqual(
 	actualFiles,
 	recordedFiles,
@@ -44,6 +58,10 @@ for (const [path, digest] of Object.entries(receipt.files)) {
 
 const manifest = json("campaign/manifest.json");
 const summary = json("campaign/summary.json");
+assert.equal(
+	receipt.purpose,
+	"Pinned live shadow-latency diagnostic on eight synthetic development cases; performance evidence only",
+);
 assert.equal(manifest.schemaVersion, 1);
 assert.equal(summary.schemaVersion, 1);
 assert.equal(manifest.preparation.schemaVersion, 1);
@@ -157,6 +175,11 @@ assert.equal(summary.reservedUsd <= receipt.approval.maxUsd, true);
 assert.equal(validCost(summary.reservedUsd), true);
 assert.equal(validCost(receipt.accounting.reservedUsd), true);
 assert.equal(summary.reservedUsd, receipt.accounting.reservedUsd);
+close(summary.reservedUsd, 0.016128);
+assert.equal(
+	receipt.accounting.basis,
+	"conservative local reservation; provider invoice unavailable",
+);
 assert.equal(
 	summary.reservationAccounting,
 	"conservative-reservations-not-invoice",
@@ -310,6 +333,8 @@ assert.equal(summary.inputTokens, receipt.usage.inputTokens);
 assert.equal(summary.outputTokens, receipt.usage.outputTokens);
 assert.equal(inputTokens, summary.inputTokens);
 assert.equal(outputTokens, summary.outputTokens);
+assert.equal(inputTokens, 4672);
+assert.equal(outputTokens, 428);
 for (const value of Object.values(receipt.latency)) {
 	assert.equal(
 		typeof value === "number" && Number.isFinite(value) && value >= 0,
@@ -320,6 +345,10 @@ close(median(providerLatency), receipt.latency.providerP50Ms);
 close(percentile(providerLatency, 95), receipt.latency.providerP95Ms);
 close(median(controllerLatency), receipt.latency.controllerP50Ms);
 close(percentile(controllerLatency, 95), receipt.latency.controllerP95Ms);
+close(receipt.latency.providerP50Ms, 242.6344685);
+close(receipt.latency.providerP95Ms, 636.308719);
+close(receipt.latency.controllerP50Ms, 245.243914);
+close(receipt.latency.controllerP95Ms, 639.880864);
 assert.equal(
 	providerLatency.every((value) => value < 10_000),
 	true,
