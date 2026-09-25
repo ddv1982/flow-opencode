@@ -206,6 +206,28 @@ describe("blocker campaign", () => {
 		expect(live.receipts[0]?.producer).toBe("controlled-study-v1");
 		expect(live.observations[0]?.origin).toBe("imported-live");
 		expect(() =>
+			evaluateCampaign(campaign, validateEvidence(campaign, input)),
+		).toThrow("unverified-live-import");
+		const unverified = validateEvidence(campaign, {
+			...live,
+			receipts: [],
+		});
+		expect(() => evaluateCampaign(campaign, unverified)).toThrow(
+			"unverified-live-import",
+		);
+		expect(() => mergeEvidence(campaign, unverified)).toThrow(
+			"unverified-live-import",
+		);
+		expect(() =>
+			evaluateCampaign(
+				campaign,
+				validateEvidence(campaign, {
+					...live,
+					receipts: [{ ...live.receipts[0], artifactDigest: "0".repeat(64) }],
+				}),
+			),
+		).toThrow("unverified-live-import");
+		expect(() =>
 			validateEvidence(campaign, {
 				...live,
 				receipts: [{ ...live.receipts[0], reviewedBy: "controlled-study-v1" }],

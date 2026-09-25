@@ -1,6 +1,7 @@
 import { JEV_ATTEMPT_RESERVATION_USD } from "../jev-transport.js";
 import {
 	type Arm,
+	assertReviewedLiveEvidence,
 	type Candidate,
 	digest,
 	type Episode,
@@ -118,6 +119,7 @@ export function evaluateCampaign(
 	campaign: ValidatedCampaign,
 	evidence: ValidatedEvidence,
 ) {
+	assertReviewedLiveEvidence(evidence);
 	validateEvidence(campaign, evidence);
 	const splits = new Map(
 		campaign.manifest.splits.map((s) => [s.episodeId, s.split]),
