@@ -311,6 +311,7 @@ assert(
 	readme.includes(receipt.baselineCommit) &&
 		readme.includes(receipt.headCommit) &&
 		readme.includes(`${receipt.maxAddedP95Us.toFixed(3)} microseconds`) &&
+		readme.includes("across the five routes") &&
 		readme.includes(
 			`${rssMiB.headAfterImports.toFixed(2)} MiB versus ${rssMiB.baselineAfterImports.toFixed(2)} MiB`,
 		) &&
