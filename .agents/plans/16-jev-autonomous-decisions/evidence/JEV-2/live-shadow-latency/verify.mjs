@@ -24,6 +24,8 @@ const median = (values) => {
 };
 const close = (actual, expected) =>
 	assert.ok(Math.abs(actual - expected) < 0.000001);
+const validCost = (value) =>
+	typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 const receipt = json("receipt.json");
 const recordedFiles = Object.keys(receipt.files).sort();
@@ -80,9 +82,22 @@ for (const [path, digest] of Object.entries(manifest.sourceDigests)) {
 assert.equal(manifest.origin, "live");
 assert.equal(manifest.controllerMode, "shadow");
 assert.equal(manifest.model, "jev-1.13.0");
+assert.equal(manifest.rubric, "recovery-v1");
+assert.equal(manifest.policy, "bounded-recovery-v1");
+assert.equal(manifest.qualification, "inconclusive");
+assert.equal(manifest.registrationDigest, null);
 assert.equal(receipt.approval.model, `typesafe/${manifest.model}`);
 assert.equal(receipt.approval.dispatches, 1);
 assert.equal(Number.isFinite(Date.parse(receipt.approval.expiresAt)), true);
+assert.equal(
+	validCost(receipt.approval.maxUsd) && receipt.approval.maxUsd > 0,
+	true,
+);
+assert.equal(
+	Number.isSafeInteger(receipt.approval.maxAttempts) &&
+		receipt.approval.maxAttempts > 0,
+	true,
+);
 const corpus = CorpusSchema.parse(manifest.corpus);
 assert.equal(digest(corpus), manifest.corpusDigest);
 assert.deepEqual(
@@ -92,8 +107,11 @@ assert.deepEqual(
 );
 assert.equal(manifest.preparation.corpusDigest, manifest.corpusDigest);
 assert.equal(manifest.corpusDigest, summary.corpusDigest);
+assert.equal(manifest.corpus.purpose, summary.purpose);
+assert.equal(manifest.corpus.labelStatus, summary.labelStatus);
 assert.equal(manifest.maxCalls, receipt.approval.maxAttempts);
 assert.equal(manifest.maxUsd, receipt.approval.maxUsd);
+assert.equal(validCost(manifest.attemptReservationUsd), true);
 close(manifest.attemptReservationUsd, JEV_ATTEMPT_RESERVATION_USD);
 assert.equal(manifest.attemptReservationUsd > 0, true);
 assert.equal(
@@ -102,6 +120,7 @@ assert.equal(
 );
 assert.equal(summary.status, "complete");
 assert.equal(summary.origin, "live");
+assert.equal(summary.registrationDigest, null);
 assert.equal(summary.purpose, "synthetic-development");
 assert.equal(summary.labelStatus, "author-proposed-unreviewed");
 assert.equal(summary.qualification, "inconclusive");
@@ -111,11 +130,14 @@ assert.equal(summary.rows.length, 8);
 assert.equal(summary.calls, 6);
 assert.equal(summary.calls <= receipt.approval.maxAttempts, true);
 assert.equal(summary.reservedUsd <= receipt.approval.maxUsd, true);
+assert.equal(validCost(summary.reservedUsd), true);
+assert.equal(validCost(receipt.accounting.reservedUsd), true);
 assert.equal(summary.reservedUsd, receipt.accounting.reservedUsd);
 assert.equal(
 	summary.reservationAccounting,
 	"conservative-reservations-not-invoice",
 );
+assert.equal(summary.usageScope, "answered-responses-only");
 
 let totalAttempts = 0;
 let totalReservedUsd = 0;
@@ -127,6 +149,7 @@ for (const [index, row] of summary.rows.entries()) {
 	const number = String(index + 1).padStart(6, "0");
 	assert.deepEqual(json(`campaign/case-${number}.json`), row);
 	assert.equal(row.origin, "live");
+	assert.equal(validCost(row.reservedUsd), true);
 	assert.equal(
 		typeof row.latencyMs === "number" &&
 			Number.isFinite(row.latencyMs) &&
@@ -190,6 +213,7 @@ for (let index = 0; index < totalAttempts; index++) {
 	assert.equal(attempt.origin, "live");
 	assert.equal(attempt.maxCalls, receipt.approval.maxAttempts);
 	assert.equal(attempt.maxUsd, receipt.approval.maxUsd);
+	assert.equal(validCost(attempt.reservedUsd), true);
 	close(attempt.reservedUsd, (index + 1) * manifest.attemptReservationUsd);
 	assert.equal(attempt.reservedUsd >= precedingReservation, true);
 	assert.equal(attempt.reservedUsd <= receipt.approval.maxUsd, true);
