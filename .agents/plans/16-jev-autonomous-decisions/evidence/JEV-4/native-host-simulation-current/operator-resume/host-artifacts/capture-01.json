@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "captureOrdinal": 1,
-  "headerSha256": "a58ae55c861dcc28cda00d881591f0445236b4b4ead579a58223cca3f720514e",
-  "headerStartedAt": "2026-09-25T04:11:20.983Z",
+  "headerSha256": "91e5abc6b3727c2b6f5f3e4342e6c8f35dcc3c693c87eb3f775168f4c7cfdb78",
+  "headerStartedAt": "2026-09-25T05:24:03.167Z",
   "arm": "manager-only",
   "declaredOrigin": "simulation",
   "hostArtifacts": {
