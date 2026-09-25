@@ -52,7 +52,7 @@ const { AutoDriveCoordinator } = await import(pathToFileURL(modulePath).href);
 const RecoveryController = recoveryPath
 	? (await import(pathToFileURL(recoveryPath).href)).RecoveryController
 	: null;
-const sourceTree = await sourceTreeIdentity();
+const rssAfterImportsBytes = process.memoryUsage().rss;
 const delivery = {
 	agent: "build",
 	model: { providerID: "provider", modelID: "model" },
@@ -72,7 +72,6 @@ const fixture = {
 	initialRevision: 11,
 	nextRevision: 12,
 };
-const rssAfterImportsBytes = process.memoryUsage().rss;
 const rssBefore = rssAfterImportsBytes;
 const rssCheckpoints: number[] = [];
 let fetchCalls = 0;
@@ -237,6 +236,8 @@ for (const kind of scenarios) {
 globalThis.fetch = originalFetch;
 if (fetchCalls !== 0 || providerCalls !== 0)
 	throw new Error("Disabled mode made a provider or network call");
+const rssAfterBytes = process.memoryUsage().rss;
+const sourceTree = await sourceTreeIdentity();
 const output = {
 	schemaVersion: 1,
 	fixture,
@@ -262,7 +263,7 @@ const output = {
 	rssAfterImportsBytes,
 	rssBeforeBytes: rssBefore,
 	rssCheckpointsBytes: rssCheckpoints,
-	rssAfterBytes: process.memoryUsage().rss,
+	rssAfterBytes,
 	results,
 };
 await writeFile(outputPath, `${JSON.stringify(output, null, 2)}\n`);

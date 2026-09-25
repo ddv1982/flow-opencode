@@ -86,7 +86,6 @@ const percentile = (samples: number[], fraction: number) => {
 const rssBeforeImportBytes = process.memoryUsage().rss;
 const FlowPlugin = (await import(pathToFileURL(modulePath).href)).default;
 const rssAfterImportBytes = process.memoryUsage().rss;
-const sourceTree = await sourceTreeIdentity();
 const workspace = await mkdtemp(join(tmpdir(), "flow-idle-hook-"));
 let promptCalls = 0;
 let fetchCalls = 0;
@@ -157,13 +156,16 @@ try {
 			throw new Error(`Unexpected prompt count at event ${index}`);
 	}
 	if (fetchCalls !== 0) throw new Error("Disabled mode made a fetch call");
+	const captureEndedAt = new Date().toISOString();
+	const rssAfterProbeBytes = process.memoryUsage().rss;
+	const sourceTree = await sourceTreeIdentity();
 	const output = {
 		schemaVersion: 1,
 		arm,
 		pairIndex,
 		sequenceOrdinal,
 		captureStartedAt,
-		captureEndedAt: new Date().toISOString(),
+		captureEndedAt,
 		fixture,
 		fixtureDigest: sha(JSON.stringify(fixture)),
 		moduleSha256: sha(await readFile(modulePath)),
@@ -181,7 +183,7 @@ try {
 		rssBeforeImportBytes,
 		rssAfterImportBytes,
 		rssAfterHooksBytes,
-		rssAfterProbeBytes: process.memoryUsage().rss,
+		rssAfterProbeBytes,
 		samplesUs,
 		p50Us: percentile(samplesUs, 0.5),
 		p95Us: percentile(samplesUs, 0.95),

@@ -9,68 +9,69 @@
     "platform": "linux",
     "arch": "x64"
   },
-  "probeSha256": "399eeb2fb45b8ae1e4f9748b65ef75a609e247df3b133a4d82ba746076630444",
+  "probeSha256": "57f096eeb022938e407990977111ea19b55536cb491c2e12aef6938fb1e5b50d",
   "rawFiles": {
-    "baseline.json.gz": "f93759ebccb6b20d1c05543cb28ca30b8ac0baa70829a395619661368bd09806",
-    "head.json.gz": "37c4fc83bb7991db0278538f3a1df54cf1095770d7d5b535cb6dcf2de852692a"
+    "baseline.json.gz": "2a72c7e9e8a4ef510f546fe79a6929ea76af0e51dbbc752d948227ff6935186e",
+    "head.json.gz": "b3563461f35c0bf7f9dc4903b244bc6ea985e303f0b4ff8c55272870d40d1651"
   },
   "results": [
     {
       "scenario": "no-lease",
-      "baselineP95Us": 1.243,
-      "headP95Us": 1.338,
-      "addedP95Us": 0.095,
+      "baselineP95Us": 1.418,
+      "headP95Us": 1.29,
+      "addedP95Us": -0.128,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     },
     {
       "scenario": "ready-continuation",
-      "baselineP95Us": 2.568,
-      "headP95Us": 2.424,
-      "addedP95Us": -0.144,
+      "baselineP95Us": 2.503,
+      "headP95Us": 2.241,
+      "addedP95Us": -0.262,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     },
     {
       "scenario": "blocked-handback",
-      "baselineP95Us": 2.38,
-      "headP95Us": 2.027,
-      "addedP95Us": -0.353,
+      "baselineP95Us": 2.116,
+      "headP95Us": 2.339,
+      "addedP95Us": 0.223,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     },
     {
       "scenario": "recovery-checkpoint",
-      "baselineP95Us": 1.631,
-      "headP95Us": 1.833,
-      "addedP95Us": 0.202,
+      "baselineP95Us": 1.551,
+      "headP95Us": 1.527,
+      "addedP95Us": -0.024,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 1500
     },
     {
       "scenario": "inactive",
-      "baselineP95Us": 0.591,
-      "headP95Us": 0.676,
-      "addedP95Us": 0.085,
+      "baselineP95Us": 0.618,
+      "headP95Us": 0.635,
+      "addedP95Us": 0.017,
       "callsAndRoutesMatch": true,
       "baselineProposalLookups": 0,
       "headProposalLookups": 0
     }
   ],
-  "maxAddedP95Us": 0.202,
+  "maxAddedP95Us": 0.223,
   "fetchCalls": 0,
   "providerCalls": 0,
   "rssMiB": {
-    "baselineAfterImports": 34.99,
-    "headAfterImports": 46.52,
-    "baselineAfterProbe": 60.71,
-    "headAfterProbe": 71.02
+    "baselineAfterImports": 28.25,
+    "headAfterImports": 41.12,
+    "baselineAfterProbe": 58.28,
+    "headAfterProbe": 66.87
   },
   "limits": [
+    "Source and external-runtime identity collection occurs after every reported latency and RSS checkpoint; it does not contaminate measured import or routing memory.",
     "The runtime-input digest includes all src/ and skills/ files, package.json, and bun.lock; the verifier rebuilds it from the pinned Git commit and checks the current branch.",
     "Each raw arm binds the complete on-disk src/ tree by path, file length, and bytes; the verifier reconstructs it from the pinned Git commit.",
     "The probe times the in-memory AutoDriveCoordinator.onIdle route with immediate mocked projection and prompt ports, not the full OpenCode plugin host event path.",
@@ -80,8 +81,8 @@
     "Shadow advice latency and the pinned live provider deadline are not measured; the JEV-2 performance gate remains open."
   ],
   "expandedSha256": {
-    "baseline.json": "c48909ca01c0ad8fe888f20acf3742aedabc7be849bc041986ccb2a2ac3e24ff",
-    "head.json": "1a181e41a6490683d0463d233d8497d500ac69a191d0f8cbed87872ea2f39008"
+    "baseline.json": "bc4f21a4950e1f8bf35465a78f5041382852d0fec5a688f8d2ce9ddd1549dc41",
+    "head.json": "34521e2cfb26c0300704a6c10d707911e46ce62e2aa0c1a44e212354b89a4637"
   },
   "introductionCommit": "0192ede787239205f14deb16a58643ca2896d09e",
   "baselineModuleSha256": "55b15ad6ac2eead7dba5cf06cdf7bcd605c6050f513fee0a8e6abad8f235ddb1",
