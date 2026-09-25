@@ -98,7 +98,39 @@ const context = {
 	client: {
 		app: { log() {} },
 		session: {
-			promptAsync() {
+			promptAsync(request: unknown) {
+				const row = request as {
+					path?: { id?: string };
+					query?: { directory?: string };
+					body?: {
+						agent?: string;
+						model?: { providerID?: string; modelID?: string };
+						parts?: Array<{
+							type?: string;
+							text?: string;
+							synthetic?: boolean;
+							metadata?: Record<string, unknown>;
+						}>;
+					};
+					throwOnError?: boolean;
+				};
+				const part = row.body?.parts?.[0];
+				if (
+					row.path?.id !== fixture.hostSessionId ||
+					row.query?.directory !== workspace ||
+					row.body?.agent !== "build" ||
+					row.body.model?.providerID !== "provider" ||
+					row.body.model.modelID !== "model" ||
+					row.body.parts?.length !== 1 ||
+					part?.type !== "text" ||
+					part.synthetic !== true ||
+					!part.text?.startsWith(
+						"Read compact status, load flow-plan, then call flow_plan_save.\n\n",
+					) ||
+					typeof part.metadata?.["opencode-plugin-flow/auto"] !== "string" ||
+					row.throwOnError !== true
+				)
+					throw new Error("Unexpected initial-route prompt request.");
 				promptCalls++;
 				return Promise.resolve({ data: undefined });
 			},
