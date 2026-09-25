@@ -1227,6 +1227,16 @@ test("registered tools share the controller across file-backed service instances
 			reset = tools.flow_feature_reset,
 			complete = tools.flow_feature_complete;
 		if (!status || !reset || !complete) throw new Error("tools");
+		const otherHostStatus = JSON.parse(
+			String(
+				await status.execute(
+					{ request: { view: "compact" } },
+					{ ...ctx, sessionID: "other-host", messageID: "other-assistant" },
+				),
+			),
+		);
+		expect(otherHostStatus.status).toBe("ok");
+		expect(otherHostStatus.workflowData.recovery).toEqual({ mode: "off" });
 		const before = (await loadSession(directory))?.revision;
 		const advice = JSON.parse(
 			String(
