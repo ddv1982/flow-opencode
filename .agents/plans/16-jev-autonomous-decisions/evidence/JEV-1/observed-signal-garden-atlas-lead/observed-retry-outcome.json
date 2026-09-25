@@ -46,7 +46,8 @@
     "recordedRevision": 21,
     "independentFeatureReview": "pending",
     "observedDesktopImageUrls": 14,
-    "recordedBaselineImageUrls": 54
+    "recordedBaselineImageUrls": 54,
+    "firstMeasurementValidationId": "9a4b1a0c-da31-48f2-9c67-08b440840e2d"
   },
   "qualification": {
     "independentDecisionLabel": "pending",
@@ -60,6 +61,10 @@
     "checkpointSnapshotSha256": "6ddd4fe3e862fdb58e20240794a2d702b1e47eaa2d6dca315d39d574ac38f9b8",
     "passedReviewSnapshotSha256": "1a7c5b0f4e7e14935c9f5232191a72c05bc816f200e82d50569a663fac57e0f0",
     "authorizationSha256": "df1619b74a628688a691b49aeb491584c7a70f9e96ec3b2295ad62997dfac1b2",
-    "dispatchSha256": "621fef1af0269a0dd705263383d3fb76c94f0b349b92fa2d86a365e5a239ceca"
+    "dispatchSha256": "621fef1af0269a0dd705263383d3fb76c94f0b349b92fa2d86a365e5a239ceca",
+    "failedMeasurementPartSha256": "9b4557e3ae61f34f29404c633f98203d1db64cf5ba6d02e567830c5fd9bdd239",
+    "passedMeasurementPartSha256": "cfcf525e43b5f98bcbd0654bfba82e4891fcca2e62ddf806af1162a04adb4099",
+    "finalSourceManifestSha256": "9ba8a289094174f5b67130abbf6404380b05d67a08fd5a52d8e7295947b3c50e",
+    "finalSourcePatchSha256": "588dfc2c43c1bf1ef1fa5ce79afa167add6de15a6fc6fd0df2f924fcd48ecc30"
   }
 }
