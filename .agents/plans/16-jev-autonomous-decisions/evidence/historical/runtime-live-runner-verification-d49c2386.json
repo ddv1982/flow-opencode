@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "kind": "live-runner-implementation-verification",
+  "qualification": "inconclusive",
+  "paidInference": false,
+  "sources": {
+    "evals/recovery-decisions/episode-host.ts": "be84204859fd8b0122893d3145c5618c4663489d90fc05a87226c10d8e7ce5eb",
+    "evals/recovery-decisions/episode-runner.ts": "3894fe43c38e707041b56e539422f13d37ee024b4caebbc82a807a26c83ab77c",
+    "tests/recovery-episode-host.test.ts": "ceab8233805ac1d278d0623acb6226fbdc11bf140ada031752a231ab0ba0a3cd"
+  },
+  "localArtifacts": {
+    "/tmp/flow-live-runner-focused.log": "3bcbac6da965917051a6cb54639caa382e3a29c4ec806e149c6b81bd438d843d",
+    "/tmp/flow-live-runner-typecheck.log": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+    "/tmp/flow-live-runner-lint.log": "79619377b7876f875e7a92fbaeb233d19a8580e62ca7a19980ff5aca2203c4e4",
+    "/tmp/flow-live-runner-simulation.log": "0b0c59b3711b18a6aa155d9370f7aa02c6605586bab09388d69b12438a319c78",
+    "/tmp/flow-live-runner-simulation-composed/complete.json": "9d9830b9d4343a3d0bd6ee9671a5ec989e93f5c95733d4874ecb0a129ef7a47b",
+    "/tmp/flow-live-runner-artifacts.log": "0445b787645371949d5297b45fe1680f074be1eeb1119c8491de60a25723e8ec",
+    "/tmp/flow-live-runner-simulation-first.log": "d1e0c24b0ed7d48259240b5e21629db07cfe0026d61add5f6a3ad40de5b9e877",
+    "/tmp/flow-live-runner-composition-before.log": "37bba75a3b8c15dcfb4c243589ef9b39969e977f58a2f3e396383fee5b3e072d"
+  },
+  "checks": {
+    "focused": {
+      "passed": 107,
+      "failed": 0,
+      "assertions": 399
+    },
+    "typecheck": "passed",
+    "lint": "passed",
+    "nativeSimulation": {
+      "passed": 2,
+      "failed": 0,
+      "assertions": 233,
+      "hosts": 4,
+      "opencodeVersion": "1.18.31",
+      "artifactHashesChecked": 27
+    },
+    "composedIdentityRegression": {
+      "before": {
+        "failed": 4
+      },
+      "after": "All four composed live-format cases pass in the focused suite."
+    }
+  },
+  "limitations": [
+    "Positive live-format runner tests use injected local hosts and synthetic reviewed-bound attestations; no provider inference or real pricing review.",
+    "Native coverage is the existing paired simulation, not a live provider comparison.",
+    "Initial native run timed out after episode-runner.ts changed during execution; its source-binding refusal was reproduced. Final unchanged-source rerun passed.",
+    "Driver implementations and reviewer identities are trusted local inputs, not authenticated provenance.",
+    "Real operational data, independent review, approved paid campaign cap and per-manager qualification remain outstanding.",
+    "Local logs may not persist outside this workstation."
+  ]
+}

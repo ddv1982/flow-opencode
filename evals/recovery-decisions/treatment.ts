@@ -10,6 +10,7 @@ export const SimulationScriptSchema = z.discriminatedUnion("kind", [
 		.object({
 			kind: z.literal("guarded-reset-v1"),
 			outcome: z.enum(["accepted", "subthreshold"]),
+			jevDelayMs: z.number().int().min(0).max(9000).optional(),
 		})
 		.strict(),
 	z.object({ kind: z.literal("operator-resume-v1") }).strict(),
@@ -40,14 +41,17 @@ export const ExperimentalLiveProfile = Object.freeze({
 	goal: 0.95,
 	suitability: 0.95,
 });
-export async function validateLiveTreatmentBudget(budget: {
-	directory: string;
-	authorizationDigest: string;
-	managerModel: string;
-	scope: EpisodeReservationScope;
-}) {
+export async function validateLiveTreatmentBudget(
+	budget: {
+		directory: string;
+		authorizationDigest: string;
+		managerModel: string;
+		scope: EpisodeReservationScope;
+	},
+	signal?: AbortSignal,
+) {
 	EpisodeReservationScopeSchema.parse(budget.scope);
-	const status = await requestBudgetStatus(budget.directory);
+	const status = await requestBudgetStatus(budget.directory, signal);
 	const models = status.authorization.models.map((row) => row.model);
 	if (
 		status.authorization.origin !== "live" ||
@@ -88,6 +92,7 @@ export async function validateTreatmentBudget(
 				scope?: EpisodeReservationScope | undefined;
 		  }
 		| undefined,
+	signal?: AbortSignal,
 ) {
 	RecoveryTreatmentSchema.parse(treatment);
 	if (!budget) throw new Error("Isolated treatment requires a request budget.");
@@ -95,9 +100,9 @@ export async function validateTreatmentBudget(
 		const scope = EpisodeReservationScopeSchema.parse(budget.scope);
 		if (scope.arm !== treatment.arm)
 			throw new Error("Treatment arm differs from reservation scope.");
-		return validateLiveTreatmentBudget({ ...budget, scope });
+		return validateLiveTreatmentBudget({ ...budget, scope }, signal);
 	}
-	const status = await requestBudgetStatus(budget.directory);
+	const status = await requestBudgetStatus(budget.directory, signal);
 	if (
 		status.authorization.origin !== "simulation" ||
 		status.cancelled ||

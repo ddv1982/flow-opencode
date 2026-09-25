@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "head": "0ac5a1dbb415afba932298d2c0b425cea814e6bc",
+  "host": "OpenCode 1.18.31",
+  "managerModel": "openai/gpt-5.6-terra",
+  "jevModel": "jev-1.13.0",
+  "origin": "simulation",
+  "paidInference": false,
+  "capture": {
+    "source": "GNOME desktop portal",
+    "input": "tmux keys into visible OpenCode TUI",
+    "videoDurationSeconds": 43,
+    "videoFrames": 43,
+    "videoFrameRate": 1,
+    "captureStartedAt": "2026-09-23T21:44:23.324Z",
+    "captureEndedAt": "2026-09-23T21:45:00.342Z"
+  },
+  "observation": {
+    "sessionId": "ses_f2fc71306ffeTv8UWhrdskEC7c",
+    "flowCalls": [
+      "flow_status",
+      "flow_status"
+    ],
+    "claimModels": [
+      "openai/gpt-5.6-terra",
+      "openai/gpt-5.6-terra",
+      "typesafe/jev-1.13.0",
+      "openai/gpt-5.6-terra"
+    ],
+    "beforeRevision": 11,
+    "afterRevision": 11,
+    "resetObserved": false,
+    "nativeHostTest": "passed, 14 assertions"
+  },
+  "files": [
+    {
+      "name": "pending.jpg",
+      "sha256": "732bb3efc0f02a22ab1e378606e582d85025668d06188bad9be0ad15d3f36187"
+    },
+    {
+      "name": "stop.png",
+      "sha256": "93ac7306497bac1cdc744e11c99db4ace176eff5780468c74e8b887139270be8"
+    },
+    {
+      "name": "stop.mp4",
+      "sha256": "ec5736dae42abbfb17665062b7e6870d26756af4831d62f189c7d3cb86460798"
+    },
+    {
+      "name": "terminal.txt",
+      "sha256": "69dc25bca4c8425a2502c08ee756ce5c429ff02f4eef75aaa66467c6aaf8ee36"
+    }
+  ],
+  "limits": [
+    "This is one simulated provider stop lane, not a live Jev quality result.",
+    "The video is a 1 fps capture of the full-screen native TUI.",
+    "JEV-4 review.mp4 and the other interaction lanes remain open."
+  ]
+}

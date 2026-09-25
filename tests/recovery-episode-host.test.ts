@@ -1,17 +1,32 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+	access,
+	mkdir,
+	mkdtemp,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { JevConfiguration } from "../evals/recovery-decisions/campaign.js";
 import {
 	createEpisodeHostDriver,
 	type EpisodeHostOptions,
 	episodeHostIdentity,
 } from "../evals/recovery-decisions/episode-host.js";
-import { runEpisode } from "../evals/recovery-decisions/episode-runner.js";
 import {
+	recoverEpisodeJournal,
+	runEpisode,
+} from "../evals/recovery-decisions/episode-runner.js";
+import { registerEpisodes } from "../evals/recovery-decisions/episodes.js";
+import {
+	cancelRequestBudget,
 	createRequestBudget,
 	type EpisodeReservationScope,
+	requestBudgetStatus,
+	reserveRequest,
 } from "../evals/recovery-decisions/request-budget.js";
 import { datasetDigest } from "../evals/recovery-decisions/schema.js";
 import { verifyRecoverySourceDigests } from "../evals/recovery-decisions/sources.js";
@@ -630,7 +645,7 @@ test("ungated and failed-stop native drivers cannot claim complete zero", async 
 	await expect(failed.reconcileReservations()).rejects.toThrow("not complete");
 });
 
-test("live source driver binds credential policy and preserves runtime scope while runner refuses startup", async () => {
+test("live source driver binds credential policy and preserves runtime scope while invalid registration refuses startup", async () => {
 	const f = await setup();
 	f.options.host.recoveryTreatment = { origin: "live", arm: "manager-only" };
 	f.options.host.providerCredentials = "disabled";
@@ -662,7 +677,7 @@ test("live source driver binds credential policy and preserves runtime scope whi
 			origin: "live",
 			driver,
 		}),
-	).rejects.toThrow("reviewed route cost bounds");
+	).rejects.toThrow();
 	expect(f.starts).toBe(0);
 	const scope: EpisodeReservationScope = {
 		executionId: randomUUID(),
@@ -686,4 +701,318 @@ test("live source driver binds credential policy and preserves runtime scope whi
 	);
 	await driver.stop();
 	expect(f.prompts).toEqual([]);
+});
+
+async function liveFixture(
+	model: "openai/gpt-5.6-terra" | "xai/grok-4.6",
+	arm: "manager-only" | "manager-plus-jev",
+) {
+	const f = await setup();
+	const directory = join(f.project, "budget");
+	const authorization = await createRequestBudget(directory, {
+		schemaVersion: 1,
+		origin: "live",
+		purpose: "Synthetic local admission test; no external dispatch",
+		maxRequests: 10,
+		maxMicroUsd: 100000,
+		expiresAt: new Date(Date.now() + 60000).toISOString(),
+		models: (arm === "manager-plus-jev"
+			? [model, "typesafe/jev-1.13.0"]
+			: [model]
+		).map((model) => ({
+			model,
+			reservationMicroUsd: 5000,
+			basis: {
+				kind: "reviewed-upper-bound",
+				reviewedBy: "test fixture",
+				evidenceDigest: "a".repeat(64),
+			},
+		})),
+	});
+	f.options.arm = arm;
+	f.options.manager.model = model;
+	f.options.host.recoveryTreatment = { origin: "live", arm };
+	f.options.host.providerCredentials = "disabled";
+	f.options.host.toolchain.environment.TYPESAFE_API_KEY = "synthetic-test-only";
+	f.options.host.requestBudget = {
+		directory,
+		authorizationDigest: datasetDigest(authorization),
+		managerModel: model,
+	};
+	const project = join(f.project, "workload");
+	await mkdir(project);
+	const original = f.options.hostFactory;
+	f.options.hostFactory = async (input) => {
+		if (!original) throw new Error("Missing factory");
+		const host = await original(input);
+		for (const [path, content] of Object.entries(input.files)) {
+			await mkdir(dirname(join(project, path)), { recursive: true });
+			await writeFile(join(project, path), content);
+		}
+		return {
+			...host,
+			project,
+			async runCommand(...args) {
+				await host.runCommand(...args);
+				for (const selected of arm === "manager-only"
+					? [model]
+					: [model, "typesafe/jev-1.13.0"]) {
+					await reserveRequest(
+						directory,
+						selected,
+						datasetDigest(authorization),
+						undefined,
+						input.requestBudget?.scope,
+					);
+				}
+				await writeFile(join(project, "src/result.txt"), "fixed\n");
+				return "quiet" as const;
+			},
+		};
+	};
+	return {
+		f,
+		directory,
+		authorization,
+		async registration(
+			driver: Awaited<ReturnType<typeof createEpisodeHostDriver>>,
+			changes = {},
+		) {
+			const identity = episodeHostIdentity(fixture);
+			const manager = {
+				...f.options.manager,
+				harnessDigest: driver.harnessDigest,
+			};
+			return registerEpisodes({
+				schemaVersion: 1,
+				split: "calibration",
+				calibrationEvidenceDigest: null,
+				episodes: [
+					{
+						id: "live-test",
+						taskDigest: datasetDigest(identity.task),
+						initialStateDigest: datasetDigest(identity.initialState),
+						completionCriteria: identity.completionCriteria,
+						sourceReference: "synthetic",
+						independenceGroupId: "synthetic",
+						...changes,
+					},
+				],
+				arms: {
+					managerOnly: manager,
+					managerPlusJev: { ...manager, jev: JevConfiguration },
+				},
+				execution: { timeoutMs: 5000, resetProtocol: "fresh fixture" },
+				inference: {
+					method: "paired-bootstrap-percentile-v1",
+					seed: 42,
+					resamples: 2000,
+					confidence: 0.95,
+				},
+			});
+		},
+	};
+}
+
+for (const model of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
+	for (const arm of ["manager-only", "manager-plus-jev"] as const) {
+		test(`live runner completes and recovers scoped local evidence for ${model} ${arm}`, async () => {
+			const l = await liveFixture(model, arm);
+			const base = await createEpisodeHostDriver(l.f.options);
+			const driver = {
+				...base,
+				harnessDigest: datasetDigest({
+					base: base.harnessDigest,
+					wrapper: "local-test",
+				}),
+			};
+			const registration = await l.registration(driver);
+			const outputDirectory = join(l.f.project, "journal");
+			const result = await runEpisode({
+				registration,
+				driver,
+				arm,
+				episodeId: "live-test",
+				outputDirectory,
+				recordedBy: "synthetic fixture",
+				origin: "live",
+			});
+			if (!result) throw new Error("Missing episode result");
+			expect(result.observation).toMatchObject({
+				result: { kind: "terminal", outcome: "completed" },
+				reservedUsd: arm === "manager-only" ? 0.005 : 0.01,
+				safetyReview: null,
+			});
+			expect(l.f.starts).toBe(1);
+			expect(l.f.stops).toBe(1);
+			expect(l.f.prompts).toHaveLength(1);
+			expect(
+				await recoverEpisodeJournal(registration, outputDirectory),
+			).toEqual(result);
+			expect(l.f.startOptions?.requestBudget?.scope).toMatchObject({
+				arm,
+				registrationDigest: datasetDigest(registration),
+				harnessDigest: driver.harnessDigest,
+			});
+		});
+	}
+}
+
+for (const failure of [
+	"task",
+	"state",
+	"criteria",
+	"policy",
+	"key",
+	"budget",
+	"cancelled",
+	"exhausted",
+	"one-slot",
+	"digest",
+	"simulation",
+	"expired",
+	"manager",
+	"aborted",
+	"unaffordable",
+	"combined-cost",
+	"missing-jev",
+] as const) {
+	test(`live runner refuses ${failure} before host startup and journal creation`, async () => {
+		const l = await liveFixture("xai/grok-4.6", "manager-plus-jev");
+		const changes: Record<string, string> = {};
+		if (failure === "task") changes.taskDigest = "b".repeat(64);
+		if (failure === "state") changes.initialStateDigest = "b".repeat(64);
+		if (failure === "criteria") changes.completionCriteria = "different";
+		if (failure === "policy") delete l.f.options.host.providerCredentials;
+		if (failure === "key")
+			delete l.f.options.host.toolchain.environment.TYPESAFE_API_KEY;
+		if (failure === "budget") delete l.f.options.host.requestBudget;
+		if (failure === "cancelled") await cancelRequestBudget(l.directory);
+		if (failure === "exhausted")
+			for (let i = 0; i < 10; i++)
+				await reserveRequest(
+					l.directory,
+					"xai/grok-4.6",
+					datasetDigest(l.authorization),
+				);
+		if (failure === "one-slot")
+			for (let i = 0; i < 9; i++)
+				await reserveRequest(
+					l.directory,
+					"xai/grok-4.6",
+					datasetDigest(l.authorization),
+				);
+		if (failure === "digest" && l.f.options.host.requestBudget)
+			l.f.options.host.requestBudget.authorizationDigest = "b".repeat(64);
+		if (
+			failure === "simulation" ||
+			failure === "expired" ||
+			failure === "manager" ||
+			failure === "unaffordable" ||
+			failure === "combined-cost" ||
+			failure === "missing-jev"
+		) {
+			const authorization = structuredClone(l.authorization);
+			if (failure === "unaffordable") authorization.maxMicroUsd = 1;
+			if (failure === "combined-cost") authorization.maxMicroUsd = 5000;
+			if (failure === "missing-jev")
+				authorization.models = authorization.models.filter(
+					(row) => row.model !== "typesafe/jev-1.13.0",
+				);
+			if (failure === "simulation") authorization.origin = "simulation";
+			if (failure === "expired")
+				authorization.expiresAt = "2020-01-01T00:00:00.000Z";
+			if (failure === "manager") {
+				const row = authorization.models[0];
+				if (!row) throw new Error("Missing model");
+				row.model = "openai/gpt-5.6-terra";
+			}
+			await writeFile(
+				join(l.directory, "authorization.json"),
+				JSON.stringify(authorization),
+			);
+			if (l.f.options.host.requestBudget)
+				l.f.options.host.requestBudget.authorizationDigest =
+					datasetDigest(authorization);
+		}
+		const expectedError = {
+			task: "differs from frozen host configuration",
+			state: "differs from frozen host configuration",
+			criteria: "differs from frozen host configuration",
+			policy: "explicit provider credential policy",
+			key: "toolchain credential",
+			budget: "requires a request budget",
+			cancelled: "Live evaluation authorization unavailable",
+			exhausted: "Live episode request budget exhausted",
+			"one-slot": "Live episode request budget exhausted",
+			digest: "Live evaluation authorization unavailable",
+			simulation: "Live evaluation authorization unavailable",
+			expired: "Live evaluation authorization unavailable",
+			manager: "Live evaluation authorization unavailable",
+			aborted: /abort/i,
+			unaffordable: "Live episode request budget exhausted",
+			"combined-cost": "Live episode request budget exhausted",
+			"missing-jev": "Live evaluation authorization unavailable",
+		}[failure];
+
+		const before = await requestBudgetStatus(l.directory);
+		const outputDirectory = join(l.f.project, "journal");
+		if (failure === "policy") {
+			await expect(createEpisodeHostDriver(l.f.options)).rejects.toThrow(
+				expectedError,
+			);
+			expect(l.f.starts).toBe(0);
+			expect(l.f.prompts).toEqual([]);
+			expect(await requestBudgetStatus(l.directory)).toEqual(before);
+			await expect(access(outputDirectory)).rejects.toThrow();
+			return;
+		}
+		const driver = await createEpisodeHostDriver(l.f.options);
+		const registration = await l.registration(driver, changes);
+		await expect(
+			runEpisode({
+				registration,
+				driver,
+				arm: "manager-plus-jev",
+				episodeId: "live-test",
+				outputDirectory,
+				recordedBy: "test",
+				origin: "live",
+				...(failure === "aborted" ? { signal: AbortSignal.abort() } : {}),
+			}),
+		).rejects.toThrow(expectedError);
+		expect(l.f.starts).toBe(0);
+		expect(l.f.prompts).toEqual([]);
+		expect(await requestBudgetStatus(l.directory)).toEqual(before);
+		await expect(access(outputDirectory)).rejects.toThrow();
+	});
+}
+
+test("cancellation during live admission prevents journal creation and preparation", async () => {
+	const l = await liveFixture("xai/grok-4.6", "manager-only");
+	const driver = await createEpisodeHostDriver(l.f.options);
+	const registration = await l.registration(driver);
+	const controller = new AbortController();
+	const admit = driver.admitLive;
+	if (!admit) throw new Error("Missing admission");
+	driver.admitLive = async (input, signal) => {
+		await admit(input, signal);
+		controller.abort();
+	};
+	const outputDirectory = join(l.f.project, "journal");
+	await expect(
+		runEpisode({
+			registration,
+			driver,
+			arm: "manager-only",
+			episodeId: "live-test",
+			outputDirectory,
+			recordedBy: "test",
+			origin: "live",
+			signal: controller.signal,
+		}),
+	).rejects.toThrow();
+	expect(l.f.starts).toBe(0);
+	expect((await requestBudgetStatus(l.directory)).consumed).toBe(0);
+	await expect(access(outputDirectory)).rejects.toThrow();
 });

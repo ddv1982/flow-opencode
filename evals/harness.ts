@@ -1565,12 +1565,16 @@ export class EvalHost {
 			await validateTreatmentBudget(
 				options.recoveryTreatment,
 				options.requestBudget,
+				options.signal,
 			);
 			if (options.withFlow === false)
 				throw new Error("Treatment requires Flow composition.");
 		}
 		if (options.requestBudget) {
-			const budget = await requestBudgetStatus(options.requestBudget.directory);
+			const budget = await requestBudgetStatus(
+				options.requestBudget.directory,
+				options.signal,
+			);
 			if (
 				budget.authorizationDigest !==
 					options.requestBudget.authorizationDigest ||

@@ -183,3 +183,158 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 			},
 			180000,
 		);
+
+for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
+	smoke(
+		`native ${managerModel} stop revokes delayed simulated Jev advice`,
+		async () => {
+			const root = await mkdtemp(join(tmpdir(), "treatment-stop-host-"));
+			const previous = process.env.FLOW_EVAL_AUTHORIZATION;
+			let host: EvalHost | undefined;
+			try {
+				const directory = join(root, "budget");
+				const authorization = await createRequestBudget(directory, {
+					schemaVersion: 1,
+					origin: "simulation",
+					purpose: "Native delayed recovery stop simulation",
+					maxRequests: 12,
+					maxMicroUsd: 100000,
+					expiresAt: new Date(Date.now() + 180000).toISOString(),
+					models: [
+						{
+							model: managerModel,
+							reservationMicroUsd: 5000,
+							basis: { kind: "simulation" },
+						},
+						{
+							model: "typesafe/jev-1.13.0",
+							reservationMicroUsd: 3000,
+							basis: { kind: "simulation" },
+						},
+					],
+				});
+				const dispatch = join(root, "dispatch");
+				await authorizePaidRun(dispatch, {
+					schemaVersion: 1,
+					purpose: "Native delayed recovery stop simulation",
+					models: [managerModel],
+					maxDispatches: 2,
+					expiresAt: new Date(Date.now() + 180000).toISOString(),
+				});
+				process.env.FLOW_EVAL_AUTHORIZATION = dispatch;
+				host = await EvalHost.start({
+					toolchain: currentBunToolchain(packageJson.packageManager),
+					packageCache: root,
+					opencodeVersion: "1.18.31",
+					files: {
+						"parser.ts":
+							"export const parse = (value: string) => value.trim();\n",
+					},
+					withFlow: true,
+					providerCredentials: "disabled",
+					ambientConfig: "disabled",
+					nativeLlm: false,
+					requestBudget: {
+						directory,
+						authorizationDigest: datasetDigest(authorization),
+						managerModel,
+					},
+					recoveryTreatment: {
+						origin: "simulation",
+						arm: "manager-plus-jev",
+						script: {
+							kind: "guarded-reset-v1",
+							outcome: "accepted",
+							jevDelayMs: 7000,
+						},
+					},
+					signal: AbortSignal.timeout(150000),
+				});
+				const repository = new MemorySessionRepository();
+				repository.sourceDigest = await createFileSourceIdentityProvider(
+					host.project,
+				).computeSourceDigest();
+				const flow = await approveSession(
+					repository,
+					deterministicEnvironment(),
+				);
+				for (let i = 0; i < 2; i++) {
+					if (i) await resetFeatureRun(flow, repository, FEATURE, `reset-${i}`);
+					await startReviewedRun(flow, repository, { suffix: `failed-${i}` });
+					await submitReview(flow, repository, {
+						suffix: `failed-${i}`,
+						summary: "Missing null guard",
+						verdict: "failed",
+						findings: [
+							{
+								severity: "blocking",
+								summary: "Null input crashes",
+								evidence: "parser.ts",
+								...(i
+									? {
+											findingId:
+												repository.session?.runs[0]?.reviews[0]?.result
+													?.findings[0]?.findingId,
+										}
+									: {}),
+							},
+						],
+					});
+				}
+				if (!repository.session) throw new Error("Missing fixture session.");
+				await saveSession(host.project, repository.session);
+				const before = await loadSession(host.project);
+				const session = await host.createSession("Delayed recovery stop");
+				const running = host
+					.runCommand(
+						session,
+						"flow-auto",
+						"--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 Repair the blocked parser within its approved plan.",
+						managerModel,
+						{ quietMs: 200, timeoutMs: 45000, stalledMs: 15000 },
+					)
+					.catch(() => undefined);
+				const deadline = Date.now() + 30000;
+				let jevStarted = false;
+				let jevClaimedAt = 0;
+				while (Date.now() < deadline) {
+					const claims = await Promise.all(
+						(await readdir(directory))
+							.filter((name) => name.startsWith("request-"))
+							.map(async (name) =>
+								JSON.parse(await readFile(join(directory, name), "utf8")),
+							),
+					);
+					if (claims.some((claim) => claim.model === "typesafe/jev-1.13.0")) {
+						jevStarted = true;
+						jevClaimedAt = Date.now();
+						break;
+					}
+					await Bun.sleep(50);
+				}
+				expect(jevStarted).toBe(true);
+				await host.runCommand(session, "flow-auto", "stop", managerModel, {
+					quietMs: 200,
+					timeoutMs: 15000,
+					stalledMs: 10000,
+				});
+				expect(Date.now() - jevClaimedAt).toBeLessThan(7000);
+				await running;
+				await Bun.sleep(7200);
+				expect(await loadSession(host.project)).toEqual(before);
+				const outcome = await host.outcome([session], 0);
+				expect(outcome.flowCalls.map((call) => call.tool)).toContain(
+					"flow_status",
+				);
+				expect(outcome.flowCalls.map((call) => call.tool)).not.toContain(
+					"flow_feature_reset",
+				);
+			} finally {
+				if (previous === undefined) delete process.env.FLOW_EVAL_AUTHORIZATION;
+				else process.env.FLOW_EVAL_AUTHORIZATION = previous;
+				await host?.stop();
+				await rm(root, { recursive: true, force: true });
+			}
+		},
+		180000,
+	);

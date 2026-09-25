@@ -460,9 +460,9 @@ The pinned native campaign exercised four hosts and recorded one scripted operat
 intervention in each arm. Both manager reports correctly show zero completed arms:
 the control remains blocked, and treatment's granted reset does not by itself
 complete a reviewed workflow. The request-budget ledger retains each arm's
-reservations, while the report leaves reserved-dollar means unavailable for these
-failed outcomes. It records zero live pairs and inconclusive qualification. No
-paid inference occurred.
+reservations. The later live-runner reconciliation reports them even when the
+workflow outcome fails. The campaign records zero live pairs and inconclusive
+qualification. No paid inference occurred.
 
 The current-head [verification receipt](evidence/runtime-paired-simulation-verification.json)
 records the repository, focused, pinned native campaign, and packaged-smoke checks
@@ -654,3 +654,48 @@ unmerged. Qualification can run against a frozen final stack before merging.
 See the [host design](live-host-design.md),
 [execution guide](../../../evals/recovery-decisions/run-episodes.md), and
 [verification receipt](evidence/runtime-live-host-verification.json).
+
+## Live runner admission
+
+The runner now admits explicit live evaluation drivers after validating the
+registered manager, task, initial state, completion criteria, arm, and frozen
+harness identity. Admission requires artifact verification and reservation
+reconciliation capabilities, explicit credential policy, a current live budget
+with reviewed bounds and remaining request capacity, and a toolchain Jev key for
+treatment. Admission runs before journal creation or host startup and consumes no
+reservations. Ordinary packed drivers still lack live admission.
+
+The host and per-request gate retain their existing checks. Admission does not
+reserve funds or guarantee that a concurrent campaign has enough budget to finish.
+Command dispatch still requires its separate paid-dispatch authorization. Review
+identities and price evidence remain attestations supplied by trusted local code.
+No new paid authorization, real cost evidence, or production profile was created.
+
+Focused verification passed 107 tests with 399 assertions. Local injected hosts
+completed and recovered live-format journals for both arms and managers, including
+exact scoped reservation totals. Rejection checks cover changed workload bindings,
+missing credentials and policy, unavailable or exhausted budgets, wrong managers,
+and cancellation before or during admission. These are synthetic checks, not live
+provider evidence. Type checking and repository lint passed.
+
+The pinned native OpenCode 1.18.31 paired simulation passed two tests with 233
+assertions across four hosts. The first attempt timed out after the runner source
+was edited during the test. Its retained registration differs from the final
+source only in episode-runner.ts, and validation reproduced the source-binding
+refusal hidden by mailbox polling. The rerun used unchanged implementation bytes
+and passed. No paid inference occurred.
+
+This closes the runner's blanket-refusal gap. Representative operational cases,
+independent review, actual route cost evidence, a new explicit campaign cap,
+separate live comparisons, and release qualification remain open. Live-origin
+receipts remain inconclusive until reviewed; production profiles remain empty.
+The stack remains unmerged.
+
+See the [admission design](live-runner-design.md),
+[execution guide](../../../evals/recovery-decisions/run-episodes.md), and
+[verification receipt](evidence/runtime-live-runner-verification.json).
+
+Final review reproduced a composed-driver admission failure in all four live-format
+local cases. Removing a redundant comparison to the native base digest preserves
+the runner-owned composed harness identity through admission and accounting. The
+four positive tests now use composed drivers.
