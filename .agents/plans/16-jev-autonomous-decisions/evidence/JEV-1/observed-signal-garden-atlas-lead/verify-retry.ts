@@ -98,6 +98,12 @@ if (privateRoot) {
 	const session = JSON.parse(
 		await readFile(join(privateRoot, "final-session.json"), "utf8"),
 	);
+	const checkpoint = JSON.parse(
+		await readFile(
+			join(privateRoot, "retry-private/snapshots/revision-00010.json"),
+			"utf8",
+		),
+	);
 	const authorization = JSON.parse(
 		await readFile(
 			join(privateRoot, "retry-dispatch/authorization.json"),
@@ -152,16 +158,27 @@ if (privateRoot) {
 		),
 		"utf8",
 	);
-	const validationReceipt = (output: string) => {
-		const match = output.match(/\[flow-validation\] (\{[^\n]+\})/);
-		return match ? JSON.parse(match[1]) : null;
+	const validationOutput = (output: string) => {
+		const match = output.match(/\n\n\[flow-validation\] (\{[^\n]+\})$/);
+		return match
+			? {
+					body: output.slice(0, match.index),
+					receipt: JSON.parse(match[1]),
+				}
+			: null;
 	};
+	const failedOutput = validationOutput(failedPart.state.output);
+	const passedOutput = validationOutput(passedPart.state.output);
 	const expectedRemedyGates = [
 		{ command: focusedAtlasGate, scope: "focused" },
 		{ command: broadAtlasGate, scope: "broad" },
 	];
 	assert(
-		session.revision === outcome.continuation.recordedRevision &&
+		session.id === lead.snapshot.session.id &&
+			checkpoint.id === session.id &&
+			checkpoint.revision === outcome.checkpointRevision &&
+			JSON.stringify(checkpoint) === JSON.stringify(lead.snapshot.session) &&
+			session.revision === outcome.continuation.recordedRevision &&
 			remedy?.state === "completed" &&
 			remedy.attempt === outcome.remedy.attempt &&
 			review?.result?.verdict === "passed" &&
@@ -212,17 +229,21 @@ if (privateRoot) {
 			failedPart.state.output.includes(
 				"loads the bounded atlas garden image set after onboarding",
 			) &&
-			Number(failedPart.state.output.match(/Received: (\d+)/)?.[1]) ===
+			Number(failedOutput?.body.match(/Received: (\d+)/)?.[1]) ===
 				outcome.continuation.observedDesktopImageUrls &&
-			validationReceipt(failedPart.state.output)?.id === firstMeasurement.id &&
-			validationReceipt(failedPart.state.output)?.passed === false &&
+			failedOutput?.receipt.id === firstMeasurement.id &&
+			failedOutput.receipt.passed === false &&
+			`sha256:${sha(Buffer.from(failedOutput.body))}` ===
+				firstMeasurement.outputDigest &&
 			passedPart.type === "tool" &&
 			passedPart.tool === "bash" &&
 			passedPart.state.input.command === browserGate &&
 			passedPart.state.metadata.exit === 0 &&
 			passedPart.state.output.includes("32 passed") &&
-			validationReceipt(passedPart.state.output)?.id === focusedValidation.id &&
-			validationReceipt(passedPart.state.output)?.passed === true &&
+			passedOutput?.receipt.id === focusedValidation.id &&
+			passedOutput.receipt.passed === true &&
+			`sha256:${sha(Buffer.from(passedOutput.body))}` ===
+				focusedValidation.outputDigest &&
 			sourceManifest.revision === 21 &&
 			sourceManifest.stable === true &&
 			sourceManifest.sourceDigestBefore === passedValidation.sourceDigest &&
