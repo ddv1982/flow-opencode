@@ -205,6 +205,14 @@ test("fixed paired seed is reproducible and observation order cannot alter estim
 
 test("strict episode and attestation bindings refuse duplicates drift and unreviewed safety claims", async () => {
 	const { protocol, registration, manager, jev } = await fixture();
+	for (const arm of ["managerOnly", "managerPlusJev"] as const) {
+		const prefixed = structuredClone(protocol);
+		prefixed.arms[arm].prompt =
+			"--recovery=shadow --recovery-calls=3 --recovery-usd=0.01 Task";
+		await expect(registerEpisodes(prefixed)).rejects.toThrow(
+			"Manager prompt cannot start with recovery options",
+		);
+	}
 	const first = protocol.episodes[0];
 	if (!first) throw new Error("Missing fixture");
 	for (const key of [
