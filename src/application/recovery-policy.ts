@@ -652,6 +652,7 @@ export class RecoveryController {
 				return false;
 			if (candidate.action === "retry")
 				return (
+					currentRun(session, candidate.featureId)?.state !== "completed" &&
 					!session.runs.some(
 						(run) =>
 							run.featureId === candidate.featureId &&

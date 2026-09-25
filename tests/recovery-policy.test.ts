@@ -783,6 +783,41 @@ test("packet uses current live finding wording instead of oversized history", as
 	expect(JSON.stringify(response)).toContain('"kind":"selected"');
 });
 
+test("completed inspect features are not eligible retry targets", async () => {
+	const s = await setup("shadow", provider, true);
+	const old = s.repository.session;
+	if (!old?.plan || old.runs.length !== 2) throw new Error("fixture");
+	const proposal = s.proposal();
+	s.repository.session = {
+		...old,
+		plan: {
+			...old.plan,
+			features: old.plan.features.map((feature) =>
+				feature.id === FEATURE
+					? { ...feature, kind: "inspect" as const }
+					: feature,
+			),
+		},
+		runs: [
+			...old.runs.map((run, index) => ({
+				...run,
+				state: index === 1 ? ("completed" as const) : run.state,
+			})),
+			...old.runs.map((run) => ({
+				...run,
+				id: `${run.id}-independent`,
+				featureId: "independent",
+			})),
+		],
+	};
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: proposal,
+	});
+	expect(response.status).toBe("error");
+	expect(response.summary).toContain("No proposed recovery action");
+});
+
 test("candidate must cite the target's live blockers", async () => {
 	const incomplete = await setup(
 		"shadow",
