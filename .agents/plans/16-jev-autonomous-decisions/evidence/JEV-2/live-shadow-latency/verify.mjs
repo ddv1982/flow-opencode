@@ -318,6 +318,12 @@ for (let index = 0; index < totalAttempts; index++) {
 		true,
 	);
 	assert.equal(Date.parse(attempt.at) >= precedingAttemptAt, true);
+	if (index > 0)
+		assert.equal(
+			Date.parse(attempt.at) + 2 >=
+				precedingAttemptAt + answeredRows[index - 1].advice.latencyMs,
+			true,
+		);
 	precedingAttemptAt = Date.parse(attempt.at);
 	assert.equal(attempt.origin, "live");
 	assert.equal(attempt.maxCalls, receipt.approval.maxAttempts);
