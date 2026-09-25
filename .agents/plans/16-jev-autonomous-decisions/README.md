@@ -11,11 +11,17 @@ Read [the research](research.md) for findings, alternatives, sources, and curren
 
 One box is one unit of work. Every box names the evidence that checks it. Check a box only when its evidence exists, a file, a log line, a screenshot, a test run, or a SHA. The body is a how-to. The appendices explain and record.
 
-The program runs the installed Poteto `playbooks/autonomous-run.md`, using `playbooks/feature.md` for each implementation phase and `playbooks/opening-a-pr.md` for review preparation. Resolve those files from the installed skill, not an assumed `pstack/` directory in Flow. The parent owns integration and verification. The operator merges every PR. All PRs stop at merge-ready. JEV-2, JEV-3, and JEV-4 require interaction review.
+The program runs the installed Poteto `playbooks/autonomous-run.md`, using `playbooks/feature.md` for each implementation phase and `playbooks/opening-a-pr.md` for review preparation. Resolve those files from the installed skill, not an assumed `pstack/` directory in Flow. The parent owns integration and verification. The operator merges every PR unless the operator explicitly directs the coding agent to merge. All PRs stop at merge-ready until that direction. JEV-2, JEV-3, and JEV-4 require interaction review.
 
-Tests alone are not sufficient verification. A PR is verified only when its unit, live, and perf boxes are all checked.
+Tests alone are not sufficient phase verification. JEV-1 through JEV-4 remain unverified until their unit, live, interaction where applicable, and performance boxes have evidence.
 
 All targets and limits below are proposed acceptance criteria. No live decision-quality result or performance baseline exists yet. Continued implementation now permits default-off runtime construction before live qualification. Production delegated activation still requires qualification. The runtime preserves process-local authority and Session v5. It does not resume autonomous permission after restart.
+
+### Guarded construction merge before qualification
+
+On 25 September 2026, the operator directed completion of implementation review and merging the default-off PR stack before delegated-recovery qualification. This authorizes the coding agent to merge construction PRs in dependency order once each PR has green current-head CI, applicable focused unit and packed-host evidence, operator-reviewed interaction evidence for changed user-facing behavior, and an independent current-head code review with every finding fixed or explicitly triaged. Check the final integrated head against current `main` before the first merge and after any conflict resolution. A green check or historical review alone is insufficient.
+
+This construction merge does not mark the four phases verified, add a production qualification profile, enable delegated recovery by default, authorize paid calls, or publish a release. The ten live lanes, full performance probes, reviewed independent decision cases, paired live campaign, thresholds, and release interaction review remain promotion gates. Keep every unsupported box open and report the merged implementation separately from qualification. A failed construction gate stops the affected PR and its descendants; a failed promotion gate keeps delegated activation off even if all construction PRs merge.
 
 ## Program checklist
 
@@ -48,12 +54,12 @@ All targets and limits below are proposed acceptance criteria. No live decision-
 - [ ] Triage each automated review finding against the diff. Record fix, dismissal with evidence, or unresolved issue.
 - [ ] Rebase on current trunk before babysitting and before the merge-ready report. Revalidate any changed patch.
 
-### Verdict and merge, for every PR
+### Verdict and merge
 
-- [ ] At the exact head SHA, run an independent gates lane, the ten live lanes, one performance lane, and an audit lane. Queue lanes beyond available capacity. Record all results.
+- [ ] For phase verification, at the exact head SHA, run an independent gates lane, the ten live lanes, one performance lane, and an audit lane. Queue lanes beyond available capacity. Record all results. The guarded construction merge uses the narrower gate above and leaves unsupported phase boxes open.
 - [ ] Use a configured fast profile only when it is installed and observable. Otherwise use generic inherited workers and disclose the fallback. Never claim model diversity from role names.
-- [ ] Return findings to the owner. Require a fresh verdict for every changed head. Mark clean only when every required lane passes.
-- [ ] Verify the patch identity and current trunk before handoff. The operator merges. Do not arm auto-merge, publish a package, or create a release under this plan.
+- [ ] Return findings to the owner. Require a fresh verdict for every changed head. Mark construction-ready only when its construction gate passes; mark the phase verified only when every phase lane passes.
+- [ ] Verify the patch identity and current trunk before handoff. The operator or an explicitly directed coding agent merges. Do not arm auto-merge, publish a package, or create a release under this plan.
 
 ### Boot recipe, for every live lane
 
