@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "classification": "observed-signal-garden-blocked-recovery-lead-unreviewed",
+  "project": "Signal Garden",
+  "baseHead": "01f6d224f8d31040fe2fe5bdfee06e0e36c51319",
+  "checkpointRevision": 10,
+  "checkpointState": "blocked",
+  "sessionSha256": "6ddd4fe3e862fdb58e20240794a2d702b1e47eaa2d6dca315d39d574ac38f9b8",
+  "sourceManifestSha256": "9c1fd6af60e5fd27d6d057f9bd466a06ccc8eacae8c921d574d95b386be5c9c1",
+  "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+  "sourceStable": true,
+  "sourceMatchesSecondReview": true,
+  "failedReviews": [
+    {
+      "id": "review:6f38224b-e98c-4063-86e4-41838b719e69",
+      "sourceDigest": "sha256:ca802bf544ce4ba7ee867ec2d895ce68802cde6512f9b0fb28ef729a32571af1",
+      "verdict": "failed",
+      "findingIds": [
+        "theme-runtime-atlases.R5-01",
+        "theme-runtime-atlases.R5-02",
+        "theme-runtime-atlases.R5-03"
+      ]
+    },
+    {
+      "id": "review:0721e612-5acb-49b9-9522-0cfe7125dc57",
+      "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+      "verdict": "failed",
+      "findingIds": [
+        "theme-runtime-atlases.R5-01",
+        "theme-runtime-atlases.R5-02",
+        "theme-runtime-atlases.R5-03",
+        "theme-runtime-atlases.R9-01"
+      ]
+    }
+  ],
+  "managerProposalMessageId": "msg_0d7a86a77001y13RdwqahPTiXo",
+  "managerProposalSha256": "64016e293a4bffec8a326bc5825a33080d68f4094d71980c5d5d1e01f0dda32b",
+  "messagesSha256": "c4635ee9d315ad3644671333d088f96bd33e574a779a9810f79eb931d703c104",
+  "runPlanSha256": "2a00058aba4dad33d8daff1600185103779685c1aa3fe50ca0ae997ddb3db5bd",
+  "baselineSha256": "2a3ac45b3aacb936f7e6322e6205d8c3ca6918953d95c0c6dc0b12f8098951c6",
+  "approvedManager": "openai/gpt-5.6-terra",
+  "approvedReviewer": "openai/gpt-5.6-sol",
+  "paidDispatchesConsumed": 1,
+  "observedAt": "2026-09-25T08:27:00.915100Z",
+  "limits": [
+    "Manager supplied a prose proposal, not a top-level typed recoveryProposal to Flow.",
+    "No TypeSafe call or Jev advice was made under the ordinary-task authorization.",
+    "No independent safe-effective label or held-out qualification count is claimed.",
+    "The host command connection ended with fetch failed after handback; the host stayed healthy and messages were retained."
+  ],
+  "draftSha256": "d9cb2ce90c15f9d4c55fee67bc192e9a4abc2a9b88feda5347c1640a5a2a456d",
+  "normalizedProposalSha256": "4ef6d29361393b3ac4670ad7c9bb7d0e863bd447a271e70dbda1edd86baf5aff",
+  "offlinePacketSha256": "c9a85a71511ead6e039015c79c7b64d7a75e56fef400c1bfd706fead5131ee98",
+  "packetDigest": "2b0e23de7ecd8e91bab782dfb2b496e1ce960c78aa858e1271b22038304423ea",
+  "observedModelSessionsSha256": "0740da978ff3ea020a1201bebb88a26520b8e7c41957801ab38d1b1948d9300c",
+  "typedProposalCapturedFromManager": false,
+  "labelReviewed": false,
+  "jevCalled": false,
+  "authorizationSha256": "da9d5806c50e4e68a7f687500d7e34d52b7d3d7dcb0d26e1dee5dc3394734ecb",
+  "dispatchSha256": "7cf3320a7a8d906dcc0db1a0ee6f9807bca4801255f0549bccd9b984c9840854"
+}

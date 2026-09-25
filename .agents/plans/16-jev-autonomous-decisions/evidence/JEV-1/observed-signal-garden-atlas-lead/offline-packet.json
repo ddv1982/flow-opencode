@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+  "checkpointRevision": 10,
+  "packet": {
+    "sessionId": "session:9c805775-6e47-46d2-9b65-846e140fdf63",
+    "revision": 10,
+    "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+    "goal": "Implement the unfinished optional asset-weight task by packing the 52 nonbackground runtime companion, garden-prop, and lens-prop images into deterministic per-theme atlases while preserving garden behavior and measuring the reduced desktop image request count.",
+    "planDigest": "592799bfd67e324e212b3ec54fbc89d1c8fb516d9fffc31d347b719ed9edd3c7",
+    "rubric": "recovery-v1",
+    "findings": [
+      {
+        "id": "theme-runtime-atlases.R5-01",
+        "summary": "Repair proven; terminal fixed pending pass: atlas compatibility bound is now satisfied",
+        "evidence": "scripts/pack-runtime-atlases.mjs:17-75 splits each theme's companion frames across two 1544-wide atlases; all six checked-in metadata files report dimensions at or below 1544x1327, and the projected current-source Chromium/mobile validation succeeds."
+      },
+      {
+        "id": "theme-runtime-atlases.R5-02",
+        "summary": "Deterministic atlas generation unit coverage remains incomplete",
+        "evidence": "src/game/__tests__/assets.test.ts:80-92 now decodes metadata-listed sources and compares frame/sourceSize dimensions, but no test invokes scripts/pack-runtime-atlases.mjs, regenerates into an isolated destination, or compares repeated/generated artifacts. The required deterministic-generation proof and the prior finding's generator-exercise requirement therefore remain unverified."
+      },
+      {
+        "id": "theme-runtime-atlases.R5-03",
+        "summary": "Repair proven; terminal fixed pending pass: current-source build and desktop/mobile browser checks succeeded",
+        "evidence": "Assignment-linked validation 9137f6e2-8ff0-4f0e-9ed3-b1a32010f4f7 records complete exit-0 execution of `pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke` at the assignment source digest."
+      },
+      {
+        "id": "theme-runtime-atlases.R9-01",
+        "summary": "Current-source lint and unit-test evidence required by the feature gate is missing",
+        "evidence": "The only assignment-linked current-source validation is `pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke`; it does not run `pnpm lint` or `pnpm test`. Expected evidence is exit-0 `pnpm lint` and `pnpm test` at this source digest, including execution of src/game/__tests__/assets.test.ts."
+      }
+    ],
+    "candidates": [
+      {
+        "id": "atlas-evidence-repair",
+        "action": "retry",
+        "featureId": "theme-runtime-atlases",
+        "remedy": "Add an isolated test that runs the atlas generator twice and compares generated artifacts; then run current-source pnpm lint and pnpm test and submit the complete gate for independent review.",
+        "changedFromPreviousAttempt": "The preceding attempt checked generated metadata but did not exercise repeated generation in an isolated output directory or record the current-source lint and full unit gate.",
+        "findingIds": [
+          "theme-runtime-atlases.R5-02",
+          "theme-runtime-atlases.R9-01"
+        ]
+      }
+    ]
+  },
+  "packetDigest": "2b0e23de7ecd8e91bab782dfb2b496e1ce960c78aa858e1271b22038304423ea",
+  "outcome": {
+    "kind": "unavailable",
+    "mode": "shadow",
+    "packetDigest": "2f82f59b000821dd59e8317973eaeedb9a24df7bc2d1d419977dc01ba2506e99",
+    "model": null,
+    "requestedModel": "jev-1.13.0",
+    "selectedCandidateId": null,
+    "action": null,
+    "featureId": null,
+    "reason": "provider"
+  },
+  "error": null
+}

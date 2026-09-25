@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "sourceHead": "01f6d224f8d31040fe2fe5bdfee06e0e36c51319",
+  "flowPlugin": "opencode-plugin-flow@9.0.2",
+  "managerModel": "openai/gpt-5.6-terra",
+  "reviewerModel": "openai/gpt-5.6-sol",
+  "textureKeys": 54,
+  "nonbackgroundTextureKeys": 52,
+  "baselineChecks": {
+    "frozenOfflineInstall": "pass",
+    "typecheck": "pass",
+    "lint": "pass",
+    "unitTests": "110 passed across 17 files",
+    "build": "pass"
+  },
+  "observedAt": "2026-09-25T07:48:14.618048Z",
+  "browserBaseline": {
+    "networkImageResponses": 54,
+    "webpResponses": 53,
+    "jpegResponses": 1,
+    "blobImageResponses": 54,
+    "browserVersion": "149.0.7827.55",
+    "networkReportSha256": "6cd8bda9e69391cec3a11fbdd6257ff8b4d9a0a65b0eeef1bf4b23d55103da5b",
+    "screenshotSha256": "7609eb99298aa2c4bde95866d9ac749151ce61a53667c95a72f023b7e8c32435"
+  }
+}

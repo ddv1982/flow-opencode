@@ -1,0 +1,422 @@
+{
+  "schemaVersion": 1,
+  "status": "awaiting-label-review",
+  "snapshot": {
+    "id": "signal-garden-runtime-atlas-review-r10-20260925",
+    "session": {
+      "version": 5,
+      "id": "session:9c805775-6e47-46d2-9b65-846e140fdf63",
+      "revision": 10,
+      "goal": "Implement the unfinished optional asset-weight task by packing the 52 nonbackground runtime companion, garden-prop, and lens-prop images into deterministic per-theme atlases while preserving garden behavior and measuring the reduced desktop image request count.",
+      "approval": "approved",
+      "plan": {
+        "summary": "Replace the 52 independently loaded runtime sprites with deterministic light and dark atlases while retaining separate garden backgrounds, existing texture keys, rendering, and animation behavior.",
+        "overview": "Add a deterministic atlas build path using the existing checked-in runtime artwork, emit a small bounded set of per-theme atlas images plus frame metadata, and load each logical Phaser texture key from its corresponding atlas frame. Keep the two garden backgrounds as standalone images. Cover logical texture reachability and atlas construction with unit tests, then measure fresh desktop image requests and exercise garden behavior on desktop and mobile with light/dark visual inspection.",
+        "requirements": [
+          "Pack all 52 nonbackground runtime companion, garden-prop, and lens-prop images from existing assets; do not regenerate artwork.",
+          "Use a small number of deterministic per-theme atlases and account for decoded texture size as well as HTTP request count.",
+          "Keep the light and dark garden backgrounds separate.",
+          "Preserve every existing logical texture key, light/dark texture selection, companion frame and sequence behavior, and garden/lens rendering.",
+          "Measure the fresh desktop garden image-request result after the change, starting from the recorded 54-image baseline.",
+          "Run typecheck, lint, unit tests, build, relevant desktop/mobile Playwright coverage, and inspect light/dark screenshots.",
+          "Do not push or merge product changes."
+        ],
+        "decisions": [
+          "Use generated checked-in atlas artifacts and metadata derived only from current runtime WebP assets so Vite can import stable atlas URLs and Phaser can retain each existing logical texture key through atlas frame registration.",
+          "Bound atlas dimensions to avoid a request-count-only optimization that inflates decoded memory disproportionately; derive layout deterministically from ordered source definitions.",
+          "Keep background imports and loading separate from atlas frame loading, exactly as requested.",
+          "Add focused request-count evidence in Playwright rather than relying on a manually observed browser network panel.",
+          "Canonical gate combines the repository's lint, typecheck, unit test, build, desktop Playwright, and mobile smoke commands because no single existing script covers all requested checks."
+        ],
+        "features": [
+          {
+            "id": "theme-runtime-atlases",
+            "title": "Build and load deterministic theme atlases",
+            "summary": "Generate bounded decoded-size light/dark companion, garden-prop, and lens-prop atlases from the 52 existing runtime images, retain backgrounds independently, and register every existing logical texture key as an atlas frame.",
+            "targets": [
+              "scripts/",
+              "src/assets/",
+              "src/game/assets.ts",
+              "src/game/__tests__/assets.test.ts",
+              "docs/ux-polish-plan.md"
+            ],
+            "validation": [
+              "Unit tests prove each existing logical light/dark texture key remains reachable and maps to an atlas frame; deterministic atlas generation preserves source dimensions.",
+              "Inspect atlas dimensions and decoded pixel totals against source images before accepting request-count reduction.",
+              "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke"
+            ],
+            "dependsOn": [],
+            "kind": "change"
+          },
+          {
+            "id": "atlas-behavior-and-measurement",
+            "title": "Verify atlas behavior and request reduction",
+            "summary": "Add or update focused browser coverage to measure fresh desktop garden image requests after atlas loading and preserve light/dark garden, lens, and companion interactions across desktop and mobile.",
+            "targets": [
+              "e2e/garden-loop.spec.ts",
+              "test-results/",
+              "docs/ux-polish-plan.md"
+            ],
+            "validation": [
+              "Fresh desktop garden entry records the post-change network image count against the 54-image baseline.",
+              "Playwright verifies light/dark texture-theme switching, companion behavior, and active lens interaction on desktop and mobile.",
+              "Capture and inspect desktop light and dark garden screenshots.",
+              "pnpm exec playwright test e2e/garden-loop.spec.ts --project=chromium"
+            ],
+            "dependsOn": [
+              "theme-runtime-atlases"
+            ],
+            "kind": "change"
+          }
+        ],
+        "evidence": [
+          {
+            "requirement": "All requested repository checks, fresh desktop request measurement, screenshot inspection, and relevant desktop/mobile browser coverage pass.",
+            "environment": "isolated local Signal Garden worktree",
+            "command": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke",
+            "scope": "gate",
+            "platform": "linux",
+            "assertions": []
+          }
+        ]
+      },
+      "runs": [
+        {
+          "id": "run:c742f83c-2350-4130-b487-2f8e5898723b",
+          "featureId": "theme-runtime-atlases",
+          "attempt": 1,
+          "state": "superseded",
+          "startedRevision": 3,
+          "summary": "theme-runtime-atlases incomplete: atlas routing and 52-frame metadata were inspected, but the companion atlas exceeds the 2048 texture compatibility bound and required determinism/dimension and full build/browser validation evidence is absent.",
+          "artifactsChanged": [
+            {
+              "path": "scripts/pack-runtime-atlases.mjs"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-companion.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-companion.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-props.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-props.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-companion.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-companion.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-props.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-props.json"
+            },
+            {
+              "path": "src/game/assets.ts"
+            },
+            {
+              "path": "src/game/scenes/GardenScene.ts"
+            },
+            {
+              "path": "src/game/PetController.ts"
+            },
+            {
+              "path": "src/game/__tests__/assets.test.ts"
+            },
+            {
+              "path": "package.json"
+            },
+            {
+              "path": "docs/ux-polish-plan.md"
+            }
+          ],
+          "validations": [
+            {
+              "id": "380fba70-6e63-4e85-998e-cce5871b7d75",
+              "featureId": "theme-runtime-atlases",
+              "runId": "run:c742f83c-2350-4130-b487-2f8e5898723b",
+              "scope": "focused",
+              "command": "pnpm lint && pnpm typecheck && pnpm test",
+              "sourceDigest": "sha256:ca802bf544ce4ba7ee867ec2d895ce68802cde6512f9b0fb28ef729a32571af1",
+              "exitCode": 0,
+              "outputDigest": "sha256:e2b3a0dfb0497fc65b321d23f75751379f0a09b8d73d6e69db7f46d2950ca9fa",
+              "outputComplete": true,
+              "recordedRevision": 4,
+              "hostPlatform": "linux"
+            }
+          ],
+          "reviews": [
+            {
+              "id": "review:6f38224b-e98c-4063-86e4-41838b719e69",
+              "operationId": "a0e95fa0-486d-471d-b1d0-15f2378d6d5b",
+              "featureId": "theme-runtime-atlases",
+              "runId": "run:c742f83c-2350-4130-b487-2f8e5898723b",
+              "kind": "feature",
+              "sourceDigest": "sha256:ca802bf544ce4ba7ee867ec2d895ce68802cde6512f9b0fb28ef729a32571af1",
+              "validationIds": [
+                "380fba70-6e63-4e85-998e-cce5871b7d75"
+              ],
+              "packet": {
+                "summary": "Review deterministic two-theme atlas implementation. Baseline was clean except unrelated untracked opencode.json. This feature adds one executable atlas generator and eight generated artifacts (four WebP / four JSON), modifies runtime loading/rendering, unit coverage, package script, and task status. No deletions, renames, or executable-mode changes to tracked files; generated script is expected executable mode only if its creation preserves shebang defaults, which git inventory has not staged. `pnpm assets:atlas` was rerun with no generated diff, lint/typecheck/full unit suite passed, targeted sleeping companion E2E passed, and four atlases decode to 36,291,200 bytes versus 33,938,440 source bytes.",
+                "riskLenses": []
+              },
+              "createdRevision": 5,
+              "result": {
+                "verdict": "failed",
+                "findings": [
+                  {
+                    "severity": "blocking",
+                    "summary": "Companion atlases exceed the WebGL 2048 texture compatibility bound",
+                    "evidence": "scripts/pack-runtime-atlases.mjs:18 and :73-121 pack four 512px rows plus five 2px gaps, producing 1544x2058 images; src/assets/runtime-atlases/light-companion.json:244-249 and dark-companion.json:244-249 confirm height 2058. A conforming 2048-max texture context cannot upload these atlases, so every companion frame can fail on affected mobile/older GPUs. The approved outcome explicitly requires bounded atlas dimensions and mobile behavior preservation.",
+                    "findingId": "theme-runtime-atlases.R5-01"
+                  },
+                  {
+                    "severity": "blocking",
+                    "summary": "Required deterministic generation and source-dimension unit coverage is missing",
+                    "evidence": "src/game/__tests__/assets.test.ts:31-66 checks routing and frame-key presence only. It neither runs/exercises the generator nor compares generated frame dimensions/content against the 52 source assets, so it does not satisfy the feature validation requiring unit proof that deterministic atlas generation preserves source dimensions.",
+                    "findingId": "theme-runtime-atlases.R5-02"
+                  },
+                  {
+                    "severity": "blocking",
+                    "summary": "Current-source build and required desktop/mobile browser validation evidence is missing",
+                    "evidence": "The only assignment-linked validation is `pnpm lint && pnpm typecheck && pnpm test` at the current source digest. There is no durable successful `pnpm build`, Chromium suite, or `pnpm e2e:mobile-smoke` evidence for the approved feature gate, and the packet's targeted sleeping-companion statement does not supply an assignment-linked validation. Expected evidence is successful completion of those commands against this source, demonstrating atlas decode/render, theme switching, companion animation, and garden/lens behavior.",
+                    "findingId": "theme-runtime-atlases.R5-03"
+                  }
+                ],
+                "terminalDisposition": "submitted",
+                "recordedRevision": 6
+              }
+            }
+          ]
+        },
+        {
+          "id": "run:c957ac8f-b630-42dd-a450-acbb041865c8",
+          "featureId": "theme-runtime-atlases",
+          "attempt": 2,
+          "state": "blocked",
+          "startedRevision": 7,
+          "summary": "theme-runtime-atlases incomplete. R5-01 repair proven; terminal fixed pending pass (blocking→advisory). R5-02 remains blocking: source-dimension checks were added, but deterministic generation is still not exercised. R5-03 repair proven; terminal fixed pending pass (blocking→advisory). Current-source lint/unit-test gate evidence is missing (R9-01).",
+          "artifactsChanged": [
+            {
+              "path": "scripts/pack-runtime-atlases.mjs"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-companion-a.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-companion-a.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-companion-b.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-companion-b.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-props.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/light-props.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-companion-a.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-companion-a.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-companion-b.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-companion-b.json"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-props.webp"
+            },
+            {
+              "path": "src/assets/runtime-atlases/dark-props.json"
+            },
+            {
+              "path": "src/game/assets.ts"
+            },
+            {
+              "path": "src/game/scenes/GardenScene.ts"
+            },
+            {
+              "path": "src/game/PetController.ts"
+            },
+            {
+              "path": "src/game/__tests__/assets.test.ts"
+            },
+            {
+              "path": "package.json"
+            },
+            {
+              "path": "docs/ux-polish-plan.md"
+            }
+          ],
+          "validations": [
+            {
+              "id": "9137f6e2-8ff0-4f0e-9ed3-b1a32010f4f7",
+              "featureId": "theme-runtime-atlases",
+              "runId": "run:c957ac8f-b630-42dd-a450-acbb041865c8",
+              "scope": "focused",
+              "command": "pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke",
+              "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+              "exitCode": 0,
+              "outputDigest": "sha256:f3451d4cfc7dc800a1f02ec89d19c42ec8cd75e284756c122601a6eb77361490",
+              "outputComplete": true,
+              "recordedRevision": 8,
+              "hostPlatform": "linux"
+            }
+          ],
+          "reviews": [
+            {
+              "id": "review:0721e612-5acb-49b9-9522-0cfe7125dc57",
+              "operationId": "ab0b7c6b-1d63-41e9-90b4-c48a68094d23",
+              "featureId": "theme-runtime-atlases",
+              "runId": "run:c957ac8f-b630-42dd-a450-acbb041865c8",
+              "kind": "feature",
+              "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+              "validationIds": [
+                "9137f6e2-8ff0-4f0e-9ed3-b1a32010f4f7"
+              ],
+              "packet": {
+                "summary": "Retry addresses all R5 blockers. Companion frames now use two 1544x1030 atlases per theme (all atlas dimensions <=2048); props atlases are 1024x1327. The generator emits source paths in metadata; unit coverage decodes all 52 source assets and checks generated frame/sourceSize dimensions, routing, frame presence, and bounds. Current-source focused validation passed: build, full Chromium suite (31 passed, 1 expected mobile skip), and mobile smoke (1 passed). Previous unrelated untracked opencode.json remains untouched. Added generated artifacts; no tracked deletion/rename or mode changes; `pnpm assets:atlas` is deterministic.",
+                "riskLenses": []
+              },
+              "createdRevision": 9,
+              "result": {
+                "verdict": "failed",
+                "findings": [
+                  {
+                    "severity": "advisory",
+                    "summary": "Repair proven; terminal fixed pending pass: atlas compatibility bound is now satisfied",
+                    "evidence": "scripts/pack-runtime-atlases.mjs:17-75 splits each theme's companion frames across two 1544-wide atlases; all six checked-in metadata files report dimensions at or below 1544x1327, and the projected current-source Chromium/mobile validation succeeds.",
+                    "findingId": "theme-runtime-atlases.R5-01"
+                  },
+                  {
+                    "severity": "blocking",
+                    "summary": "Deterministic atlas generation unit coverage remains incomplete",
+                    "evidence": "src/game/__tests__/assets.test.ts:80-92 now decodes metadata-listed sources and compares frame/sourceSize dimensions, but no test invokes scripts/pack-runtime-atlases.mjs, regenerates into an isolated destination, or compares repeated/generated artifacts. The required deterministic-generation proof and the prior finding's generator-exercise requirement therefore remain unverified.",
+                    "findingId": "theme-runtime-atlases.R5-02"
+                  },
+                  {
+                    "severity": "advisory",
+                    "summary": "Repair proven; terminal fixed pending pass: current-source build and desktop/mobile browser checks succeeded",
+                    "evidence": "Assignment-linked validation 9137f6e2-8ff0-4f0e-9ed3-b1a32010f4f7 records complete exit-0 execution of `pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke` at the assignment source digest.",
+                    "findingId": "theme-runtime-atlases.R5-03"
+                  },
+                  {
+                    "severity": "blocking",
+                    "summary": "Current-source lint and unit-test evidence required by the feature gate is missing",
+                    "evidence": "The only assignment-linked current-source validation is `pnpm build && pnpm e2e --project=chromium && pnpm e2e:mobile-smoke`; it does not run `pnpm lint` or `pnpm test`. Expected evidence is exit-0 `pnpm lint` and `pnpm test` at this source digest, including execution of src/game/__tests__/assets.test.ts.",
+                    "findingId": "theme-runtime-atlases.R9-01"
+                  }
+                ],
+                "terminalDisposition": "submitted",
+                "recordedRevision": 10
+              }
+            }
+          ]
+        }
+      ],
+      "operations": [
+        {
+          "id": "67ba439b-09be-4240-b12d-733fa1e30d76",
+          "kind": "plan-save",
+          "inputDigest": "sha256:514d17e143079bb7d776f0e06b557b1fde46e3c4f3b52f41aad1b9a61f4c960a",
+          "committedRevision": 1
+        },
+        {
+          "id": "ad18b122-9e0e-415c-a1a4-0b54d22f996f",
+          "kind": "plan-approve",
+          "inputDigest": "sha256:830463fb6d5450861dc2eb39b3351778dcfb948cf8c805a037f1fbacd70c998d",
+          "committedRevision": 2
+        },
+        {
+          "id": "0f08a299-9299-4c0a-ab37-640feb4e72cc",
+          "kind": "run-start",
+          "inputDigest": "sha256:f597481178bfbac0241a5e11dc80e7f05854f30e3b12890c0e7ce7dbc13d45db",
+          "committedRevision": 3,
+          "entityId": "run:c742f83c-2350-4130-b487-2f8e5898723b"
+        },
+        {
+          "id": "a0e95fa0-486d-471d-b1d0-15f2378d6d5b",
+          "kind": "review-start",
+          "inputDigest": "sha256:f37b141d03bd230497a95d1fe36dc677fe8bcb946d57d4b4f7a5748b7d8df057",
+          "committedRevision": 5,
+          "entityId": "review:6f38224b-e98c-4063-86e4-41838b719e69"
+        },
+        {
+          "id": "review-submit:theme-runtime-atlases-20260925-01",
+          "kind": "feature-complete",
+          "inputDigest": "sha256:566968b8743cb939f2f93fab71be1e1288ce91e688fd24ae21e26e0c49abbb36",
+          "committedRevision": 6,
+          "entityId": "run:c742f83c-2350-4130-b487-2f8e5898723b"
+        },
+        {
+          "id": "73fcced8-0089-4309-a689-5b75c2d1f231",
+          "kind": "feature-reset",
+          "inputDigest": "sha256:39b75dca45fa2f796e99fae0f448a328627a2497c72416ab36be45ad2eba2112",
+          "committedRevision": 7,
+          "entityId": "run:c957ac8f-b630-42dd-a450-acbb041865c8"
+        },
+        {
+          "id": "ab0b7c6b-1d63-41e9-90b4-c48a68094d23",
+          "kind": "review-start",
+          "inputDigest": "sha256:a5b5ce63845ada92d4cf7dc93484a1e0518b9ffba99d7edaadc4d557bc2f3dd4",
+          "committedRevision": 9,
+          "entityId": "review:0721e612-5acb-49b9-9522-0cfe7125dc57"
+        },
+        {
+          "id": "review-submit:9f64dc89-7c1b-4cac-a261-4da092d470aa",
+          "kind": "feature-complete",
+          "inputDigest": "sha256:34ddbb58110369fb4fcd306364c89c174fe04a38e5ac6ac7fc6b95d50ff4b8f9",
+          "committedRevision": 10,
+          "entityId": "run:c957ac8f-b630-42dd-a450-acbb041865c8"
+        }
+      ],
+      "closure": null
+    },
+    "sourceDigest": "sha256:44375b270a58e7c2d782a0db744e92beaf11c9e0def4556d50f91ea4c5635ec7",
+    "proposal": {
+      "id": "signal-atlas-prose-normalization-r10",
+      "sessionId": "session:9c805775-6e47-46d2-9b65-846e140fdf63",
+      "expectedRevision": 10,
+      "candidates": [
+        {
+          "id": "atlas-evidence-repair",
+          "action": "retry",
+          "featureId": "theme-runtime-atlases",
+          "remedy": "Add an isolated test that runs the atlas generator twice and compares generated artifacts; then run current-source pnpm lint and pnpm test and submit the complete gate for independent review.",
+          "changedFromPreviousAttempt": "The preceding attempt checked generated metadata but did not exercise repeated generation in an isolated output directory or record the current-source lint and full unit gate.",
+          "findingIds": [
+            "theme-runtime-atlases.R5-02",
+            "theme-runtime-atlases.R9-01"
+          ]
+        }
+      ]
+    },
+    "provenance": {
+      "origin": "observed-recovery",
+      "sourceReference": "signal-garden-01f6d22-atlas-r10",
+      "originatingTaskId": "signal-garden-runtime-atlas-20260925",
+      "independenceGroupId": "signal-garden-runtime-atlas-20260925",
+      "scenarioFamily": "atlas-generator-test-and-gate-evidence",
+      "capturedAt": "2026-09-25T08:27:00.915100Z",
+      "importedBy": "codex-case-importer",
+      "sanitization": {
+        "reviewedBy": "codex-local-source-audit",
+        "reviewedAt": "2026-09-25T08:30:02.631Z",
+        "notes": "Reviewed raw Session v5 and manager prose for credentials and unrelated private content. Session source digest matched the second failed review and the stable captured source tree. Proposal fields were normalized by the collector from the manager final prose; this was not a typed manager tool proposal. Independent label review and Jev advice remain pending.",
+        "payloadDigest": "1f2b871bb916363471aec0ff62550a2d72237f7c96d63b54609f521e1d573a0c"
+      }
+    }
+  }
+}

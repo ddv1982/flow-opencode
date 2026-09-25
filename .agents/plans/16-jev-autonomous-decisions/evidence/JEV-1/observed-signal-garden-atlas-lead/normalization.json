@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "status": "author-normalized-from-manager-prose-unreviewed",
+  "managerProposalMessageId": "msg_0d7a86a77001y13RdwqahPTiXo",
+  "managerProposalSha256": "64016e293a4bffec8a326bc5825a33080d68f4094d71980c5d5d1e01f0dda32b",
+  "proposal": {
+    "id": "signal-atlas-prose-normalization-r10",
+    "sessionId": "session:9c805775-6e47-46d2-9b65-846e140fdf63",
+    "expectedRevision": 10,
+    "candidates": [
+      {
+        "id": "atlas-evidence-repair",
+        "action": "retry",
+        "featureId": "theme-runtime-atlases",
+        "remedy": "Add an isolated test that runs the atlas generator twice and compares generated artifacts; then run current-source pnpm lint and pnpm test and submit the complete gate for independent review.",
+        "changedFromPreviousAttempt": "The preceding attempt checked generated metadata but did not exercise repeated generation in an isolated output directory or record the current-source lint and full unit gate.",
+        "findingIds": [
+          "theme-runtime-atlases.R5-02",
+          "theme-runtime-atlases.R9-01"
+        ]
+      }
+    ]
+  }
+}
