@@ -11,13 +11,13 @@ import { EpisodeReservationScopeSchema } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
 import {
 	ExperimentalProfile,
-	RecoveryTreatmentSchema,
+	SimulationTreatmentSchema,
 	validateTreatmentBudget,
 } from "./treatment.js";
 
 const Options = z
 	.object({
-		treatment: RecoveryTreatmentSchema,
+		treatment: SimulationTreatmentSchema,
 		budget: z
 			.object({
 				directory: z.string().min(1),

@@ -290,8 +290,8 @@ startup. The [shared request gate](run-request-budget.md) enforces durable reque
 reservations. Command dispatch limits alone do not cap manager or subagent
 spending.
 
-The host's isolated treatment uses shared Flow plugin composition with an experimental
-profile. Its configuration permits simulation only. Both arms use the same
+The host's isolated simulation treatment uses shared Flow plugin composition with an experimental
+profile. Both arms use the same
 composition and `/flow-auto` command. The Jev arm adds explicit recovery limits.
 The fixed `guarded-reset-v1` script supports `openai/gpt-5.6-terra` and
 `xai/grok-4.6`. It returns accepted or below-threshold Jev responses through the
@@ -301,8 +301,15 @@ These scripted responses are not model-quality evidence.
 A separate evaluation-only `live-treatment-plugin.ts` implements live admission.
 It installs the existing request gate before composing Flow and checks the active
 in-process gate identity. Its control arm cannot call Jev. Its treatment arm uses
-the real adapter with a fixed experimental profile. This entry is not connected to
-`EvalHost` or the episode driver. The runner still rejects every live episode.
+the real adapter with a fixed experimental profile. `EvalHost` and the episode
+driver select this entry when `recoveryTreatment.origin` is `live`. Live host
+startup requires a scoped live budget and an explicit `providerCredentials`
+policy. The runner still rejects every live episode.
+
+The live Jev arm receives `TYPESAFE_API_KEY` from the selected toolchain environment
+only at native server spawn. The control arm receives no Jev key. Inherited manager
+credentials are limited to the selected provider and use the existing refresh
+synchronization lifecycle. Live startup installs no synthetic OAuth credentials.
 
 The isolated plugin tests use synthetic credentials and intercepted transport:
 
@@ -310,13 +317,26 @@ The isolated plugin tests use synthetic credentials and intercepted transport:
 bun test tests/recovery-live-treatment.test.ts
 ```
 
-These tests prove plugin admission and reservation ordering. They do not prove
-native host loading or establish real provider pricing. See the
+These tests prove plugin admission and reservation ordering. They do not establish
+real provider pricing. See the
 [design boundary](../../.agents/plans/16-jev-autonomous-decisions/live-treatment-design.md).
+
+Run the native startup check with a pinned OpenCode 1.18.31 executable:
+
+```sh
+FLOW_RECOVERY_OPENCODE_EXECUTABLE=/path/to/opencode \
+FLOW_RECOVERY_LIVE_HOST_SMOKE=1 bun test tests/recovery-live-host.test.ts
+```
+
+This check uses synthetic credentials and test authorization records. It starts
+both live arms for each manager, sends no model prompt, and checks zero inference
+reservations. It proves native loading and cleanup. It does not prove live
+inference or provider OAuth refresh. See the
+[host design](../../.agents/plans/16-jev-autonomous-decisions/live-host-design.md).
 
 Finishing live execution requires reviewed cost bounds for the actual routes,
 independently reviewed execution evidence, a new explicit campaign spending cap,
-and host integration for the live entry.
+and runner admission for the live entry.
 Simulation treatment support does not authorize live treatment activation or paid
 calls. The production qualification registry remains empty.
 

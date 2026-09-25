@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -14,6 +14,26 @@ import {
 	type EpisodeReservationScope,
 } from "../evals/recovery-decisions/request-budget.js";
 import { datasetDigest } from "../evals/recovery-decisions/schema.js";
+import { verifyRecoverySourceDigests } from "../evals/recovery-decisions/sources.js";
+
+test("registered source bytes are checked again before host preparation", async () => {
+	const root = await mkdtemp(join(tmpdir(), "episode-sources-"));
+	dirs.push(root);
+	await mkdir(join(root, "evals"));
+	const path = join(root, "evals", "live-treatment-plugin.ts");
+	await writeFile(path, "registered");
+	const sources = {
+		"evals/live-treatment-plugin.ts": createHash("sha256")
+			.update("registered")
+			.digest("hex"),
+	};
+	const signal = new AbortController().signal;
+	await verifyRecoverySourceDigests(sources, signal, root);
+	await writeFile(path, "changed");
+	await expect(
+		verifyRecoverySourceDigests(sources, signal, root),
+	).rejects.toThrow("Registered source bytes changed");
+});
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -271,7 +291,7 @@ test("unsupported treatment and live runner gating refuse before any host start"
 	const f = await setup();
 	await expect(
 		createEpisodeHostDriver({ ...f.options, arm: "manager-plus-jev" }),
-	).rejects.toThrow("requires isolated simulation");
+	).rejects.toThrow("requires isolated treatment");
 	const driver = await createEpisodeHostDriver(f.options);
 	await expect(
 		runEpisode({
@@ -608,4 +628,62 @@ test("ungated and failed-stop native drivers cannot claim complete zero", async 
 	await expect(failed.stop()).rejects.toThrow("Stop failed");
 	if (!failed.reconcileReservations) throw new Error("Missing reconciliation.");
 	await expect(failed.reconcileReservations()).rejects.toThrow("not complete");
+});
+
+test("live source driver binds credential policy and preserves runtime scope while runner refuses startup", async () => {
+	const f = await setup();
+	f.options.host.recoveryTreatment = { origin: "live", arm: "manager-only" };
+	f.options.host.providerCredentials = "disabled";
+	f.options.host.requestBudget = {
+		directory: f.project,
+		authorizationDigest: "a".repeat(64),
+		managerModel: "openai/gpt-5.6-terra",
+	};
+	f.options.manager.model = "openai/gpt-5.6-terra";
+	const omitted = { ...f.options.host };
+	delete omitted.providerCredentials;
+	await expect(
+		createEpisodeHostDriver({ ...f.options, host: omitted }),
+	).rejects.toThrow("explicit provider credential policy");
+	const driver = await createEpisodeHostDriver(f.options);
+	const inherited = await createEpisodeHostDriver({
+		...f.options,
+		host: { ...f.options.host, providerCredentials: "inherit" },
+	});
+	expect(driver.origin).toBe("live");
+	expect(driver.harnessDigest).not.toBe(inherited.harnessDigest);
+	await expect(
+		runEpisode({
+			registration: {},
+			episodeId: "episode",
+			arm: "manager-only",
+			outputDirectory: join(f.project, "journal"),
+			recordedBy: "test",
+			origin: "live",
+			driver,
+		}),
+	).rejects.toThrow("reviewed route cost bounds");
+	expect(f.starts).toBe(0);
+	const scope: EpisodeReservationScope = {
+		executionId: randomUUID(),
+		registrationDigest: "b".repeat(64),
+		episodeId: "episode",
+		arm: "manager-only",
+		harnessDigest: "c".repeat(64),
+	};
+	await driver.prepare(new AbortController().signal, scope);
+	expect(f.startOptions?.requestBudget?.scope).toEqual(scope);
+	expect(f.startOptions?.recoveryTreatment).toEqual({
+		origin: "live",
+		arm: "manager-only",
+	});
+	expect(f.startOptions?.frozenArtifacts?.identity.packageCache).toBeNull();
+	const frozenBundle = f.startOptions?.frozenTreatmentBundle;
+	expect(frozenBundle).toBeDefined();
+	if (!frozenBundle) throw new Error("Missing registered treatment bundle.");
+	expect(createHash("sha256").update(frozenBundle.bytes).digest("hex")).toBe(
+		frozenBundle.sha256,
+	);
+	await driver.stop();
+	expect(f.prompts).toEqual([]);
 });

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import { EvalHost } from "../harness.js";
 import {
@@ -20,7 +21,10 @@ import {
 	reconcileRequestReservations,
 } from "./request-budget.js";
 import { datasetDigest } from "./schema.js";
-import { recoverySourceDigests } from "./sources.js";
+import {
+	recoverySourceDigests,
+	verifyRecoverySourceDigests,
+} from "./sources.js";
 
 const FilePath = z
 	.string()
@@ -158,7 +162,7 @@ export async function createEpisodeHostDriver(
 ): Promise<EpisodeDriver> {
 	options = { ...options, host: structuredClone(options.host) };
 	if (options.arm === "manager-plus-jev" && !options.host.recoveryTreatment)
-		throw new Error("Manager-plus-Jev requires isolated simulation treatment.");
+		throw new Error("Manager-plus-Jev requires isolated treatment.");
 	if (
 		options.host.recoveryTreatment &&
 		options.host.recoveryTreatment.arm !== options.arm
@@ -187,6 +191,13 @@ export async function createEpisodeHostDriver(
 		options.host.requestBudget.managerModel !== manager.model
 	)
 		throw new Error("Host budget manager differs from the registered manager.");
+	if (
+		options.host.recoveryTreatment?.origin === "live" &&
+		!["inherit", "disabled"].includes(options.host.providerCredentials ?? "")
+	)
+		throw new Error(
+			"Live treatment requires an explicit provider credential policy.",
+		);
 	const hostArtifacts = await captureHostArtifacts({
 		paths: {
 			bun: options.host.toolchain.executable,
@@ -198,6 +209,24 @@ export async function createEpisodeHostDriver(
 		bunVersion: options.host.toolchain.actualVersion,
 		opencodeVersion: options.host.opencodeVersion,
 	});
+	let frozenTreatmentBundle: { bytes: Uint8Array; sha256: string } | undefined;
+	if (options.host.recoveryTreatment?.origin === "live") {
+		const built = await Bun.build({
+			entrypoints: [
+				fileURLToPath(new URL("./live-treatment-plugin.ts", import.meta.url)),
+			],
+			target: "bun",
+			format: "esm",
+			minify: false,
+		});
+		if (!built.success || built.outputs.length !== 1 || !built.outputs[0])
+			throw new Error("Registered live treatment bundle failed.");
+		const bytes = new Uint8Array(await built.outputs[0].arrayBuffer());
+		frozenTreatmentBundle = {
+			bytes,
+			sha256: bytesDigest(Buffer.from(bytes)),
+		};
+	}
 	const sources = await recoverySourceDigests();
 	const evalSources = (await readdir("evals", { recursive: true }))
 		.filter((path) => path.endsWith(".ts"))
@@ -212,6 +241,8 @@ export async function createEpisodeHostDriver(
 			options.host.requestBudget?.authorizationDigest ?? null,
 		manager,
 		recoveryTreatment: options.host.recoveryTreatment ?? null,
+		treatmentBundleSha256: frozenTreatmentBundle?.sha256 ?? null,
+		providerCredentials: options.host.providerCredentials ?? "inherit",
 		sources,
 		host: {
 			bun: options.host.toolchain.actualVersion,
@@ -243,7 +274,7 @@ export async function createEpisodeHostDriver(
 			return structuredClone(hostArtifacts);
 		},
 		operatorPolicy,
-		origin: options.host.recoveryTreatment ? "simulation" : "live",
+		origin: options.host.recoveryTreatment?.origin ?? "live",
 		async prepare(signal, scopeInput) {
 			if (state !== "new")
 				throw new Error("An episode host can only prepare once.");
@@ -267,10 +298,14 @@ export async function createEpisodeHostDriver(
 				hostArtifacts,
 				signal,
 			);
+			await verifyRecoverySourceDigests(sources, signal);
 			signal.throwIfAborted();
 			lifecycle.signal.throwIfAborted();
 			starting = (options.hostFactory ?? EvalHost.start)({
 				...options.host,
+				...(frozenTreatmentBundle
+					? { frozenTreatmentBundle: structuredClone(frozenTreatmentBundle) }
+					: {}),
 				...(options.host.requestBudget && reservationScope
 					? {
 							requestBudget: {

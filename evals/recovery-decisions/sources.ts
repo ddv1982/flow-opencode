@@ -1,5 +1,23 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+export async function verifyRecoverySourceDigests(
+	sources: Record<string, string>,
+	signal: AbortSignal,
+	root = process.cwd(),
+) {
+	for (const [path, expected] of Object.entries(sources)) {
+		signal.throwIfAborted();
+		const actual = createHash("sha256")
+			.update(await readFile(join(root, path), { signal }))
+			.digest("hex");
+		if (actual !== expected)
+			throw new Error(`Registered source bytes changed: ${path}`);
+	}
+	signal.throwIfAborted();
+}
+
 export async function recoverySourceDigests() {
 	const runtimePaths = (await readdir("src", { recursive: true }))
 		.filter((path) => path.endsWith(".ts"))
