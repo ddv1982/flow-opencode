@@ -23,6 +23,7 @@ import {
 	packedPackageManifest,
 	samePackedArtifact,
 } from "../evals/provenance.js";
+import { RELEASE_HOST_POLICY } from "../evals/release-policy.js";
 import type { ActorIdentity, ArtifactIdentity } from "../evals/report.js";
 import { reportArtifactForCanary } from "../evals/report-artifact.js";
 import { assuranceProjection } from "../src/application/delivery.js";
@@ -519,6 +520,7 @@ export function deriveCanaryResult(input: {
 		"loads-flow-tools":
 			host.preparedFixture &&
 			host.versions.length === 1 &&
+			host.versions[0] === RELEASE_HOST_POLICY.opencodeVersion &&
 			hasCompletedFlowCall &&
 			loadedPlugin,
 		"saves-plan":

@@ -108,7 +108,7 @@ export const RELEASE_MAX_CAMPAIGN_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 export const RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM = 1;
 
 export const RELEASE_HOST_POLICY = {
-	opencodeVersion: "1.18.6",
+	opencodeVersion: "1.18.31",
 	platform: "linux",
 	reviewerSteps: null,
 } as const;

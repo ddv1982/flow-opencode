@@ -333,8 +333,8 @@ function evidence(overrides: Partial<EvidenceInput> = {}) {
 }
 
 describe("OpenCode eval metadata probe", () => {
-	test("pins the Phase 0 host, endpoints, and reviewer bound", () => {
-		expect(HOST_METADATA_CONTRACT.hostVersion).toBe("1.18.6");
+	test("pins the current host, endpoints, and reviewer bound", () => {
+		expect(HOST_METADATA_CONTRACT.hostVersion).toBe("1.18.31");
 		expect(HOST_METADATA_CONTRACT.endpoints).toEqual({
 			agents: "GET /agent",
 			createSession: "POST /session",

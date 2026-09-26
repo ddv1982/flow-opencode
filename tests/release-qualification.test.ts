@@ -45,7 +45,7 @@ function releaseReport(stopped = false) {
 		models: MODELS,
 		scenarios,
 		sampling: { kind: "release" },
-		opencodeVersion: "1.18.6",
+		opencodeVersion: "1.18.31",
 	});
 	const evaluator = evaluatorIdentity({
 		sourceCommit: ARTIFACT.sourceCommit,
