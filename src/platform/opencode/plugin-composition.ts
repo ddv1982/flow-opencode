@@ -2,7 +2,10 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
-import type { RecoveryController } from "../../application/recovery-policy.js";
+import type {
+	RecoveryController,
+	RecoverySettings,
+} from "../../application/recovery-policy.js";
 import {
 	type FlowCodingModel,
 	resolveFlowReviewerConfiguration,
@@ -41,6 +44,7 @@ const ModelMismatch = z.object({
 
 export function createFlowPlugin(dependencies: {
 	createRecovery(): RecoveryController;
+	defaultRecovery?(): RecoverySettings | null;
 	entryUrl: string;
 }): Plugin {
 	return async (ctx, pluginOptions) => {
@@ -152,6 +156,9 @@ export function createFlowPlugin(dependencies: {
 				autoDrive,
 				flow,
 				recovery,
+				...(dependencies.defaultRecovery
+					? { defaultRecovery: dependencies.defaultRecovery }
+					: {}),
 				showRefusal: async (message) => {
 					await ctx.client.tui.showToast({
 						body: {

@@ -261,11 +261,12 @@ hold or retry budget is persisted. At blocked or ready `await-user-direction`,
 read detail once and report findings. Reset-only compatibility never restores
 implicit selection. See [Session v5](#session-v5).
 
-In the default-off preview, `flow_status.recoveryProposal` accepts id,
-sessionId, expectedRevision and up to 3 candidates with id, action, featureId,
-remedy, changedFromPreviousAttempt and findingIds. Exact reset/start advice needs
-a live host grant under lock. Replays stay read-only. Production
-qualification is empty. See [ADR 0016](adr/0016-delegated-recovery.md).
+With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow advice (six attempts,
+$0.02). Otherwise recovery is off; `--recovery=off` opts out.
+`flow_status.recoveryProposal` accepts up to three candidates. Exact reset/start
+needs a qualified live host grant, but
+production qualification is empty. Replays stay read-only. See
+[ADR 0016](adr/0016-delegated-recovery.md).
 
 ### Commands
 

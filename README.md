@@ -221,9 +221,9 @@ bounded-wave rationale.
 
 ## Recovery advice development preview
 
-These controls are in development, not the published release. Recovery is off
-for ordinary `/flow-auto`. Opt-in shadow advice requires
-`TYPESAFE_API_KEY` and explicit limits.
+With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow
+advice, capped at six attempts and $0.02. Without it, recovery is off. Use
+`--recovery=off` to opt out or the options below to change limits.
 
 ```text
 /flow-auto --recovery=shadow --recovery-calls=6 --recovery-usd=0.02 <goal>

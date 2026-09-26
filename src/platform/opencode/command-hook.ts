@@ -82,6 +82,7 @@ export function createCommandHook(
 		autoDrive: AutoDriveCoordinator;
 		flow: FlowService;
 		recovery?: RecoveryController;
+		defaultRecovery?: () => RecoverySettings | null;
 		showRefusal?: (message: string) => Promise<void>;
 	}>,
 ): CommandHook {
@@ -114,7 +115,7 @@ export function createCommandHook(
 		const parsed =
 			command === "flow-auto"
 				? parseRecoveryCommand(input.arguments)
-				: { goal: input.arguments, settings: null };
+				: { goal: input.arguments, settings: null, explicit: false };
 		if (command === "flow-auto" && /^(?:stop|cancel)$/i.test(action)) {
 			const confirmed = output.parts.some(
 				(part) => part.type === "text" && part.text === AUTO_STOPPED,
@@ -130,9 +131,13 @@ export function createCommandHook(
 		}
 		try {
 			assertOperational(`execute /${command}`);
-			if (parsed.settings) {
+			const settings =
+				command === "flow-auto" && !parsed.explicit
+					? (options.defaultRecovery?.() ?? null)
+					: parsed.settings;
+			if (settings) {
 				if (!recovery) throw new Error("Recovery is unavailable in this host.");
-				recovery.activate(input.sessionID, parsed.settings);
+				recovery.activate(input.sessionID, settings);
 			} else recovery?.revoke(input.sessionID);
 			if (command === "flow-auto" || command === "flow-plan") {
 				const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
@@ -193,6 +198,7 @@ export function createCommandHook(
 export function parseRecoveryCommand(args: string): {
 	goal: string;
 	settings: RecoverySettings | null;
+	explicit: boolean;
 } {
 	let rest = args.trim();
 	const fields = new Map<string, string>();
@@ -203,10 +209,20 @@ export function parseRecoveryCommand(args: string): {
 		fields.set(match[1], match[2]);
 		rest = rest.slice(match[0].length);
 	}
-	if (!fields.size) return { goal: args, settings: null };
+	const trailingOff = /(?:^|\s)--recovery=off\s*$/.exec(rest);
+	if (trailingOff && !fields.size) {
+		const goal = rest.slice(0, trailingOff.index).trim();
+		if (!/(?:^|\s)--recovery\S*/.test(goal))
+			return { goal, settings: null, explicit: true };
+	}
+	if (/(?:^|\s)--recovery\S*/.test(rest))
+		throw new Error("Invalid recovery command options.");
+	if (!fields.size) return { goal: args, settings: null, explicit: false };
 	const mode = fields.get("--recovery"),
 		calls = fields.get("--recovery-calls"),
 		usd = fields.get("--recovery-usd");
+	if (mode === "off" && fields.size === 1)
+		return { goal: rest, settings: null, explicit: true };
 	if (
 		(mode !== "shadow" && mode !== "delegated") ||
 		!calls ||
@@ -215,10 +231,11 @@ export function parseRecoveryCommand(args: string): {
 		!/^\d+(\.\d+)?$/.test(usd)
 	)
 		throw new Error(
-			"Recovery requires --recovery=shadow|delegated, --recovery-calls=N and --recovery-usd=X.",
+			"Recovery requires --recovery=off or --recovery=shadow|delegated with --recovery-calls=N and --recovery-usd=X.",
 		);
 	return {
 		goal: rest,
 		settings: { mode, maxCalls: Number(calls), maxUsd: Number(usd) },
+		explicit: true,
 	};
 }

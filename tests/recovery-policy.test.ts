@@ -217,7 +217,24 @@ describe("process-local recovery", () => {
 		).toEqual({
 			goal: "Repair parser",
 			settings: { mode: "shadow", maxCalls: 3, maxUsd: 0.01 },
+			explicit: true,
 		});
+		expect(parseRecoveryCommand("--recovery=off Repair parser")).toEqual({
+			goal: "Repair parser",
+			settings: null,
+			explicit: true,
+		});
+		expect(parseRecoveryCommand("Repair parser --recovery=off")).toEqual({
+			goal: "Repair parser",
+			settings: null,
+			explicit: true,
+		});
+		expect(() =>
+			parseRecoveryCommand("Repair parser --recovery=shadow"),
+		).toThrow("Invalid recovery command options");
+		expect(() =>
+			parseRecoveryCommand("Repair parser --recovery=off --recovery=off"),
+		).toThrow("Invalid recovery command options");
 		expect(() =>
 			parseRecoveryCommand("--recovery=shadow Repair parser"),
 		).toThrow();

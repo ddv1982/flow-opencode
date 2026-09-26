@@ -171,6 +171,73 @@ test("real command hook captures explicit shadow limits and stop revokes", async
 	expect(recovery.snapshot()).toEqual({ mode: "off" });
 });
 
+test("configured auto defaults to bounded shadow and explicit off wins", async () => {
+	const { createCommandHook } = await import(
+		"../src/platform/opencode/command-hook.js"
+	);
+	const { createFlowService } = await import(
+		"../src/application/flow-service.js"
+	);
+	const { MemorySessionRepository, deterministicEnvironment } = await import(
+		"./runtime-test-support.js"
+	);
+	const recovery = new RecoveryController(unavailable);
+	const auto = new AutoDriveCoordinator({
+		recovery,
+		readProjection: async () => ({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		}),
+		prompt: async () => {},
+	});
+	let configured = true;
+	const hook = createCommandHook({
+		recovery,
+		autoDrive: auto,
+		flow: createFlowService(
+			new MemorySessionRepository(),
+			deterministicEnvironment(),
+		),
+		assertOperational() {},
+		defaultRecovery: () =>
+			configured ? { mode: "shadow", maxCalls: 6, maxUsd: 0.02 } : null,
+	});
+	const run = async (argumentsText: string) => {
+		const output = { parts: [] } as Parameters<typeof hook>[1];
+		await hook(
+			{ command: "flow-auto", sessionID: "host", arguments: argumentsText },
+			output,
+		);
+		return output;
+	};
+	const automatic = await run("Fix parser");
+	expect(recovery.snapshot()).toMatchObject({
+		mode: "shadow",
+		remainingCalls: 6,
+		maxUsd: 0.02,
+	});
+	expect(JSON.stringify(automatic)).toContain("Fix parser");
+	expect(JSON.stringify(automatic)).not.toContain("--recovery");
+	await run("--recovery=off Fix parser");
+	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	const trailingOptOut = await run("Fix parser --recovery=off");
+	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(JSON.stringify(trailingOptOut)).toContain("Fix parser");
+	expect(JSON.stringify(trailingOptOut)).not.toContain("--recovery");
+	configured = false;
+	await run("Fix parser");
+	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	await run(
+		"--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Fix parser",
+	);
+	expect(recovery.snapshot()).toMatchObject({
+		mode: "shadow",
+		remainingCalls: 2,
+		maxUsd: 0.01,
+	});
+});
+
 test("cross-host plain auto synchronously revokes the prior recovery invocation", async () => {
 	const { createCommandHook } = await import(
 		"../src/platform/opencode/command-hook.js"
