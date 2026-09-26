@@ -1,0 +1,162 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized-opencode-session-trace",
+  "sessionId": "ses_f2b9b0cafffeARwLAILoZAgWpS",
+  "rawExportSha256": "32a4c73e41eb4c85ebd6cea0c9a16d28c0d84e4420e958ba0d2fae8b9a6df3bf",
+  "messages": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto --recovery=shadow --recovery-calls=1 --recovery-usd=1"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "qualification": "shadow-only",
+            "last": null,
+            "revision": 0
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "qualification": "shadow-only",
+            "last": null,
+            "revision": 0
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_guidance",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "read",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto stop"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "qualification": null,
+            "last": null,
+            "revision": 0
+          }
+        }
+      ]
+    }
+  ],
+  "recoveryStates": [
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "qualification": "shadow-only",
+      "last": null,
+      "revision": 0
+    },
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "qualification": "shadow-only",
+      "last": null,
+      "revision": 0
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "qualification": null,
+      "last": null,
+      "revision": 0
+    }
+  ]
+}

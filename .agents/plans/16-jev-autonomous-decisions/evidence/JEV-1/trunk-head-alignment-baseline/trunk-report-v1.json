@@ -1,0 +1,137 @@
+{
+	"schemaVersion": 1,
+	"corpusId": "flow-alignment-v1",
+	"corpusSchemaVersion": 1,
+	"model": "jev-latest",
+	"endpoint": "https://api.typesafe.ai/v1/systemone",
+	"thresholds": {
+		"scoreMin": 1.6,
+		"confidenceMin": 0.6
+	},
+	"cases": [
+		{
+			"id": "compatible-narrowing",
+			"version": 1,
+			"category": "continuation",
+			"expectedChoice": "continue",
+			"mapped": "continue",
+			"verdict": "match",
+			"score": 1.82,
+			"confidence": 0.72,
+			"veto": "pass",
+			"vetoVerdict": "correct-pass"
+		},
+		{
+			"id": "approve-same-plan",
+			"version": 1,
+			"category": "continuation",
+			"expectedChoice": "continue",
+			"mapped": "continue",
+			"verdict": "match",
+			"score": 1.98,
+			"confidence": 0.97,
+			"veto": "pass",
+			"vetoVerdict": "correct-pass"
+		},
+		{
+			"id": "unrelated-replacement",
+			"version": 1,
+			"category": "replacement",
+			"expectedChoice": "new-scope",
+			"mapped": "new-scope",
+			"verdict": "match",
+			"score": 0.15,
+			"confidence": 0.77,
+			"veto": "veto",
+			"vetoVerdict": "correct-veto"
+		},
+		{
+			"id": "inspect-vs-implement",
+			"version": 1,
+			"category": "additive",
+			"expectedChoice": "new-scope",
+			"mapped": "new-scope",
+			"verdict": "match",
+			"score": 0.97,
+			"confidence": 0.95,
+			"veto": "veto",
+			"vetoVerdict": "correct-veto"
+		},
+		{
+			"id": "keep-plan-and-add-tui",
+			"version": 1,
+			"category": "mixed-scope",
+			"expectedChoice": "new-scope",
+			"mapped": "new-scope",
+			"verdict": "match",
+			"score": 1,
+			"confidence": 0.99,
+			"veto": "veto",
+			"vetoVerdict": "correct-veto"
+		},
+		{
+			"id": "method-emphasis-narrowing",
+			"version": 1,
+			"category": "continuation",
+			"expectedChoice": "continue",
+			"mapped": "continue",
+			"verdict": "match",
+			"score": 1.98,
+			"confidence": 0.97,
+			"veto": "pass",
+			"vetoVerdict": "correct-pass"
+		},
+		{
+			"id": "research-then-save-plan",
+			"version": 1,
+			"category": "continuation",
+			"expectedChoice": "continue",
+			"mapped": "continue",
+			"verdict": "match",
+			"score": 1.88,
+			"confidence": 0.82,
+			"veto": "pass",
+			"vetoVerdict": "correct-pass"
+		},
+		{
+			"id": "extra-evidence-request",
+			"version": 1,
+			"category": "continuation",
+			"expectedChoice": "continue",
+			"mapped": "continue",
+			"verdict": "match",
+			"score": 1.98,
+			"confidence": 0.97,
+			"veto": "pass",
+			"vetoVerdict": "correct-pass"
+		}
+	],
+	"counts": {
+		"match": 8,
+		"mismatch": 0,
+		"unscored": 0,
+		"continue": 5,
+		"new-scope": 3,
+		"abstain": 0,
+		"error": 0
+	},
+	"veto": {
+		"fired": 3,
+		"correctVeto": 3,
+		"falseVeto": 0,
+		"missedVeto": 0,
+		"correctPass": 5
+	},
+	"mixedScope": {
+		"id": "keep-plan-and-add-tui",
+		"version": 1,
+		"category": "mixed-scope",
+		"expectedChoice": "new-scope",
+		"mapped": "new-scope",
+		"verdict": "match",
+		"score": 1,
+		"confidence": 0.99,
+		"veto": "veto",
+		"vetoVerdict": "correct-veto"
+	}
+}

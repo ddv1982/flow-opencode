@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type {
 	ObservedValidation,
 	PreparedValidation,
@@ -8,6 +12,7 @@ import type {
 	ValidationObservation,
 } from "../src/domain/session.js";
 import {
+	readHostToolOutput,
 	ValidationCaptureCoordinator,
 	ValidationCaptureError,
 } from "../src/platform/opencode/validation-capture.js";
@@ -51,6 +56,118 @@ function persistedObservation(
 }
 
 const REPORT = `<testsuites><testcase name="on Windows" classname="s"/></testsuites>`;
+
+test("reads only bounded OpenCode tool-output files", async () => {
+	const dataHome = await mkdtemp(join(tmpdir(), "flow-host-output-"));
+	try {
+		const directory = join(dataHome, "opencode", "tool-output");
+		await mkdir(directory, { recursive: true });
+		const path = join(directory, "tool_ABC123");
+		await writeFile(path, "complete cargo output\n");
+		expect(await readHostToolOutput(path, dataHome)).toBe(
+			"complete cargo output\n",
+		);
+		const textPath = join(directory, "tool_ABC123.txt");
+		await writeFile(textPath, "complete text output\n");
+		expect(await readHostToolOutput(textPath, dataHome)).toBe(
+			"complete text output\n",
+		);
+		const otherExtension = join(directory, "tool_ABC123.log");
+		await writeFile(otherExtension, "unsupported output\n");
+		expect(await readHostToolOutput(otherExtension, dataHome)).toBeNull();
+		const outside = join(dataHome, "tool_outside");
+		await writeFile(outside, "not host output\n");
+		await symlink(outside, join(directory, "tool_link"));
+		expect(
+			await readHostToolOutput(join(directory, "tool_link"), dataHome),
+		).toBeNull();
+		expect(await readHostToolOutput(outside, dataHome)).toBeNull();
+	} finally {
+		await rm(dataHome, { recursive: true, force: true });
+	}
+});
+
+test("binds a truncated Bash view to the host's full output file", async () => {
+	const path = "/isolated/opencode/tool-output/tool_ABC123";
+	const full = `test start\n${"case passed\n".repeat(100)}test result: ok\n`;
+	const visible = `...output truncated...\n\nFull output saved to: ${path}\n\n${full.slice(-150)}`;
+	let persisted: ObservedValidation | null = null;
+	const coordinator = new ValidationCaptureCoordinator({
+		readFullOutput: async (requested) => (requested === path ? full : null),
+		persistObservation: async (_workspace, input) => {
+			persisted = input;
+			return persistedObservation(input);
+		},
+	});
+	coordinator.arm("session", "/workspace", prepared);
+	await coordinator.observeToolBefore(
+		{ tool: "bash", sessionID: "session", callID: "bash-1" },
+		{ args: { command: prepared.command } },
+	);
+	const output = {
+		title: "gate",
+		output: visible,
+		metadata: { exit: 0, truncated: true, outputPath: path },
+	};
+	await coordinator.observeToolAfter(
+		{
+			tool: "bash",
+			sessionID: "session",
+			callID: "bash-1",
+			args: { command: prepared.command },
+		},
+		output,
+	);
+	const fullDigest = `sha256:${createHash("sha256").update(full).digest("hex")}`;
+	expect(persisted).toMatchObject({
+		exitCode: 0,
+		outputComplete: true,
+		outputDigest: fullDigest,
+	});
+	expect(output.output).toContain(`"fullOutputDigest":"${fullDigest}"`);
+});
+
+test("keeps truncated validation ineligible when the host file cannot be bound", async () => {
+	const path = "/isolated/opencode/tool-output/tool_ABC123";
+	for (const [visible, full] of [
+		[
+			`...output truncated...\n\nFull output saved to: ${path}\n\n${"tail".repeat(20)}`,
+			"different output",
+		],
+		[
+			`Full output saved to: ${path}\n\n${"tail".repeat(20)}`,
+			"tail".repeat(40),
+		],
+	] as const) {
+		let persisted: ObservedValidation | null = null;
+		const coordinator = new ValidationCaptureCoordinator({
+			readFullOutput: async () => full,
+			persistObservation: async (_workspace, input) => {
+				persisted = input;
+				return persistedObservation(input);
+			},
+		});
+		coordinator.arm("session", "/workspace", prepared);
+		await coordinator.observeToolBefore(
+			{ tool: "bash", sessionID: "session", callID: "bash-1" },
+			{ args: { command: prepared.command } },
+		);
+		await coordinator.observeToolAfter(
+			{
+				tool: "bash",
+				sessionID: "session",
+				callID: "bash-1",
+				args: { command: prepared.command },
+			},
+			{
+				title: "gate",
+				output: visible,
+				metadata: { exit: 0, truncated: true, outputPath: path },
+			},
+		);
+		expect(persisted).toMatchObject({ exitCode: 0, outputComplete: false });
+	}
+});
 
 /**
  * Runs one capture to completion and returns what was persisted.

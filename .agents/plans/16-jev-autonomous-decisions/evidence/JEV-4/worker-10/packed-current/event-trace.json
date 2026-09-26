@@ -1,0 +1,379 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized-opencode-session-trace",
+  "sessionId": "ses_f2bf87b42ffeRXSNqc52iVzhO4",
+  "rawExportSha256": "8056eb439fdd2abb938ffc53ea1fe4e60a89a7692d21b27700b4b9b22f97213b",
+  "messages": [
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto invocation (recovery options preserved in receipt and resulting flow_status state)"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "skill",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "qualification": "shadow-only",
+            "last": null,
+            "revision": 0,
+            "approval": null
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_guidance",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        },
+        {
+          "type": "tool",
+          "name": "glob",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "read",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "task",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_plan_save",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_plan_save",
+          "status": "completed"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-status"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "qualification": null,
+            "last": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "qualification": null,
+            "last": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto invocation (recovery options preserved in receipt and resulting flow_status state)"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "qualification": "shadow-only",
+            "last": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto stop"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-status"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "qualification": null,
+            "last": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto invocation (recovery options preserved in receipt and resulting flow_status state)"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "shadow",
+            "remainingCalls": 1,
+            "qualification": "shadow-only",
+            "last": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto stop"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "parts": [
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "mode": "off",
+            "remainingCalls": null,
+            "qualification": null,
+            "last": null,
+            "revision": 1,
+            "approval": "pending"
+          }
+        }
+      ]
+    }
+  ],
+  "recoveryStates": [
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "qualification": "shadow-only",
+      "last": null,
+      "revision": 0,
+      "approval": null
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "qualification": null,
+      "last": null,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "qualification": null,
+      "last": null,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "qualification": "shadow-only",
+      "last": null,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "qualification": null,
+      "last": null,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "shadow",
+      "remainingCalls": 1,
+      "qualification": "shadow-only",
+      "last": null,
+      "revision": 1,
+      "approval": "pending"
+    },
+    {
+      "mode": "off",
+      "remainingCalls": null,
+      "qualification": null,
+      "last": null,
+      "revision": 1,
+      "approval": "pending"
+    }
+  ],
+  "fullExportRetainedOutsideRepository": true
+}

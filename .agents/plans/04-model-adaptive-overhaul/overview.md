@@ -533,10 +533,10 @@ Run each case in an isolated fixture or worktree at the PR head. Use the existin
 
 This investigation used code inspection, retained reports, current provider documentation, three read-only exploration lanes, offline tests, a real packed-host smoke, and bounded local probes. It did not build a speculative implementation or run a paid model campaign.
 
-- The parent reproduced the operation-capacity failure with [the probe](evidence/capacity-probe.ts) and [its result](evidence/capacity-probe.json). The base is `52ddb8be284f07562ef0f64fe64664e8ae973a30`. No prototype branch exists because the probe changes no production code.
-- [The prompt inventory](evidence/prompt-inventory.json) establishes static byte counts and repeated kernel inclusion. It does not establish live token cost or the benefit of deletion.
-- [The retained report inventory](evidence/inventory.json) establishes local coverage and the absence of finalized paired reports. It is not a new model run.
-- [The packed-host smoke](evidence/live-smoke.log) proves OpenCode 1.18.6 package integration. [Replay](evidence/replay.log) reproduces 13 decision cassettes. The [verification record](evidence/verification.md) records all parent checks.
+- The parent reproduced the operation-capacity failure; the original probe and result are unavailable. [Retained F0 verification](evidence/f0/verification.md) records the same capacity boundary after the implementation work. The base is `52ddb8be284f07562ef0f64fe64664e8ae973a30`. No prototype branch exists because the probe changes no production code.
+- The original prompt inventory is unavailable. It established static byte counts and repeated kernel inclusion; it did not establish live token cost or the benefit of deletion.
+- The original retained-report inventory is unavailable. It established local coverage and the absence of finalized paired reports; it was not a new model run.
+- The original packed-host smoke and replay outputs are unavailable. The [verification record](evidence/verification.md) preserves the parent check summary, including the historical package-integration and replay claims.
 - Variant preservation, newer-model tool compatibility, prompt quality, review specificity, efficiency, and wider task value remain unproven. F1 through F6 define the experiments that settle them. No screenshots or videos of a new behavior exist yet.
 
 ## Appendix B. Alternatives rejected

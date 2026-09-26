@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "qualification": "inconclusive",
+  "checkedAt": "2026-09-21T20:13:34.529Z",
+  "opencodeVersion": "1.18.31",
+  "managers": [
+    {
+      "model": "openai/gpt-5.6-terra",
+      "provider": "openai",
+      "apiModel": "gpt-5.6-terra",
+      "sdk": "@ai-sdk/openai",
+      "authType": "oauth",
+      "catalogCosts": {
+        "input": 0,
+        "output": 0,
+        "cache": {
+          "read": 0,
+          "write": 0
+        }
+      },
+      "catalogHasPricingTiers": false,
+      "catalogLimits": {
+        "context": 400000,
+        "input": 272000,
+        "output": 128000
+      },
+      "catalogMetadataDigest": "21c0e777d70df5c5b058a1a826399074e9783912ff63d0873cefe537aa83a9f3",
+      "billing": "unverified",
+      "inferenceAvailability": "unprobed",
+      "arms": [
+        "manager-only",
+        "manager-plus-jev"
+      ]
+    },
+    {
+      "model": "xai/grok-4.6",
+      "provider": "xai",
+      "apiModel": "grok-4.6",
+      "sdk": "@ai-sdk/xai",
+      "authType": "oauth",
+      "catalogCosts": {
+        "input": 2,
+        "output": 6,
+        "cache": {
+          "read": 0.5,
+          "write": 0
+        }
+      },
+      "catalogHasPricingTiers": true,
+      "catalogLimits": {
+        "context": 500000,
+        "output": 500000
+      },
+      "catalogMetadataDigest": "fc97f2bdea7575fa23bd8a81e97e832b907ea406899e08aef6d6c98a77bef63f",
+      "billing": "unverified",
+      "inferenceAvailability": "unprobed",
+      "arms": [
+        "manager-only",
+        "manager-plus-jev"
+      ]
+    }
+  ],
+  "executionReady": false,
+  "assurance": "Catalog membership and connection metadata only. Zero catalog cost is not proof of free inference. OAuth is not API-key billing. Each manager requires its own paired comparison and qualification evidence.",
+  "remaining": [
+    "Verify the actual OAuth request and billing boundary without replacing the selected connection.",
+    "Enforce all-model spending and explicit campaign authorization before inference.",
+    "Complete isolated Jev treatment and episode host integration."
+  ]
+}

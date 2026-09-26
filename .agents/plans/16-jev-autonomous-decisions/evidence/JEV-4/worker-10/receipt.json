@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "head": "2d41965cf1b7f477b90752980f23ec20e10eb1d7",
+  "host": "OpenCode 1.18.31",
+  "managerModel": "openai/gpt-5.6-terra",
+  "origin": "native-tui",
+  "qualification": "inconclusive",
+  "lane": "JEV-4 worker-10 partial control observation",
+  "observedAt": "2026-09-24T08:58:06.246157+00:00",
+  "capture": {
+    "source": "X11 xterm window attached to a controlled tmux session",
+    "videoDurationSeconds": 45,
+    "videoFrames": 45,
+    "videoFrameRate": 1,
+    "windowOnly": true
+  },
+  "observation": {
+    "flowStatus": "idle",
+    "revision": 0,
+    "autoStop": "No Flow auto lease was active in this OpenCode session.",
+    "flowSessionCreated": false,
+    "jevInferenceObserved": false,
+    "managerInferenceObserved": true,
+    "managerInvoiceCost": "unknown"
+  },
+  "files": [
+    {
+      "name": "controls.png",
+      "sha256": "33e5af0ea9e4640851fc0c8420757fd79c7f378274af946ed3aec76524ec1c6e"
+    },
+    {
+      "name": "stop.png",
+      "sha256": "bbeddbd15d025ea07a0c6901723b290e2a2b89fa6df82ed408af9a6f02f8872e"
+    },
+    {
+      "name": "controls.mp4",
+      "sha256": "1d764b6bb47338115d04be45d132963295b51d1561a01c379539cab9d60c8140"
+    },
+    {
+      "name": "terminal.txt",
+      "sha256": "b0d3016ca53c94cc3333fab2e5c9f3e8c1789b09d5644b60bc0943d0e08f65b7"
+    }
+  ],
+  "limits": [
+    "Only idle status and stop behavior were exercised; mode selection and a blocked recovery checkpoint were not exercised.",
+    "The status screenshot and video were recorded in separate real TUI sessions at the same code head. The video includes the stop response.",
+    "This does not pass lane 10, interaction review, performance, or Jev quality gates."
+  ],
+  "sessionIds": {
+    "statusScreenshot": "ses_f2d653457ffep71cEVVFRwudbR",
+    "videoAndStop": "ses_f2d549b31ffeFfRGx57KhE0sBD"
+  }
+}

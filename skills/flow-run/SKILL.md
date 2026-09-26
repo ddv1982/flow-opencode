@@ -153,18 +153,18 @@ compact `findingsDigest` as the user-facing list. The runtime already weighs
 - Running `await-user-direction` means plan evidence is unsatisfied. Offer its
   command byte-for-byte and environment, defer, or abandon. Do not review or reset.
 
-- Ready `await-user-direction` has no blocked run left to reset. Identify the
-  planned feature whose latest relevant reviewed outcome remains failed and
-  checkpoint unless the current aligned request explicitly authorizes its
-  retry. When authorized, call `flow_run_start` with that exact `featureId`.
-  Never call `flow_feature_reset` from ready status.
-- For blocked `await-user-direction`, checkpoint. Do not reset.
+- Ready `await-user-direction` has no blocked run to reset. Retry the exact
+  failed feature only with aligned user direction or an exact host-recommended
+  `flow_run_start` request. Shadow advice grants no authority. Never reset ready state.
+- For blocked `await-user-direction`, checkpoint unless host recovery status
+  recommends a mutation. Use its exact request. Shadow grants nothing.
+  Revalidate and review.
 - For blocked `flow_feature_reset`, one automatic reset is allowed under
   existing implementation authority. Pass the blocked `featureId` as
   `nextFeatureId` so reset and run start are atomic. Fix only its blocking
   findings, then run full validation and full independent review.
 - When `failedReviewCount >= 2`, retry only when the current aligned request
-  explicitly authorizes one additional attempt.
+  explicitly authorizes one additional attempt or host recovery supplies its exact request.
 - If explicit direction selects another planned, dependency-independent
   feature, pass that exact `featureId` as `nextFeatureId` on
   `flow_feature_reset`.

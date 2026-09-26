@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Production adapter availability and response-contract probe; not runtime recovery qualification",
+  "origin": "live",
+  "synthetic": true,
+  "startedAt": "2026-09-21T12:11:55.992Z",
+  "finishedAt": "2026-09-21T12:11:56.589Z",
+  "sourceDigests": {
+    "src/application/ports/decision-provider.ts": "2c8eae7ebcc509beca0b2a277b7eaecf1cb13ccd84d845b2ef02f63ce109422c",
+    "src/infrastructure/jev-decision-provider.ts": "2ca9f1732e0b97bc9866852983321290b1983f6b93bea4a46fed91673fe8cb31",
+    "src/infrastructure/jev-transport.ts": "1f29658a8b382ecde8734f66fef2a2109c9876b1363b150db6241ea62dce2cd2"
+  },
+  "packet": {
+    "sessionId": "synthetic-runtime-probe",
+    "revision": 3,
+    "sourceDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "goal": "Fix parseCount so null returns zero while preserving numeric input behavior.",
+    "planDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+    "rubric": "recovery-v1",
+    "findings": [
+      {
+        "id": "null-count",
+        "summary": "The previous repair still dereferences null before checking it.",
+        "evidence": "Synthetic failing assertion: parseCount(null) throws; expected zero."
+      }
+    ],
+    "candidates": [
+      {
+        "id": "guard-null",
+        "action": "retry",
+        "featureId": "parse-count",
+        "remedy": "Return zero for null before any dereference; retain the existing numeric path.",
+        "changedFromPreviousAttempt": "Move the null check ahead of the dereference and add the null regression case.",
+        "findingIds": [
+          "null-count"
+        ]
+      }
+    ]
+  },
+  "advice": {
+    "kind": "answered",
+    "model": "jev-1.13.0",
+    "choice": "guard-null",
+    "probabilities": {
+      "guard-null": 0.94,
+      "abstain": 0.06
+    },
+    "confidence": 0.88,
+    "assessments": {
+      "guard-null": {
+        "goal": 0.95,
+        "suitability": 0.88
+      }
+    },
+    "inputTokens": 814,
+    "outputTokens": 72,
+    "latencyMs": 594.1965250000001
+  },
+  "budget": {
+    "calls": 1,
+    "reservedUsd": 0.002688,
+    "maxCalls": 3,
+    "maxUsd": 0.01
+  },
+  "estimatedUsd": 0.000034188000000000005
+}

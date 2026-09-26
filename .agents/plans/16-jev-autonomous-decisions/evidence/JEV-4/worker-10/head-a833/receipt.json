@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-tui-packed-controls",
+  "lane": "JEV-4 worker-10",
+  "laneVerdict": "pass-controls-only",
+  "sourceHead": "a8330e8beb7b2a4cc58864aa80282e1974b7afe9",
+  "sourceTree": "3c2f2269fe471810f3f536e80fd533a81eb0d88a",
+  "recordedAt": "2026-09-24T17:12:15.542644+00:00",
+  "host": "OpenCode 1.18.32",
+  "smokeHost": "OpenCode 1.18.6",
+  "bun": "1.4.0",
+  "sessionId": "ses_f2b9b0cafffeARwLAILoZAgWpS",
+  "packedPlugin": {
+    "schemaVersion": 1,
+    "sourceHead": "a8330e8beb7b2a4cc58864aa80282e1974b7afe9",
+    "sourceTree": "3c2f2269fe471810f3f536e80fd533a81eb0d88a",
+    "hostVersion": "OpenCode 1.18.32",
+    "smokeHostVersion": "OpenCode 1.18.6",
+    "package": "opencode-plugin-flow@9.0.2",
+    "tarballSha256": "d35205113e3985d00ebad5531d9ceb144932b6cbc587478deccba11ae0ef97ae",
+    "sourceDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+    "installedDistSha256": "933e96d3501bf145f944d3f1b35c7af74c905df6532d9ab3a867a0d565fb0f6d",
+    "projectConfigSha256": "485be5bb90688bcf10a273d1d50825ba19ebd14bc1860240def33127b3e5dbc2"
+  },
+  "capture": {
+    "source": "X11 xterm window attached to the controlled OpenCode TUI",
+    "windowId": "0x1800012",
+    "videoFrames": 90,
+    "videoFrameRate": 1,
+    "videoDurationSeconds": 90,
+    "windowOnly": true
+  },
+  "observations": [
+    "At the recorded source head, frozen install, build, pack, and packed-plugin smoke passed.",
+    "The interactive host loaded the disposable project config and installed package bytes matching the source build.",
+    "A user-entered recovery command reported shadow mode, one remaining call, and shadow-only qualification.",
+    "A user-entered /flow-auto stop revoked the lease before plan save; a later flow_status returned off at revision 0."
+  ],
+  "limits": [
+    "No blocked recovery checkpoint or Jev packet occurred in this controls lane.",
+    "This does not establish Jev decision quality or delegated qualification.",
+    "This receipt is bound to the source code head; later evidence-only commits must not be interpreted as runtime code changes."
+  ],
+  "files": {
+    "boot-identity.json": "aebb4865996ae4767b458ae2870319fd269993a86f010ff2364dd62f14c808d7",
+    "event-trace.json": "344dbe2e5f99b8c511689b1aa69d7c4bbc7edc574e55a4cff925c0f517e59464",
+    "controls.mp4": "2fb34298faf01d13fc7c82bcac288d18b6f4cfa3f0585e48be1a5e54233109c7",
+    "packet-digest.json": "62145caaa0e114e68acfb6ac265f612753adc26bb122193ca31c3d6530c97005",
+    "host-startup.txt": "77ec8728fb8ed0bd9624ffa91788a19c20d8696505b08b36adbbec107b6933c9",
+    "terminal.txt": "60451bc9d04175e448d3dda849c6bec67178f86949c03a2d6b02eba112162388",
+    "controls.png": "7c73a7e80afc5ae24f7002ba2494949d09bbd9e14935a7ac044962e386a6c70b",
+    "build.log": "1a41a25bb0eec8b0ecfccb7dd08abc6d2724c194571413670ce3bc33b4671a51",
+    "frozen-install.log": "385ae2dd607d3d226f5c6dce44226771d87be2fae9132d53cba7b87828084734",
+    "off.png": "f656e8cb5d53381c9e273e76f23b8538ae491efbf516a59358936c202b337d1b",
+    "pack.log": "dc96692073d57038d6d081596f3e6fd35abd633ca46221a940f145b3d0b5ef07",
+    "packed-cache-install.log": "2f109eb479575295cd851f486a7142ef31b01dc140567e68a6d053cbf398a55d",
+    "packed-smoke.log": "59c32ed161fdafba600ee4a4fe4353922ac0367f3009a4f09ed24169fa600f96",
+    "stop.png": "c6047f60da0614bb1c7a3791cc41d29794fc711975a730b9dae1bcc6af696622"
+  }
+}

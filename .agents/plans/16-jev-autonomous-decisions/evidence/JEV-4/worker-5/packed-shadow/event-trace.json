@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized-packed-host-events",
+  "rawMessagesSha256": "06eaeca6e634f93e78d04ec2a329486553100a454c7f1542005b904415c31dfd",
+  "messages": [
+    {
+      "role": "user",
+      "createdMs": 1790268413755,
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto shadow simulation"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "createdMs": 1790268413773,
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "recoveryMode": "shadow",
+            "remainingCalls": 3,
+            "revision": 11
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "createdMs": 1790268414637,
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "recoveryMode": null,
+            "remainingCalls": null,
+            "revision": null
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "createdMs": 1790268415150,
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto stop"
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "createdMs": 1790268568258,
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-status"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    }
+  ],
+  "recoveryStates": [
+    {
+      "recoveryMode": "shadow",
+      "remainingCalls": 3,
+      "revision": 11
+    },
+    {
+      "recoveryMode": null,
+      "remainingCalls": null,
+      "revision": null
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/recovery-treatment-host.test.ts:
+(pass) real openai/gpt-5.6-terra host guarded reset simulation model-mismatch [121478.05ms]
+(pass) real xai/grok-4.6 host guarded reset simulation model-mismatch [9932.94ms]
+
+ 2 pass
+ 8 filtered out
+ 0 fail
+ 34 expect() calls
+Ran 2 tests across 1 file. [131.49s]

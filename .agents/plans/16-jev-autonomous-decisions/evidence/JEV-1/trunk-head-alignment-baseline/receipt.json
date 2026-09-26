@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "summary": "summary.json",
+  "files": {
+    "jev1-head-run.log": "cd0c9b8e8bb51737026fde1ccbb456c02e121eb66a2ba38a7c49186efac40c6b",
+    "jev1-head-frozen-install.log": "165fa0e59965e8606cad0f05cead55d664a8844e4664950079d822f4a89611f5",
+    "jev1-head-report-v2.json": "7abdcd93a86634acdfb38eb95cefbaa4fb604504c2e2f5291c35f5b455d624b6",
+    "normalized-inputs.json": "8d2fc4a3b5b0393863fdb69a054d7c43ff062e974f6364afa716abfa20314a18",
+    "trunk-report-v1.json": "f6562d70f4e719e75eeaf732ef8dbb681efda7201d699a9e4d07ae2831b9d82a",
+    "trunk-run.log": "3cc64bf535fed1d28174dc189ba2fc98b8b049e0a9431d93615708d81b8ca9cf",
+    "summary.json": "d2ed8e9cb3e7a5d32af0ed36c5b126dafe4ff761a6f29b961d09e7b43389e79f",
+    "trunk-frozen-install.log": "d99151c29536b5767e1d70e2db110f3ed21f21fe37f7e0b5050a1c4d9ceaf856",
+    "trunk-measurements.json": "1f560325b83d61e337a99d33b287faad87be2c19bae715568be445cab773b5c0",
+    "trunk-collector.ts": "d468707b66fd41168911ea8ca47fada78e432ee14fe1075d6f269a7d5a8dd60f",
+    "compare-packets.ts": "31287440b7464cbd401c7ae2cfdedf371857d8aca2abffc44ab0bd90cd3925e2"
+  },
+  "credentialPersisted": false
+}

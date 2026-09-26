@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "79c057b01e0b94041ee6d444b0a6f377c1e4e72f",
+  "recordedAt": "2026-09-25T21:07:36.348946+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1552,
+      "skipped": 15,
+      "failed": 0,
+      "assertions": 8880,
+      "logSha256": "71de2f37b41fab4c3c4f9e0512f9532e0fc37a7ca4146227fc12faf09a4978e8"
+    },
+    {
+      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts tests/recovery-comparison.test.ts tests/recovery-decision-quality.test.ts tests/recovery-campaign-host.test.ts tests/recovery-capture.test.ts tests/jev-decision-provider.test.ts tests/host-artifacts-host.test.ts",
+      "exitCode": 0,
+      "passed": 93,
+      "skipped": 2,
+      "failed": 0,
+      "assertions": 421,
+      "logSha256": "71d9766dec3c0ddab8838ce540116a5bce9ca7f385d99482d9a37ae4137874bd"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "382b1d41a168f8fdf140706a2cc7f96f7488fadaa99090455c423386d4bb41de"
+    }
+  ],
+  "sourceDigests": {
+    "evals/harness.ts": "9f615b30ed599a0b523edac9bfd122d3be3ab79bc909026958e903793e3912ce",
+    "evals/recovery-decisions/budget-plugin.ts": "1b1fd7a671e49f99fd79af15494afe9b9254be85f39a040e0f9254f2f14dfb79",
+    "evals/recovery-decisions/capture.ts": "0db16805da9cfb1ae5c5eca1c13229b5d1eb53c1122d9f7cfda282867070bf8a",
+    "evals/recovery-decisions/live-treatment-plugin.ts": "1ed42081e4b018ee636c60c95aa5b8daa6582d3a22fec2075d10586c37f33d51",
+    "evals/recovery-decisions/simulation-transport.ts": "8aa77bb05016b7401ac16107fea9b15e0a58174cfc08a922d7deb8737c3268c5",
+    "evals/recovery-decisions/sources.ts": "62e03969ee3cf391ea4ddec4820598e3bde04cb564fb9371baba958d0df56698",
+    "src/infrastructure/jev-decision-provider.ts": "caec83a5ffcc92b786599540410f936c434bfb15ff111bda2d2fb4775cfec54e",
+    "tests/host-artifacts-host.test.ts": "5dad0c84d33ae3394786995ac74d285bb91b7707f3f97f8895c0cb5a7a4e583b",
+    "tests/recovery-capture.test.ts": "576fa58effc54fd33363cee96a3bcddebbe8615ae6f07fe577315d5ea93af76c",
+    "tests/recovery-live-treatment-child.ts": "6d729429fb54f216231431f955a937c21d9744432cbc8e847c59292ad5a62a68",
+    "tests/recovery-live-treatment.test.ts": "0fcdcb9eb90f4477636d9565cfa9f629f5cf0ea6945f4083ec2ee666202cea60",
+    "tests/recovery-treatment.test.ts": "cbaaa84ea420eacfa512078b9e56ce7bffd450db438af08a37f2439c886a3b9a"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-6476b652.json",
+    "verifiedCodeHead": "6476b6525b57097e2122938ec3fa99d7cafb9ca9",
+    "originalSha256": "e3166717366c93f8c8f2ca58df92ae52c567ff2bc2af51756be8dcb2a88a5b71"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
+  ]
+}

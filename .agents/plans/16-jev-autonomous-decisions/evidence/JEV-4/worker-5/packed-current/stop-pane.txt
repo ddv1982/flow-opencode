@@ -1,0 +1,38 @@
+
+  ┃
+  ┃  Flow flow-auto: Repair the blocked parser within its approved plan.
+  ┃
+
+     ⚙ flow_status
+     ⚙ flow_status
+
+  ┃
+  ┃  Flow auto stopped.
+  ┃
+
+     Simulation complete.
+
+     ▣  Build · GPT-5.6 Terra · 136ms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · GPT-5.6 Terra OpenAI
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/workspace-yxm8jR/project                                                             110 (0%)  ctrl+p commands

@@ -61,28 +61,30 @@ merged summary reports cannot qualify.
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
 messages, duration, tokens, and cost.
 
-Silent passes stay ungated. Three same-change baselines moved from 20/22 to 19/22 to
-22/22, so the level did not track reviewer value. `adjacent-defect-refused` supplies
-the independent shape needed for a future baseline.
+Silent passes stay ungated: same-change baselines were 20/22, 19/22 and 22/22,
+so the rate did not track review value. `adjacent-defect-refused` is the future
+baseline.
 
-Usage is provider-shaped and may be partial after failure or cancellation, not a
-billing total. See [eval reporting limits](../evals/README.md#stopping-a-campaign).
+Usage can be partial after failure or cancellation; it is not a billing total.
+See [eval reporting limits](../evals/README.md#stopping-a-campaign).
+
+Recovery delegation binds the qualified Jev model, rubric, policy, thresholds
+and packet construction. A changed model or rubric needs a fresh reviewed
+holdout and release profile. A resolved-version mismatch reports both versions
+as `model-mismatch`, grants no action and preserves the checkpoint.
 
 ## Cadence
 
 Finish or close active sessions before changing Flow versions in either direction.
 
-- **Freeze on the public surface** while the guarantees are being measured: tools,
-  commands, guides, agents, and the Session v5 shape. Additive optional fields are
-  allowed; removals and renames are not.
-- **Full qualification** requires a sealed V2 bundle and fresh canary; reviewed
-  offline exceptions use their explicit policies above.
-  The bundle retains every attempt, transcript, grader source, and exact artifact
-  needed to reproduce its decision. Release metadata independently regrades those
-  bytes before publication and derives the provider-count evidence table added to
-  the release notes. A `CHANGELOG` entry states the schema impact explicitly.
-- **Patch releases** for defects and host-compatibility fixes, which is what the
-  weekly OpenCode compatibility smoke exists to catch early.
+- **Freeze the public surface** during measurement: tools, commands, guides,
+  agents, and Session v5. Optional fields may be added; removals and renames wait.
+- **Full qualification** requires a sealed V2 bundle and fresh canary, except for
+  the reviewed offline paths above. Retain every attempt, transcript, grader
+  source, and artifact byte. Release metadata regrades them and derives the
+  provider-count release table; `CHANGELOG` states schema impact.
+- **Patch releases** address defects and host compatibility, monitored by the
+  weekly OpenCode smoke.
 - **Deprecate before removing.** A surface that is going away is announced in one
   release and removed no earlier than the next major, so no session is stranded
   mid-lifecycle by an upgrade.

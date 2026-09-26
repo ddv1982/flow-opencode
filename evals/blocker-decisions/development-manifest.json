@@ -1,0 +1,69 @@
+{
+	"schemaVersion": 1,
+	"id": "blocker-development-v1",
+	"corpusDigest": "0fd9ac833981974d650b1e20b3801e0c09ea669ed111674b7e767f000bb11106",
+	"sourceRevision": "c9813f9",
+	"policyVersion": "recovery-proposal-v1",
+	"rubricVersion": "blocker-v1",
+	"managerModel": "unmeasured-manager",
+	"managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+	"requestedModel": "jev-1.13.0",
+	"registration": {
+		"status": "development"
+	},
+	"splits": [
+		{
+			"episodeId": "repair",
+			"split": "development"
+		},
+		{
+			"episodeId": "new-scope",
+			"split": "development"
+		},
+		{
+			"episodeId": "mixed-scope",
+			"split": "development"
+		},
+		{
+			"episodeId": "missing-evidence",
+			"split": "development"
+		},
+		{
+			"episodeId": "injection",
+			"split": "development"
+		},
+		{
+			"episodeId": "no-fit",
+			"split": "development"
+		},
+		{
+			"episodeId": "independent",
+			"split": "development"
+		},
+		{
+			"episodeId": "dependency",
+			"split": "development"
+		}
+	],
+	"thresholds": {
+		"retry": {
+			"choice": 0.8,
+			"goal": 0.9,
+			"suitability": 0.9
+		},
+		"independent-feature": {
+			"choice": 0.8,
+			"goal": 0.9,
+			"suitability": 0.9
+		}
+	},
+	"qualifyActions": ["retry", "independent-feature"],
+	"comparison": {
+		"minimumPairs": 100,
+		"minimumUsefulCoverageGain": 0.05
+	},
+	"budget": {
+		"maxCalls": 24,
+		"maxUsd": 0.1
+	}
+}

@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "kind": "OpenCode-truncated-Bash-output-reproduction",
+  "source": "isolated Echo PR-05 and recording-gate task runs",
+  "opencodeHost": "1.18.31",
+  "flowSourceHead": "c17ab469260acd29b2271ad0792b134b20c28e7c",
+  "canonicalCommand": "RUSTUP_HOME=/home/vriesd/.rustup cargo test --workspace",
+  "observations": {
+    "matchedSpills": 3,
+    "results": [
+      {
+        "fullBytes": 58981,
+        "visibleBytes": 51341,
+        "sha256": "aab8d97f0d9ed459aa55b1c2f6724a77256597cf23c1fc49de22defaf2c4488d",
+        "exit": 0
+      },
+      {
+        "fullBytes": 58981,
+        "visibleBytes": 51327,
+        "sha256": "1849d18d0bb869975484e5beb033b98ef59783c2e0125831d7c28997f8b2827c",
+        "exit": 0
+      },
+      {
+        "fullBytes": 58874,
+        "visibleBytes": 51305,
+        "sha256": "ec9162cd251a2b0436efaf011d31524de5581d4be8189826ed03717be5cdd499",
+        "exit": 0
+      }
+    ]
+  },
+  "result": "Three host outputPath files were regular, bounded, and matched the visible truncated tail. Each retained the complete exit-zero output while the displayed Bash result was truncated.",
+  "limits": [
+    "This is validation-output provenance, not a JEV decision-quality case.",
+    "No raw Echo command output or credential is committed."
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "kind": "official-jev-version-availability",
+  "lane": "JEV-1 worker-7",
+  "laneVerdict": "pass",
+  "qualification": "inconclusive",
+  "verifiedCodeHead": "5db4e9852492cf671f16534be52a23e00fb655a4",
+  "recordedAt": "2026-09-24T10:52:46.746244+00:00",
+  "command": "bun run eval:blockers collect-jev --max-calls 1 --max-usd 0.003 --out PRIVATE_OUTPUT",
+  "collectorExitCode": 2,
+  "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+  "observation": {
+    "origin": "live",
+    "resultKind": "decision",
+    "requestedModel": "jev-1.13.0",
+    "resolvedModel": "jev-1.13.0",
+    "attempts": 1,
+    "inputTokens": 728,
+    "outputTokens": 72,
+    "latencyMs": 550.884666,
+    "reservedUsd": 0.002688
+  },
+  "budget": {
+    "maxCalls": 1,
+    "maxUsd": 0.003,
+    "paidDispatches": 1
+  },
+  "capture": {
+    "source": "X11 xterm window showing metadata from the retained live collector output",
+    "windowOnly": true
+  },
+  "files": [
+    {
+      "name": "version.png",
+      "sha256": "48e3ef9454870402c6c66523bc48e87c1730c1a53117c179f1ce2debf651c545"
+    },
+    {
+      "name": "version-result.json",
+      "sha256": "9386d1207809b0eebdf623cab3e26dfd05ed17305b93a251b2661feee6fcdd08"
+    },
+    {
+      "name": "terminal.txt",
+      "sha256": "8a1c1ca991d89da535cd73703043868d638ef96bb43c2ce2a64c8138d517eea6"
+    },
+    {
+      "name": "collector.log",
+      "sha256": "f87b158044456f84812cd0a240cc528eaff1fba6767775cdfa11afa5db737deb"
+    }
+  ],
+  "limits": [
+    "The corpus is synthetic and this single call establishes model availability and response compatibility only.",
+    "Seven remaining rows are budget-unavailable; the collector exits 2 for those rows.",
+    "Reserved USD is a local upper-bound reservation, not a provider invoice.",
+    "No manager comparison, calibrated threshold, holdout decision-quality result, or promotion claim follows from this lane."
+  ]
+}

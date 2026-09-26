@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "scope": "reviewed-dataset-workflow",
+  "origin": "offline-and-simulated-tests",
+  "qualification": "inconclusive",
+  "paidCalls": 0,
+  "checks": {
+    "typecheck": "pass",
+    "lint": "pass",
+    "focusedTests": {
+      "passed": 65,
+      "failed": 0,
+      "assertions": 530,
+      "logSha256": "4b8e98fc02657e08cdc39e599fc846ecaaa114b9c683a52fe998b023ddfb9081"
+    }
+  },
+  "sourceDigests": {
+    "evals/recovery-decisions/schema.ts": "fda5273a7b1e60deabc1e9666df44d4bd51e6d659218067a71d0cc5736bbdb80",
+    "evals/recovery-decisions/dataset.ts": "930f7c1c2093cb94797b9b3070212b2cc4bdb8ca8a3f5f62b5a28c97f9632752",
+    "evals/recovery-decisions/evaluate.ts": "70ce8fb0df1adc614ef50e827659388b8ddfcb36745aebcefb000087394b22b1",
+    "evals/recovery-decisions/run.ts": "9dd90fb77f5675818dce3fcfb2624f607dd8f2a2be48867d4e3988266f953c4b",
+    "evals/recovery-decisions/collect.ts": "c6e4bb710569dbfc751d03809ee50105a9e932ed159c958d3ced8a71bd77a8b2",
+    "tests/recovery-dataset.test.ts": "2f6316ec92e4605fc7b67632ad763483d984cbc06327d000a5438b0a48e3737e"
+  },
+  "limitations": [
+    "No real observed corpus or independent human reviews added",
+    "Attestations are not authenticated identities",
+    "No holdout registration, manager comparison or release qualification"
+  ]
+}
