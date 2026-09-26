@@ -87,7 +87,11 @@ export function createSimulationTransport(
 			if (script.kind === "guarded-reset-v1" && script.jevDelayMs)
 				await Bun.sleep(script.jevDelayMs);
 			return Response.json({
-				model: "jev-1.13.0",
+				model:
+					script.kind === "guarded-reset-v1" &&
+					script.outcome === "model-mismatch"
+						? "jev-1.14.0"
+						: "jev-1.13.0",
 				answers: {
 					choice: {
 						type: "choice",

@@ -38,6 +38,7 @@ type WorkspaceFlowService = ReturnType<typeof createWorkspaceFlowService>;
 
 type ToolOptions = Readonly<{
 	recovery?: RecoveryController;
+	onRecoveryOutcome?: (outcome: unknown) => Promise<void>;
 	validation: ValidationCaptureCoordinator;
 	prepareValidation: (
 		workspace: string,
@@ -203,6 +204,16 @@ export function createTools(options: ToolOptions): FlowTools {
 			execute: (args, context) =>
 				execute(context, async (workspace) => {
 					const response = await workspace.status(args);
+					if (
+						"recovery" in response.workflowData &&
+						options.onRecoveryOutcome
+					) {
+						try {
+							await options.onRecoveryOutcome(response.workflowData.recovery);
+						} catch {
+							// A missing TUI cannot change the Flow status result.
+						}
+					}
 					const workflowData =
 						"projection" in response.workflowData
 							? {

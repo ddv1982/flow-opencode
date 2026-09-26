@@ -832,7 +832,10 @@ export class RecoveryController {
 					: "abstain",
 			mode: lease.settings.mode,
 			packetDigest,
-			model: advice.kind === "answered" ? advice.model : null,
+			model:
+				advice.kind === "answered"
+					? advice.model
+					: (advice.resolvedModel ?? null),
 			requestedModel: "jev-1.13.0",
 			selectedCandidateId: selected?.id ?? null,
 			action: selected?.action ?? null,
@@ -850,6 +853,7 @@ export class RecoveryController {
 					"oversize",
 					"malformed",
 					"invalid-response",
+					"model-mismatch",
 					"invalid-distribution",
 				].includes(advice.reason)
 					? advice.reason

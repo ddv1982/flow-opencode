@@ -20,7 +20,11 @@ export type DecisionPacket = Readonly<{
 	candidates: readonly RecoveryCandidate[];
 }>;
 export type DecisionAdvice =
-	| Readonly<{ kind: "unavailable"; reason: string }>
+	| Readonly<{
+			kind: "unavailable";
+			reason: string;
+			resolvedModel?: string;
+	  }>
 	| Readonly<{
 			kind: "answered";
 			model: "jev-1.13.0";
