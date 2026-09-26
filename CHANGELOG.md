@@ -2,6 +2,23 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.1.0] - 2026-09-27
+
+`/flow-auto` can show bounded Jev recovery advice when TypeSafe is configured.
+
+- With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow advice, limited to six
+  attempts and $0.02. Without the key, recovery advice stays off. Pass
+  `--recovery=off` to opt out of a configured run.
+- Shadow advice cannot authorize edits or other mutations. Delegated recovery
+  remains unavailable because no qualified recovery profile is installed.
+- Flow now reports a Jev model mismatch and a refused delegated request in the
+  terminal. Truncated validation output can use a matching bounded host output
+  file to retain complete validation evidence.
+- Session v5 schema, validation and reviewer gates, and continuation routing are
+  unchanged. The OpenCode host used by the release checks is pinned to 1.18.31.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.1.0 --global --force`.
+
 ## [9.0.2] - 2026-09-19
 
 Same-goal follow-ups continue more often; inspect-then-implement still stops.
