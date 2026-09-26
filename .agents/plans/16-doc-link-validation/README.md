@@ -1,0 +1,3 @@
+- [x] Repair the quickstart troubleshooting link and extend the documentation contract check to validate local Markdown link paths and anchors in README and docs.
+- [x] Run the focused documentation contract test and the repository check gate.
+- [x] Inspect the final diff and plan checklist before review.
