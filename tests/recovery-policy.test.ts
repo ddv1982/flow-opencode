@@ -179,6 +179,12 @@ describe("process-local recovery", () => {
 		).toEqual({
 			goal: "Repair parser",
 			settings: { mode: "shadow", maxCalls: 3, maxUsd: 0.01 },
+			explicit: true,
+		});
+		expect(parseRecoveryCommand("--recovery=off Repair parser")).toEqual({
+			goal: "Repair parser",
+			settings: null,
+			explicit: true,
 		});
 		expect(() =>
 			parseRecoveryCommand("--recovery=shadow Repair parser"),
