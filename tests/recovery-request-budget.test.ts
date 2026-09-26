@@ -33,7 +33,7 @@ async function fixture(maxRequests = 5, maxMicroUsd = 25000) {
 		maxRequests,
 		maxMicroUsd,
 		expiresAt: new Date(Date.now() + 60000).toISOString(),
-		models: ["openai/gpt-5.6-terra", "xai/grok-4.6", "typesafe/jev-1.13.0"].map(
+		models: ["openai/gpt-6-sol", "xai/grok-4.6", "typesafe/jev-1.13.0"].map(
 			(model) => ({
 				model,
 				reservationMicroUsd: 5000,
@@ -70,7 +70,7 @@ test("shared integer-dollar limit survives concurrent clients and reopening", as
 		Array.from({ length: 12 }, (_, i) =>
 			reserveRequest(
 				f.directory,
-				i % 2 ? "openai/gpt-5.6-terra" : "xai/grok-4.6",
+				i % 2 ? "openai/gpt-6-sol" : "xai/grok-4.6",
 				f.authorizationDigest,
 			),
 		),
@@ -125,7 +125,8 @@ test("unknown models routes hosted tools and oversized bodies never reach transp
 	});
 	for (const invalid of [
 		request("https://api.x.ai/v1/chat/completions?redirect=other"),
-		request("https://api.openai.com/v1/responses", "gpt-5.6-terra"),
+		request("https://api.openai.com/v1/responses", "gpt-6-sol"),
+		request("https://chatgpt.com/backend-api/codex/responses", "gpt-5.6-terra"),
 		request("https://chatgpt.com/backend-api/codex/responses", "gpt-5.6-sol"),
 		new Request("https://api.x.ai/v1/responses", {
 			method: "POST",
@@ -153,7 +154,7 @@ test("both OAuth routes and Jev share the same request ceiling", async () => {
 		transport: async () => new Response("ok"),
 	});
 	await gate(
-		request("https://chatgpt.com/backend-api/codex/responses", "gpt-5.6-terra"),
+		request("https://chatgpt.com/backend-api/codex/responses", "gpt-6-sol"),
 	);
 	await gate(request("https://api.x.ai/v1/responses"));
 	await gate(request("https://api.typesafe.ai/v1/systemone", "jev-1.13.0"));

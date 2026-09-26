@@ -13,7 +13,7 @@ import packageJson from "../package.json" with { type: "json" };
 import { authorizePaidRun } from "../scripts/paid-budget.js";
 
 const smoke = process.env.FLOW_REQUEST_BUDGET_SMOKE === "1" ? test : test.skip;
-for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
+for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const)
 	smoke(
 		`real OpenCode meters ${managerModel} OAuth retries with simulated credentials`,
 		async () => {

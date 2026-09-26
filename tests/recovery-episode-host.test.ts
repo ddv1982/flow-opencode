@@ -652,9 +652,9 @@ test("live source driver binds credential policy and preserves runtime scope whi
 	f.options.host.requestBudget = {
 		directory: f.project,
 		authorizationDigest: "a".repeat(64),
-		managerModel: "openai/gpt-5.6-terra",
+		managerModel: "openai/gpt-6-sol",
 	};
-	f.options.manager.model = "openai/gpt-5.6-terra";
+	f.options.manager.model = "openai/gpt-6-sol";
 	const omitted = { ...f.options.host };
 	delete omitted.providerCredentials;
 	await expect(
@@ -704,7 +704,7 @@ test("live source driver binds credential policy and preserves runtime scope whi
 });
 
 async function liveFixture(
-	model: "openai/gpt-5.6-terra" | "xai/grok-4.6",
+	model: "openai/gpt-6-sol" | "xai/grok-4.6",
 	arm: "manager-only" | "manager-plus-jev",
 ) {
 	const f = await setup();
@@ -814,7 +814,7 @@ async function liveFixture(
 	};
 }
 
-for (const model of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
+for (const model of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 	for (const arm of ["manager-only", "manager-plus-jev"] as const) {
 		test(`live runner completes and recovers scoped local evidence for ${model} ${arm}`, async () => {
 			const l = await liveFixture(model, arm);
@@ -925,7 +925,7 @@ for (const failure of [
 			if (failure === "manager") {
 				const row = authorization.models[0];
 				if (!row) throw new Error("Missing model");
-				row.model = "openai/gpt-5.6-terra";
+				row.model = "openai/gpt-6-sol";
 			}
 			await writeFile(
 				join(l.directory, "authorization.json"),

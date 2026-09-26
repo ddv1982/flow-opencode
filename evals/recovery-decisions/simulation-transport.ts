@@ -116,7 +116,7 @@ export function createSimulationTransport(
 			url.href === "https://api.x.ai/v1/responses"
 				? "grok-4.6"
 				: url.href === "https://chatgpt.com/backend-api/codex/responses"
-					? "gpt-5.6-terra"
+					? "gpt-6-sol"
 					: null;
 		if (!model) throw new Error("Unexpected simulation route.");
 		const parsed = z

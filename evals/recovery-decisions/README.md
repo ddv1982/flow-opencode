@@ -186,7 +186,7 @@ For durable journals and the live-run limitations, use
 
 ## Selected manager models
 
-The recovery evaluation uses `openai/gpt-5.6-terra` and `xai/grok-4.6`. Each model
+The recovery evaluation uses `openai/gpt-6-sol` and `xai/grok-4.6`. Each model
 needs its own manager-only and manager-plus-Jev comparison, with identical manager
 settings within that pair. Do not pool the two models' qualification evidence.
 
@@ -204,7 +204,7 @@ not retain credentials, headers, provider URLs, or arbitrary provider options.
 Catalog membership does not prove inference access. Zero cost metadata does not
 prove free inference. The observed connections are OAuth; public API price tables
 alone do not establish their billing behavior. For reference, the vendors publish
-[GPT-5.6 Terra API pricing](https://developers.openai.com/api/docs/models/gpt-5.6-terra)
+[GPT-6 Sol API pricing](https://developers.openai.com/api/docs/models/gpt-6-sol)
 and [xAI API pricing](https://docs.x.ai/developers/pricing). A live request adapter
 must verify the actual connection route and enforce the campaign's spending rules.
 Preflight creates no spending authorization and leaves live execution disabled.

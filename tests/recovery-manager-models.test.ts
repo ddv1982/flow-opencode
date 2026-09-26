@@ -5,11 +5,11 @@ import {
 } from "../evals/recovery-decisions/manager-models.js";
 
 const metadata = {
-	id: "gpt-5.6-terra",
+	id: "gpt-6-sol",
 	providerID: "openai",
 	status: "active",
 	api: {
-		id: "gpt-5.6-terra",
+		id: "gpt-6-sol",
 		npm: "@ai-sdk/openai",
 		url: "https://private.invalid/secret",
 	},
@@ -19,11 +19,11 @@ const metadata = {
 	limit: { context: 400000, input: 272000, output: 128000 },
 };
 const catalog = (value: unknown) =>
-	`openai/other\n{}\nopenai/gpt-5.6-terra\n${JSON.stringify(value, null, 2)}\nopenai/gpt-5.6-terra-fast\n{}\n`;
+	`openai/other\n{}\nopenai/gpt-6-sol\n${JSON.stringify(value, null, 2)}\nopenai/gpt-6-sol-fast\n{}\n`;
 
 test("selected managers remain exact and zero-cost OAuth metadata never authorizes inference", () => {
 	expect(EvaluationManagers.map((row) => row.model)).toEqual([
-		"openai/gpt-5.6-terra",
+		"openai/gpt-6-sol",
 		"xai/grok-4.6",
 	]);
 	const report = inspectManagerCatalog(
@@ -41,11 +41,12 @@ test("selected managers remain exact and zero-cost OAuth metadata never authoriz
 
 test("missing aliases wrong routes inactive models and malformed metadata are rejected", () => {
 	for (const input of [
-		catalog(metadata).replace("openai/gpt-5.6-terra\n", "openai/gpt-5.6-sol\n"),
+		catalog(metadata).replace("openai/gpt-6-sol\n", "openai/gpt-5.6-terra\n"),
+		catalog(metadata).replace("openai/gpt-6-sol\n", "openai/gpt-5.6-sol\n"),
 		catalog({ ...metadata, providerID: "other" }),
 		catalog({
 			...metadata,
-			api: { ...metadata.api, id: "gpt-5.6-terra-fast" },
+			api: { ...metadata.api, id: "gpt-6-sol-fast" },
 		}),
 		catalog({ ...metadata, status: "deprecated" }),
 		catalog({ ...metadata, cost: { ...metadata.cost, input: -1 } }),

@@ -303,7 +303,7 @@ campaign; creating or running test fixtures does not grant paid-call permission.
 The host's isolated simulation treatment uses shared Flow plugin composition with an experimental
 profile. Both arms use the same
 composition and `/flow-auto` command. The Jev arm adds explicit recovery limits.
-The fixed `guarded-reset-v1` script supports `openai/gpt-5.6-terra` and
+The fixed `guarded-reset-v1` script supports `openai/gpt-6-sol` and
 `xai/grok-4.6`. It returns accepted or below-threshold Jev responses through the
 real Jev adapter and guarded tools.
 These scripted responses are not model-quality evidence.
@@ -475,7 +475,7 @@ FLOW_RECOVERY_CAMPAIGN_OUTPUT=/tmp/flow-paired-proof \
 bun test tests/recovery-campaign-host.test.ts
 ```
 
-The check runs both registered arms separately for `openai/gpt-5.6-terra` and
+The check runs both registered arms separately for `openai/gpt-6-sol` and
 `xai/grok-4.6`. Each arm starts from the same frozen blocked fixture for its pair.
 The treatment executes a guarded recovery before the operator question. A scripted
 reply continues the same session and completes the exact output-file check.

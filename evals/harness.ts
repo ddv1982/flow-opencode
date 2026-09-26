@@ -1483,7 +1483,7 @@ export class EvalHost {
 			scope?: EpisodeReservationScope;
 			directory: string;
 			authorizationDigest: string;
-			managerModel: "openai/gpt-5.6-terra" | "xai/grok-4.6";
+			managerModel: "openai/gpt-6-sol" | "xai/grok-4.6";
 		};
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
@@ -1638,8 +1638,7 @@ export class EvalHost {
 							carryProviderCredentials(
 								childData,
 								liveTreatment
-									? options.requestBudget?.managerModel ===
-										"openai/gpt-5.6-terra"
+									? options.requestBudget?.managerModel === "openai/gpt-6-sol"
 										? "openai"
 										: "xai"
 									: undefined,

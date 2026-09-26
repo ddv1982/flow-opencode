@@ -136,7 +136,7 @@ const frozenTreatmentBundle = {
 	sha256: createHash("sha256").update(bundleBytes).digest("hex"),
 };
 const records = [];
-for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const) {
+for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 	for (const arm of ["manager-only", "manager-plus-jev"] as const) {
 		const directory = join(root, `${managerModel.split("/")[0]}-${arm}`);
 		const scope: EpisodeReservationScope = {

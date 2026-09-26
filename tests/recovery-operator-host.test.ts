@@ -38,7 +38,7 @@ async function runOperatorCli(args: string[]) {
 }
 const smoke =
 	process.env.FLOW_RECOVERY_OPERATOR_SMOKE === "1" ? test : test.skip;
-for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
+for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const)
 	for (const cancel of [false, true])
 		smoke(
 			`real ${managerModel} operator episode ${cancel ? "cancels" : "resumes"}`,

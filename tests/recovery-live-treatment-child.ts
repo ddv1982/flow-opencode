@@ -19,7 +19,7 @@ const root = process.argv[2];
 const scenario = process.argv[3];
 assert(root && scenario);
 const managerModel =
-	process.argv[4] === "xai" ? "xai/grok-4.6" : "openai/gpt-5.6-terra";
+	process.argv[4] === "xai" ? "xai/grok-4.6" : "openai/gpt-6-sol";
 const control =
 	scenario === "control" ||
 	scenario === "control-with-jev" ||
@@ -43,13 +43,11 @@ const modelNames =
 		? [managerModel]
 		: scenario === "wrong-manager"
 			? [
-					managerModel === "xai/grok-4.6"
-						? "openai/gpt-5.6-terra"
-						: "xai/grok-4.6",
+					managerModel === "xai/grok-4.6" ? "openai/gpt-6-sol" : "xai/grok-4.6",
 					"typesafe/jev-1.13.0",
 				]
 			: scenario === "other-manager"
-				? ["openai/gpt-5.6-terra", "xai/grok-4.6", "typesafe/jev-1.13.0"]
+				? ["openai/gpt-6-sol", "xai/grok-4.6", "typesafe/jev-1.13.0"]
 				: [managerModel, "typesafe/jev-1.13.0"];
 const authorization = await createRequestBudget(directory, {
 	schemaVersion: 1,
