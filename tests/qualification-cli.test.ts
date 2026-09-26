@@ -30,6 +30,7 @@ import {
 } from "../evals/qualification-bundle.js";
 import { regradeQualificationBundle } from "../evals/qualification-regrade.js";
 import {
+	RELEASE_HOST_POLICY,
 	releaseCatalog,
 	releaseGraderBundle,
 	releaseHostConfigSha256,
@@ -142,7 +143,10 @@ function canaryTranscript(input: {
 		state: { status: "completed", input: {}, output },
 	});
 	return {
-		info: { directory: input.fixture, version: "1.18.6" },
+		info: {
+			directory: input.fixture,
+			version: RELEASE_HOST_POLICY.opencodeVersion,
+		},
 		messages: [
 			{
 				info: {
@@ -225,7 +229,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			models,
 			scenarios,
 			sampling: { kind: "release" },
-			opencodeVersion: "1.18.6",
+			opencodeVersion: RELEASE_HOST_POLICY.opencodeVersion,
 		});
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
@@ -437,6 +441,48 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			recordedAt,
 		});
 		expect(canary.record.status).toBe("passed");
+		const currentHostTranscript = canaryTranscript({
+			fixture: join(preparedDirectory, "fixture"),
+			packageVersion: artifact.packageVersion,
+			pluginEntrySha256: prepared.pluginEntrySha256,
+			session,
+		});
+		const oldHostTranscript = {
+			...currentHostTranscript,
+			info: { ...currentHostTranscript.info, version: "1.18.6" },
+		};
+		const oldHostCanary = await recordCanary({
+			repositoryRoot: join(temporary, "old-host-canary-root"),
+			prepared,
+			preparedDirectory,
+			operator: "qualification-test",
+			session,
+			transcript: oldHostTranscript,
+			recordedAt,
+		});
+		expect(oldHostCanary.record.status).toBe("failed");
+		const rejected = Bun.spawn(
+			[
+				"bun",
+				"run",
+				"qualify",
+				"--",
+				"--campaign-dir",
+				campaignDirectory,
+				"--canary",
+				oldHostCanary.path,
+			],
+			{ cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
+		);
+		const [rejectedStdout, rejectedStderr, rejectedExitCode] =
+			await Promise.all([
+				new Response(rejected.stdout).text(),
+				new Response(rejected.stderr).text(),
+				rejected.exited,
+			]);
+		expect(rejectedExitCode).not.toBe(0);
+		expect(rejectedStdout).not.toContain("VERIFIED:");
+		expect(rejectedStderr).toContain("Canary status is failed.");
 
 		const bundlesDirectory = join(temporary, "bundles");
 		const qualified = Bun.spawn(

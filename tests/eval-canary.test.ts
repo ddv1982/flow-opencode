@@ -11,6 +11,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { RELEASE_HOST_POLICY } from "../evals/release-policy.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
@@ -146,7 +147,7 @@ function canaryTranscript(
 		},
 	}));
 	return {
-		info: { directory, version: "1.18.6" },
+		info: { directory, version: RELEASE_HOST_POLICY.opencodeVersion },
 		messages: [
 			{
 				info: {
@@ -375,6 +376,27 @@ describe("canary record boundary", () => {
 			"manager",
 			"reviewer",
 		]);
+	});
+
+	test("rejects a canary recorded on a different OpenCode release host", () => {
+		const value = prepared();
+		const transcript = canaryTranscript();
+		const oldHostTranscript = {
+			...transcript,
+			info: { ...transcript.info, version: "1.18.6" },
+		};
+		const derived = deriveCanaryResult({
+			packageVersion: value.artifact.packageVersion,
+			artifactSha256: value.artifactSha256,
+			tarballSha256: value.artifact.tarballSha256,
+			preparedSha256: value.sha256,
+			pluginEntrySha256: value.pluginEntrySha256,
+			installation: installation(value),
+			session: canarySession(),
+			transcript: oldHostTranscript,
+		});
+		expect(derived.checks["loads-flow-tools"]).toBe(false);
+		expect(derived.status).toBe("failed");
 	});
 
 	test("refuses empty validation and delivery assertion sets", () => {
@@ -727,8 +749,6 @@ describe("canary release verification", () => {
 				now: new Date(now),
 				...(freshness ? { freshness } : {}),
 			});
-		// Retained evidence is read exactly as it would have been read inside its
-		// window: the expiry stops applying, and nothing else does.
 		expect(await verify("2026-08-29T00:00:00.000Z", "retained")).toBe(
 			await verify("2026-08-25T01:00:00.000Z"),
 		);
