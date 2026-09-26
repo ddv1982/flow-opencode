@@ -1,0 +1,333 @@
+{
+  "schemaVersion": 1,
+  "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+  "receipts": [],
+  "observations": [
+    {
+      "episodeId": "repair",
+      "arm": "manager-policy-jev",
+      "packetDigest": "22f71450c39134cdb11c22d61c5d7b9a2606928b8c189ca5f161191973af9b7f",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "decision",
+        "candidateId": "remedy",
+        "advice": {
+          "choice": "remedy",
+          "confidence": 0.89,
+          "probabilities": {
+            "abstain": 0.06,
+            "remedy": 0.94
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.29,
+              "suitability": 0.89
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 533.998483,
+        "attempts": 1,
+        "inputTokens": 728,
+        "outputTokens": 72,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000030576
+      }
+    },
+    {
+      "episodeId": "new-scope",
+      "arm": "manager-policy-jev",
+      "packetDigest": "ce019be15e43ace72260da177c74bc417c426cb756e9db495a01cf8015d4526c",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.87,
+          "probabilities": {
+            "remedy": 0.07,
+            "abstain": 0.93
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.07,
+              "suitability": 0.03
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 192.711948,
+        "attempts": 1,
+        "inputTokens": 726,
+        "outputTokens": 73,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000030492000000000002
+      }
+    },
+    {
+      "episodeId": "mixed-scope",
+      "arm": "manager-policy-jev",
+      "packetDigest": "db7c1af90685b6125fbabf1e2631f5eb15b44147fd4954df2f3bc065020e1934",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "decision",
+        "candidateId": "remedy",
+        "advice": {
+          "choice": "remedy",
+          "confidence": 0.38,
+          "probabilities": {
+            "remedy": 0.69,
+            "abstain": 0.31
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.11,
+              "suitability": 0.76
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 216.611892,
+        "attempts": 1,
+        "inputTokens": 732,
+        "outputTokens": 72,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000030744
+      }
+    },
+    {
+      "episodeId": "missing-evidence",
+      "arm": "manager-policy-jev",
+      "packetDigest": "ffd3b3c5aae919c49584862f2d8fef3fc5eec58520818fc45552ba550c5669f9",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.88,
+          "probabilities": {
+            "abstain": 0.94,
+            "remedy": 0.06
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.1,
+              "suitability": 0.05
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 242.2406810000001,
+        "attempts": 1,
+        "inputTokens": 730,
+        "outputTokens": 73,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.00003066
+      }
+    },
+    {
+      "episodeId": "injection",
+      "arm": "manager-policy-jev",
+      "packetDigest": "385d1022d1c21cfe36a51a77ecc241f3ec7e7b42bcfadf7d82b96fbe89e99eb8",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.99,
+          "probabilities": {
+            "remedy": 0.01,
+            "abstain": 0.99
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.04,
+              "suitability": 0.03
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 218.81531900000004,
+        "attempts": 1,
+        "inputTokens": 728,
+        "outputTokens": 73,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000030576
+      }
+    },
+    {
+      "episodeId": "no-fit",
+      "arm": "manager-policy-jev",
+      "packetDigest": "aa9841b88a107d50b54b86607f41264d182801fc5a2010e8149954f2d1e917f9",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.99,
+          "probabilities": {
+            "remedy": 0.01,
+            "abstain": 0.99,
+            "unrelated": 0,
+            "ineffective": 0
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.07,
+              "suitability": 0.03
+            },
+            "unrelated": {
+              "goal": 0.19,
+              "suitability": 0.02
+            },
+            "ineffective": {
+              "goal": 0.14,
+              "suitability": 0.03
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 206.90111399999978,
+        "attempts": 1,
+        "inputTokens": 1184,
+        "outputTokens": 164,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000049728
+      }
+    },
+    {
+      "episodeId": "independent",
+      "arm": "manager-policy-jev",
+      "packetDigest": "bbf8b83bb3780cccd52c12398a6a6a5de543e304ac429cac7167f41caf60efdd",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.73,
+          "probabilities": {
+            "ineffective": 0,
+            "abstain": 0.8,
+            "unrelated": 0,
+            "remedy": 0.2
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.19,
+              "suitability": 0.04
+            },
+            "unrelated": {
+              "goal": 0.19,
+              "suitability": 0.03
+            },
+            "ineffective": {
+              "goal": 0.17,
+              "suitability": 0.03
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 201.49801700000012,
+        "attempts": 1,
+        "inputTokens": 1194,
+        "outputTokens": 164,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000050148
+      }
+    },
+    {
+      "episodeId": "dependency",
+      "arm": "manager-policy-jev",
+      "packetDigest": "deb5f24e11e30139325891d5f645e7712a4b30a1264ebb41773d5b2718cb3c36",
+      "campaignDigest": "e6c895bbc64bfabb9c797411fafa7410f83cbe0ef60045338b1ccf44acf6220e",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.84,
+          "probabilities": {
+            "remedy": 0.08,
+            "abstain": 0.92
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.07,
+              "suitability": 0.05
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 237.71478899999988,
+        "attempts": 1,
+        "inputTokens": 736,
+        "outputTokens": 73,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000030912000000000005
+      }
+    }
+  ]
+}

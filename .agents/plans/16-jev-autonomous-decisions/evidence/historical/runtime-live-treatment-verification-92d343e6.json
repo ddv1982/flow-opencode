@@ -1,0 +1,56 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "92d343e6984d8ef191c074dfbf8c5ab299823791",
+  "recordedAt": "2026-09-24T02:08:35.904653+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1526,
+      "skipped": 15,
+      "failed": 0,
+      "assertions": 8099,
+      "logSha256": "99aee10b7bbb91ab05bc872f1a49e1ad9a8e2de60e86e5edd7bac284f73cc2de"
+    },
+    {
+      "command": "bun test tests/recovery-live-treatment.test.ts tests/recovery-treatment.test.ts",
+      "exitCode": 0,
+      "passed": 54,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 117,
+      "logSha256": "ae51fbed45a7d8442ccab29167768cf3c4e0c6ece25f46988bd02eb068eab0d6"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "7342a231968d918e0a1432ac6dbce3f4823098c07d21cf77903f5eea906b28b2"
+    }
+  ],
+  "sourceDigests": {
+    "evals/recovery-decisions/budget-plugin.ts": "f871bd0f2dc820fd87505f5701009a07662c61745ea98bfd3beda47224831103",
+    "evals/recovery-decisions/live-treatment-plugin.ts": "8c9b428a67bd492e3f8d427283442a4e921e4d7c6419427f35a25fb9d18470b0",
+    "evals/recovery-decisions/sources.ts": "62e03969ee3cf391ea4ddec4820598e3bde04cb564fb9371baba958d0df56698",
+    "tests/recovery-live-treatment.test.ts": "866317d3b6dc1487b77942dab9c1d6f485cf8a29544eef78f8e8523b6317f782",
+    "tests/recovery-live-treatment-child.ts": "816909716f27ec8054f888fb0b4a813d29c01dd6214fc06e1702eddd3e550cc0"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-treatment-verification-7cc44a2e.json",
+    "verifiedCodeHead": "7cc44a2e744f12b2fbbc450cef56b1725345d8c3",
+    "originalSha256": "cd8121cc88ace4bf7ddb7e6341a086ef7e93e6ab6953704cffaf9b4d2e52c27f"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
+  ]
+}

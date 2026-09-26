@@ -1,0 +1,22 @@
+bun pack v1.4.0 (34cbb9a40)
+
+packed 2.96KB package.json
+packed 94.0KB CHANGELOG.md
+packed 1.1KB LICENSE
+packed 10.61KB README.md
+packed 57B dist/index.d.ts
+packed 0.34MB dist/index.js
+packed 0.66MB dist/index.js.map
+packed 87B dist/platform/opencode/plugin.d.ts
+packed 294B dist/platform/opencode/sdk.d.ts
+packed 151B dist/tui.d.ts
+packed 7.73KB dist/tui.js
+packed 15.36KB dist/tui.js.map
+
+/tmp/flow-jev-overnight-20260924/jev4-packed-lane10/opencode-plugin-flow-9.0.2.tgz
+
+Total files: 12
+Shasum: dfe44f2af0c7be23508dc768b6a4138d7b3f6055
+Integrity: sha512-Q+uTR72RZhNVR[...]SaRYjxKVaSx8A==
+Unpacked size: 1.13MB
+Packed size: 0.26MB

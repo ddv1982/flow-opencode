@@ -1,0 +1,5 @@
+Establish blocker decisions and compare alternatives (JEV-1)  boxes=32  files=5 build=9 you-see=1 verify-unit=1 verify-live=10 verify-perf=4 review-gate=0 merge=2
+Enforce delegated policy and collect shadow advice (JEV-2)  boxes=34  files=6 build=9 you-see=1 verify-unit=1 verify-live=10 verify-perf=4 review-gate=1 merge=2
+Execute bounded recovery without a human turn (JEV-3)  boxes=34  files=5 build=10 you-see=1 verify-unit=1 verify-live=10 verify-perf=4 review-gate=1 merge=2
+Qualify unattended runs and document the operating limits (JEV-4)  boxes=32  files=5 build=8 you-see=1 verify-unit=1 verify-live=10 verify-perf=4 review-gate=1 merge=2
+4 PR sections, 0 problems

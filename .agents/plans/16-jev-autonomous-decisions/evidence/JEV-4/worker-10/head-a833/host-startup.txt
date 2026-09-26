@@ -1,0 +1,3 @@
+Host: OpenCode 1.18.32
+timestamp=2026-09-24T17:06:50.442Z level=INFO run=cc0b817f message=loading path=/tmp/flow-jev-overnight-20260924/jev4-packed-lane10c/project/opencode.json
+timestamp=2026-09-24T17:06:50.557Z level=INFO run=cc0b817f message="Flow 9.0.2: Flow is active for this project."

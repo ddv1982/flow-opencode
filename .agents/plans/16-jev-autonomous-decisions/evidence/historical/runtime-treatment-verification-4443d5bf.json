@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-22T10:13:04.139686+00:00",
+  "qualification": "inconclusive",
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1416,
+      "skipped": 9,
+      "failed": 0,
+      "assertions": 7410
+    },
+    {
+      "command": "FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-treatment-host.test.ts",
+      "exitCode": 0,
+      "passed": 6,
+      "failed": 0,
+      "assertions": 98
+    },
+    {
+      "command": "FLOW_RECOVERY_TREATMENT_SMOKE=1 FLOW_REQUEST_BUDGET_SMOKE=1 bun test tests/recovery-treatment-host.test.ts tests/recovery-request-host.test.ts",
+      "exitCode": 0,
+      "passed": 5,
+      "failed": 0,
+      "assertions": 57,
+      "scope": "Initial xAI treatment plus both existing manager request-budget checks, before the OpenAI treatment extension."
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "failed": 0,
+      "assertions": 133,
+      "hostVersion": "1.18.6",
+      "scope": "Packaged production plugin. Production sources did not change during the subsequent OpenAI evaluation extension."
+    },
+    {
+      "command": "git diff --check",
+      "exitCode": 0
+    }
+  ],
+  "hostSimulation": {
+    "hostVersion": "1.18.31",
+    "managers": [
+      "openai/gpt-5.6-terra",
+      "xai/grok-4.6"
+    ],
+    "casesPerManager": [
+      "accepted",
+      "manager-only control",
+      "subthreshold"
+    ],
+    "credentials": "synthetic only; inherited credentials and environment removed",
+    "providerResponses": "finite scripted Responses streams and Jev JSON; no remote inference or refresh forwarding",
+    "accepted": "exact recovery grant persisted; revision increments once; previous run superseded; replacement active",
+    "rejected": "unchanged session; control zero Jev requests; subthreshold one Jev request",
+    "budget": "all manager and Jev requests reserved; exact integer-microdollar totals from actual claims",
+    "fixture": "Blocked Session v5 seeded through existing Flow service transitions. This is not a frozen live episode campaign."
+  },
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "reviews": {
+    "designCandidates": 2,
+    "independentDesignJudge": true,
+    "coreCompositionReview": "No hook behavior regression found. Production entry and registry remain closed.",
+    "integrationReview": "Synthetic OAuth setup moved into host startup after review. Final two-manager review found no material issue.",
+    "commentReview": "No actionable incremental comments or suppressions.",
+    "modelDiversity": "unverified; inherited models"
+  },
+  "sourceDigests": {
+    "bun.lock": "00872348d141163c992993e1e4ad9076ef44d56aa792ae35a0e9514b588f847c",
+    "evals/harness.ts": "208d787668e7a91ee2bf0552a503ffc8f0f7a39ca94bca8f0fcf1d32f892743c",
+    "evals/recovery-decisions/budget-plugin.ts": "4209a05bcd2edd74b43f4f12a7c718c0efff6144ce4b2206ca551f121f9e462a",
+    "evals/recovery-decisions/episode-host.ts": "b05c8ae9cbb89d20234ad06fecba13d1feceedced4dd99b371e9137a77aab647",
+    "evals/recovery-decisions/simulation-transport.ts": "7f2f3aacf72443f18ebe68bc2a8e23c73589d9184a8daa04e793ebb860e36860",
+    "evals/recovery-decisions/sources.ts": "86b8c9410bc64a170383bbb0a8cbc157e9ebcf5e88da5ed5af59d1b7efc7fdbf",
+    "evals/recovery-decisions/treatment-plugin.ts": "ac3f5e09e5848c491daaae569171ca0ff3cfb2453bb2621e3c5027dd3a51137c",
+    "evals/recovery-decisions/treatment.ts": "14b08c1a90511c1b223a6994f566210ba40002a0d1fa0ec614878381f9f86b6c",
+    "package.json": "9ff111d81a6a1b87b3557a4df6a5387a028d64b3a90458cd8b1788d2b796742c",
+    "src/application/recovery-policy.ts": "75552d0acd8745530aa0f7b4d6dbc588d600396ff16de8ed39be47a24ad2ef3d",
+    "src/platform/opencode/plugin-composition.ts": "b6b1a35542c3d8720f77307ccb50709f7b771a952221c03de1b850d9687d5d12",
+    "src/platform/opencode/plugin.ts": "ab4fd0be3e8fde414f6a6de3278b1f2705b9336049ee98000b214031e29901cd",
+    "tests/distribution-and-surface.test.ts": "adad3f4f4fab88799d1b55e650d5a6662b0b172ba199620b96399090bf5be156",
+    "tests/recovery-episode-host.test.ts": "3e5a6563258e8f8c913fe9141339a120959110d49c0d4d44862cda34524a6735",
+    "tests/recovery-treatment-host.test.ts": "199ddf1281aae994f8c4c49d0a9bff68cee9136e3643a4f9b835a98bbf932160",
+    "tests/recovery-treatment.test.ts": "45a86c1a61fd3e44d037bd6c55e4d8f3774724ad71902419012eceeb83ab5aa5"
+  },
+  "logs": [
+    {
+      "path": "/tmp/flow-treatment-parent-final-check.log",
+      "sha256": "365bc9a42721ddefc98b94b108fe0f088efddb44c4448002f1329cb6a17e9a98"
+    },
+    {
+      "path": "/tmp/flow-treatment-parent-final-host.log",
+      "sha256": "dc99d410d7be9fb83a8ef8cc4d866fd4ee536b6eedc4fe48878db34c6a3e1fcf"
+    },
+    {
+      "path": "/tmp/flow-treatment-parent-host.log",
+      "sha256": "c716f67e14017116d1324e1b7038814c042baaf22f1b0a872af4aecb63ed5402"
+    },
+    {
+      "path": "/tmp/flow-treatment-parent-packed-host.log",
+      "sha256": "a9aa899fbdb7a3fd0bab21e8495fbb6e49c7a3efa9f893167f576ede7d668eb5"
+    }
+  ],
+  "limits": [
+    "Simulation proves treatment wiring, not real model quality or pricing.",
+    "Live episode runner remains closed.",
+    "Operator wait/resume and full frozen episode campaign verification remain.",
+    "Reviewed request-cost bounds and new explicit paid campaign cap required.",
+    "Executable and package-cache identity and release qualification remain."
+  ]
+}

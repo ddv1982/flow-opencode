@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "kind": "native-tui-refusal-visibility-regression",
+  "qualification": "inconclusive",
+  "baselineHead": "2d41965cf1b7f477b90752980f23ec20e10eb1d7",
+  "treatmentHead": "94d08bd8633a65f7d0feebe2968f155180ea8faf",
+  "host": "OpenCode 1.18.31",
+  "model": "openai/gpt-5.6-terra",
+  "recordedAt": "2026-09-24T10:05:10.392708+00:00",
+  "capture": {
+    "source": "X11 xterm window attached to tmux",
+    "windowOnly": true,
+    "frameRate": 30,
+    "beforeFrames": 240,
+    "afterFrames": 240,
+    "durationSeconds": 8
+  },
+  "observation": {
+    "command": "/flow-auto --recovery=delegated --recovery-calls=1 --recovery-usd=0.01 ...",
+    "beforeSessionId": "ses_f2d33a3a5ffeGchv7Al2jq2xwJ",
+    "afterSessionId": "ses_f2d23f43dffeAiqkhanRVWKfRl",
+    "before": "Runtime refused in the host log, but no persistent refusal appeared in the TUI capture.",
+    "after": "Warning toast visibly says delegated recovery is unavailable and directs the user to shadow.",
+    "managerInferenceObserved": false,
+    "jevInferenceObserved": false,
+    "flowSessionCreated": false
+  },
+  "check": {
+    "command": "bun run check",
+    "passed": 1566,
+    "skipped": 18,
+    "failed": 0,
+    "logSha256": "a37ed7b096dd93a119503edd91693136dafb757326cca8222a52db15eaa28989"
+  },
+  "files": [
+    {
+      "name": "before.mp4",
+      "sha256": "91812ad80d895a61c42ee56fadb9024c69ea3ad977435299776926670e816035"
+    },
+    {
+      "name": "after.mp4",
+      "sha256": "8df6c284134069afaeec07e75fd4d5eaf49d715e1039e90b5c69276edb5f0dec"
+    },
+    {
+      "name": "after.png",
+      "sha256": "1d7b3e4c30439afd959ce60622bc718649d7636fe2e84046a8537feed7e26faa"
+    }
+  ],
+  "limits": [
+    "This verifies the refusal presentation and the fail-closed command path, not Jev quality or an approved delegated profile.",
+    "JEV-4 lane 10 remains open because the full set of mode and blocked-checkpoint interactions was not exercised."
+  ]
+}

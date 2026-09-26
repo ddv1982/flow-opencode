@@ -28,6 +28,7 @@ import {
 	EVIDENCE_PLATFORMS,
 	VALIDATION_INELIGIBLE_REASONS,
 } from "../domain/validation.js";
+import { RecoveryProposalSchema } from "./recovery-policy.js";
 
 const encoder = new TextEncoder();
 
@@ -410,6 +411,7 @@ export const ValidationStartInputSchema = z
 
 export const StatusInputSchema = z
 	.object({
+		recoveryProposal: RecoveryProposalSchema.optional(),
 		request: z.discriminatedUnion("view", [
 			z.object({ view: z.literal("compact") }).strict(),
 			z.object({ view: z.literal("detail") }).strict(),

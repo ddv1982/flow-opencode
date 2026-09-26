@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "purpose": "independent-observed-recovery-label-review",
+  "reviewedAt": "2026-09-24T19:36:56.000Z",
+  "model": "openai/gpt-5.6-sol",
+  "hostVersion": "1.18.31",
+  "toolsAllowed": false,
+  "elapsedMs": 11047.646392999999,
+  "tokens": {
+    "total": 11100,
+    "input": 10635,
+    "output": 293,
+    "reasoning": 172,
+    "cache": {
+      "write": 0,
+      "read": 0
+    }
+  },
+  "inputFileSha256": {
+    "snapshot.json": "f9cf1f3db2c43985021ca26255c29e716632675c7aa920ee1c92e16ea0c6a61c",
+    "decision-packet.json": "c699b889296bead544c18dfaae7c67425b1281cdb3c800c34bdf67ec679b0ce4",
+    "runtime-shadow-outcome.json": "8d1de8fe3ee728b83fcbbddd0616d910f85d2d3b4bbb424b81d3d33c143a6eba",
+    "label-proposal-unreviewed.json": "ec70069e52859c51e18db5a2c10bfde24bb29ddc15170a3d8128fa45552f44bd",
+    "source-provenance.json": "4552812ed5bb370e04a0d101ac90c1686009e97e0a97459ef1b35a5300ab35ac"
+  },
+  "review": {
+    "verdict": "approve",
+    "candidateOutcome": "safe-ineffective",
+    "acceptableSelections": [
+      "abstain"
+    ],
+    "sourceAuthenticity": "sufficient",
+    "rationale": "At revision 19, no authentic pre-edit reproduction receipt was available in the decision packet. The sole candidate safely required such a receipt and prohibited fabrication, but could not resolve the blocking finding with then-available evidence, making it ineffective. Abstention was therefore the supported selection. The observed-origin attestation is independently supported by matching session, revision, source digest, runtime packet digest, and provenance records. The later attached receipt and user-directed repair are outside the checkpoint and do not alter this judgment.",
+    "evidence": [
+      "Runtime selected abstain at source revision 19 with no execution mutation.",
+      "R12-03 remained blocking because no pre-edit receipt was retained in the Flow packet.",
+      "Candidate retry was explicitly conditional on supplying an existing authentic receipt.",
+      "Provenance marks the later pre-edit artifact as not available in the decision packet.",
+      "Packet digest ea6869f4... matches the runtime record.",
+      "Session ID, revision 19, and source digest agree across the snapshot, decision packet, runtime record, and provenance."
+    ],
+    "limitations": [
+      "Raw private sessions and artifact bytes are not included for direct verification.",
+      "Provenance is classified unreviewed-case-only, so authenticity rests on the supplied audit metadata and digest consistency.",
+      "No judgment uses the post-revision-19 receipt or manual repair."
+    ]
+  },
+  "reviewScope": "Sanitized case bundle and later outcome summary; private raw session bytes were not given to the reviewer."
+}
