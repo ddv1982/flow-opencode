@@ -699,3 +699,22 @@ Final review reproduced a composed-driver admission failure in all four live-for
 local cases. Removing a redundant comparison to the native base digest preserves
 the runner-owned composed harness identity through admission and accounting. The
 four positive tests now use composed drivers.
+
+## Merged construction and one reviewed Signal Garden calibration case
+
+On 26 September 2026, PRs #113, #114, #125, and #126 merged in that order.
+`main` reached `8a3e622252bec8004dc5d7e20e9d68aef46a09b4`. Its CI and Release
+workflows succeeded; the Release workflow skipped publication. With a nonempty
+`TYPESAFE_API_KEY`, ordinary `/flow-auto` now uses bounded shadow advice by
+default. Without that key, recovery remains off. The production delegated
+qualification registry remains empty.
+
+The [Signal Garden atlas case](evidence/JEV-1/observed-signal-garden-atlas-lead/README.md)
+now has an independently reviewed label and passes offline corpus preparation.
+It contributes one primary calibration case in one independence group. The
+capture omitted an untracked `opencode.json` from its source snapshot; the
+surviving private file restored the exact revision-10 source digest and is
+retained separately. No Jev response, holdout case, paired live episode, or
+production qualification was added. Representative independent cases, live
+comparison, reviewed costs, a new paid campaign authorization, and release
+qualification remain open.
