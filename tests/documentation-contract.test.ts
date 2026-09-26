@@ -222,6 +222,61 @@ function headings(markdown: string): string[] {
 	);
 }
 
+function markdownAnchors(markdown: string): Set<string> {
+	const counts = new Map<string, number>();
+	let fence: { character: string; length: number } | undefined;
+	const prose = markdown
+		.split("\n")
+		.filter((line) => {
+			const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+			if (!fence && marker) {
+				fence = { character: marker[0] ?? "", length: marker.length };
+				return false;
+			}
+			if (!fence) return true;
+			if (
+				new RegExp(`^ {0,3}${fence.character}{${fence.length},}[\\t ]*$`).test(
+					line,
+				)
+			) {
+				fence = undefined;
+			}
+			return false;
+		})
+		.join("\n");
+	return new Set(
+		[...prose.matchAll(/^#{1,6}\s+(.+?)\s*#*\s*$/gm)].map((match) => {
+			const base = (match[1] ?? "")
+				.trim()
+				.toLowerCase()
+				.replace(/[^\p{L}\p{N}_ -]/gu, "")
+				.replace(/\s+/g, "-");
+			const count = counts.get(base) ?? 0;
+			counts.set(base, count + 1);
+			return count === 0 ? base : `${base}-${count}`;
+		}),
+	);
+}
+
+test("ignores fenced code while preserving duplicate heading suffixes", () => {
+	const anchors = markdownAnchors(`
+# Repeated heading
+
+\`\`\`markdown
+# Heading-shaped code
+\`\`\`
+
+\`\`\`\`markdown
+\`\`\`
+# Heading-shaped code in a longer fence
+\`\`\`\`
+
+# Repeated heading
+`);
+
+	expect(anchors).toEqual(new Set(["repeated-heading", "repeated-heading-1"]));
+});
+
 async function markdownFiles(directory: string): Promise<string[]> {
 	const entries = await readdir(directory, { withFileTypes: true });
 	return (
@@ -720,7 +775,7 @@ describe("Flow documentation contract", () => {
 		expect(transitions).not.toContain("assertDeclaredExternalEvidence");
 	});
 
-	test("keeps maintained relative Markdown links resolvable", async () => {
+	test("keeps maintained local Markdown links and anchors resolvable", async () => {
 		const documents = [
 			"README.md",
 			"CHANGELOG.md",
@@ -732,15 +787,24 @@ describe("Flow documentation contract", () => {
 			const markdown = await readFile(document, "utf8");
 			for (const match of markdown.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
 				const rawTarget = match[1]?.trim();
-				if (!rawTarget || /^(?:[a-z]+:|#|\/)/i.test(rawTarget)) continue;
-				const path = decodeURIComponent(
-					rawTarget.replace(/^<|>$/g, "").split("#", 1)[0] ?? "",
-				);
-				if (!path) continue;
+				if (!rawTarget || /^(?:[a-z]+:|\/)/i.test(rawTarget)) continue;
+				const [rawPath, rawAnchor] = rawTarget
+					.replace(/^<|>$/g, "")
+					.split("#", 2);
+				const path = decodeURIComponent(rawPath ?? "");
+				const target = path ? resolve(dirname(document), path) : document;
 				try {
-					await access(resolve(dirname(document), path));
+					await access(target);
 				} catch {
 					broken.push(`${document} -> ${rawTarget}`);
+					continue;
+				}
+				if (rawAnchor) {
+					const targetMarkdown = await readFile(target, "utf8");
+					const anchor = decodeURIComponent(rawAnchor);
+					if (!markdownAnchors(targetMarkdown).has(anchor)) {
+						broken.push(`${document} -> ${rawTarget}`);
+					}
 				}
 			}
 		}
