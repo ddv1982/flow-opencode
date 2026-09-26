@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "purpose": "One ordinary Flow implementation of per-theme runtime texture atlases in Signal Garden, observed for natural review-blocked recovery cases; not a Jev qualification campaign",
+  "models": [
+    "openai/gpt-5.6-terra",
+    "openai/gpt-5.6-sol"
+  ],
+  "maxDispatches": 1,
+  "expiresAt": "2026-09-27T07:00:00Z"
+}
