@@ -20,7 +20,7 @@ Create an authorization JSON file with the following fields.
 | `models` | Unique model reservation definitions |
 
 Each model definition has `model`, `reservationMicroUsd`, and `basis`. Supported
-models are `openai/gpt-5.6-terra`, `xai/grok-4.6`, and `typesafe/jev-1.13.0`.
+models are `openai/gpt-6-sol`, `xai/grok-4.6`, and `typesafe/jev-1.13.0`.
 Every request reserves the model's full fixed amount. Jev's reservation cannot
 fall below the production transport's conservative request bound.
 
@@ -56,7 +56,7 @@ Pass `requestBudget` to `EvalHost.start` or through `createEpisodeHostDriver`'s
 requestBudget: {
 	directory: budgetDirectory,
 	authorizationDigest: datasetDigest(authorization),
-	managerModel: "openai/gpt-5.6-terra",
+	managerModel: "openai/gpt-6-sol",
 }
 ```
 

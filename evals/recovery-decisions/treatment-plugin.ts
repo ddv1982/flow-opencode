@@ -23,7 +23,7 @@ const Options = z
 				directory: z.string().min(1),
 				scope: EpisodeReservationScopeSchema.optional(),
 				authorizationDigest: z.string().regex(/^[a-f0-9]{64}$/),
-				managerModel: z.enum(["openai/gpt-5.6-terra", "xai/grok-4.6"]),
+				managerModel: z.enum(["openai/gpt-6-sol", "xai/grok-4.6"]),
 			})
 			.strict(),
 		readyPath: z.string().min(1),

@@ -58,7 +58,7 @@ export async function validateLiveTreatmentBudget(
 		status.cancelled ||
 		status.authorizationDigest !== budget.authorizationDigest ||
 		Date.parse(status.authorization.expiresAt) <= Date.now() ||
-		!["openai/gpt-5.6-terra", "xai/grok-4.6"].includes(budget.managerModel) ||
+		!["openai/gpt-6-sol", "xai/grok-4.6"].includes(budget.managerModel) ||
 		!models.some((model) => model === budget.managerModel) ||
 		models.some(
 			(model) =>
@@ -113,7 +113,7 @@ export async function validateTreatmentBudget(
 		)
 	)
 		throw new Error("Invalid simulation treatment authorization.");
-	if (!["openai/gpt-5.6-terra", "xai/grok-4.6"].includes(budget.managerModel))
+	if (!["openai/gpt-6-sol", "xai/grok-4.6"].includes(budget.managerModel))
 		throw new Error("Unsupported simulation manager.");
 	return status;
 }

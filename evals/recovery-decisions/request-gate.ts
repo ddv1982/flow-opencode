@@ -8,7 +8,7 @@ import {
 const routes = new Map([
 	[
 		"https://chatgpt.com/backend-api/codex/responses",
-		{ model: "gpt-5.6-terra", budgetModel: "openai/gpt-5.6-terra" },
+		{ model: "gpt-6-sol", budgetModel: "openai/gpt-6-sol" },
 	],
 	[
 		"https://api.x.ai/v1/chat/completions",

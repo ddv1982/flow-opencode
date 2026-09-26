@@ -223,7 +223,7 @@ test("guarded reset simulation refuses a fresh Flow checkpoint", async () => {
 		{
 			method: "POST",
 			body: JSON.stringify({
-				model: "gpt-5.6-terra",
+				model: "gpt-6-sol",
 				stream: true,
 				tools: [{ name: "flow_status" }],
 				input: [
@@ -255,7 +255,7 @@ test("simulation cites every live blocker of the blocked feature", async () => {
 		new Request("https://chatgpt.com/backend-api/codex/responses", {
 			method: "POST",
 			body: JSON.stringify({
-				model: "gpt-5.6-terra",
+				model: "gpt-6-sol",
 				stream: true,
 				tools: [{ name: "flow_status" }],
 				input: [

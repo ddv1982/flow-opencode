@@ -6,7 +6,7 @@ import { JEV_ATTEMPT_RESERVATION_USD } from "../../src/application/ports/decisio
 import { datasetDigest } from "./schema.js";
 
 export const BudgetModel = z.enum([
-	"openai/gpt-5.6-terra",
+	"openai/gpt-6-sol",
 	"xai/grok-4.6",
 	"typesafe/jev-1.13.0",
 ]);

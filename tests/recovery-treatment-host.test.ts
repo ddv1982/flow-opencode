@@ -29,7 +29,7 @@ import {
 
 const smoke =
 	process.env.FLOW_RECOVERY_TREATMENT_SMOKE === "1" ? test : test.skip;
-for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
+for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const)
 	for (const scenario of [
 		"accepted",
 		"control",
@@ -145,7 +145,7 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 					const captureDirectory = process.env.FLOW_RECOVERY_TUI_CAPTURE_DIR;
 					const captureThisHost =
 						captureDirectory &&
-						managerModel === "openai/gpt-5.6-terra" &&
+						managerModel === "openai/gpt-6-sol" &&
 						scenario === "model-mismatch";
 					if (captureThisHost) {
 						await writeFile(
@@ -249,7 +249,7 @@ for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
 			180000,
 		);
 
-for (const managerModel of ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const)
+for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const)
 	smoke(
 		`native ${managerModel} stop revokes delayed simulated Jev advice`,
 		async () => {

@@ -5,9 +5,9 @@ import { datasetDigest } from "./schema.js";
 
 export const EvaluationManagers = [
 	{
-		model: "openai/gpt-5.6-terra",
+		model: "openai/gpt-6-sol",
 		provider: "openai",
-		apiModel: "gpt-5.6-terra",
+		apiModel: "gpt-6-sol",
 		authLabel: "OpenAI",
 	},
 	{

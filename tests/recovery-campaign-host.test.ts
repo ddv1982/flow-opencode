@@ -39,7 +39,7 @@ import { frozenCampaignFixture } from "./recovery-campaign-support.js";
 import { awaitQuestion } from "./recovery-operator-support.js";
 
 const arms = ["manager-only", "manager-plus-jev"] as const;
-const managers = ["openai/gpt-5.6-terra", "xai/grok-4.6"] as const;
+const managers = ["openai/gpt-6-sol", "xai/grok-4.6"] as const;
 type WorkflowRecoveryEvidence = {
 	blockedRunId: string;
 	blockedRunState: FeatureRun["state"] | null;
