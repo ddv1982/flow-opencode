@@ -142,8 +142,21 @@ async function fixture() {
 		return {
 			bundleSha256: hash("bundle"),
 			summary: {
+				schemaVersion: 1,
+				packageVersion: "8.3.0",
+				reportId: "baseline-report",
+				verdict: "VERIFIED",
+				bundleSha256: hash("bundle"),
+				artifact: baselineArtifact,
 				canarySha256: hash("canary"),
-				totals: { passed: 76, scored: 76 },
+				totals: { scheduled: 76, passed: 76, scored: 76 },
+				providers: ["openai", "xai"].map((provider) => ({
+					provider,
+					scheduled: 38,
+					scored: 38,
+					passed: 38,
+					passRate: 1,
+				})),
 			} as ReleaseEvidenceSummary,
 		};
 	};
@@ -170,6 +183,26 @@ test("eligible patch verifies baseline and discloses prior-only evidence", async
 	expect(result.notes).toContain("No live model evals or canary");
 	expect(result.notes).toContain("not measurements of this candidate");
 	expect(result.bundleSha256).toBe(hash(await readFile(f.input.path, "utf8")));
+});
+test("refuses a one-provider release as a patch baseline", async () => {
+	const f = await fixture();
+	await expect(
+		assertPatchReleaseEvidence(f.input, async () => ({
+			bundleSha256: hash("bundle"),
+			summary: {
+				...(await f.verify()).summary,
+				providers: [
+					{
+						provider: "openai",
+						scheduled: 38,
+						scored: 38,
+						passed: 38,
+						passRate: 1,
+					},
+				],
+			},
+		})),
+	).rejects.toThrow("two-provider baseline");
 });
 test("reads the baseline seal as retained evidence, not as a fresh measurement", async () => {
 	const f = await fixture();

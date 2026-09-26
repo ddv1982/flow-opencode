@@ -8,9 +8,7 @@ name: Model evals
 # to run locally: every recorded report was single-model, so "works with Flow" meant
 # "worked once, with one provider".
 #
-# Evals cost money and need credentials, so they stay out of the PR gate. This runs
-# weekly against at least two providers and publishes the report as an artifact,
-# with the qualification thresholds applied by `scripts/qualify-release.ts`.
+# Evals cost money and need credentials, so they stay out of the PR gate.
 # See docs/adr/0010-declared-canonical-gate.md.
 
 on:
@@ -80,6 +78,7 @@ jobs:
             echo "::notice::No eval model matrix or provider credentials configured; skipping."
             echo "models=" >> "$GITHUB_OUTPUT"
           else
+            FLOW_EVAL_MODEL="$models" bun run scripts/check-release-models.ts
             echo "models=$models" >> "$GITHUB_OUTPUT"
           fi
 

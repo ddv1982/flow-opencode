@@ -9,7 +9,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 
 | Threshold | Value | Why |
 | --- | --- | --- |
-| Distinct providers | ≥ 2 | Every report recorded before this policy was single-model, so "works with Flow" meant "worked once, with one provider". |
+| Distinct providers | ≥ 2; 9.1.0 only: 1 | 9.1.0 pins `openai/gpt-6-sol`. Its evidence covers OpenAI only. Later releases require two routes. |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask or at a blocker. |
 | Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
@@ -43,8 +43,7 @@ canary inside its window. The wall clock decided this until 9.0.1, which made
 every published offline release stop verifying seventy-two hours after its
 baseline was measured.
 
-A new scenario needs an explicit release-policy decision. Any required canonical
-case missing from the report fails qualification.
+New scenarios need a policy decision. Missing required cases fail qualification.
 
 A non-product attempt never shrinks the required sample. The frozen plan retains
 one environment reserve per provider and case. A retryable provider or host
@@ -53,10 +52,10 @@ second external failure or an unallowed ask leaves a gap. Product and evaluator
 failures never activate reserves. Evaluator failure is `NOT VERIFIED`;
 persistence failure stops without a finalized report.
 
-Repository code owns the ordered release catalog. Persisted `catalog.json` is only a
-witness and must match it exactly. The two-provider grid has 76 primary cells and
-16 predeclared environment reserves; ordinary, narrowed, dynamically extended, or
-merged summary reports cannot qualify.
+Repository code owns the ordered release catalog; persisted `catalog.json` must
+match. Version 9.1.0 uses 38 primary cells and eight reserves on GPT-6 Sol only.
+Other versions use 76 primary cells and 16 reserves on distinct providers.
+Narrowed, extended, or merged summary reports cannot qualify.
 
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
 messages, duration, tokens, and cost.
@@ -95,16 +94,17 @@ Finish or close active sessions before changing Flow versions in either directio
 
 Finish code, dependency, version and changelog changes first. Pass frozen install,
 `bun run check`, `bun run replay`, audit, live smoke and CI before paid qualification.
-Freeze packed contents and evaluator inputs, then run the full two-provider matrix
+Freeze packed contents and evaluator inputs, then run the versioned matrix
 on the canonical Linux host. Run a fresh canary against its exact `artifact.tgz`,
 seal/regrade the bundle, and commit only evidence without changing measured inputs.
 Recheck final main CI and exact artifact identity before tagging `v<package-version>`.
 
 Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
+For 9.1.0, run the pinned OpenAI model.
 
 ```bash
-bun run eval -- --release --model openai/gpt-6-sol --model xai/grok-4.6
+bun run eval -- --release --model openai/gpt-6-sol
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.
 bun run eval:canary -- record <record-options>

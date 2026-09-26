@@ -244,6 +244,8 @@ export async function assertPatchReleaseEvidence(
 	});
 	if (baseline.bundleSha256 !== record.baseline.bundleSha256)
 		throw new Error("Baseline qualification bundle changed.");
+	if (new Set(baseline.summary.providers.map((item) => item.provider)).size < 2)
+		throw new Error("Patch exception requires a two-provider baseline.");
 	return {
 		bundleSha256: hash(bytes),
 		notes: [

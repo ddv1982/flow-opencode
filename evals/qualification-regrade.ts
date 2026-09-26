@@ -27,8 +27,8 @@ import { readQualificationBundle } from "./qualification-bundle.js";
 import {
 	RELEASE_ANALYSIS_SHA256,
 	RELEASE_MAX_CAMPAIGN_AGE_MS,
-	RELEASE_POLICY_SHA256,
 	releaseGraderBundle,
+	releasePolicySha256,
 } from "./release-policy.js";
 import type { ArtifactIdentity, ValidatedReport } from "./report.js";
 import { SCENARIOS } from "./scenarios.js";
@@ -310,7 +310,11 @@ export async function regradeQualificationBundle(input: {
 			),
 	};
 	if (
-		policy.policySha256 !== RELEASE_POLICY_SHA256 ||
+		policy.policySha256 !==
+			releasePolicySha256(
+				(expectedStored as { artifact: ArtifactIdentity }).artifact
+					.packageVersion,
+			) ||
 		policy.analysisSha256 !== RELEASE_ANALYSIS_SHA256 ||
 		canonicalJson(policy.graderBundle) !== canonicalJson(bundledGrader) ||
 		canonicalJson(policy.graderBundle) !==

@@ -10,9 +10,9 @@ import {
 import { QualificationBundleManifestSchema } from "../evals/qualification-bundle.js";
 import { regradeQualificationBundle } from "../evals/qualification-regrade.js";
 import {
-	RELEASE_POLICY_SHA256,
 	releaseCatalog,
 	releaseGraderBundle,
+	releasePolicySha256,
 	releaseScenarioCatalog,
 } from "../evals/release-policy.js";
 import {
@@ -319,18 +319,18 @@ export function qualificationRecordIssue(
 	}
 	const expectedCatalogSha256 = canonicalSha256(
 		"flow-decision-catalog-v1",
-		releaseCatalog(),
+		releaseCatalog(version),
 	);
 	if (entry.catalogSha256 !== expectedCatalogSha256) {
 		return `the qualification catalog digest for ${version} is not current repository policy`;
 	}
-	if (entry.policySha256 !== RELEASE_POLICY_SHA256) {
+	if (entry.policySha256 !== releasePolicySha256(version)) {
 		return `the qualification policy digest for ${version} is not current repository policy`;
 	}
 	const expectedEvaluator = evaluatorIdentity({
 		sourceCommit: parsedArtifact.data.sourceCommit,
 		caseCatalog: releaseScenarioCatalog(SCENARIOS),
-		policyCatalog: releaseCatalog(),
+		policyCatalog: releaseCatalog(version),
 		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
 	});
 	if (
