@@ -34,14 +34,14 @@ import {
 } from "../evals/qualification-bundle.js";
 import {
 	assertExactReleaseCatalog,
+	assertReleaseModels,
 	RELEASE_ANALYSIS_SHA256,
-	RELEASE_POLICY_SHA256,
 	releaseCatalog,
 	releaseCellsFor,
 	releaseGraderBundle,
 	releaseGraderSourceBundle,
 	releaseHostConfigSha256,
-	releaseMinimumProviders,
+	releasePolicySha256,
 	releaseRandomizationSeed,
 	releaseScenarioCatalog,
 } from "../evals/release-policy.js";
@@ -131,7 +131,10 @@ function sameJson(left: unknown, right: unknown): boolean {
 	return canonicalJson(left) === canonicalJson(right);
 }
 
-function assertFrozenReleasePlan(report: ValidatedReport): void {
+function assertFrozenReleasePlan(
+	report: ValidatedReport,
+	packageVersion: string,
+): void {
 	const models: ModelIdentity[] = [];
 	for (const cell of report.plan.cells) {
 		if (
@@ -141,15 +144,8 @@ function assertFrozenReleasePlan(report: ValidatedReport): void {
 			models.push(cell.managerModel);
 		}
 	}
-	if (
-		models.length !== releaseMinimumProviders() ||
-		new Set(models.map((model) => model.routeProvider)).size !== models.length
-	) {
-		throw new Error(
-			"Release plan must schedule exactly two models on distinct route providers.",
-		);
-	}
-	const expected = releaseCellsFor(models);
+	assertReleaseModels(models, packageVersion);
+	const expected = releaseCellsFor(models, packageVersion);
 	const primaryCount = expected.filter(
 		(cell) => cell.schedule === "primary",
 	).length;
@@ -159,7 +155,7 @@ function assertFrozenReleasePlan(report: ValidatedReport): void {
 			"Release plan does not contain the canonical primary and environment-reserve grid.",
 		);
 	}
-	const expectedSeed = releaseRandomizationSeed(models);
+	const expectedSeed = releaseRandomizationSeed(models, packageVersion);
 	if (
 		report.plan.planId !== "flow-v2-primary-matrix" ||
 		report.plan.randomizationSeed !== expectedSeed ||
@@ -187,7 +183,7 @@ function canonicalEvaluator(
 	return evaluatorIdentity({
 		sourceCommit: artifact.sourceCommit,
 		caseCatalog: releaseScenarioCatalog(SCENARIOS),
-		policyCatalog: releaseCatalog(),
+		policyCatalog: releaseCatalog(artifact.packageVersion),
 		graderBundle: releaseGraderBundle(
 			join(import.meta.dir, ".."),
 			historical ? artifact.sourceCommit : undefined,
@@ -247,7 +243,10 @@ export function qualifyV2(input: {
 	readonly expected: ReleaseExpectedProvenance;
 	readonly canary: CanaryRecord | null;
 } {
-	const catalog = assertExactReleaseCatalog(input.catalogInput);
+	const catalog = assertExactReleaseCatalog(
+		input.catalogInput,
+		input.artifact.packageVersion,
+	);
 	const parsed = parseReport(input.reportInput, catalog);
 	if (!parsed.ok) {
 		throw new Error(
@@ -256,7 +255,7 @@ export function qualifyV2(input: {
 				.join("; ")}`,
 		);
 	}
-	assertFrozenReleasePlan(parsed.value);
+	assertFrozenReleasePlan(parsed.value, input.artifact.packageVersion);
 	const measuredArtifact = parsed.value.attempts[0]?.artifact;
 	if (!measuredArtifact || !("sourceCommit" in measuredArtifact)) {
 		throw new Error("A v2 qualification report requires a Flow artifact.");
@@ -339,7 +338,9 @@ export function decisionRecordFor(input: {
 		"flow-decision-catalog-v1",
 		input.catalog,
 	);
-	const policySha256 = RELEASE_POLICY_SHA256;
+	const policySha256 = releasePolicySha256(
+		input.expected.artifact.packageVersion,
+	);
 	const actorSha256 = canonicalSha256(
 		"flow-decision-actors-v1",
 		input.expected.attempts.map((attempt) => ({
@@ -760,7 +761,7 @@ async function main(): Promise<void> {
 	}
 	const policy = {
 		schemaVersion: 1,
-		policySha256: RELEASE_POLICY_SHA256,
+		policySha256: releasePolicySha256(artifact.packageVersion),
 		analysisSha256: RELEASE_ANALYSIS_SHA256,
 		graderBundle: retainedGraderBundle,
 		executionGraderBundle,

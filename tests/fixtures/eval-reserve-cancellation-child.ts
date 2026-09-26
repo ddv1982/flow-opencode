@@ -12,7 +12,7 @@ const [root, mode] = process.argv.slice(2);
 if (!root || (mode !== "handoff" && mode !== "reserve"))
 	throw new Error("Expected temporary root and handoff/reserve mode.");
 const repositoryRoot = root;
-const models = ["fixture-a/model", "fixture-b/model"] as const;
+const models = ["openai/gpt-6-sol"] as const;
 const event = (name: string) =>
 	process.stdout.write(`\n@@eval-reserve:${name}\n`);
 process.stdin.resume(); // Keep the child alive until the parent releases cleanup.
@@ -99,15 +99,12 @@ class FakeReleaseHost {
 		return `fixture-session-${this.attempt}`;
 	}
 	async runCommand(): Promise<"quiet"> {
-		if (mode === "reserve" && this.attempt === 78)
-			await stopHere(this.signal, 77);
+		if (mode === "reserve" && this.attempt === 40)
+			await stopHere(this.signal, 39);
 		return "quiet";
 	}
 	async outcome(sessionIds: string[]): Promise<Outcome> {
 		event(`outcome:${this.attempt}`);
-		// One eligible gap in each of the first three canonical case/provider
-		// strata: three reserves really activate, leaving a third queued behind
-		// the interrupted second reserve. No outcome/ledger retry flags are patched.
 		const gap = [1, 4, 7].includes(this.attempt);
 		const observation = gap
 			? {
@@ -146,8 +143,8 @@ class FakeReleaseHost {
 	}
 	async stop() {
 		event(`stop:${this.attempt}`);
-		if (mode === "handoff" && this.attempt === 76)
-			await stopHere(this.signal, 76).catch((error: unknown) => {
+		if (mode === "handoff" && this.attempt === 38)
+			await stopHere(this.signal, 38).catch((error: unknown) => {
 				if (error !== this.signal.reason) throw error;
 			});
 		if (this.signal.aborted) await cleanupGate();
@@ -204,15 +201,7 @@ try {
 			try {
 				const code = await runCampaign(
 					signal,
-					[
-						"--release",
-						"--model",
-						models[0],
-						"--model",
-						models[1],
-						"--concurrency",
-						"1",
-					],
+					["--release", "--model", models[0], "--concurrency", "1"],
 					repositoryRoot,
 					beginFinalization,
 				);

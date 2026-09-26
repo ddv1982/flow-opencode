@@ -56,8 +56,9 @@ plugin tuple configuration, and records the same selection in provenance.
 Release sampling rejects reviewer overrides.
 
 Ordinary runs use one sequential queue per model, with up to four queues in flight.
-Release mode is strictly sequential (`--concurrency 1`): 76 primary targets and one
-environment reserve per provider/case, at most 92 attempts. Only retained retryable
+Release mode is strictly sequential (`--concurrency 1`). Version 9.1.0 pins
+`openai/gpt-6-sol` with 38 primary targets and eight reserves. Other versions
+require two providers, 76 primary targets and 16 reserves. Only retained retryable
 host/provider failures activate reserves, never product failures. Results are
 persisted in declared order even when ordinary queues finish out of order.
 
@@ -410,24 +411,22 @@ a suite that measures nothing look identical from here, so read one run anyway.
 
 ## Three tiers, three prices
 
-One price for every question is what made this suite something run at release rather
-than during work:
+Use three eval tiers:
 
 | Tier | Command | Cost | Answers |
 | --- | --- | --- | --- |
 | Replay | `bun run replay` | free | does the runtime still reach the same outcome on decisions a model already made? |
 | Smoke | `bun run eval:smoke -- --model <id>` | one model, one attempt | did a prompt change break the ordinary path? |
-| Matrix | `bun run eval -- --release --model <a> --model <b>` | real money | may this be released? |
+| Matrix | `bun run eval -- --release --model <id> [--model <id>]` | real money | may this be released? |
 
 Only the matrix qualifies a release. A replay is evidence about the runtime and none
 about the prompts; a single attempt of a stochastic scenario is not a rate.
 
 ## Multi-model matrix
 
-Every report recorded before this existed was single-model, so "works with Flow"
-meant "worked once, with one provider". Qualification needs at least two distinct
-providers, and `.github/workflows/evals.yml` runs the matrix weekly and on demand —
-never in a gate a contributor waits on, since a full pass costs real money.
+Version 9.1.0 requires only `openai/gpt-6-sol`; it makes no cross-provider claim.
+Other versions require two distinct providers. `.github/workflows/evals.yml`
+runs the matrix weekly and on demand, outside contributor gates.
 
 ## Using evals to change prompts
 
@@ -580,8 +579,9 @@ distinction that matters: one pass in six and six in six are different findings.
 
 ## Cost
 
-Release qualification schedules 76 primary attempts across eight scenarios and
-two providers, plus at most 16 environment reserves. Ordinary campaign size depends
+Version 9.1.0 schedules 38 primary attempts and eight reserves on GPT-6 Sol.
+Its evidence supports only that route. Other versions schedule 76 primary attempts
+and 16 reserves across two providers. Ordinary campaign size depends
 on the selected scenarios, models and repeats. Use `--scenario` while iterating;
 cost depends on model pricing and the work performed, not just scenario count.
 

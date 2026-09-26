@@ -98,7 +98,34 @@ const RELEASE_POLICY_INPUT = [
 
 const parsed = parseCaseCatalog(RELEASE_POLICY_INPUT);
 if (!parsed.ok) throw new Error("Repository release policy is invalid.");
-const RELEASE_CATALOG = parsed.value;
+const STANDARD_RELEASE_CATALOG = parsed.value;
+
+export type ReleaseProfile = {
+	readonly catalog: ValidatedCaseCatalog;
+	readonly requiredModels: readonly ModelIdentity[] | null;
+};
+
+const OPENAI_ONLY_9_1_0: ReleaseProfile = {
+	catalog: STANDARD_RELEASE_CATALOG.map((row) => ({ ...row, minProviders: 1 })),
+	requiredModels: [
+		{
+			routeProvider: "openai",
+			gateway: null,
+			family: "gpt-6-sol",
+			model: "gpt-6-sol",
+			revision: null,
+		},
+	],
+};
+
+const STANDARD_RELEASE: ReleaseProfile = {
+	catalog: STANDARD_RELEASE_CATALOG,
+	requiredModels: null,
+};
+
+export function releaseProfile(packageVersion: string): ReleaseProfile {
+	return packageVersion === "9.1.0" ? OPENAI_ONLY_9_1_0 : STANDARD_RELEASE;
+}
 
 export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {
 	kind: "rate",
@@ -113,42 +140,77 @@ export const RELEASE_HOST_POLICY = {
 	reviewerSteps: null,
 } as const;
 
-export const RELEASE_POLICY_SHA256 = canonicalSha256("flow-release-policy-v1", {
-	catalog: RELEASE_CATALOG,
-	host: RELEASE_HOST_POLICY,
-	analysisSha256: RELEASE_ANALYSIS_SHA256,
-	environmentReservesPerStratum: RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM,
-});
+export function releasePolicySha256(packageVersion: string): string {
+	const profile = releaseProfile(packageVersion);
+	return canonicalSha256("flow-release-policy-v1", {
+		catalog: profile.catalog,
+		...(profile.requiredModels === null
+			? {}
+			: { requiredModels: profile.requiredModels }),
+		host: RELEASE_HOST_POLICY,
+		analysisSha256: RELEASE_ANALYSIS_SHA256,
+		environmentReservesPerStratum: RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM,
+	});
+}
+
+export const RELEASE_POLICY_SHA256 = releasePolicySha256("standard");
 
 export const RELEASE_POLICY_CATALOG_SHA256 = canonicalSha256(
 	"flow-evaluator-policy-catalog-v1",
-	RELEASE_CATALOG,
+	STANDARD_RELEASE_CATALOG,
 );
 
-export function releaseCatalog(): ValidatedCaseCatalog {
-	return RELEASE_CATALOG;
+export function releaseCatalog(
+	packageVersion = "standard",
+): ValidatedCaseCatalog {
+	return releaseProfile(packageVersion).catalog;
 }
 
 export function releaseCaseIds(): readonly string[] {
-	return RELEASE_CATALOG.map((policy) => policy.caseId);
+	return STANDARD_RELEASE_CATALOG.map((policy) => policy.caseId);
 }
 
 export function releaseAttemptsFor(caseId: string): number {
-	const policy = RELEASE_CATALOG.find((item) => item.caseId === caseId);
+	const policy = STANDARD_RELEASE_CATALOG.find(
+		(item) => item.caseId === caseId,
+	);
 	if (!policy) throw new Error(`No release policy for ${caseId}.`);
 	return policy.minScoredAttempts;
 }
 
-export function releaseMinimumProviders(): number {
-	return Math.max(...RELEASE_CATALOG.map((policy) => policy.minProviders));
+export function releaseMinimumProviders(packageVersion = "standard"): number {
+	return Math.max(
+		...releaseCatalog(packageVersion).map((policy) => policy.minProviders),
+	);
+}
+
+export function assertReleaseModels(
+	models: readonly ModelIdentity[],
+	packageVersion: string,
+): void {
+	const profile = releaseProfile(packageVersion);
+	const minimum = releaseMinimumProviders(packageVersion);
+	if (
+		models.length !== minimum ||
+		new Set(models.map((model) => model.routeProvider)).size !== minimum ||
+		(profile.requiredModels !== null &&
+			canonicalJson(models) !== canonicalJson(profile.requiredModels))
+	) {
+		throw new Error(
+			profile.requiredModels !== null
+				? `Release ${packageVersion} requires exactly ${profile.requiredModels.map((model) => `${model.routeProvider}/${model.model}`).join(", ")} with its canonical direct-route identity.`
+				: `Release requires exactly ${minimum} models on distinct route providers.`,
+		);
+	}
 }
 
 export function releasePrimaryCellsFor(
 	models: readonly ModelIdentity[],
+	packageVersion = "standard",
 ): ScheduledCell[] {
 	let slot = 0;
 	return models.flatMap((model) =>
-		RELEASE_CATALOG.flatMap((policy) =>
+		releaseCatalog(packageVersion).flatMap((policy) =>
 			Array.from({ length: policy.minScoredAttempts }, (_, repetition) => {
 				const block = slot;
 				slot += 1;
@@ -175,10 +237,11 @@ export function releasePrimaryCellsFor(
 
 export function releaseCellsFor(
 	models: readonly ModelIdentity[],
+	packageVersion = "standard",
 ): ScheduledCell[] {
-	const primary = releasePrimaryCellsFor(models);
+	const primary = releasePrimaryCellsFor(models, packageVersion);
 	const reserves = models.flatMap((model) =>
-		RELEASE_CATALOG.map((policy) => {
+		releaseCatalog(packageVersion).map((policy) => {
 			const identity = canonicalSha256("flow-v2-environment-reserve-v1", {
 				model: `${model.routeProvider}/${model.model}`,
 				scenario: policy.caseId,
@@ -204,11 +267,12 @@ export function releaseCellsFor(
 
 export function releaseRandomizationSeed(
 	models: readonly ModelIdentity[],
+	packageVersion = "standard",
 ): string {
 	return canonicalSha256("flow-v2-seed-v1", {
 		models: models.map((model) => `${model.routeProvider}/${model.model}`),
 		scenarios: releaseCaseIds(),
-		releasePolicySha256: RELEASE_POLICY_SHA256,
+		releasePolicySha256: releasePolicySha256(packageVersion),
 	});
 }
 
@@ -260,17 +324,19 @@ export function assertReleaseScenarioOrder(
 
 export function assertExactReleaseCatalog(
 	input: unknown,
+	packageVersion = "standard",
 ): ValidatedCaseCatalog {
 	const supplied = parseCaseCatalog(input);
+	const catalog = releaseCatalog(packageVersion);
 	if (
 		!supplied.ok ||
-		canonicalJson(supplied.value) !== canonicalJson(RELEASE_CATALOG)
+		canonicalJson(supplied.value) !== canonicalJson(catalog)
 	) {
 		throw new Error(
 			"Persisted catalog does not match repository release policy.",
 		);
 	}
-	return RELEASE_CATALOG;
+	return catalog;
 }
 
 export function selectReleaseScenarios<

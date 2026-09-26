@@ -94,6 +94,7 @@ import {
 } from "./provenance.js";
 import {
 	assertReleaseHost,
+	assertReleaseModels,
 	assertReleaseScenarioOrder,
 	RELEASE_ANALYSIS_SHA256,
 	RELEASE_HOST_POLICY,
@@ -102,7 +103,6 @@ import {
 	releaseCellsFor,
 	releaseGraderBundle,
 	releaseHostConfigSha256,
-	releaseMinimumProviders,
 	releaseRandomizationSeed,
 	releaseScenarioCatalog,
 	selectReleaseScenarios,
@@ -283,7 +283,7 @@ export function caseCatalogFor(
 ): ValidatedCaseCatalog {
 	if (sampling.kind === "release") {
 		assertReleaseScenarioOrder(scenarios);
-		return releaseCatalog();
+		return releaseCatalog(sampling.packageVersion ?? packageJson.version);
 	}
 	const parsed = parseCaseCatalog(
 		scenarios.map((scenario) => ({
@@ -310,7 +310,7 @@ export function caseCatalogFor(
 
 export type EvalSampling =
 	| { readonly kind: "ordinary"; readonly repeat: number }
-	| { readonly kind: "release" };
+	| { readonly kind: "release"; readonly packageVersion?: string };
 
 export function attemptsForScenario(
 	scenarioId: string,
@@ -332,13 +332,22 @@ export function campaignPlanFor(input: {
 }): CampaignPlan {
 	if (input.sampling.kind === "release") {
 		assertReleaseScenarioOrder(input.scenarios);
+		assertReleaseModels(
+			input.models.map(legacyRequestedModel),
+			input.sampling.packageVersion ?? packageJson.version,
+		);
 	}
 	let slot = 0;
 	const ordinaryRepeat =
 		input.sampling.kind === "ordinary" ? input.sampling.repeat : null;
 	const cells =
 		ordinaryRepeat === null
-			? releaseCellsFor(input.models.map(legacyRequestedModel))
+			? releaseCellsFor(
+					input.models.map(legacyRequestedModel),
+					input.sampling.kind === "release"
+						? (input.sampling.packageVersion ?? packageJson.version)
+						: packageJson.version,
+				)
 			: input.models.flatMap((model) =>
 					input.scenarios.flatMap((scenario) =>
 						Array.from({ length: ordinaryRepeat }, (_, repetition) => {
@@ -373,7 +382,10 @@ export function campaignPlanFor(input: {
 		planSha256: `sha256:${"0".repeat(64)}`,
 		randomizationSeed:
 			input.sampling.kind === "release"
-				? releaseRandomizationSeed(input.models.map(legacyRequestedModel))
+				? releaseRandomizationSeed(
+						input.models.map(legacyRequestedModel),
+						input.sampling.packageVersion ?? packageJson.version,
+					)
 				: canonicalSha256("flow-v2-seed-v1", {
 						models: input.models,
 						scenarios: input.scenarios.map((scenario) => scenario.id),
@@ -575,23 +587,21 @@ function parseArgs(argv: string[]) {
 		process.exit(2);
 	}
 	if (release) {
-		const providers = new Set<string>();
 		for (const model of models) {
 			try {
-				providers.add(legacyRequestedModel(model).routeProvider);
+				legacyRequestedModel(model);
 			} catch (error) {
 				console.error(error instanceof Error ? error.message : String(error));
 				process.exit(2);
 			}
 		}
-		const minimumProviders = releaseMinimumProviders();
-		if (
-			models.length !== minimumProviders ||
-			providers.size !== minimumProviders
-		) {
-			console.error(
-				`--release requires exactly ${minimumProviders} models on distinct route providers.`,
+		try {
+			assertReleaseModels(
+				models.map(legacyRequestedModel),
+				packageJson.version,
 			);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
 			process.exit(2);
 		}
 	}

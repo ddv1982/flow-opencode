@@ -44,7 +44,7 @@ function releaseReport(stopped = false) {
 	const plan = campaignPlanFor({
 		models: MODELS,
 		scenarios,
-		sampling: { kind: "release" },
+		sampling: { kind: "release", packageVersion: ARTIFACT.packageVersion },
 		opencodeVersion: "1.18.31",
 	});
 	const evaluator = evaluatorIdentity({

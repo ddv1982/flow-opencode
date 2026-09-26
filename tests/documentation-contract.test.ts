@@ -664,12 +664,6 @@ describe("Flow documentation contract", () => {
 		expect(release).not.toContain("--clobber");
 		expect(release).not.toContain("canary-not-enabled");
 
-		// Model-driven evals need credentials and cost real money, so they run on a
-		// schedule and never on a pull request. `evals.yml` is the one workflow allowed
-		// to invoke them, and the property worth pinning is that no gate a contributor
-		// waits on can: the previous rule banned the word outright, which also banned
-		// the scheduled multi-model matrix that made "works with Flow" mean anything
-		// beyond one provider (docs/adr/0010-declared-canonical-gate.md).
 		const evals = await readFile(".github/workflows/evals.yml", "utf8");
 		expect(evals).toContain("bun run eval");
 		expect(evals).toContain("V2 report:");
@@ -680,6 +674,9 @@ describe("Flow documentation contract", () => {
 		expect(evals).toContain("github.run_attempt == 1");
 		expect(evals).toContain("vars.FLOW_EVAL_AUTHORIZE_SCHEDULE == 'true'");
 		expect(evals).toContain('--max-dispatches "$MAX_DISPATCHES"');
+		expect(evals.indexOf("check-release-models.ts")).toBeLessThan(
+			evals.indexOf("paid-budget.ts authorize"),
+		);
 		expect(evals).toContain("FLOW_EVAL_AUTHORIZATION:");
 
 		expect(evals).not.toMatch(/^on:[\s\S]*?^\s{2}(?:pull_request|push):/m);

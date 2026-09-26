@@ -121,8 +121,8 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						expect(result.signal).toBeNull();
 						expect(result.events).not.toContain("unexpected-network");
 						expect(result.events).toContain("returned");
-						const retained = mode === "handoff" ? 76 : 77;
-						const started = mode === "handoff" ? 76 : 78;
+						const retained = mode === "handoff" ? 38 : 39;
+						const started = mode === "handoff" ? 38 : 40;
 						expect(result.events).toContain(`durable:${retained}`);
 						expect(
 							result.events.filter((event) => event.startsWith("signal:")),
@@ -153,11 +153,11 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						expect(reports).toHaveLength(1);
 						const directory = join(results, required(reports[0]));
 						expect(await readJson(join(directory, "catalog.json"))).toEqual(
-							releaseCatalog(),
+							releaseCatalog("9.1.0"),
 						);
 						const parsed = parseReport(
 							await readJson(join(directory, "report.json")),
-							releaseCatalog(),
+							releaseCatalog("9.1.0"),
 						);
 						if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
 						const report = parsed.value;
@@ -167,8 +167,8 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						const reserves = report.plan.cells.filter(
 							(cell) => cell.schedule === "environment-reserve",
 						);
-						expect(primary).toHaveLength(76);
-						expect(reserves).toHaveLength(16);
+						expect(primary).toHaveLength(38);
+						expect(reserves).toHaveLength(8);
 						expect(report.attempts.map((attempt) => attempt.cellId)).toEqual([
 							...primary.map((cell) => cell.cellId),
 							...(mode === "reserve" ? [required(reserves[0]).cellId] : []),
@@ -253,7 +253,7 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 							throw new Error("Expected packed artifact identity.");
 						const decision = deriveReleaseDecision({
 							report,
-							catalog: releaseCatalog(),
+							catalog: releaseCatalog("9.1.0"),
 							expected: {
 								kind: "release",
 								artifact: first.artifact,

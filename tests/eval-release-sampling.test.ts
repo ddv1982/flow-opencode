@@ -2,9 +2,11 @@ import { describe, expect, test } from "bun:test";
 import {
 	assertExactReleaseCatalog,
 	assertReleaseHost,
+	assertReleaseModels,
 	releaseAttemptsFor,
 	releaseCaseIds,
 	releaseCatalog,
+	releasePolicySha256,
 } from "../evals/release-policy.js";
 import {
 	campaignPlanFor,
@@ -17,6 +19,73 @@ import {
 import { SCENARIOS } from "../evals/scenarios.js";
 
 describe("release eval sampling", () => {
+	test("pins the 9.1.0 OpenAI-only grid without weakening later releases", () => {
+		const model = {
+			routeProvider: "openai",
+			gateway: null,
+			family: "gpt-6",
+			model: "gpt-6-sol",
+			revision: null,
+		};
+		const catalog = releaseCatalog("9.1.0");
+		expect(catalog.every((row) => row.minProviders === 1)).toBe(true);
+		expect(
+			catalog.map((row) => row.minScoredAttempts).reduce((a, b) => a + b),
+		).toBe(38);
+		const plan = campaignPlanFor({
+			models: ["openai/gpt-6-sol"],
+			scenarios: releaseScenarios(),
+			sampling: { kind: "release" },
+			opencodeVersion: "1.18.31",
+		});
+		expect(plan.stoppingRule.count).toBe(38);
+		expect(plan.budget.maxAttempts).toBe(46);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(8);
+		expect(() =>
+			assertReleaseModels(
+				[{ ...model, routeProvider: "xai", model: "grok-4.6" }],
+				"9.1.0",
+			),
+		).toThrow("openai/gpt-6-sol");
+		for (const forged of [
+			{ ...model, gateway: "gateway" },
+			{ ...model, family: "other-family" },
+			{ ...model, revision: "preview" },
+			{ ...model, variant: "fast" },
+		]) {
+			expect(() => assertReleaseModels([forged], "9.1.0")).toThrow(
+				"canonical direct-route identity",
+			);
+		}
+		expect(() => assertReleaseModels([model], "9.1.1")).toThrow(
+			"exactly 2 models",
+		);
+		expect(releasePolicySha256("9.1.0")).not.toBe(releasePolicySha256("9.1.1"));
+		expect(() => assertExactReleaseCatalog(catalog, "9.1.1")).toThrow();
+	});
+
+	test("checks configured CI release models before authorization", async () => {
+		for (const [configured, expectedCode] of [
+			["openai/gpt-6-sol", 0],
+			["openai/gpt-6-sol,xai/grok-4.6", 1],
+			["xai/grok-4.6", 1],
+		] as const) {
+			const child = Bun.spawn(
+				["bun", "run", "scripts/check-release-models.ts"],
+				{
+					cwd: new URL("..", import.meta.url).pathname,
+					env: { ...process.env, FLOW_EVAL_MODEL: configured },
+					stderr: "pipe",
+				},
+			);
+			const [code, stderr] = await Promise.all([
+				child.exited,
+				new Response(child.stderr).text(),
+			]);
+			expect(code).toBe(expectedCode);
+			if (expectedCode !== 0) expect(stderr).toContain("openai/gpt-6-sol");
+		}
+	});
 	test("gives 90 percent cases ten attempts and 100 percent cases three", () => {
 		for (const policy of releaseCatalog()) {
 			expect(releaseAttemptsFor(policy.caseId)).toBe(
@@ -56,7 +125,7 @@ describe("release eval sampling", () => {
 			campaignPlanFor({
 				models: ["xai/grok-4.6"],
 				scenarios,
-				sampling: { kind: "release" },
+				sampling: { kind: "release", packageVersion: "8.1.2" },
 				opencodeVersion: "1.18.6",
 			}),
 		).toThrow("Release scenarios do not match repository release policy");
@@ -89,7 +158,7 @@ describe("release eval sampling", () => {
 		const plan = campaignPlanFor({
 			models: ["xai/grok-4.6", "openai/gpt-5.6-sol"],
 			scenarios,
-			sampling: { kind: "release" },
+			sampling: { kind: "release", packageVersion: "8.1.2" },
 			opencodeVersion: "1.18.6",
 		});
 		expect(plan.cells).toHaveLength(92);
@@ -105,9 +174,9 @@ describe("release eval sampling", () => {
 			retry: "environment-only",
 			maxReplacementBlocks: 16,
 		});
-		expect(caseCatalogFor(scenarios, { kind: "release" })).toEqual(
-			releaseCatalog(),
-		);
+		expect(
+			caseCatalogFor(scenarios, { kind: "release", packageVersion: "8.1.2" }),
+		).toEqual(releaseCatalog());
 		expect(
 			plan.cells.filter((cell) => cell.caseId === "skipped-case-named-binding"),
 		).toHaveLength(8);
@@ -196,7 +265,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects every release model grid except two distinct providers", async () => {
+	test("rejects every 9.1.0 release grid except GPT-6 Sol", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -219,7 +288,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				"--release requires exactly 2 models on distinct route providers",
+				"Release 9.1.0 requires exactly openai/gpt-6-sol",
 			);
 		}
 	});
@@ -231,9 +300,7 @@ describe("release eval sampling", () => {
 				"run",
 				"evals/run.ts",
 				"--model",
-				"xai/a",
-				"--model",
-				"openai/b",
+				"openai/gpt-6-sol",
 				"--release",
 				"--concurrency",
 				"2",

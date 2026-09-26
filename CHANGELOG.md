@@ -16,6 +16,8 @@ One short entry per release, written for users deciding whether to upgrade.
   file to retain complete validation evidence.
 - Session v5 schema, validation and reviewer gates, and continuation routing are
   unchanged. The OpenCode host used by the release checks is pinned to 1.18.31.
+- This release uses a GPT-6 Sol-only qualification profile. Its evidence makes
+  no cross-provider reliability claim. Later releases retain the two-provider gate.
 
 Upgrade with `opencode plugin opencode-plugin-flow@9.1.0 --global --force`.
 

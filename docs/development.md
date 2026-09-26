@@ -151,7 +151,8 @@ Follow the [frozen-candidate sequence](release-qualification.md#running-it):
 finish fixes and dependency updates, pass deterministic checks, approve paid
 evals.
 `bun run qualify -- --campaign-dir <dir> --canary <record>` seals the
-two-provider campaign, exact-artifact canary and grader evidence. Commit that
+policy grid, canary and grader evidence. Version 9.1.0 uses GPT-6 Sol only.
+Other versions require two providers. Commit that
 bundle before tagging; never substitute interrupted results for qualification.
 
 Release tags use `v<package-version>`. Blocking release checks: the normal
