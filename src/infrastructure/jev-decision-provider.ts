@@ -99,6 +99,20 @@ export function createJevDecisionProvider(
 				...(transport ? { transport } : {}),
 			});
 			if (!response.ok) return { kind: "unavailable", reason: response.reason };
+			const resolved = z
+				.object({
+					model: z
+						.string()
+						.max(32)
+						.regex(/^jev-\d+\.\d+\.\d+$/),
+				})
+				.safeParse(response.payload);
+			if (resolved.success && resolved.data.model !== JEV_PINNED_MODEL)
+				return {
+					kind: "unavailable",
+					reason: "model-mismatch",
+					resolvedModel: resolved.data.model,
+				};
 			const parsed = z
 				.object({
 					model: z.literal(JEV_PINNED_MODEL),

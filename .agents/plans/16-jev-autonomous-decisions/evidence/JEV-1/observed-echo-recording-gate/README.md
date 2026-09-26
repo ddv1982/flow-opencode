@@ -1,0 +1,9 @@
+# Observed Echo recovery draft
+
+An ordinary Echo recording-gate repair received two independent failed reviews. The second left its feature blocked at Session v5 revision 19. The manager proposed a retry conditional on attaching an authentic pre-edit reproduction receipt. Flow's live shadow call to `jev-1.13.0` abstained and made no mutation.
+
+`checkpoint.json` is the retained durable state. `manager-proposal.json` and `decision-packet.json` preserve the exact candidate and policy packet. The packet's SHA-256 matches `runtime-shadow-outcome.json`. `review-findings.json` shows both review cohorts; `source-provenance.json` binds their private raw session hashes and the earlier Echo failure artifact. `snapshot.json` passes the dataset importer; `draft.json` is the import result.
+
+`label-proposal-unreviewed.json` preserves the author's initial proposal. A separate earlier Echo run did contain a failure artifact, but it was recovered only afterward. An independent OpenAI GPT-5.6 Sol review approved `safe-ineffective` for the conditional retry and `abstain` as the acceptable selection at revision 19. `independent-label-review.json` records its reasoning, limitations, model, tool denial, and hashes of the reviewed inputs. `apply-review.ts` verifies those hashes and builds `reviewed-case.json` and `reviewed-calibration-corpus.json`; the offline preparation check confirms controller eligibility agrees with the label.
+
+The reviewer saw the sanitized case bundle and digest-linked provenance, not the private raw session bytes. Source authenticity therefore retains the operator's raw-session attestation. This one reviewed **calibration** case supplies no holdout, paired manager-only comparison, sample-volume, or delegated-mutation evidence. It contributes **zero** to qualification counts and does not authorize delegation.

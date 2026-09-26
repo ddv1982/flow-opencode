@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "attempts": [
+    {
+      "attempt": 1,
+      "reviewId": "review:7a27f1e9-7934-43ee-a517-381e3b0edb10",
+      "verdict": "failed",
+      "findings": [
+        {
+          "findingId": "recording-gate-restart-repair.R12-01",
+          "severity": "blocking",
+          "summary": "The new regression does not deterministically exercise the contended-gate retry path.",
+          "evidence": "crates/echo/src/rec/tests.rs:1091-1099 signals before the worker calls try_start_in, then relies on a 5 ms sleep before unlocking. The worker may remain unscheduled until after unlock, allowing the test to pass without ever observing WouldBlock or executing the retry added at crates/echo/src/rec/lease.rs:170-183. This does not prove the required stale-gate/no-live-lock regression behavior."
+        },
+        {
+          "findingId": "recording-gate-restart-repair.R12-02",
+          "severity": "blocking",
+          "summary": "The required focused current-source validation is missing from the supplied evidence.",
+          "evidence": "The feature names `RUSTUP_HOME=/home/vriesd/.rustup cargo test -p echo rec::tests::toggle_starts_stops_and_can_restart -- --exact`, but the assignment links only the broad `cargo test --workspace` receipt. A summary claim that focused tests previously passed is not a durable source-bound validation; the exact command and passing observable result are required."
+        },
+        {
+          "findingId": "recording-gate-restart-repair.R12-03",
+          "severity": "blocking",
+          "summary": "No supplied evidence proves the documented failure was reproduced before editing.",
+          "evidence": "The approved requirement explicitly requires pre-edit reproduction. docs/observed-recording-gate-failure.md:3-5 records the original report, but the assignment supplies no pre-change run evidence reproducing `toggle_starts_stops_and_can_restart` failing with `another recording is starting` before this repair."
+        },
+        {
+          "findingId": "recording-gate-restart-repair.R12-04",
+          "severity": "advisory",
+          "summary": "Retry exhaustion and its public error behavior lack direct regression coverage.",
+          "evidence": "crates/echo/src/rec/lease.rs:170-188 retries 32 times and then returns `another recording is starting`, but crates/echo/src/rec/tests.rs:1080-1103 covers only eventual release and does not assert bounded termination or the exhaustion error while a stale gate remains held."
+        }
+      ]
+    },
+    {
+      "attempt": 2,
+      "reviewId": "review:1007b979-d59d-49cf-9973-c86df4dfbc25",
+      "verdict": "failed",
+      "findings": [
+        {
+          "findingId": "recording-gate-restart-repair.R12-01",
+          "severity": "advisory",
+          "summary": "Repair proven; terminal fixed pending pass.",
+          "evidence": "crates/echo/src/rec/tests.rs:1104-1120 pauses after an observed WouldBlock and releases the held gate during that acquisition; current-source focused receipt fcd45968-da92-487e-83b8-82f967e52c8c passes the exact regression."
+        },
+        {
+          "findingId": "recording-gate-restart-repair.R12-02",
+          "severity": "advisory",
+          "summary": "Repair proven; terminal fixed pending pass.",
+          "evidence": "Current-source receipt 30159ed1-c6f4-4635-8218-80594ba1cba2 passes the exact required focused command with complete output."
+        },
+        {
+          "findingId": "recording-gate-restart-repair.R12-03",
+          "severity": "blocking",
+          "summary": "Recurring: no supplied evidence proves the documented failure was reproduced before editing.",
+          "evidence": "The approved requirement requires pre-edit reproduction, while the assignment packet explicitly states that no pre-edit reproduction was retained in Flow history. docs/observed-recording-gate-failure.md:3-5 documents an earlier report but is not a source-bound pre-change reproduction receipt for this work."
+        },
+        {
+          "findingId": "recording-gate-restart-repair.R12-04",
+          "severity": "advisory",
+          "summary": "Repair proven; terminal fixed pending pass.",
+          "evidence": "crates/echo/src/rec/tests.rs:1092-1102 directly asserts bounded retry exhaustion and the public `another recording is starting` error while the stale gate remains held; receipt fcd45968-da92-487e-83b8-82f967e52c8c passes on current source."
+        }
+      ]
+    }
+  ]
+}

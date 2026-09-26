@@ -6,6 +6,7 @@ import {
 	type RecoveryMutation,
 	type RecoveryProfile,
 } from "../src/application/recovery-policy.js";
+import { createJevDecisionProvider } from "../src/infrastructure/jev-decision-provider.js";
 import { parseRecoveryCommand } from "../src/platform/opencode/command-hook.js";
 import {
 	approveSession,
@@ -164,6 +165,43 @@ const apply = (
 		? s.flow.featureReset({ request: mutation.request })
 		: s.flow.runStart({ request: mutation.request });
 describe("process-local recovery", () => {
+	test("an upgraded Jev response reports its version without granting a reset", async () => {
+		const s = await setup(
+			"delegated",
+			createJevDecisionProvider(
+				() => "fixture-credential",
+				async () => Response.json({ model: "jev-1.14.0" }),
+			),
+		);
+		const before = revision(s.repository);
+		const response = await s.flow.status({
+			request: { view: "compact" },
+			recoveryProposal: s.proposal(),
+		});
+		expect(response.status).toBe("ok");
+		if (response.status !== "ok" || !("recovery" in response.workflowData))
+			throw new Error(response.summary);
+		expect(response.workflowData.recovery).toMatchObject({
+			kind: "unavailable",
+			reason: "model-mismatch",
+			requestedModel: "jev-1.13.0",
+			model: "jev-1.14.0",
+			selectedCandidateId: null,
+		});
+		expect(response.workflowData.recovery).not.toHaveProperty("recommended");
+		expect(revision(s.repository)).toBe(before);
+		expect(
+			(
+				await s.flow.featureReset({
+					request: {
+						operationId: "upgrade-must-not-reset",
+						expectedRevision: before,
+						featureId: FEATURE,
+					},
+				})
+			).status,
+		).toBe("error");
+	});
 	test("production rejects delegated activation and command parsing strips only explicit options", () => {
 		expect(() =>
 			new RecoveryController(provider).activate("host", {

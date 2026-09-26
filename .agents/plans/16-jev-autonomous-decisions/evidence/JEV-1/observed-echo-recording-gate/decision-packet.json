@@ -1,0 +1,42 @@
+{
+  "sessionId": "session:ad5e0546-7203-4354-b873-2e939274f597",
+  "revision": 19,
+  "sourceDigest": "sha256:d35e1bfaadb6159fb0b7b836438f588fe0bae1e95fde0928449f988ef0f79133",
+  "goal": "Investigate and fix the genuine Echo recording restart failure documented in docs/observed-recording-gate-failure.md, preserving session and lock safety with a regression test, focused and workspace validation, and independent review.",
+  "planDigest": "795298a9d7e73a5f7a2d6c6269d8e9135f2942abd7b81f66ff0d5049d14f6390",
+  "rubric": "recovery-v1",
+  "findings": [
+    {
+      "id": "recording-gate-restart-repair.R12-01",
+      "summary": "Repair proven; terminal fixed pending pass.",
+      "evidence": "crates/echo/src/rec/tests.rs:1104-1120 pauses after an observed WouldBlock and releases the held gate during that acquisition; current-source focused receipt fcd45968-da92-487e-83b8-82f967e52c8c passes the exact regression."
+    },
+    {
+      "id": "recording-gate-restart-repair.R12-02",
+      "summary": "Repair proven; terminal fixed pending pass.",
+      "evidence": "Current-source receipt 30159ed1-c6f4-4635-8218-80594ba1cba2 passes the exact required focused command with complete output."
+    },
+    {
+      "id": "recording-gate-restart-repair.R12-03",
+      "summary": "Recurring: no supplied evidence proves the documented failure was reproduced before editing.",
+      "evidence": "The approved requirement requires pre-edit reproduction, while the assignment packet explicitly states that no pre-edit reproduction was retained in Flow history. docs/observed-recording-gate-failure.md:3-5 documents an earlier report but is not a source-bound pre-change reproduction receipt for this work."
+    },
+    {
+      "id": "recording-gate-restart-repair.R12-04",
+      "summary": "Repair proven; terminal fixed pending pass.",
+      "evidence": "crates/echo/src/rec/tests.rs:1092-1102 directly asserts bounded retry exhaustion and the public `another recording is starting` error while the stale gate remains held; receipt fcd45968-da92-487e-83b8-82f967e52c8c passes on current source."
+    }
+  ],
+  "candidates": [
+    {
+      "id": "retry-recording-gate-with-retained-preedit-receipt",
+      "action": "retry",
+      "featureId": "recording-gate-restart-repair",
+      "remedy": "Resume only if an existing, authentic pre-edit reproduction receipt for the documented failure can be supplied and attached as evidence; do not fabricate or replace evidence.",
+      "changedFromPreviousAttempt": "The second attempt resolved deterministic retry-path coverage, current-source focused validation, retry-exhaustion coverage, and a full-output workspace gate; only the absent pre-edit receipt remains.",
+      "findingIds": [
+        "recording-gate-restart-repair.R12-03"
+      ]
+    }
+  ]
+}
