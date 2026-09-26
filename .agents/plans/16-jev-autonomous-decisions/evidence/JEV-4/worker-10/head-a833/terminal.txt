@@ -1,0 +1,38 @@
+     ✱ Glob "**/{AGENTS.md,CONTRIBUTING.md,README*,package.json,pyproject.toml,Cargo.toml,go.mod,Makefile}"
+     ✱ Glob ".github/workflows/*"
+     ✱ Glob "*" (1 match)
+
+     + Thought: Clarifying plan save intent · 4.4s
+
+     + Thought: Preparing minimal flow plan initialization · 38ms
+
+     → Read opencode.json
+
+     ▣  Build · GPT-5.6 Luna · interrupted
+
+  ┃
+  ┃  Flow auto stopped.
+  ┃
+
+     + Thought: Confirming final stopped state · 1.3s
+
+     Flow auto stopped before flow_plan_save; no mutation was made.
+
+     ▣  Build · GPT-5.6 Luna · 5.7s
+
+  ┃
+  ┃  Call flow_status and report only the recovery mode. Do not create a plan.
+  ┃
+
+     ⚙ flow_status
+
+     Recovery mode: off
+
+     ▣  Build · GPT-5.6 Luna · 5.1s
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · GPT-5.6 Luna OpenAI
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/flow-jev-overnight-20260924/jev4-packed-lane10c/project                            17.8K (4%)  ctrl+p commands

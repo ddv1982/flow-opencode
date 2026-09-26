@@ -1,0 +1,16 @@
+$ bun run clean && bun run build:plugin && bun run build:tui && bun run build:types
+$ bun run scripts/clean-dist.ts
+$ bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --sourcemap=external ./src/index.ts
+Bundled 68 modules in 18ms
+
+  index.js      0.34 MB  (entry point)
+  index.js.map  0.66 MB  (source map)
+
+$ bun build --target=bun --outdir=./dist --entry-naming=tui.js --sourcemap=external ./src/tui.ts
+Bundled 2 modules in 12ms
+
+  tui.js      7.73 KB   (entry point)
+  tui.js.map  15.36 KB  (source map)
+
+$ tsc -p tsconfig.types.json && bun run scripts/prune-dist-declarations.ts
+Kept 4 public declarations and pruned 59 internal declarations.

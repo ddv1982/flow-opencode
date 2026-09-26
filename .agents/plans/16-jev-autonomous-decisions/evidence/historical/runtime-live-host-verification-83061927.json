@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "scope": "native live evaluation host startup without inference",
+  "baseCommit": "7cc44a2e744f12b2fbbc450cef56b1725345d8c3",
+  "sourceHashes": {
+    "evals/harness.ts": "8a169e9bd2b1ee109dda9ac5b776d8083d9807c9e20215ac8207b28d54ffa399",
+    "evals/recovery-decisions/episode-host.ts": "2edbf7d73713bc59f8ef4d050d16f82c02ace402b337778b2e784572f202eff4",
+    "evals/recovery-decisions/live-treatment-plugin.ts": "459f105519a7fbc9072953a3070459f26ecb7b8fc02b5ef1cb75204bfa710f9d",
+    "evals/recovery-decisions/treatment-plugin.ts": "44a5925189e37e43e39ec85bcadde8f27cb181b33b7dd043c5c7e27cd105ccee",
+    "evals/recovery-decisions/treatment.ts": "e586563adfc7bc82a65d7f02c8e873fbf74784027827db2e011ac896655b26a7",
+    "tests/recovery-episode-host.test.ts": "ee3695531b565866ead27af3e5efee0ba31f54dc8f68d9cc03c82052daadb023",
+    "tests/recovery-live-host.test.ts": "3988301538ddb64f8eb36559d34bbea295d1110e4dde5e250b7793ade6a4af4b",
+    "tests/recovery-live-host-child.ts": "b50a12f4f74154001df2228a5759e910222bb42216baacc73c89e9a2be9a4d5d"
+  },
+  "artifactHashes": {
+    "/tmp/flow-live-host-parent-focused.log": "ec5b578eda7733665a66b33292efa8796bd7d08cb35a052e601e7252c07dff44",
+    "/tmp/flow-live-host-parent-native.log": "7290355e4a23741f5ee51cc4550a81d8d6ee29daf4f9909ee35e8a29e53fda8c",
+    "/tmp/flow-live-host-parent-native/report.json": "952cf37ebc7fa1aa61315030473d99024ead26be6d659ab366615aefed4dbda6",
+    "/tmp/flow-live-host-parent-simulation.log": "242b18cc1d948ed210f7da8a471ea9ab4baf111bab4b60adc41624a954bc9b87",
+    "/tmp/flow-live-host-parent-simulation/complete.json": "77a03114e9fdab04a927286c9b7228039aba2bf55c0b90673843f5d5e2c53ebd",
+    "/tmp/flow-live-host-parent-artifacts.log": "0445b787645371949d5297b45fe1680f074be1eeb1119c8491de60a25723e8ec",
+    "/tmp/flow-live-host-code-review.md": "646a57c504bb616431cfb34a5460375a84998ccd81ac28bbad95da2d8a5644b9",
+    "/tmp/flow-live-host-comment-review.md": "d6dba3c79691b36972f8133d58c3a3b8a6097f9f5d30799170f858e1c77f302e",
+    "/tmp/flow-live-host-judgment.md": "fd0abf36745262e8f00da405028706207453dab9c4295b6711faee561af4d8b4"
+  },
+  "verification": {
+    "parentFocused": {
+      "passed": 192,
+      "failed": 0,
+      "bunAssertions": 619
+    },
+    "nativeLiveStartup": {
+      "opencodeVersion": "1.18.31",
+      "passed": 3,
+      "failed": 0,
+      "bunAssertions": 8,
+      "nativeHosts": 4,
+      "inferenceClaims": 0,
+      "subprocessAssertions": true
+    },
+    "nativeSimulation": {
+      "opencodeVersion": "1.18.31",
+      "passed": 2,
+      "failed": 0,
+      "bunAssertions": 233,
+      "retainedHashesChecked": 27
+    },
+    "independentFocused": {
+      "passed": 172,
+      "failed": 0,
+      "skipped": 1,
+      "bunAssertions": 509
+    },
+    "commentAudit": {
+      "addedComments": 0,
+      "addedSuppressions": 0,
+      "unresolvedFindings": 0
+    }
+  },
+  "limits": [
+    "Synthetic credentials and startup only for live hosts. No paid inference.",
+    "Native startup does not establish real provider inference or OAuth refresh.",
+    "Live runner admission remains disabled; production profiles remain empty.",
+    "No authentic pricing review, campaign approval, operational dataset or qualification is established.",
+    "Independent reviewer model identity is unverified."
+  ]
+}

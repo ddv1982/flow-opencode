@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "classification": "evidence-gap-audit",
+  "lanes": [
+    {
+      "lane": 5,
+      "historicalReceipt": "worker-5/receipt.json",
+      "historicalHead": "0ac5a1dbb415afba932298d2c0b425cea814e6bc",
+      "retained": ["TUI video", "screenshot", "terminal transcript", "session revision observation"],
+      "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
+      "verdict": "partial; packed shadow stop and delegated eval stop are proven in separate runs",
+      "currentProbe": "worker-5/packed-current/receipt.json",
+      "currentSourceHead": "560c7503b43beac66432801a4d3ec04c6c042cea",
+      "currentProbeEvidence": [
+        "frozen install and build",
+        "packed-plugin smoke",
+        "simulated treatment bundle identity",
+        "real TUI screenshot and video",
+        "sanitized event trace",
+        "exact Jev packet digest",
+        "unchanged session after delayed reply"
+      ],
+      "currentProbeMissing": [
+        "one observed run combining packed plugin provenance with pending delegated mutation authority"
+      ],
+      "currentPackedProbe": "worker-5/packed-shadow/receipt.json",
+      "currentPackedSourceHead": "fe1d0665eecb969b3f18cae392084cbd11e4356b",
+      "currentPackedEvidence": [
+        "packed artifact loaded by observed OpenCode host",
+        "real TUI shadow stop during delayed simulated Jev request",
+        "exact outgoing packet digest",
+        "unchanged Session v5 state after delayed reply"
+      ]
+    },
+    {
+      "lane": 10,
+      "historicalReceipt": "worker-10/shadow-receipt.json",
+      "historicalHead": "1cb337fbdbf3e44469c14a66f786602c77b702c2",
+      "retained": ["TUI video", "screenshots", "terminal transcripts", "session ID"],
+      "missing": ["exact-head frozen install and build log", "packed-plugin smoke startup log", "session event trace", "packet identity or explicit no-packet trace"],
+      "verdict": "historical media partial; current packed capture passes controls lane",
+      "newProbe": "worker-10/packed-probe/receipt.json",
+      "newProbeHead": "db70a7c52dacbe3bd2354b15a50d21976bd95ed9",
+      "newProbeEvidence": [
+        "frozen install and build output",
+        "packed smoke output",
+        "tarball and installed module digests",
+        "project startup log",
+        "sanitized session event trace",
+        "terminal panes showing shadow selection and stop"
+      ],
+      "newProbeMissing": [
+        "real TUI screenshot and video for this exact run",
+        "complete ten-lane interaction review"
+      ],
+      "currentCapture": "worker-10/head-a833/receipt.json",
+      "currentSourceHead": "a8330e8beb7b2a4cc58864aa80282e1974b7afe9",
+      "currentVerdict": "pass for controls at a8330e8; evidence-only descendants must preserve this packaged runtime code",
+      "previousPackedCapture": "worker-10/packed-current/receipt.json",
+      "previousPackedSourceHead": "b063f510d9cfb2a2120ba3f15fd5f7d24a7a0057",
+      "currentSourceTree": "3c2f2269fe471810f3f536e80fd533a81eb0d88a"
+    }
+  ],
+  "interpretation": "Lane 10 was replayed at a8330e8 after review found the earlier capture stale; its packed plugin, media, and trace prove shadow to stop to off controls at that source head. Lane 5 has packed shadow and delegated eval-only stop runs separately; their same-run combination remains open. Neither simulation qualifies Jev decision quality."
+}

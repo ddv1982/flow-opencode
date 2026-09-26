@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "classification": "no-jev-packet-observed",
+  "sessionId": "ses_f2b9b0cafffeARwLAILoZAgWpS",
+  "observedPacketCount": 0,
+  "sha256OfConcatenatedPackets": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "evidence": "No blocked checkpoint or Jev tool event occurred; every flow_status recovery.last value was null. This controls lane makes no Jev quality claim."
+}

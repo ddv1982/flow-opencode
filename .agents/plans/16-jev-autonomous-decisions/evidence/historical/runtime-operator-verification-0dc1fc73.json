@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "0dc1fc737c78dc635f7c6ca3cfdaceb600d8151d",
+  "recordedAt": "2026-09-23T23:42:04.749436+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1432,
+      "skipped": 13,
+      "failed": 0,
+      "assertions": 7472,
+      "logSha256": "605ec47ceeee42f169d4596c5223932dbd85c11fb4e8b9aa4f545a9083dfab5c"
+    },
+    {
+      "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=pinned FLOW_RECOVERY_OPERATOR_SMOKE=1 FLOW_RECOVERY_TREATMENT_SMOKE=1 bun test tests/recovery-operator-host.test.ts tests/recovery-treatment-host.test.ts",
+      "exitCode": 0,
+      "passed": 10,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 150,
+      "logSha256": "703b67299e46850402740eb430096ad706743ee8e735e37a7ac932cc3d9e1b46"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "4ba68741371d9b07510b4df7726f814f842b9e96cf0b74670676c441f3b3dd91"
+    }
+  ],
+  "sourceDigests": {
+    "evals/harness.ts": "99d2da4d2a378ff4e57e0c4637afa32a266153217971da4ef9caf79574e52904",
+    "evals/recovery-decisions/episode-host.ts": "81fe2b3bf1e4cecbe9161b33069868540741cb55a4fb6f91db621108d75fa9b9",
+    "evals/recovery-decisions/episode-operator.ts": "a8405fd7f7a19dc64f47763079b68e613be552082ed8d3904e4a7d8cbbc43c13",
+    "evals/recovery-decisions/episode-receipts.ts": "8677ea2b95f6caadd77ef97f54e012f5f7c0a7bd82b109eb9e6dcda668053736",
+    "evals/recovery-decisions/episode-runner.ts": "9052e67312984dc4092aaeef2f8ecdfd4bee157066fc02a24702e1d045aa50e9",
+    "evals/recovery-decisions/run.ts": "6a995ee28db9ba648dacfe5c1644b6e5156ba6dd28a5c93539b6322aed1d938b",
+    "evals/recovery-decisions/simulation-transport.ts": "e61fc3d14272a987da52bbdc4209cd3aae21db5947b6f8269fd6e631b11528a5",
+    "evals/recovery-decisions/sources.ts": "131927f63f4d6b76a67f1c258220c77c1246a4659ff6a934845b334d79329186",
+    "evals/recovery-decisions/treatment.ts": "659e629a87d4dd49e2971144206255230008a98db902ad146030d1f8e86e38d8",
+    "tests/recovery-episode-host.test.ts": "4962707da1c7831dfc2479f4c0ddadcca2e0c62d4519a47fecb9d4243fb39ce8",
+    "tests/recovery-operator-host.test.ts": "7dab5934b9ef442e25f470c7a83fb79fb96029d93cfcc1d5b0163b23f250c4ac",
+    "tests/recovery-operator-support.ts": "be24ec970b84a9bb7228b0a8c6e3658d739d171efcd5a63ffeeccd0e62f7b45f",
+    "tests/recovery-operator.test.ts": "3bfa07e7a24180e2981e1e3527b74922b837975509b3e70f5a644fa575c781e5"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-operator-verification-7df0c2e8.json",
+    "verifiedCodeHead": "7df0c2e8403d560535242a5c29718692330180ed",
+    "originalSha256": "7838acff0270f3c29bf3b106af2778383bf0fc852d90f8c0fe362915985aa749"
+  },
+  "limits": [
+    "Native host tests use scripted manager and Jev responses; no paid inference or model-quality claim.",
+    "Operator attribution remains unverified and raw episode replies require review.",
+    "Production delegated recovery remains disabled."
+  ]
+}

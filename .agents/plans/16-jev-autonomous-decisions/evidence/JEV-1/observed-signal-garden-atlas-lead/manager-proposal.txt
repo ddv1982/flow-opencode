@@ -1,0 +1,7 @@
+**Findings**
+- `theme-runtime-atlases.R5-01` advisory: atlas compatibility bound is now satisfied.
+- `theme-runtime-atlases.R5-02` blocking: deterministic atlas generation still lacks an isolated generator-exercising test.
+- `theme-runtime-atlases.R5-03` advisory: build and desktop/mobile browser checks passed.
+- `theme-runtime-atlases.R9-01` blocking: current-source lint and full unit-test evidence is not recorded.
+
+Flow is at `await-user-direction` after two review attempts. An additional explicitly authorized retry can add the isolated generator test and record lint/unit evidence.

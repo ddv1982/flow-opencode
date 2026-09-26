@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-21T13:21:03.995366+00:00",
+  "sourceRevision": "0192ede787239205f14deb16a58643ca2896d09e",
+  "sourceState": "uncommitted-working-tree",
+  "bunVersion": "1.4.0",
+  "sourceDigestEncoding": "sha256-of-source-bytes",
+  "sourceDigests": {
+    "evals/recovery-decisions/collect.ts": "9f761cd2a60afa1c52987bbe370fc5bc823c4e1d6c2411ce3dc1c82ad34d8ff3",
+    "evals/recovery-decisions/run.ts": "61f34e91c460991d5ca17080dbe638eb6ed928176c92f2e129586b8c0e69c561",
+    "evals/recovery-decisions/evaluate.ts": "476bcb2c45c33cf0db560c2dabae958248847ecb236d6eb17fa8bd275632a263",
+    "tests/recovery-collection.test.ts": "c25b5a3677aa79179a3cb1670d6238f1f23312b13b0fad9a34551f92858e1cf1",
+    "tests/recovery-decisions.test.ts": "dadd1fac03ffea8301e36ee47bfc1fea509d4f6e238c1c81d7dd4f254428a021"
+  },
+  "checks": {
+    "typecheck": {
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    "lint": {
+      "command": "bun run lint",
+      "exitCode": 0,
+      "filesChecked": 270
+    },
+    "tests": {
+      "command": "bun test tests/recovery-collection.test.ts tests/recovery-decisions.test.ts tests/recovery-policy.test.ts tests/jev-decision-provider.test.ts tests/paid-budget.test.ts tests/documentation-contract.test.ts",
+      "exitCode": 0,
+      "passed": 57,
+      "failed": 0,
+      "assertions": 500
+    },
+    "cli": {
+      "command": "python3 /tmp/flow-recovery-cli-check.py",
+      "exitCode": 0,
+      "checks": [
+        "unfunded refusal before output creation",
+        "SIGTERM exits 143 and preserves receipts",
+        "interrupted output refuses reuse without changing receipts"
+      ],
+      "provider": "fetch replaced by local pending-response stub"
+    },
+    "commentReview": {
+      "findings": 0,
+      "scope": [
+        "evals/recovery-decisions/collect.ts",
+        "evals/recovery-decisions/run.ts",
+        "tests/recovery-collection.test.ts"
+      ]
+    }
+  },
+  "logs": {
+    "/tmp/flow-recovery-collector-tests.log": "b21bb917322c325a687e523f6ef27c5e5de420108631fc1caefbe4950a0845d2",
+    "/tmp/flow-recovery-collector-cli.log": "2d0ec3094c8a4512eb9b193aa14dc62dc621390ea9b262a5c7c129d56ca6c0bd"
+  },
+  "paidCalls": 0,
+  "qualification": "inconclusive",
+  "limitations": [
+    "Synthetic unreviewed development corpus only",
+    "No live decision-quality evidence added",
+    "New explicit campaign budget required before paid calls",
+    "Abrupt kill during reservation writing may leave partial journal; output reuse is refused"
+  ]
+}

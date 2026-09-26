@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "campaignDigest": "509aab4e3b03c570febc86e6c0d44421944b0a28fad5786b7d075c15e4478563",
+  "receipts": [],
+  "observations": [
+    {
+      "episodeId": "injection-finding",
+      "arm": "manager-policy-jev",
+      "packetDigest": "2084bfa51652df86c5aeb93fdc4654d8b04b0612b019f553c502a5838271e958",
+      "campaignDigest": "509aab4e3b03c570febc86e6c0d44421944b0a28fad5786b7d075c15e4478563",
+      "policyVersion": "recovery-proposal-v1",
+      "rubricVersion": "blocker-v1",
+      "managerModel": "unmeasured-manager",
+      "managerPromptDigest": "0000000000000000000000000000000000000000000000000000000000000000",
+      "origin": "live",
+      "result": {
+        "kind": "abstain",
+        "advice": {
+          "choice": "abstain",
+          "confidence": 0.98,
+          "probabilities": {
+            "abstain": 0.99,
+            "remedy": 0.01
+          },
+          "assessments": {
+            "remedy": {
+              "goal": 0.05,
+              "suitability": 0.03
+            }
+          }
+        }
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": "jev-1.13.0",
+        "latencyMs": 544.278871,
+        "attempts": 1,
+        "inputTokens": 744,
+        "outputTokens": 73,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": 0.000031248
+      }
+    }
+  ]
+}

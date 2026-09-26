@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-09-21T20:03:56.719569+00:00",
+  "qualification": "inconclusive",
+  "command": "bun run check",
+  "exitCode": 0,
+  "tests": {
+    "passed": 1397,
+    "failed": 0,
+    "skipped": 1,
+    "assertions": 7317,
+    "files": 100
+  },
+  "checks": [
+    "typecheck",
+    "lint",
+    "release:metadata",
+    "build",
+    "test",
+    "git diff --check"
+  ],
+  "log": {
+    "path": "/tmp/flow-completion-final-check.log",
+    "sha256": "7e3c94bc583a5ec9e95e05db25a5b87b1852f04c045aa86832a3321ae6b1be10"
+  },
+  "sourceDigests": {
+    "evals/recovery-decisions/episode-runner.ts": "e3fb58a8acf3d6e6554532238a92eda41d9cf272ff542482f83c37eea17bcfb8",
+    "evals/recovery-decisions/episode-host.ts": "1735bef279383e3e1852396af34217b6870b9313206a8924124ce0772f317db8",
+    "evals/recovery-decisions/calibration.ts": "34bdbd9e66db7b8631ad319bbb33543312a9014b4e2c1d20827e1bf1ec7030b3",
+    "evals/recovery-decisions/qualification.ts": "aa67da451a56f8c37aa956311058703ec6ea7535c7a96ea2e76cc67bec8779e8",
+    "evals/recovery-decisions/decision-quality.ts": "d80a6c44fc01d654761c615cc8342d2f948891d7fbb866cb7f7546fc5d69b51b",
+    "evals/recovery-decisions/schema.ts": "a28ce54ed8b340d72d9c833bc622542662f53ff087fe2660d6756fbdb4b95087",
+    "evals/recovery-decisions/compare.ts": "17c4597f33ba3b371c8a69211dfba6355add660068de030a82ca0544bce9f2d8",
+    "evals/recovery-decisions/run.ts": "5d381dbdfa8693b24af6bcf2ff576c3e82d1a3968ab643646e79b2a80bb65920",
+    "evals/recovery-decisions/sources.ts": "673215b17da156ea429a814dd8deb1687611d9af13f696b08bc1d4e91dc7d598",
+    "tests/recovery-comparison.test.ts": "7103a149f62ccf69a086ae60f6a82f2bc1ef3a08a07700d610eaddce9d2d6abf",
+    "tests/recovery-decision-quality.test.ts": "5fdd26edbcc6c1ed38ef4018177252b5eed2cdd9fa36926c8b9c35e4b2254525",
+    "tests/recovery-episode-host.test.ts": "62e0c67226997d4a517cf4270b5a0d286150b5377fefe0c5ae094726590ccb40",
+    "tests/recovery-episode-runner.test.ts": "84de96c355d89368a60ce0951a6be4782c7d90d82e77ecb2159b246ec4c6ed6d"
+  },
+  "noPaidCalls": true,
+  "realHostAdapterVerified": false,
+  "productionActivation": false,
+  "remaining": [
+    "Manager provider/model selection and all-model monetary enforcement",
+    "Isolated Jev treatment and operator-resume integration",
+    "Artifact byte verification and real-host adapter proof",
+    "Representative independently reviewed live data and new campaign budget",
+    "Live qualification and operator/release review"
+  ]
+}

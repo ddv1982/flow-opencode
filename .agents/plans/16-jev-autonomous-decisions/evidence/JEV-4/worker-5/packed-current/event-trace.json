@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "classification": "sanitized-simulation-host-events",
+  "rawMessagesSha256": "cb4b3de8476c39a1943453d0958fb740408528ffb44329106ae450ddfe76dac2",
+  "messages": [
+    {
+      "role": "user",
+      "createdMs": 1790267305274,
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto delegated simulation"
+        },
+        {
+          "type": "command",
+          "name": "redacted user text"
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "createdMs": 1790267305297,
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "recoveryMode": "delegated",
+            "remainingCalls": 3,
+            "revision": 11
+          }
+        }
+      ]
+    },
+    {
+      "role": "assistant",
+      "createdMs": 1790267306141,
+      "parts": [
+        {
+          "type": "tool",
+          "name": "flow_status",
+          "status": "completed",
+          "flowState": {
+            "recoveryMode": null,
+            "remainingCalls": null,
+            "revision": null
+          }
+        }
+      ]
+    },
+    {
+      "role": "user",
+      "createdMs": 1790267306673,
+      "parts": [
+        {
+          "type": "command",
+          "name": "flow-auto stop"
+        }
+      ]
+    }
+  ],
+  "recoveryStates": [
+    {
+      "recoveryMode": "delegated",
+      "remainingCalls": 3,
+      "revision": 11
+    },
+    {
+      "recoveryMode": null,
+      "remainingCalls": null,
+      "revision": null
+    }
+  ]
+}

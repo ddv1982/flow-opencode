@@ -1,3 +1,7 @@
+import {
+	type EpisodeQuestion,
+	EpisodeQuestionSchema,
+} from "./recovery-decisions/episode-operator.js";
 // Model-in-the-loop harness for Flow.
 //
 // tests/ proves the runtime and the *text* of prompts deterministically. This
@@ -9,6 +13,7 @@
 // Requires provider credentials, so it is never part of `bun run check`.
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	chmod,
 	cp,
@@ -16,13 +21,15 @@ import {
 	mkdtemp,
 	readdir,
 	readFile,
+	realpath,
 	rename,
 	rm,
 	writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { consumePaidDispatch } from "../scripts/paid-budget.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
@@ -36,6 +43,16 @@ import {
 	providerFailure,
 } from "./failure-origin.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
+import {
+	artifactFile,
+	type HostArtifactPaths,
+	type HostArtifacts,
+	HostArtifactsSchema,
+	type HostArtifactVerification,
+	processArtifactFile,
+	stageHostArtifacts,
+	verifyHostArtifacts,
+} from "./host-artifacts.js";
 import {
 	extractObservedActor,
 	guidanceLoad,
@@ -52,6 +69,18 @@ import {
 	packedPackageManifest,
 	tarballSha256,
 } from "./provenance.js";
+import {
+	type EpisodeReservationScope,
+	EpisodeReservationScopeSchema,
+	requestBudgetStatus,
+} from "./recovery-decisions/request-budget.js";
+import { datasetDigest } from "./recovery-decisions/schema.js";
+import {
+	ExperimentalLiveProfile,
+	type RecoveryTreatment,
+	RecoveryTreatmentSchema,
+	validateTreatmentBudget,
+} from "./recovery-decisions/treatment.js";
 import { normalizeStudyUsage, type StudyUsage } from "./study-usage.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
@@ -407,6 +436,7 @@ export type CredentialSync = {
 	 * copy cannot say which of its own entries are stale.
 	 */
 	readonly snapshot: string | null;
+	readonly provider?: "openai" | "xai";
 };
 
 /**
@@ -437,8 +467,9 @@ function providerCredentialPaths(childData: string): {
  * authenticate from the environment, and a login the child performs is still worth
  * carrying back.
  */
-async function carryProviderCredentials(
+export async function carryProviderCredentials(
 	childData: string,
+	provider?: "openai" | "xai",
 ): Promise<CredentialSync | null> {
 	if (process.env.FLOW_EVAL_NO_AUTH_COPY === "1") return null;
 	const paths = providerCredentialPaths(childData);
@@ -450,11 +481,30 @@ async function carryProviderCredentials(
 		// then reading the source again would let a concurrent host's sync land in
 		// between, and the snapshot would describe a file this host never saw.
 		snapshot = await readFile(paths.source, "utf8");
+		if (provider) snapshot = selectProviderCredentials(snapshot, provider);
 		await writeFile(paths.target, snapshot, { mode: 0o600 });
-	} catch {
+	} catch (error) {
+		if (provider && (error as NodeJS.ErrnoException).code !== "ENOENT")
+			throw new Error("Selected provider credentials unavailable.");
 		// No stored credentials; the provider may still authenticate from the env.
 	}
-	return { ...paths, snapshot };
+	return { ...paths, snapshot, ...(provider ? { provider } : {}) };
+}
+
+function selectProviderCredentials(
+	contents: string,
+	provider: "openai" | "xai",
+): string {
+	let entries: unknown;
+	try {
+		entries = JSON.parse(contents);
+	} catch {
+		throw new Error("Invalid provider credential store.");
+	}
+	if (!isRecord(entries)) throw new Error("Invalid provider credential store.");
+	return JSON.stringify(
+		Object.hasOwn(entries, provider) ? { [provider]: entries[provider] } : {},
+	);
 }
 
 /**
@@ -588,13 +638,17 @@ export async function syncProviderCredentialsBack(
 				`Eval host credentials are invalid; retained at ${paths.target}.`,
 			);
 		}
-		let current = "";
+		let current = paths.provider ? "{}" : "";
 		try {
 			current = await readFile(paths.source, "utf8");
 		} catch (error) {
 			// The real file is gone — the developer logged out mid-run, or there was
 			// never one to copy. The child's own entries are all there is.
 			if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+		}
+		if (paths.provider) {
+			selectProviderCredentials(current, paths.provider);
+			contents = selectProviderCredentials(contents, paths.provider);
 		}
 		const merged = mergeCredentials(current, contents, paths.snapshot);
 		// Nothing this host rotated, so nothing to publish. Leaving the file alone is
@@ -1279,6 +1333,7 @@ export async function preparePackageCache(
  */
 type MessageEntry = {
 	info: {
+		id?: string;
 		role: string;
 		agent?: string;
 		model?: { providerID?: unknown; modelID?: unknown };
@@ -1295,6 +1350,8 @@ type MessageEntry = {
 		};
 	};
 	parts: {
+		callID?: string;
+		messageID?: string;
 		type: string;
 		tool?: string;
 		text?: string;
@@ -1354,7 +1411,36 @@ export class EvalHost {
 	 * and a bare flag would have swallowed it for the rest of the attempt.
 	 */
 	private lastSelfAbortAt = 0;
+	private readonly escalationQuestions = new Map<string, EpisodeQuestion>();
+	escalationQuestion(sessionId: string): EpisodeQuestion {
+		const question = this.escalationQuestions.get(sessionId);
+		if (!question) throw new Error("No captured escalation question.");
+		return structuredClone(question);
+	}
 
+	private artifacts:
+		| { paths: HostArtifactPaths; identity: HostArtifacts }
+		| undefined;
+	private verifiedArtifacts: HostArtifactVerification | undefined;
+	get artifactVerification(): HostArtifactVerification | undefined {
+		return this.verifiedArtifacts
+			? structuredClone(this.verifiedArtifacts)
+			: undefined;
+	}
+	get artifactIdentity(): HostArtifacts | undefined {
+		return this.artifacts
+			? structuredClone(this.artifacts.identity)
+			: undefined;
+	}
+	private async verifyArtifacts() {
+		if (this.artifacts)
+			await verifyHostArtifacts(
+				this.artifacts.paths,
+				this.artifacts.identity,
+				this.signal,
+				this.server?.pid,
+			);
+	}
 	readonly project: string;
 	private readonly scratch: string;
 	private credentialPaths: CredentialSync | null = null;
@@ -1377,6 +1463,8 @@ export class EvalHost {
 	/** Boots a throwaway OpenCode host over a git fixture. */
 	static async start(options: {
 		toolchain: BunToolchain;
+		frozenArtifacts?: { opencodeExecutable: string; identity: HostArtifacts };
+		frozenTreatmentBundle?: { bytes: Uint8Array; sha256: string };
 		/** Prepared by `preparePackageCache`, copied in rather than reinstalled. */
 		packageCache: string;
 		packageVersion?: string;
@@ -1389,9 +1477,117 @@ export class EvalHost {
 		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
+		providerCredentials?: "inherit" | "disabled";
+		recoveryTreatment?: RecoveryTreatment;
+		requestBudget?: {
+			scope?: EpisodeReservationScope;
+			directory: string;
+			authorizationDigest: string;
+			managerModel: "openai/gpt-5.6-terra" | "xai/grok-4.6";
+		};
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
+		if (options.frozenArtifacts) {
+			const { signal, ...configuration } = options;
+			options = {
+				...structuredClone(configuration),
+				...(signal ? { signal } : {}),
+			};
+		}
+		if (options.requestBudget)
+			options = {
+				...options,
+				requestBudget: {
+					...options.requestBudget,
+					directory: resolve(options.requestBudget.directory),
+					...(options.requestBudget.scope
+						? {
+								scope: Object.freeze(
+									EpisodeReservationScopeSchema.parse(
+										options.requestBudget.scope,
+									),
+								),
+							}
+						: {}),
+				},
+			};
+		const frozenArtifacts = options.frozenArtifacts
+			? structuredClone(options.frozenArtifacts)
+			: undefined;
+		if (frozenArtifacts)
+			frozenArtifacts.identity = HostArtifactsSchema.parse(
+				frozenArtifacts.identity,
+			);
 		checkCancellation(options.signal);
+		if (options.recoveryTreatment)
+			options = {
+				...options,
+				recoveryTreatment: RecoveryTreatmentSchema.parse(
+					options.recoveryTreatment,
+				),
+			};
+		const liveTreatment = options.recoveryTreatment?.origin === "live";
+		const simulationTreatment =
+			options.recoveryTreatment?.origin === "simulation";
+		const frozenTreatmentBundle = options.frozenTreatmentBundle
+			? {
+					bytes: new Uint8Array(options.frozenTreatmentBundle.bytes),
+					sha256: options.frozenTreatmentBundle.sha256,
+				}
+			: undefined;
+		if (frozenTreatmentBundle) {
+			if (
+				!liveTreatment ||
+				createHash("sha256")
+					.update(frozenTreatmentBundle.bytes)
+					.digest("hex") !== frozenTreatmentBundle.sha256
+			)
+				throw new Error("Frozen treatment bundle differs from registration.");
+		}
+		const jevKey =
+			liveTreatment && options.recoveryTreatment?.arm === "manager-plus-jev"
+				? options.toolchain.environment.TYPESAFE_API_KEY
+				: undefined;
+		if (
+			liveTreatment &&
+			!["inherit", "disabled"].includes(options.providerCredentials ?? "")
+		)
+			throw new Error(
+				"Live treatment requires an explicit provider credential policy.",
+			);
+		if (
+			liveTreatment &&
+			options.recoveryTreatment?.arm === "manager-plus-jev" &&
+			!jevKey
+		)
+			throw new Error("Live evaluation credential unavailable.");
+		if (options.recoveryTreatment) {
+			await validateTreatmentBudget(
+				options.recoveryTreatment,
+				options.requestBudget,
+				options.signal,
+			);
+			if (options.withFlow === false)
+				throw new Error("Treatment requires Flow composition.");
+		}
+		if (options.requestBudget) {
+			const budget = await requestBudgetStatus(
+				options.requestBudget.directory,
+				options.signal,
+			);
+			if (
+				budget.authorizationDigest !==
+					options.requestBudget.authorizationDigest ||
+				budget.cancelled ||
+				Date.parse(budget.authorization.expiresAt) <= Date.now() ||
+				!budget.authorization.models.some(
+					(row) => row.model === options.requestBudget?.managerModel,
+				)
+			)
+				throw new Error("Invalid host request budget.");
+			if (options.opencodeVersion !== "1.18.31")
+				throw new Error("Request gate is verified only for OpenCode 1.18.31.");
+		}
 		const version = exactPackageVersion(
 			options.packageVersion ?? packageJson.version,
 		);
@@ -1412,15 +1608,22 @@ export class EvalHost {
 			await mkdir(gitHooks);
 			const environment: NodeJS.ProcessEnv = {
 				...Object.fromEntries(
-					Object.entries(options.toolchain.environment).filter(
-						([name]) => !name.startsWith("GIT_"),
-					),
+					Object.entries(
+						options.recoveryTreatment
+							? { PATH: options.toolchain.environment.PATH }
+							: options.toolchain.environment,
+					).filter(([name]) => !name.startsWith("GIT_")),
 				),
 				GIT_CONFIG_NOSYSTEM: "1",
 				GIT_CONFIG_GLOBAL: gitConfig,
 			};
 			delete environment.FLOW_EVAL_AUTHORIZATION;
-			if (options.ambientConfig === "disabled") {
+			if (options.requestBudget) {
+				environment.OPENCODE_EXPERIMENTAL_WEBSOCKETS = "false";
+				environment.OPENCODE_EXPERIMENTAL_NATIVE_LLM = "false";
+			}
+
+			if (options.ambientConfig === "disabled" || options.requestBudget) {
 				for (const name of [
 					"OPENCODE_CONFIG",
 					"OPENCODE_CONFIG_CONTENT",
@@ -1428,12 +1631,20 @@ export class EvalHost {
 				])
 					delete environment[name];
 			}
-			host.credentialPaths = await evaluationPhase(
-				"host",
-				"credential-copy-failed",
-				true,
-				() => carryProviderCredentials(childData),
-			);
+			host.credentialPaths =
+				options.providerCredentials === "disabled" || simulationTreatment
+					? null
+					: await evaluationPhase("host", "credential-copy-failed", true, () =>
+							carryProviderCredentials(
+								childData,
+								liveTreatment
+									? options.requestBudget?.managerModel ===
+										"openai/gpt-5.6-terra"
+										? "openai"
+										: "xai"
+									: undefined,
+							),
+						);
 
 			// Flow derives source identity from git, so the fixture must be a repo.
 			for (const [relative, contents] of Object.entries(options.files)) {
@@ -1469,7 +1680,55 @@ export class EvalHost {
 
 			// Copy rather than race filesystem writes against cancellation: cleanup
 			// must wait until no copy can recreate scratch after its removal.
-			if (options.withFlow !== false) {
+			if (frozenArtifacts) {
+				if (
+					frozenArtifacts.identity.bun.version !==
+						options.toolchain.actualVersion ||
+					frozenArtifacts.identity.opencode.version !==
+						options.opencodeVersion ||
+					(frozenArtifacts.identity.packageCache === null) !==
+						(Boolean(options.recoveryTreatment) || options.withFlow === false)
+				)
+					throw new Error("Host artifact configuration mismatch.");
+				if (
+					options.recoveryTreatment &&
+					JSON.stringify(
+						process.platform === "linux"
+							? await processArtifactFile(process.pid, options.signal)
+							: await artifactFile(
+									await realpath(process.execPath),
+									options.signal,
+								),
+					) !== JSON.stringify(frozenArtifacts.identity.bun.bytes)
+				)
+					throw new Error(
+						"Treatment builder differs from registered Bun bytes.",
+					);
+				const paths = await stageHostArtifacts({
+					paths: {
+						bun: options.toolchain.executable,
+						opencode: frozenArtifacts.opencodeExecutable,
+						packageCache:
+							frozenArtifacts.identity.packageCache === null
+								? null
+								: options.packageCache,
+					},
+					expected: frozenArtifacts.identity,
+					directory: join(scratch, "bin"),
+					packageCache:
+						frozenArtifacts.identity.packageCache === null
+							? null
+							: join(
+									childCache,
+									"opencode",
+									"packages",
+									`opencode-plugin-flow@${version}`,
+								),
+					signal: options.signal,
+				});
+				host.artifacts = { paths, identity: frozenArtifacts.identity };
+				environment.PATH = `${dirname(paths.bun)}${delimiter}${environment.PATH ?? ""}`;
+			} else if (options.withFlow !== false && !options.recoveryTreatment) {
 				const packages = join(childCache, "opencode", "packages");
 				await mkdir(packages, { recursive: true });
 				await cp(
@@ -1485,19 +1744,112 @@ export class EvalHost {
 				);
 			}
 			checkCancellation(options.signal);
-			const pluginEntry = `opencode-plugin-flow@${version}`;
+			let pluginEntry = `opencode-plugin-flow@${version}`;
+			let treatmentBundleDigest: string | undefined;
+			if (options.recoveryTreatment) {
+				if (frozenTreatmentBundle) {
+					const destination = join(
+						scratch,
+						"treatment",
+						"live-treatment-plugin.js",
+					);
+					await mkdir(dirname(destination), { recursive: true });
+					await writeFile(destination, frozenTreatmentBundle.bytes);
+					checkCancellation(options.signal);
+					pluginEntry = pathToFileURL(destination).href;
+					treatmentBundleDigest = frozenTreatmentBundle.sha256;
+				} else {
+					const built = await Bun.build({
+						entrypoints: [
+							fileURLToPath(
+								new URL(
+									liveTreatment
+										? "./recovery-decisions/live-treatment-plugin.ts"
+										: "./recovery-decisions/treatment-plugin.ts",
+									import.meta.url,
+								),
+							),
+						],
+						outdir: join(scratch, "treatment"),
+						target: "bun",
+						format: "esm",
+						minify: false,
+					});
+					checkCancellation(options.signal);
+					if (!built.success || !built.outputs[0])
+						throw new Error("Evaluation treatment bundle failed.");
+					pluginEntry = pathToFileURL(built.outputs[0].path).href;
+					treatmentBundleDigest = createHash("sha256")
+						.update(await readFile(built.outputs[0].path))
+						.digest("hex");
+				}
+			}
+
 			const reviewer = options.reviewer;
-			const configuredPlugin =
-				reviewer &&
-				(reviewer.model !== undefined ||
-					reviewer.variant !== undefined ||
-					reviewer.steps !== undefined)
+			const configuredPlugin = options.recoveryTreatment
+				? [
+						pluginEntry,
+						{
+							...(liveTreatment
+								? { origin: "live" }
+								: { treatment: options.recoveryTreatment }),
+							budget: options.requestBudget,
+							readyPath: join(scratch, "treatment-ready.json"),
+							budgetReadyPath: join(scratch, "budget-ready.json"),
+						},
+					]
+				: reviewer &&
+						(reviewer.model !== undefined ||
+							reviewer.variant !== undefined ||
+							reviewer.steps !== undefined)
 					? [pluginEntry, { reviewer }]
 					: pluginEntry;
 			await writeFile(
 				join(project, "opencode.json"),
 				`${JSON.stringify(
-					options.withFlow === false ? {} : { plugin: [configuredPlugin] },
+					{
+						plugin: [
+							...(options.requestBudget && !liveTreatment
+								? [
+										[
+											pathToFileURL(
+												fileURLToPath(
+													new URL(
+														"./recovery-decisions/budget-plugin.ts",
+														import.meta.url,
+													),
+												),
+											).href,
+											{
+												directory: resolve(options.requestBudget.directory),
+												...(options.requestBudget.scope
+													? { scope: options.requestBudget.scope }
+													: {}),
+												authorizationDigest:
+													options.requestBudget.authorizationDigest,
+												readyPath: join(scratch, "budget-ready.json"),
+												...(options.recoveryTreatment?.origin === "simulation"
+													? {
+															simulationScript:
+																options.recoveryTreatment.script,
+														}
+													: {}),
+											},
+										],
+									]
+								: []),
+							...(options.withFlow === false ? [] : [configuredPlugin]),
+						],
+						...(options.requestBudget
+							? {
+									model: options.requestBudget.managerModel,
+									small_model: options.requestBudget.managerModel,
+									enabled_providers: [
+										options.requestBudget.managerModel.split("/")[0],
+									],
+								}
+							: {}),
+					},
 					null,
 					2,
 				)}\n`,
@@ -1512,11 +1864,14 @@ export class EvalHost {
 					const port = await availablePort();
 					checkCancellation(options.signal);
 					host.baseUrl = `http://127.0.0.1:${port}`;
+					await host.verifyArtifacts();
+					checkCancellation(options.signal);
 					host.server = spawn(
-						options.toolchain.executable,
+						host.artifacts?.paths.opencode ?? options.toolchain.executable,
 						[
-							"x",
-							`opencode-ai@${options.opencodeVersion}`,
+							...(host.artifacts
+								? []
+								: ["x", `opencode-ai@${options.opencodeVersion}`]),
 							"serve",
 							"--port",
 							String(port),
@@ -1528,6 +1883,7 @@ export class EvalHost {
 							detached: process.platform !== "win32",
 							env: {
 								...environment,
+								...(jevKey ? { TYPESAFE_API_KEY: jevKey } : {}),
 								...(options.nativeLlm === false
 									? { OPENCODE_EXPERIMENTAL_NATIVE_LLM: "false" }
 									: {}),
@@ -1590,7 +1946,94 @@ export class EvalHost {
 						throw new Error("OpenCode readiness session had no id.");
 					}
 					await host.deleteSession(ready.id);
+					if (options.requestBudget) {
+						const receipt = JSON.parse(
+							await readFile(join(scratch, "budget-ready.json"), "utf8"),
+						);
+						if (
+							receipt.scopeDigest !==
+								(options.requestBudget.scope
+									? datasetDigest(options.requestBudget.scope)
+									: null) ||
+							receipt.authorizationDigest !==
+								options.requestBudget.authorizationDigest ||
+							(receipt.pid !== host.server.pid &&
+								(!host.server.pid ||
+									process.platform === "win32" ||
+									!(await processGroupMembers(host.server.pid)).includes(
+										receipt.pid,
+									)))
+						)
+							throw new Error(
+								"Request gate did not initialize in the host process.",
+							);
+					}
+					if (options.recoveryTreatment) {
+						const receipt = JSON.parse(
+							await readFile(join(scratch, "treatment-ready.json"), "utf8"),
+						);
+						const budgetReceipt = JSON.parse(
+							await readFile(join(scratch, "budget-ready.json"), "utf8"),
+						);
+						if (
+							receipt.pid !== budgetReceipt.pid ||
+							receipt.authorizationDigest !==
+								options.requestBudget?.authorizationDigest ||
+							(simulationTreatment &&
+								receipt.treatmentDigest !==
+									datasetDigest(options.recoveryTreatment)) ||
+							(liveTreatment &&
+								(budgetReceipt.origin !== "live" ||
+									budgetReceipt.scriptDigest !== null ||
+									receipt.scopeDigest !==
+										datasetDigest(options.requestBudget?.scope) ||
+									receipt.qualification !== "experimental-evaluation" ||
+									receipt.profileDigest !==
+										(options.recoveryTreatment.arm === "manager-plus-jev"
+											? datasetDigest(ExperimentalLiveProfile)
+											: null))) ||
+							receipt.pluginEntrySha256 !== treatmentBundleDigest ||
+							receipt.origin !== options.recoveryTreatment.origin ||
+							receipt.arm !== options.recoveryTreatment.arm
+						)
+							throw new Error(
+								"Treatment did not initialize with the expected identity.",
+							);
+						if (simulationTreatment) {
+							const auth = await fetch(
+								`${host.baseUrl}/auth/${options.requestBudget?.managerModel.split("/")[0]}`,
+								{
+									method: "PUT",
+									headers: { "content-type": "application/json" },
+									body: JSON.stringify({
+										type: "oauth",
+										access: "simulation-access",
+										refresh: "simulation-refresh",
+										expires: Date.now() + 3600000,
+									}),
+									signal: options.signal
+										? AbortSignal.any([
+												options.signal,
+												AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+											])
+										: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+								},
+							);
+							if (!auth.ok)
+								throw new Error("Simulation credential installation failed.");
+						}
+					}
 					checkCancellation(options.signal);
+					await host.verifyArtifacts();
+					checkCancellation(options.signal);
+					if (host.artifacts)
+						host.verifiedArtifacts = {
+							manifestDigest: datasetDigest(host.artifacts.identity),
+							method:
+								process.platform === "linux"
+									? "copied-files-and-linux-process"
+									: "copied-files-and-direct-spawn",
+						};
 					return host;
 				},
 			);
@@ -1673,6 +2116,7 @@ export class EvalHost {
 			observeUsage?: (usage: StudyUsage) => void;
 		},
 	): Promise<string | null> {
+		await this.verifyArtifacts();
 		const sessionId = await this.createSession(`flow-eval probe ${model}`);
 		let usage = normalizeStudyUsage({ tokens: {}, costUsd: null });
 		try {
@@ -1758,6 +2202,9 @@ export class EvalHost {
 		} = {},
 	): Promise<CommandEnd> {
 		checkCancellation(this.signal);
+		await this.verifyArtifacts();
+		checkCancellation(this.signal);
+		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "command" });
 		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
@@ -1796,6 +2243,9 @@ export class EvalHost {
 		} = {},
 	): Promise<CommandEnd> {
 		checkCancellation(this.signal);
+		await this.verifyArtifacts();
+		checkCancellation(this.signal);
+		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "prompt" });
 		const { variant, ...waitOptions } = options;
 		return runSessionRequest({
@@ -1931,6 +2381,26 @@ export class EvalHost {
 			// attempts each burned their full twenty minutes producing nothing after the
 			// model asked.
 			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
+				const captured = EpisodeQuestionSchema.safeParse({
+					sessionId,
+					calls: messages.flatMap((entry) =>
+						entry.parts
+							.filter(
+								(part) =>
+									part.type === "tool" &&
+									part.tool === "question" &&
+									(part.state?.status === "running" ||
+										part.state?.status === "pending"),
+							)
+							.map((part) => ({
+								messageId: part.messageID ?? entry.info.id,
+								callId: part.callID,
+								input: part.state?.input,
+							})),
+					),
+				});
+				if (captured.success)
+					this.escalationQuestions.set(sessionId, captured.data);
 				await abortWait();
 				return "escalated";
 			}

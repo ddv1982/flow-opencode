@@ -1,0 +1,28 @@
+{
+  "recordedAt": "2026-09-21T09:29:34.821011+00:00",
+  "cwd": "/Users/vriesd/projects/flow-opencode",
+  "inspectedHead": "c9813f9a87b9b7438671658cfd523adcd89f3098",
+  "branch": "main",
+  "installedBun": "1.3.14",
+  "requestedBun": "1.4.0",
+  "receipts": [
+    {
+      "path": "baseline-tests.txt",
+      "command": "bun test tests/auto-drive-decision.test.ts tests/auto-drive.test.ts tests/jev-alignment.test.ts tests/jev-alignment-runner.test.ts",
+      "result": "59 pass; two Jev test-file load failures; zod missing"
+    },
+    {
+      "path": "auto-drive-tests.txt",
+      "command": "bun test tests/auto-drive-decision.test.ts tests/auto-drive.test.ts",
+      "result": "59 pass; 0 fail"
+    }
+  ],
+  "timingNote": "Commands ran earlier in this research session. Exact command start timestamps were not captured. recordedAt is provenance-record creation time.",
+  "liveJev": "not run; TYPESAFE_API_KEY absent",
+  "exaRun": {
+    "id": "agent_run_19b0fd54476c458c9db9b855b0e4e615",
+    "status": "completed",
+    "officialSourceCount": 8
+  },
+  "productChanges": "none; only this plan directory added"
+}

@@ -1,0 +1,9 @@
+{
+  "schemaVersion": 1,
+  "model": "typesafe/jev-1.13.0",
+  "sequence": 2,
+  "at": "2026-09-24T16:46:54.713Z",
+  "rawClaimSha256": "84591306f650bd7935809794c4c0a40da34224b9a0a04c3ffd20237cfc03ced8",
+  "stopUserMessageCreatedMs": 1790268415150,
+  "stopAfterClaimMs": 437
+}
