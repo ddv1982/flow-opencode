@@ -26,13 +26,13 @@ The useful simplification target is repeated interpretation of these rules. It i
 
 ## What the retained evidence proves
 
-The [reproducible inventory](evidence/inventory.py) found 38 finalized V2 reports containing 1,238 attempts. Every report uses rate analysis. There are no finalized paired reports in this local result set. The repository also contains two committed qualification bundles. Local evidence may be incomplete, so absence here does not prove nobody has run comparisons elsewhere.
+The original reproducible inventory is unavailable. Its investigation record found 38 finalized V2 reports containing 1,238 attempts. Every report uses rate analysis. There are no finalized paired reports in this local result set. The repository also contains two committed qualification bundles. Local evidence may be incomplete, so absence here does not prove nobody has run comparisons elsewhere.
 
-The newest retained campaign is [the September 5 report](../../../evals/results/2026-09-05T12-24-38-776Z.v2/report.json). It records 76 of 76 scored conformance passes using `openai/gpt-5.6-sol` and `xai/grok-4.6`. Its artifact comes from commit `8a935dedd339a654cd1e4677b3a63dd1fbb0b0f0`, not the current checkout. It is historical evidence, not qualification of this HEAD. There is no sealed 8.2.1 qualification bundle in the inspected bundle directory.
+The September 5 report is unavailable. Historical investigation notes record 76 of 76 scored conformance passes using `openai/gpt-5.6-sol` and `xai/grok-4.6`. Its artifact came from commit `8a935dedd339a654cd1e4677b3a63dd1fbb0b0f0`, not the current checkout. It is historical evidence, not qualification of this HEAD. There is no sealed 8.2.1 qualification bundle in the inspected bundle directory.
 
 That campaign has 23 review assignments, 23 silent passing reviews, and no findings. This does not show that the reviewer is ineffective. The campaign chiefly tests workflow behavior and includes clean work. It does show why release passes cannot establish defect detection. Full campaign cost is unknown because only 38 of 76 runs report cost. The V2 total correctly remains null. The partial dollar sum in the older summary must not be presented as total spend.
 
-Parent verification during this investigation passed `bun run check`. Its test stage had 828 passes, one opt-in live test skipped, and no failures. The test stage took 45.05 seconds. The separate packed-host smoke then passed all 21 tests on OpenCode 1.18.6 in 6.37 seconds. All 13 replay cassettes reproduced. See [verification](evidence/verification.md), [replay output](evidence/replay.log), and [live host output](evidence/live-smoke.log). No paid model campaign was run.
+Parent verification during this investigation passed `bun run check`. Its test stage had 828 passes, one opt-in live test skipped, and no failures. The test stage took 45.05 seconds. The separate packed-host smoke then passed all 21 tests on OpenCode 1.18.6 in 6.37 seconds. All 13 replay cassettes reproduced. See [verification](evidence/verification.md). The original replay output and live-host output are unavailable. No paid model campaign was run.
 
 ## Fix the measurement before changing the behavior
 
@@ -51,7 +51,7 @@ The existing five hidden executable benchmarks, shuffled paired blocks, masked a
 
 ## Simplify the actual prompt stack
 
-The [prompt inventory](evidence/prompt-inventory.ts) measures the assembled auto router plus planning and execution guidance at 17,346 bytes and 2,386 whitespace words. These are static text measurements, not tokenizer counts. The 788-byte manager kernel appears twice in that stack. Compaction and continuation can introduce another copy. The reviewer prompt is 7,555 bytes.
+The original prompt inventory is unavailable. It measured the assembled auto router plus planning and execution guidance at 17,346 bytes and 2,386 whitespace words. These are static text measurements, not tokenizer counts. The 788-byte manager kernel appears twice in that stack. Compaction and continuation can introduce another copy. The reviewer prompt is 7,555 bytes.
 
 Prompt economy tests mostly inspect seven compiled command and role strings. The long planning and execution guides have a combined size test, but are outside the same absolute-rule and duplicate-sentence loops. Several behavior tests also require exact wording. See `tests/prompt-quality.test.ts:395`, `src/guidance/catalog.ts:13`, `src/prompt-surfaces.ts:94`, and `src/platform/opencode/auto-drive.ts`.
 
@@ -97,7 +97,7 @@ The prompt protocol and eval comparison runner are the highest-priority rewrite 
 
 Two runtime findings belong in an early correctness phase. An inspect feature may complete with a failed verdict because the requested output is the finding report. The service summary still says the feature is blocked, while assurance expects every review to pass. This is an inconsistency between task completion and code acceptance, not evidence that inspect results falsely receive full assurance. See `src/domain/transitions.ts:687`, `src/application/flow-service.ts:102`, and `src/application/delivery.ts:117`.
 
-A separate boundary exists at the 4,096-operation session limit. A valid session can consume the collection limit and leave no capacity for a new close operation. Verify the retained [capacity probe](evidence/capacity-probe.ts) before fixing it. Reserve capacity for terminal operations at mutation admission. Do not add an unbounded operation history or erase idempotency records to get past the limit.
+A separate boundary exists at the 4,096-operation session limit. A valid session can consume the collection limit and leave no capacity for a new close operation. The original probe is unavailable; [F0 verification](evidence/f0/verification.md) records the boundary and its later fix. Reserve capacity for terminal operations at mutation admission. Do not add an unbounded operation history or erase idempotency records to get past the limit.
 
 Keep Session v5, the storage format, exact command binding, and one active feature through the initial overhaul. A model-adaptive prompt and experiment profile should remain process configuration and eval provenance. It should not become another durable workflow ledger.
 
