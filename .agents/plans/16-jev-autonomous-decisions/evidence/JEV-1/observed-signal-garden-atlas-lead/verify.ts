@@ -2,12 +2,19 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { RecoveryController } from "../../../../../../src/application/recovery-policy.js";
-import { createFileSourceIdentityProvider } from "../../../../../../src/infrastructure/fs/source-identity.js";
+import {
+	buildReviewedCorpus,
+	reviewSnapshot,
+} from "../../../../../../evals/recovery-decisions/dataset.js";
+import { evaluateRecoveryCorpus } from "../../../../../../evals/recovery-decisions/evaluate.js";
 import {
 	DraftSchema,
 	datasetDigest,
+	ReviewedCaseSchema,
+	ReviewedCorpusSchema,
 } from "../../../../../../evals/recovery-decisions/schema.js";
+import { RecoveryController } from "../../../../../../src/application/recovery-policy.js";
+import { createFileSourceIdentityProvider } from "../../../../../../src/infrastructure/fs/source-identity.js";
 
 const directory = new URL(".", import.meta.url);
 const bytes = (name: string) => readFile(new URL(name, directory));
@@ -141,6 +148,43 @@ assert(
 	"offline packet replay",
 );
 
+const submission = await json("label-submission.json");
+const reviewedCase = ReviewedCaseSchema.parse(await json("reviewed-case.json"));
+assert(
+	datasetDigest(reviewSnapshot(draft, submission)) ===
+		datasetDigest(reviewedCase) &&
+		datasetDigest(reviewedCase) ===
+			"e17acbc1ede8ac34561cc9c3133a0802212b673bc7107f2c1383ccf1f9f11ecf",
+	"reviewed case and label binding",
+);
+const corpus = ReviewedCorpusSchema.parse(
+	await json("reviewed-calibration-corpus.json"),
+);
+assert(
+	datasetDigest(await buildReviewedCorpus([reviewedCase])) ===
+		datasetDigest(corpus) &&
+		corpus.cases.length === 1 &&
+		corpus.cases[0]?.labels.split === "calibration" &&
+		corpus.cases[0].labels.primary === true,
+	"single reviewed calibration group",
+);
+const preparation = await json("offline-preparation.json");
+const { sourceDigestEncoding, sourceDigests, ...storedReport } = preparation;
+const recomputedReport = await evaluateRecoveryCorpus(corpus);
+assert(
+	datasetDigest(storedReport) === datasetDigest(recomputedReport) &&
+		datasetDigest(preparation) ===
+			"51af3a7f8f625c6a218400d13d2af193084d86e57a4c1edc9252f97a0c94e9a3" &&
+		sourceDigestEncoding === "sha256-of-source-bytes" &&
+		typeof sourceDigests === "object" &&
+		sourceDigests !== null &&
+		recomputedReport.rows.length === 1 &&
+		recomputedReport.rows[0]?.eligibilityMatches === true &&
+		recomputedReport.rows[0].packetDigest === offline.packetDigest &&
+		recomputedReport.qualification === "inconclusive",
+	"reviewed offline preparation",
+);
+
 const privateRoot = process.env.FLOW_SIGNAL_ATLAS_PRIVATE_ROOT;
 const productWorktree = process.env.FLOW_SIGNAL_ATLAS_WORKTREE;
 if (privateRoot && productWorktree) {
@@ -178,15 +222,15 @@ if (privateRoot && productWorktree) {
 		"private current source identity",
 	);
 }
-console.log(
-	JSON.stringify({
-		verdict:
-			privateRoot && productWorktree
-				? "verified-private-source-lead"
-				: "verified-public-lead-bindings",
-		revision: session.revision,
-		failedReviews: failed.length,
-		packetDigest: offline.packetDigest,
-		qualification: "unreviewed-lead-only",
-	}),
-);
+const result = {
+	verdict:
+		privateRoot && productWorktree
+			? "verified-private-source-calibration"
+			: "verified-public-calibration",
+	revision: session.revision,
+	failedReviews: failed.length,
+	reviewedCases: corpus.cases.length,
+	packetDigest: offline.packetDigest,
+	qualification: recomputedReport.qualification,
+};
+process.stdout.write(`${JSON.stringify(result)}\n`);
