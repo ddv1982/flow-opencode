@@ -209,6 +209,14 @@ export function parseRecoveryCommand(args: string): {
 		fields.set(match[1], match[2]);
 		rest = rest.slice(match[0].length);
 	}
+	const trailingOff = /(?:^|\s)--recovery=off\s*$/.exec(rest);
+	if (trailingOff && !fields.size) {
+		const goal = rest.slice(0, trailingOff.index).trim();
+		if (!/(?:^|\s)--recovery\S*/.test(goal))
+			return { goal, settings: null, explicit: true };
+	}
+	if (/(?:^|\s)--recovery\S*/.test(rest))
+		throw new Error("Invalid recovery command options.");
 	if (!fields.size) return { goal: args, settings: null, explicit: false };
 	const mode = fields.get("--recovery"),
 		calls = fields.get("--recovery-calls"),

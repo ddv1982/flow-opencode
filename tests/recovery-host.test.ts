@@ -221,6 +221,10 @@ test("configured auto defaults to bounded shadow and explicit off wins", async (
 	expect(JSON.stringify(automatic)).not.toContain("--recovery");
 	await run("--recovery=off Fix parser");
 	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	const trailingOptOut = await run("Fix parser --recovery=off");
+	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(JSON.stringify(trailingOptOut)).toContain("Fix parser");
+	expect(JSON.stringify(trailingOptOut)).not.toContain("--recovery");
 	configured = false;
 	await run("Fix parser");
 	expect(recovery.snapshot()).toEqual({ mode: "off" });
