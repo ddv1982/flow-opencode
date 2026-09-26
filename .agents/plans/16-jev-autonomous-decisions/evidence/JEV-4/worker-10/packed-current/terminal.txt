@@ -1,0 +1,38 @@
+     Thought · 846ms
+
+     ⚙ flow_status
+
+     - Recovery mode: "shadow"
+     - Remaining calls: 1
+     - Qualification: "shadow-only"
+
+     ▣  Build · GPT-5.6 Luna · 8.2s
+
+  ┃
+  ┃  Flow auto stopped.
+  ┃
+
+     Flow remains stopped in planning with approval pending. No approval or implementation was performed.
+
+     ▣  Build · GPT-5.6 Luna · 5.1s
+
+  ┃
+  ┃  Call flow_status and report only recovery mode, revision, and approval. Do not mutate the plan.
+  ┃
+
+     Thought · 672ms
+
+     ⚙ flow_status
+
+     - Recovery mode: "off"
+     - Revision: 1
+     - Approval: "pending"
+
+     ▣  Build · GPT-5.6 Luna · 6.3s
+
+  ┃
+  ┃
+  ┃
+  ┃  Build · GPT-5.6 Luna OpenAI
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/flow-jev-overnight-20260924/jev4-packed-lane10b/project                            28.3K (7%)  ctrl+p commands

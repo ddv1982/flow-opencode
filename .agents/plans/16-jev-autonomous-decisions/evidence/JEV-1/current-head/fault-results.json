@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "head": "7a1cb596a3a231d8951a8842e43cec6ef70f5c31",
+  "origin": "simulation",
+  "providerCalls": 0,
+  "cases": [
+    {
+      "case": "rate-limit",
+      "injectedHttpStatus": 429,
+      "dispatches": 3,
+      "result": {
+        "kind": "unavailable",
+        "reason": "http"
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": null,
+        "latencyMs": 6.5910379999999975,
+        "attempts": 3,
+        "inputTokens": null,
+        "outputTokens": null,
+        "reservedUsd": 0.008064,
+        "estimatedUsd": null
+      },
+      "elapsedMs": 9.826068999999997
+    },
+    {
+      "case": "overload",
+      "injectedHttpStatus": 529,
+      "dispatches": 3,
+      "result": {
+        "kind": "unavailable",
+        "reason": "http"
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": null,
+        "latencyMs": 2.2279100000000014,
+        "attempts": 3,
+        "inputTokens": null,
+        "outputTokens": null,
+        "reservedUsd": 0.008064,
+        "estimatedUsd": null
+      },
+      "elapsedMs": 3.0968149999999994
+    },
+    {
+      "case": "timeout",
+      "dispatches": 1,
+      "result": {
+        "kind": "unavailable",
+        "reason": "timeout"
+      },
+      "metrics": {
+        "requestedModel": "jev-1.13.0",
+        "resolvedModel": null,
+        "latencyMs": 10001.267191,
+        "attempts": 1,
+        "inputTokens": null,
+        "outputTokens": null,
+        "reservedUsd": 0.002688,
+        "estimatedUsd": null
+      },
+      "elapsedMs": 10003.504517000001
+    }
+  ]
+}

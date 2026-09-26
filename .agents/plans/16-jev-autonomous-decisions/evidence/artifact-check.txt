@@ -1,0 +1,1 @@
+Local document links and artifact whitespace: PASS

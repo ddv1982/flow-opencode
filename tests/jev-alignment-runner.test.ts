@@ -142,3 +142,62 @@ describe("jev alignment runner", () => {
 		});
 	});
 });
+
+test("v2 alignment report preserves v1 scoring with complete pinned metadata", async () => {
+	await withResults(async (resultsPath) => {
+		const { report } = await runJevAlignment({
+			apiKey: SECRET,
+			resultsPath,
+			fetch: async () => ({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					model: "jev-1.13.0",
+					usage: { input_tokens: 100, output_tokens: 20 },
+					answers: {
+						same_goal: {
+							type: "score",
+							score: 2,
+							confidence: 0.9,
+							probabilities: { "0": 0.01, "1": 0.04, "2": 0.95 },
+						},
+					},
+				}),
+			}),
+		});
+		expect(report.schemaVersion).toBe(2);
+		expect(report.rubricVersion).toBe("same-goal-v1");
+		expect(report.counts.continue).toBe(8);
+		expect(report.cases[0]).toMatchObject({
+			requestedModel: "jev-1.13.0",
+			resolvedModel: "jev-1.13.0",
+			metadataStatus: "validated",
+			origin: "simulation",
+			inputTokens: 100,
+			outputTokens: 20,
+			probabilities: { "0": 0.01, "1": 0.04, "2": 0.95 },
+		});
+	});
+});
+
+test("legacy score-only responses never fabricate resolved-model metadata", async () => {
+	await withResults(async (resultsPath) => {
+		const { report } = await runJevAlignment({
+			apiKey: SECRET,
+			resultsPath,
+			fetch: async () => ({
+				ok: true,
+				status: 200,
+				json: async () => scorePayload(2, 0.9),
+			}),
+		});
+		expect(report.cases[0]).toMatchObject({
+			mapped: "continue",
+			metadataStatus: "unavailable",
+			resolvedModel: null,
+			probabilities: null,
+			inputTokens: null,
+			outputTokens: null,
+		});
+	});
+});

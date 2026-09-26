@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "classification": "partial-live-lane-evidence",
+  "lane": "JEV-4 worker-5",
+  "sourceHead": "fe1d0665eecb969b3f18cae392084cbd11e4356b",
+  "recordedAt": "2026-09-24T16:51:23.679289+00:00",
+  "origin": "simulation",
+  "paidInference": false,
+  "host": "OpenCode 1.18.31",
+  "client": "OpenCode 1.18.32",
+  "managerModel": "xai/grok-4.6",
+  "jevModel": "typesafe/jev-1.13.0",
+  "sessionId": "ses_f2bb12ab3ffeVVcJxAmblijr4f",
+  "flowRevisionBefore": 11,
+  "flowRevisionAfter": 11,
+  "capture": {
+    "source": "X11 xterm attached to packed-plugin OpenCode host",
+    "videoDurationSeconds": 90,
+    "videoFrameRate": 1,
+    "videoFrames": 90,
+    "windowOnly": true
+  },
+  "observations": [
+    "The observed disposable host loaded the packed Flow artifact and the separate simulation request gate; installed and source dist hashes match.",
+    "A real TUI shadow recovery command reached a delayed simulated Jev request and retained the exact outgoing packet digest.",
+    "The user-entered /flow-auto stop followed the request claim by 437 ms, before the simulated reply.",
+    "After the delay the Session v5 state was identical to the seeded blocked snapshot and no reset tool call appeared in the host trace."
+  ],
+  "laneVerdict": "partial",
+  "remaining": [
+    "This packed-host run used shadow mode, which cannot authorize a recovery mutation. The separate delegated simulation capture verifies stop under an experimental profile but used an eval-only treatment bundle; lane 5 remains open until the delegated authority and packed-host requirements are proven together."
+  ],
+  "qualification": "no Jev decision-quality claim",
+  "files": {
+    "boot-identity.json": "a73aefc40dd0e36137f834e94b39277b0c4e0feba3652006979f255afd364cf9",
+    "pending.png": "7e2a356ff96740785efcfe5176e4fa1f34aafd93137f0ce459da45b3d2c4150a",
+    "event-trace.json": "5ca26fadf11bfb5050d2caecbabb2bbf9f92bc277bb1c5a5e0ff37573861b95c",
+    "pending-pane.txt": "aecf887cc413c62512871f5772040d81d7ea8c1257a4fad102ae410f62353af3",
+    "stop.mp4": "1abab93591cefdab1b59602567ffa29acfd49b9ec3fe36ac88817cd355fb3563",
+    "stop-pane.txt": "46dd82046162f5660cb25456044fa8acaa5d44a179d130956d6cf65ccf6b43e9",
+    "packet-digest.json": "217fed9becefeab3785893ab056cddb34388bbc2e0b0dbf0d94e0dfb856ed773",
+    "state-comparison.json": "9ca64237ec7346da71df408240aa5a579d2aa548702e5b4a1df1248b04b56f8c",
+    "host-startup.txt": "eb9b98395dea6a3277b1a6f0cb413bdf8d717777bf56b6975789fef0739aedd3",
+    "build.log": "2a04527b5d6baa3a45a59d7ec8c074d8273481b1ed1b423219a06a993d7186b5",
+    "frozen-install.log": "165fa0e59965e8606cad0f05cead55d664a8844e4664950079d822f4a89611f5",
+    "pack.log": "ed069a2ef48ac1544bf5c029bfb453fbb0663465ca5ae2168ce263ebf08318e0",
+    "packed-cache-install.log": "bb1778ce3c090f10940423497e6c1d7b57d870a4559ba96d06994852de54d53c",
+    "request-claim.json": "112e55b54e4f8a77e4d03c878e6db49d257ec0e7b8bace6ee605c392773ca81d",
+    "packed-smoke.log": "9314de518ea3005fdbb4ddc22af4d24cbc40a1e90cba2a9fd4075fe37deeed26",
+    "stop.png": "75487ad576b97461d5781c31dc46969ed651319a5c874b081aa0425a7b81c2de"
+  }
+}

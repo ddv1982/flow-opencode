@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "be47032ac47e1e3b296a2df17243354d32bceab8",
+  "recordedAt": "2026-09-24T01:37:17.676539+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1457,
+      "skipped": 14,
+      "failed": 0,
+      "assertions": 7787,
+      "logSha256": "036811606ba0d7e64039104e3dfb91c40b7bafa95939621795a48c87efd51066"
+    },
+    {
+      "command": "bun test tests/host-artifacts.test.ts tests/recovery-episode-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-episode-receipts.test.ts tests/recovery-operator.test.ts",
+      "exitCode": 0,
+      "passed": 47,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 191,
+      "logSha256": "10faa1ce877ffe5696d09962d7820d044c0a0b62c39899907152d428f9d4f01c"
+    },
+    {
+      "command": "FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode FLOW_HOST_ARTIFACT_SMOKE=1 FLOW_RECOVERY_OPERATOR_SMOKE=1 bun test tests/host-artifacts-host.test.ts tests/recovery-operator-host.test.ts",
+      "exitCode": 0,
+      "passed": 5,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 65,
+      "logSha256": "fd2c27792af404c162df55a3858225606c700b86d315c5dfe2b5367b5737b0f9"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "3a75704ec6ecf1723e2364603d54037d202b7db3e55f995cbb5793809768f9e0"
+    }
+  ],
+  "sourceDigests": {
+    "evals/harness.ts": "691379bf9c8d0e534fa3362477eb4c0e65457536007b821b926b468ff52b9a45",
+    "evals/host-artifacts.ts": "4a5ac5162782c729c97c95d947d845a7c2f179833dd7be55eed6eaa409a61fb8",
+    "evals/recovery-decisions/episode-host.ts": "9d3a3de75119559ffc67b05f530c12ffdb3381f64ddfd3b9a4d258ac54485616",
+    "evals/recovery-decisions/episode-receipts.ts": "2ea8cf796fd191ae8aa2ae3749772cd6c5e7a436f4679f32e1a489c674c89a0b",
+    "evals/recovery-decisions/episode-runner.ts": "6022f9af6db7444116382347326e5602c00f7522551251e658359accae809dfe",
+    "evals/recovery-decisions/sources.ts": "7e5644a340f3e75ee50925d2ccf00cf61ee47e10eb8c7a6958bec95a505b764f",
+    "tests/host-artifacts-host.test.ts": "80462950755b54aa76c51af8c8a413b1de1f3f760f37b89f85735497669c127d",
+    "tests/host-artifacts.test.ts": "e465a20dcf8fc8ecdb30da593965c9a6aab8aec4e0dfa30b99d19942f022561e",
+    "tests/recovery-episode-host.test.ts": "82b9da93fc9dc9f0c4c00340bf0e576a443f4df3a90ce49664e36826e0b2096a",
+    "tests/recovery-episode-receipts.test.ts": "6ca509e536c705ac35a1adec131ee0358080a8524e00be31085e29f3f66de4e0",
+    "tests/recovery-operator-host.test.ts": "16d1d2a26892c932fe175d5dcf481a53f49826d7268c9ea8e567e6dd90d650ca"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-artifact-verification-5aea9673.json",
+    "verifiedCodeHead": "5aea96734840adf953e46260ca49683c1849c8cf",
+    "originalSha256": "5278feec5f8cc1a3cd3e59ba67f9de25453000abea58abb9f7040927c66f07d0"
+  },
+  "limits": [
+    "Native host tests use scripted manager and provider responses, not paid decision quality.",
+    "Production delegated recovery remains disabled.",
+    "The receipt verifies the source files at verifiedCodeHead; prior receipts remain historical."
+  ]
+}

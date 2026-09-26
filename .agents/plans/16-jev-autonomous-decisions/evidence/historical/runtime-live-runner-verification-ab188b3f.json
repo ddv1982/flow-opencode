@@ -1,0 +1,69 @@
+{
+  "schemaVersion": 1,
+  "kind": "current-head-verification",
+  "verifiedCodeHead": "ab188b3f9682eba2e906e814b8b327c68758140c",
+  "recordedAt": "2026-09-24T04:23:20.190461+00:00",
+  "qualification": "inconclusive",
+  "origin": "simulation",
+  "paidInferenceCalls": 0,
+  "productionActivation": false,
+  "checks": [
+    {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1556,
+      "skipped": 18,
+      "failed": 0,
+      "assertions": 8259,
+      "logSha256": "14cfc6a6d64bcd7b0abc5b38753a7c4124d12c1658f9c322c4fc35b2b586fc65"
+    },
+    {
+      "command": "bun test tests/recovery-campaign-host.test.ts tests/recovery-live-host.test.ts tests/recovery-episode-runner.test.ts tests/recovery-live-treatment.test.ts tests/recovery-episode-host.test.ts tests/recovery-capture.test.ts",
+      "exitCode": 0,
+      "passed": 114,
+      "skipped": 2,
+      "failed": 0,
+      "assertions": 508,
+      "logSha256": "ce01e1b22dd6c4c91e7aa7a1e83bcd1eb9fc1d1878fd6e7828e8767da613da80"
+    },
+    {
+      "command": "FLOW_RECOVERY_CAMPAIGN_SMOKE=1 FLOW_RECOVERY_OPENCODE_EXECUTABLE=/tmp/flow-campaign-opencode-1.18.31/node_modules/opencode-linux-x64/bin/opencode bun test tests/recovery-campaign-host.test.ts",
+      "exitCode": 0,
+      "passed": 2,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 244,
+      "logSha256": "20a52ff47a811f7be6ff747b5ac8b44cda73bffdde34243bf713ab2e550354f6"
+    },
+    {
+      "command": "bun run smoke:live",
+      "exitCode": 0,
+      "passed": 22,
+      "skipped": 0,
+      "failed": 0,
+      "assertions": 133,
+      "logSha256": "865b58b1d8be1bb7c67337156e818c0a5154a87e44a40c66c4b44f9ef2b7eac5"
+    }
+  ],
+  "sourceDigests": {
+    "evals/recovery-decisions/capture.ts": "0db16805da9cfb1ae5c5eca1c13229b5d1eb53c1122d9f7cfda282867070bf8a",
+    "evals/recovery-decisions/episode-host.ts": "3e6d2551219e40b100571d6e5f3c9a7201bb675611ec5ea220893f97686a05fd",
+    "evals/recovery-decisions/episode-runner.ts": "d7c84b1757efbe4310edbc23941f19dd9fc33d93a9d29f04af4732f33a681514",
+    "evals/recovery-decisions/simulation-transport.ts": "a8c56b97e8e48abd7036122cbd8395d8df3137fd56d7fdaa70d22fadc53d5956",
+    "evals/recovery-decisions/treatment.ts": "fba6de2f5b16ca856ed4c0d134951cc6f88080000b34aa2bba6ad7c849386b72",
+    "tests/recovery-campaign-host.test.ts": "79c8e0e530fe71d310a69986455d50c3d2fe4039039df26352ab0a93752b8493",
+    "tests/recovery-capture.test.ts": "576fa58effc54fd33363cee96a3bcddebbe8615ae6f07fe577315d5ea93af76c",
+    "tests/recovery-episode-host.test.ts": "cecfc80da4daeff7856f62eb7cc04abea45dd580a18efec21cc1823185eb3691",
+    "tests/recovery-treatment-host.test.ts": "7fa691cb5fc30af118b906203ad70032de67585afa68a99cacc5c3d5ea9f7038"
+  },
+  "historicalReceipt": {
+    "path": ".agents/plans/16-jev-autonomous-decisions/evidence/historical/runtime-live-runner-verification-d9c81d85.json",
+    "verifiedCodeHead": "d9c81d850468b99526c247200ec44c8d169ab099",
+    "originalSha256": "2b251e3214c63c39b22de76dea186dd352eecf47d07828b575b8eb250a1b1c88"
+  },
+  "limits": [
+    "Checks use scripted or intercepted providers and do not establish Jev decision quality.",
+    "No production delegated profile is enabled.",
+    "The verified code head precedes this evidence-only commit."
+  ]
+}

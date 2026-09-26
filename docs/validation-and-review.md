@@ -56,6 +56,10 @@ broad claim on any other command. Nothing decides whether the declared command i
 a test; [ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
 caller declaration made at planning time.
 
+For truncated Bash output, Flow hashes the host `outputPath` only if its
+bounded regular `tool-output` file matches the visible tail. Missing or
+mismatched files stay incomplete; the exact command and exit code still bind.
+
 `savePlan` requires `evidence`: one gate plus optional extra observations. Every
 entry names its command, `platform`, and `assertions`. One satisfaction rule
 applies to all entries: an eligible exact-command observation on the declared

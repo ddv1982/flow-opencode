@@ -1,0 +1,51 @@
+bun test v1.4.0 (34cbb9a40)
+
+tests/jev-alignment.test.ts:
+(pass) jev alignment mapping > maps high same_goal score and confidence to continue [0.58ms]
+(pass) jev alignment mapping > maps a confident score below the continue threshold to new-scope [0.01ms]
+(pass) jev alignment mapping > abstains when confidence is below the pin [0.02ms]
+(pass) jev alignment mapping > records malformed and out-of-range payloads as error, never continue [0.42ms]
+(pass) jev alignment mapping > inspect-to-implement corpus case cannot count as a correct continuation [0.60ms]
+(pass) jev alignment mapping > mixed-scope corpus case cannot count as a correct continuation [0.14ms]
+(pass) jev alignment mapping > shadow veto fires only on mapped new-scope [0.03ms]
+
+tests/jev-transport.test.ts:
+(pass) bounded Jev transport > retries transient responses at most three attempts and reserves each [4.59ms]
+(pass) bounded Jev transport > refuses attempt exceeding budget and does not retry authentication [0.09ms]
+(pass) bounded Jev transport > deadline covers stalled headers and body even when test transport ignores abort [44.27ms]
+(pass) bounded Jev transport > rejects oversized streaming body and request [0.24ms]
+(pass) bounded Jev transport > pre-cancelled requests consume no budget [0.05ms]
+(pass) HTTP-date backoff beyond deadline prevents another attempt [0.07ms]
+
+tests/blocker-decisions.test.ts:
+(pass) blocker campaign > offline report preserves missing arms and never promotes synthetic data [1.59ms]
+(pass) blocker campaign > rejects stale corpus, origin split leakage and duplicate observations [3.27ms]
+(pass) blocker campaign > labels never enter outgoing state or its digest [0.52ms]
+(pass) blocker campaign > imports require an explicit matching receipt and default to simulation [0.74ms]
+(pass) blocker campaign > advice cannot admit forbidden scope and low absolute suitability abstains [0.48ms]
+(pass) blocker campaign > malformed advice rejects exact options, probabilities, NaN and missing assessments [0.45ms]
+(pass) blocker campaign > simulation and unknown resolved models cannot qualify or admit [0.32ms]
+(pass) blocker campaign > 299 retry plus one independent action never qualifies either class [80.34ms]
+(pass) blocker campaign > cross-campaign evidence is rejected at evaluation [0.46ms]
+{"output":"/var/folders/ph/ypnbw6f11qd1s2j_df2rvzgc0000gn/T/blocker-cli-fMkdfo/report.json"}
+(pass) blocker campaign > CLI writes an inspectable offline report and refuses overwrites [4.43ms]
+(pass) blocker collector > missing key makes zero calls and preserves unavailable outcomes [0.61ms]
+(pass) blocker collector > bounded collector saves complete metadata and cannot claim live provenance [0.99ms]
+(pass) blocker collector > unknown models, missing answers and malformed distributions are unavailable [2.46ms]
+(pass) qualification is reachable only with complete independent safe live evidence [637.75ms]
+(pass) origin variants contribute only the canonical sample [36.50ms]
+(pass) three-way choice uses the selected candidate's atomic assessment [2.14ms]
+{"output":"/var/folders/ph/ypnbw6f11qd1s2j_df2rvzgc0000gn/T/blocker-reservation-4K88Fm/report.json"}
+(pass) existing or unwritable output prevents every paid attempt [2.07ms]
+
+tests/jev-alignment-runner.test.ts:
+(pass) jev alignment runner > missing key does not fetch and records error, not continue [0.89ms]
+(pass) jev alignment runner > sends authorization to fetch but omits it from the report [1.37ms]
+(pass) jev alignment runner > retains http, transport, and abstain outcomes [607.70ms]
+(pass) v2 alignment report preserves v1 scoring with complete pinned metadata [1.09ms]
+(pass) legacy score-only responses never fabricate resolved-model metadata [0.81ms]
+
+ 35 pass
+ 0 fail
+ 164 expect() calls
+Ran 35 tests across 4 files. [1461.00ms]

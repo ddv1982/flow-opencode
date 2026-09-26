@@ -22,8 +22,8 @@ export const FLOW_MANAGER_KERNEL = [
 		"and independent review only to `flow-reviewer`; never use generic or general-purpose agents.",
 	].join(" "),
 	[
-		"- Make one automatic fresh full retry only when the projected `nextAction`",
-		"is `flow_feature_reset`; otherwise checkpoint.",
+		"- Use exact host recovery requests, or retry once in full when",
+		"`nextAction` is `flow_feature_reset`; else checkpoint.",
 		"On `await-user-direction` or a lease stop, print compact `findingsDigest`",
 		"without inventing ids.",
 	].join(" "),

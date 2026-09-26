@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "kind": "live-OpenCode-spilled-output-verification",
+  "flowSourceHead": "92e86160de66ca40381437b7531aae2ce02b47da",
+  "hostVersion": "1.18.31",
+  "packedPluginSha256": "7448f3d22a9a6b7477e8d4f172772453c9361f9a07e52e685e6c697f093a1a7c",
+  "echoSessionId": "session:ad5e0546-7203-4354-b873-2e939274f597",
+  "canonicalCommand": "RUSTUP_HOME=/home/vriesd/.rustup cargo test --workspace",
+  "observations": [
+    {
+      "validationId": "d5d5e2ee-191d-496d-b1cc-c2192987dfff",
+      "recordedRevision": 11,
+      "exitCode": 0,
+      "displayTruncated": true,
+      "fullBytes": 58874,
+      "fullOutputDigest": "sha256:e3e25e8123caf8be4c557364c26745c46aa4ca861d271bf8f035764eb6de10c1",
+      "sessionOutputComplete": true,
+      "markerPassed": true
+    },
+    {
+      "validationId": "193e2d42-254f-4dc6-9963-95ef3357450a",
+      "recordedRevision": 17,
+      "exitCode": 0,
+      "displayTruncated": true,
+      "fullBytes": 59304,
+      "fullOutputDigest": "sha256:5546e1c95699dfdf14fdb2c65cf3ea47aee3ec56df909f669d8da9185ed0fddf",
+      "sessionOutputComplete": true,
+      "markerPassed": true
+    }
+  ],
+  "result": "Both unmodified canonical gate executions produced host-truncated displays and complete exit-zero Session v5 observations bound to the full host output files. Independent review began after the first observation and accepted the broad receipt.",
+  "limits": [
+    "Raw Echo output and credentials remain outside this repository.",
+    "The Echo repair itself failed review on missing pre-edit reproduction evidence; this receipt verifies only the Flow validation fallback."
+  ]
+}

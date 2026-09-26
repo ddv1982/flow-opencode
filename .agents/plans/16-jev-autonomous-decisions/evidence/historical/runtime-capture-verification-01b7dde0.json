@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "scope": "private-recovery-input-capture",
+  "qualification": "inconclusive",
+  "paidInference": false,
+  "sourceFiles": [
+    {
+      "path": "evals/recovery-decisions/capture.ts",
+      "sha256": "3d1cf43e1b11be33be118a07d7faadab2b43e410402906630bf9ecc7613bb01f"
+    },
+    {
+      "path": "evals/recovery-decisions/capture-plugin.ts",
+      "sha256": "51e08ee6f42352dd52ffeb6a7057a8f9748e385eea50ae779edb9b144610ea08"
+    },
+    {
+      "path": "evals/recovery-decisions/sources.ts",
+      "sha256": "ef42242c631e4e9579400fbc497c47dcae1e9a710cc211a17f64cae53d92d492"
+    },
+    {
+      "path": "tests/recovery-capture.test.ts",
+      "sha256": "5e422d2a9a94ce087b990da274782a9e1016a5d3c6361afd0a4de6dede4bd74d"
+    }
+  ],
+  "checks": {
+    "repository": {
+      "command": "bun run check",
+      "exitCode": 0,
+      "passed": 1448,
+      "skipped": 15,
+      "failed": 0,
+      "assertions": 7640,
+      "log": {
+        "path": "/tmp/flow-capture-parent-check.log",
+        "sha256": "f13edb694c3c9d51246999c6799a72236ec851b11c13d39c7f32ac2738623f62"
+      }
+    },
+    "focused": {
+      "command": "bun test tests/recovery-capture.test.ts tests/recovery-policy.test.ts tests/recovery-dataset.test.ts tests/distribution-and-surface.test.ts tests/opencode-schema-contract.test.ts",
+      "exitCode": 0,
+      "passed": 66,
+      "failed": 0,
+      "assertions": 840,
+      "log": {
+        "path": "/tmp/flow-capture-parent-focused.log",
+        "sha256": "07a047349cc70014a35ff42cb4155f162bd9fcbc53e093b178b88d9cc824349d"
+      }
+    },
+    "independentReview": {
+      "passed": 8,
+      "assertions": 112,
+      "unresolvedFindings": 0,
+      "modelDiversity": "unverified-inherited",
+      "report": {
+        "path": "/tmp/flow-capture-code-review.md",
+        "sha256": "8f45e27ff0245132a1e424776701f3c9d8c3b42ad81d1ae5ddb0ff4af552ed59"
+      },
+      "log": {
+        "path": "/tmp/flow-capture-judge-focused.log",
+        "sha256": "a02336fbede405d1f8255c68f65b48b354e45a2d15addc1f9e7629e2653adadb"
+      }
+    },
+    "commentAudit": {
+      "addedComments": 0,
+      "suppressions": 0,
+      "deletions": 0,
+      "unresolvedFindings": 0
+    },
+    "native": {
+      "command": "bun /tmp/flow-capture-native-source-proof.ts",
+      "exitCode": 0,
+      "hostVersion": "1.18.31",
+      "entry": "evals/recovery-decisions/capture-plugin.ts",
+      "origin": "scripted-local-simulation",
+      "localProviderRequests": 3,
+      "records": 1,
+      "exactPayloadMatches": true,
+      "workspaceSourceUnchanged": true,
+      "controllerOutcome": "rejected-no-active-recovery-lease-after-capture",
+      "script": {
+        "path": "/tmp/flow-capture-native-source-proof.ts",
+        "sha256": "09af92977ab5e17065c435cb795258c4673be3ce857a891321e9810fea431388"
+      },
+      "report": {
+        "path": "/tmp/flow-capture-native-FdmCCe/report.json",
+        "sha256": "fff7f030349845a1924278b8e8c4a8f361366bdcf4f6af56620a21a88ac68549"
+      },
+      "log": {
+        "path": "/tmp/flow-capture-parent-native.log",
+        "sha256": "2544124c3b74314692f0561464bcc92615a81793695033fd60fab4dede40a3fd"
+      },
+      "transcript": {
+        "path": "/tmp/flow-capture-native-FdmCCe/stdout.jsonl",
+        "sha256": "9fd56dbca28fb7956eac759a7f31d7b2d77a56d292b4fd0a25e56abf60e1e487"
+      },
+      "priorBundleReport": {
+        "path": "/tmp/flow-capture-native-wSVFWV/report.json",
+        "sha256": "0af410b80c0f6d807774009c942c519acccd166ec741c63002e8742dd3da67c6"
+      },
+      "setupDiagnosis": {
+        "path": "/tmp/flow-capture-native-diagnostic.md",
+        "sha256": "b7ba9070ff7af45c1b8e1bb957a664e89797ee090e0dd0254199a894a200b186"
+      }
+    }
+  },
+  "limits": [
+    "Raw inputs are unreviewed with unverified origin.",
+    "Capture precedes controller eligibility and can record rejected proposals.",
+    "Capture-only provider cannot dispatch Jev requests. Manager execution remains separate.",
+    "Native proof uses synthetic inputs and local scripted responses.",
+    "Initial native setup stalls have no isolated root cause.",
+    "Fifteen existing opt-in checks were not rerun.",
+    "Production qualification profiles remain empty and live episode execution remains refused.",
+    "Representative cases, independent reviews, real cost bounds, new paid cap, live execution and qualification, and release review remain outstanding."
+  ]
+}

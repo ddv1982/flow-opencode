@@ -1,0 +1,57 @@
+
+  ┃                                                                                                                                                                        Native TUI recovery stop
+  ┃  Flow flow-auto: Repair the blocked parser within its approved plan.
+  ┃                                                                                                                                                                        Context
+                                                                                                                                                                           110 tokens
+       flow_status                                                                                                                                                         0% used
+       flow_status                                                                                                                                                         $0.00 spent
+
+  ┃                                                                                                                                                                        LSP
+  ┃  Flow auto stopped.                                                                                                                                                    LSPs are disabled
+  ┃
+
+     Simulation complete.
+
+        Build  GPT-5.6 Terra   163ms
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  ┃
+  ┃
+  ┃
+  ┃  Build   GPT-5.6 Terra OpenAI                                                                                                                                          /tmp/workspace-xg5xtx/project:main
+  ╹▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀
+   /tmp/workspace-xg5xtx/project                                                                                                              110 (0%)  ctrl+p commands      OpenCode 1.18.31
