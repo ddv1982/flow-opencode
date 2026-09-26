@@ -104,7 +104,7 @@ Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-sim
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
 
 ```bash
-bun run eval -- --release --model openai/gpt-5.6-sol --model xai/grok-4.6
+bun run eval -- --release --model openai/gpt-6-sol --model xai/grok-4.6
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.
 bun run eval:canary -- record <record-options>

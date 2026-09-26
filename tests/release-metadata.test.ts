@@ -99,7 +99,7 @@ const canarySession = (() => {
 	return SessionSchema.parse(session);
 })();
 const canaryTranscript = (packageVersion: string) => ({
-	info: { directory: "<flow-eval-workspace>", version: "1.18.6" },
+	info: { directory: "<flow-eval-workspace>", version: "1.18.31" },
 	messages: [
 		{
 			info: {
