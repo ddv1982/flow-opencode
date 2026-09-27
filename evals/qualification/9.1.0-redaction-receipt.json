@@ -1,0 +1,54 @@
+{
+  "changes": [
+    {
+      "attemptId": "attempt-cell-b092d71fc74d45427db84badd81e3cdc348419ab5f6abc90e9011896b2ee2d64",
+      "changedFields": [
+        "gradeInput.allCalls.25.output",
+        "gradeInput.allCalls.25.rawOutput",
+        "gradeInput.allCalls.25.metadata.output"
+      ],
+      "derivedSha256": "sha256:fe4ac3f8eb45835cd614f8f26246d8026f2cd3091f7a6d50fdeccaf217e5c387",
+      "originalSha256": "sha256:fccaf0027db0264855855a03ca4ea7f58f3ce015dd6d120a5bb7e99232ae4214"
+    },
+    {
+      "attemptId": "attempt-cell-939bdc83e55dde978fb61a182cd32d50bb589b0c1bf3afbf29326827edd89d09",
+      "changedFields": [
+        "gradeInput.allCalls.12.output",
+        "gradeInput.allCalls.12.rawOutput",
+        "gradeInput.allCalls.12.metadata.output"
+      ],
+      "derivedSha256": "sha256:d19c7260b5e503415ba05395afff71833eb4da75eb54cef4e906ec8be7522245",
+      "originalSha256": "sha256:5f4171184203890a82f6d0bc497dcf7ba7f2106e7bd36c3c7afb57c3cc08eddb"
+    },
+    {
+      "attemptId": "attempt-cell-7099f0b9d8e57505d23629b87b3b4a73413bade2fbd5939deba177a4949c1a9b",
+      "changedFields": [
+        "gradeInput.allCalls.13.output",
+        "gradeInput.allCalls.13.rawOutput",
+        "gradeInput.allCalls.13.metadata.output"
+      ],
+      "derivedSha256": "sha256:6ed7f56d2f1e9d3a28557dc80f338852e5d22fa22b0f56fa2af977aecfd0381f",
+      "originalSha256": "sha256:ba26b9ec0b6fc309be89a4b96abe1074236813417f9896cf14aa26108c5b51d1"
+    },
+    {
+      "attemptId": "attempt-cell-1e7e501f19ee3750f3ac23f6b4487e6b41bdc301bc066261a7bbf0c073f1ec03",
+      "changedFields": [
+        "gradeInput.allCalls.11.output",
+        "gradeInput.allCalls.11.rawOutput",
+        "gradeInput.allCalls.11.metadata.output"
+      ],
+      "derivedSha256": "sha256:bf64f48e0dab12611f4f87f44319035e08a1e777ac7bee87661e0824f54db328",
+      "originalSha256": "sha256:3c78fdff2174b9deebf18be38e7203950a3a057f1c81cd5016a662392084aae5"
+    }
+  ],
+  "derivedReportSha256": "sha256:ff0314c2af85f5a5dd32f1c99a3052978f0bfb423abee8e0494f7c0d2f6c212f",
+  "kind": "post-capture-output-path-redaction",
+  "purpose": "Post-capture privacy redaction of local toolchain paths in diagnostic tool outputs; recorded decisions and grades are unchanged.",
+  "qualifiedBundleSha256": "sha256:86bbc934222c2715d315521ff5041edc718eba6492ff679db50a6d494fc1bd6d",
+  "redaction": {
+    "replacement": "<redacted-home>/",
+    "scope": "gradeInput.allCalls output, rawOutput, and metadata.output strings only"
+  },
+  "schemaVersion": 1,
+  "sourceReportSha256": "sha256:0a6525b8e24792d1109a2d62fc70ddac2614f00d5fff631120fd482a18cee1ee"
+}
