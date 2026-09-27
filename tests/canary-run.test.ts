@@ -1,6 +1,13 @@
 import { afterEach, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+	chmod,
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runPaidCanary } from "../scripts/canary-run.js";
@@ -101,3 +108,42 @@ test("changed prepared bytes fail before consuming or launching", async () => {
 	).rejects.toThrow("bytes changed");
 	expect((await paidRunStatus(directory)).consumed).toBe(0);
 });
+
+test.skipIf(process.platform === "win32")(
+	"default canary launch excludes ambient TypeSafe credentials",
+	async () => {
+		const { directory, input } = await fixture();
+		const executable = join(directory, "opencode");
+		const record = join(directory, "child-environment.txt");
+		await writeFile(
+			executable,
+			'#!/bin/sh\n{ printenv TYPESAFE_API_KEY >/dev/null && echo present || echo absent; printenv FLOW_EVAL_AUTHORIZATION >/dev/null && echo present || echo absent; echo "$FLOW_CANARY_SENTINEL"; } > "$FLOW_CANARY_RECORD"\n',
+		);
+		await chmod(executable, 0o755);
+		const original = {
+			path: process.env.PATH,
+			key: process.env.TYPESAFE_API_KEY,
+			sentinel: process.env.FLOW_CANARY_SENTINEL,
+			record: process.env.FLOW_CANARY_RECORD,
+		};
+		try {
+			process.env.PATH = `${directory}:${original.path ?? ""}`;
+			process.env.TYPESAFE_API_KEY = "synthetic-not-real";
+			process.env.FLOW_CANARY_SENTINEL = "retained";
+			process.env.FLOW_CANARY_RECORD = record;
+			expect(await runPaidCanary(input)).toBe(0);
+			expect(await readFile(record, "utf8")).toBe("absent\nabsent\nretained\n");
+			expect((await paidRunStatus(directory)).consumed).toBe(1);
+		} finally {
+			for (const [name, value] of Object.entries({
+				PATH: original.path,
+				TYPESAFE_API_KEY: original.key,
+				FLOW_CANARY_SENTINEL: original.sentinel,
+				FLOW_CANARY_RECORD: original.record,
+			})) {
+				if (value === undefined) delete process.env[name];
+				else process.env[name] = value;
+			}
+		}
+	},
+);

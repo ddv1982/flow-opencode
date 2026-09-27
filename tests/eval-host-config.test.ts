@@ -67,3 +67,44 @@ test("eval host writes reviewer model through native plugin tuple options", asyn
 	}
 	// The host already permits 180s startup; allow packaging and cleanup as well.
 }, 240_000);
+
+test.skipIf(process.platform !== "linux")(
+	"ordinary eval host does not pass ambient TypeSafe credentials to OpenCode",
+	async () => {
+		const toolchain = currentBunToolchain(packageJson.packageManager);
+		const prior = process.env.FLOW_EVAL_NO_AUTH_COPY;
+		process.env.FLOW_EVAL_NO_AUTH_COPY = "1";
+		let host: EvalHost | null = null;
+		try {
+			host = await EvalHost.start({
+				toolchain: {
+					...toolchain,
+					environment: {
+						...toolchain.environment,
+						TYPESAFE_API_KEY: "synthetic-not-real",
+						FLOW_EVAL_SENTINEL: "retained",
+					},
+				},
+				packageCache: "",
+				withFlow: false,
+				opencodeVersion: packageJson.devDependencies["@opencode-ai/plugin"],
+				ambientConfig: "disabled",
+				providerCredentials: "disabled",
+				files: { "package.json": '{"name":"eval-host-credential-test"}\n' },
+				signal: AbortSignal.timeout(120_000),
+			});
+			const server = Reflect.get(host, "server") as { pid?: number };
+			if (!server.pid) throw new Error("OpenCode server has no pid");
+			const entries = (await readFile(`/proc/${server.pid}/environ`, "utf8"))
+				.split("\0")
+				.map((entry) => entry.split("=", 1)[0]);
+			expect(entries.includes("TYPESAFE_API_KEY")).toBe(false);
+			expect(entries.includes("FLOW_EVAL_SENTINEL")).toBe(true);
+		} finally {
+			await host?.stop();
+			if (prior === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
+			else process.env.FLOW_EVAL_NO_AUTH_COPY = prior;
+		}
+	},
+	150_000,
+);

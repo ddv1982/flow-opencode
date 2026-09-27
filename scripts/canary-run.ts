@@ -42,6 +42,7 @@ async function launchCanary(
 	return new Promise((resolve, reject) => {
 		const environment = { ...process.env };
 		delete environment.FLOW_EVAL_AUTHORIZATION;
+		delete environment.TYPESAFE_API_KEY;
 		const child = spawn(
 			"opencode",
 			["run", "--model", model, "--format", "json", "--", prompt],

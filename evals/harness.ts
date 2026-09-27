@@ -1618,6 +1618,7 @@ export class EvalHost {
 				GIT_CONFIG_GLOBAL: gitConfig,
 			};
 			delete environment.FLOW_EVAL_AUTHORIZATION;
+			delete environment.TYPESAFE_API_KEY;
 			if (options.requestBudget) {
 				environment.OPENCODE_EXPERIMENTAL_WEBSOCKETS = "false";
 				environment.OPENCODE_EXPERIMENTAL_NATIVE_LLM = "false";
