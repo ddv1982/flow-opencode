@@ -1,6 +1,14 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      recover_tag:
+        description: Recover the verified 9.1.0 release without moving its tag
+        required: true
+        type: choice
+        options:
+          - v9.1.0
   push:
     branches:
       - main
@@ -17,6 +25,7 @@ jobs:
     outputs:
       publish: ${{ steps.resolve.outputs.publish }}
       tag: ${{ steps.resolve.outputs.tag }}
+      recovery: ${{ steps.resolve.outputs.recovery }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -24,26 +33,39 @@ jobs:
       - name: Resolve release tag
         id: resolve
         shell: bash
+        env:
+          RECOVERY_TAG: ${{ inputs.recover_tag }}
         run: |
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           tag="v${version}"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
-          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            if [[ "${GITHUB_REF}" != "refs/heads/main" || "${RECOVERY_TAG}" != "v9.1.0" || "${RECOVERY_TAG}" != "${tag}" ]]; then
+              echo "::error::Release recovery requires main and the exact v9.1.0 tag."
+              exit 1
+            fi
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "recovery=true" >> "$GITHUB_OUTPUT"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             if [[ "${GITHUB_REF_NAME}" != "${tag}" ]]; then
               echo "::error::Release tag/version mismatch: tag=${GITHUB_REF_NAME}, package.json=${version}."
               exit 1
             fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
+            echo "recovery=false" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "recovery=false" >> "$GITHUB_OUTPUT"
           fi
 
   verify-main-and-tag:
     needs: decide
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FLOW_RELEASE_RECOVERY_TAG: ${{ needs.decide.outputs.recovery == 'true' && needs.decide.outputs.tag || '' }}
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,7 +93,16 @@ jobs:
 
       - name: Rebuild release candidate
         timeout-minutes: 2
-        run: bun pm pack --destination .
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun pm pack --destination .
+          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+            bun run scripts/restore-exact-release-artifact.ts \
+              opencode-plugin-flow-9.1.0.tgz \
+              evals/qualification/bundles/qb1-86bbc934222c2715d315521ff5041edc718eba6492ff679db50a6d494fc1bd6d/objects/sha256-0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24 \
+              sha256:0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24
+          fi
 
       - name: Report release evidence readiness without publishing
         timeout-minutes: 5
@@ -80,13 +111,20 @@ jobs:
           set -euo pipefail
           tarball="$(ls opencode-plugin-flow-*.tgz)"
           bun run release:metadata -- --artifact "$tarball"
-          bun run eval:canary -- verify --artifact "$tarball" --mode dry-run
+          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+            bun run release:metadata -- --tag "$FLOW_RELEASE_RECOVERY_TAG" --artifact "$tarball" --canary evals/canary/9.1.0.json
+            bun run eval:canary -- verify --artifact "$tarball" --mode strict
+          else
+            bun run eval:canary -- verify --artifact "$tarball" --mode dry-run
+          fi
 
   release:
     needs: [decide, verify-main-and-tag]
     if: needs.decide.outputs.publish == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      FLOW_RELEASE_RECOVERY_TAG: ${{ needs.decide.outputs.recovery == 'true' && needs.decide.outputs.tag || '' }}
     concurrency:
       group: release-publication
       cancel-in-progress: false
@@ -140,6 +178,12 @@ jobs:
         run: |
           set -euo pipefail
           bun pm pack --destination .
+          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+            bun run scripts/restore-exact-release-artifact.ts \
+              opencode-plugin-flow-9.1.0.tgz \
+              evals/qualification/bundles/qb1-86bbc934222c2715d315521ff5041edc718eba6492ff679db50a6d494fc1bd6d/objects/sha256-0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24 \
+              sha256:0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24
+          fi
 
       - name: Restore release record from this workflow run
         id: restore
@@ -177,10 +221,14 @@ jobs:
           elif [ -f "evals/qualification/patches/${version}.json" ]; then
             evidence=(--patch "evals/qualification/patches/${version}.json")
           fi
+          commit="${GITHUB_SHA}"
+          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+            commit="$(git rev-parse "${FLOW_RELEASE_RECOVERY_TAG}^{commit}")"
+          fi
           bun run scripts/release.ts init .release-state \
             --artifact "$tarball" \
             "${evidence[@]}" \
-            --commit "${GITHUB_SHA}"
+            --commit "$commit"
 
       - name: Persist release record before publication
         if: steps.restore.outputs.restored != 'true'
