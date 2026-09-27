@@ -20,6 +20,7 @@ import {
 	convergeNpmPublication,
 	defaultRuntime,
 	type PublicationRuntime,
+	verifyReleaseRecoveryRef,
 	verifyReleaseRef,
 } from "./release-publish.js";
 
@@ -47,6 +48,7 @@ export const ReleaseRecordSchema = z
 		bundles: z.string().min(1),
 		bundleSha256: Hash,
 		creationOwner: z.string().min(1),
+		publicationMode: z.literal("recovery").optional(),
 	})
 	.strict();
 export type ReleaseRecord = z.infer<typeof ReleaseRecordSchema>;
@@ -170,6 +172,12 @@ export async function resumeRelease(
 	},
 ): Promise<void> {
 	const record = await loadRelease(directory);
+	const recovery = record.publicationMode === "recovery";
+	if (
+		recovery !== Boolean(process.env.FLOW_RELEASE_RECOVERY_TAG) ||
+		(recovery && process.env.FLOW_RELEASE_RECOVERY_TAG !== record.tag)
+	)
+		throw new Error("Release recovery mode differs from its durable record.");
 	await verify(record);
 	const github = {
 		repository: record.repository,
@@ -183,8 +191,11 @@ export async function resumeRelease(
 		],
 	};
 	const proof = async (currentMain: boolean) => {
-		const evidence = await verifyReleaseRef(record.tag, runtime, currentMain);
-		if (evidence.headSha !== record.commit)
+		const commit = recovery
+			? (await verifyReleaseRecoveryRef(record.tag, runtime, currentMain))
+					.localTagCommitSha
+			: (await verifyReleaseRef(record.tag, runtime, currentMain)).headSha;
+		if (commit !== record.commit)
 			throw new Error("Release record commit differs from checkout.");
 	};
 	const prepared = await convergeGithubRelease(
@@ -271,6 +282,9 @@ async function initialize(directory: string, options: Map<string, string>) {
 				: "evals/qualification/bundles"));
 	const metadata = JSON.parse(await readFile("package.json", "utf8"));
 	const tag = `v${metadata.version}`;
+	const recovery = process.env.FLOW_RELEASE_RECOVERY_TAG;
+	if (recovery && recovery !== tag)
+		throw new Error("Release recovery tag differs from package version.");
 	const artifact = await inspectArtifact({
 		repositoryRoot: process.cwd(),
 		tarballPath: artifactPath,
@@ -296,7 +310,8 @@ async function initialize(directory: string, options: Map<string, string>) {
 			record.canary !== canary ||
 			record.patch !== patch ||
 			record.feature !== feature ||
-			record.bundles !== bundles
+			record.bundles !== bundles ||
+			record.publicationMode !== (recovery ? "recovery" : undefined)
 		)
 			throw new Error(
 				"Existing release record conflicts with requested inputs.",
@@ -355,6 +370,7 @@ async function initialize(directory: string, options: Map<string, string>) {
 		bundles,
 		bundleSha256: evidence.bundleSha256,
 		creationOwner: owner(),
+		...(recovery ? { publicationMode: "recovery" as const } : {}),
 	});
 	await writeExclusive(join(directory, "release.json"), record);
 }

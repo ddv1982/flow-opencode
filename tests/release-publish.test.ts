@@ -9,12 +9,16 @@ import {
 	convergeGithubRelease,
 	convergeNpmPublication,
 	type PublicationRuntime,
+	type RecoveryRefEvidence,
 	type ReleaseRefEvidence,
+	releaseRecoveryRefIssue,
 	releaseRefIssue,
 } from "../scripts/release-publish.js";
 
 const COMMIT = "0123456789abcdef0123456789abcdef01234567";
 const TAG_OBJECT = "89abcdef0123456789abcdef0123456789abcdef";
+const RECOVERY_COMMIT = "727308d2ccd5761f03024341328cff06887ebae1";
+const RECOVERY_TAG_OBJECT = "c629deb583185b977908f2203fab0caee69484a9";
 
 function refEvidence(
 	overrides: Partial<ReleaseRefEvidence> = {},
@@ -29,6 +33,27 @@ function refEvidence(
 		remoteTagObjectSha: TAG_OBJECT,
 		remoteTagCommitSha: COMMIT,
 		mainCommitSha: COMMIT,
+		...overrides,
+	};
+}
+
+function recoveryEvidence(
+	overrides: Partial<RecoveryRefEvidence> = {},
+): RecoveryRefEvidence {
+	return {
+		expectedTag: "v9.1.0",
+		requestedTag: "v9.1.0",
+		eventName: "workflow_dispatch",
+		eventRefType: "branch",
+		eventRefName: "main",
+		eventSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		headSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		localTagObjectSha: RECOVERY_TAG_OBJECT,
+		localTagCommitSha: RECOVERY_COMMIT,
+		remoteTagObjectSha: RECOVERY_TAG_OBJECT,
+		remoteTagCommitSha: RECOVERY_COMMIT,
+		mainCommitSha: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		tagAncestorOfMain: true,
 		...overrides,
 	};
 }
@@ -57,6 +82,48 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("release ref proof", () => {
+	test("accepts only a current-main dispatch for an unchanged ancestor tag", () => {
+		expect(releaseRecoveryRefIssue(recoveryEvidence(), true)).toBeNull();
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ mainCommitSha: null, tagAncestorOfMain: null }),
+				false,
+			),
+		).toBeNull();
+	});
+
+	test("recovery refuses a moved tag, unrelated main, or unreviewed dispatch", () => {
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ remoteTagObjectSha: COMMIT }),
+				true,
+			),
+		).toContain("remote tag");
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ localTagCommitSha: COMMIT }),
+				true,
+			),
+		).toContain("pinned 9.1.0");
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ tagAncestorOfMain: false }),
+				true,
+			),
+		).toContain("ancestor");
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ eventRefName: "feature" }),
+				true,
+			),
+		).toContain("main branch");
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ mainCommitSha: COMMIT }),
+				true,
+			),
+		).toContain("current origin/main");
+	});
 	test("obsolete publication commands fail with migration guidance", () => {
 		const legacy = spawnSync(
 			"bun",

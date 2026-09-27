@@ -12,6 +12,9 @@ const MUTATION_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 5_000;
 const MAX_COMMAND_OUTPUT_BYTES = 1_000_000;
 const MAX_RELEASE_PAGES = 10;
+const RECOVERY_TAG = "v9.1.0";
+const RECOVERY_TAG_OBJECT = "c629deb583185b977908f2203fab0caee69484a9";
+const RECOVERY_TAG_COMMIT = "727308d2ccd5761f03024341328cff06887ebae1";
 
 export type CommandResult = {
 	readonly exitCode: number;
@@ -45,6 +48,22 @@ export type ReleaseRefEvidence = {
 	readonly remoteTagObjectSha: string;
 	readonly remoteTagCommitSha: string;
 	readonly mainCommitSha: string;
+};
+
+export type RecoveryRefEvidence = {
+	readonly expectedTag: string;
+	readonly requestedTag: string;
+	readonly eventName: string;
+	readonly eventRefType: string;
+	readonly eventRefName: string;
+	readonly eventSha: string;
+	readonly headSha: string;
+	readonly localTagObjectSha: string;
+	readonly localTagCommitSha: string;
+	readonly remoteTagObjectSha: string;
+	readonly remoteTagCommitSha: string;
+	readonly mainCommitSha: string | null;
+	readonly tagAncestorOfMain: boolean | null;
 };
 
 type NpmPublicationInput = {
@@ -208,6 +227,40 @@ export function releaseRefIssue(evidence: ReleaseRefEvidence): string | null {
 	return null;
 }
 
+export function releaseRecoveryRefIssue(
+	evidence: RecoveryRefEvidence,
+	requireCurrentMain: boolean,
+): string | null {
+	if (
+		evidence.eventName !== "workflow_dispatch" ||
+		evidence.eventRefType !== "branch" ||
+		evidence.eventRefName !== "main"
+	)
+		return "Release recovery requires a dispatch from the main branch.";
+	if (
+		evidence.expectedTag !== RECOVERY_TAG ||
+		evidence.requestedTag !== evidence.expectedTag ||
+		evidence.eventSha !== evidence.headSha
+	)
+		return "Release recovery input or checkout differs from the dispatch.";
+	if (
+		evidence.localTagObjectSha !== RECOVERY_TAG_OBJECT ||
+		evidence.localTagCommitSha !== RECOVERY_TAG_COMMIT
+	)
+		return "Release recovery tag no longer identifies the pinned 9.1.0 release.";
+	if (evidence.localTagObjectSha !== evidence.remoteTagObjectSha)
+		return "The remote tag object no longer matches the checked-out release tag.";
+	if (evidence.localTagCommitSha !== evidence.remoteTagCommitSha)
+		return "The remote tag commit no longer matches the checked-out release tag.";
+	if (requireCurrentMain) {
+		if (evidence.mainCommitSha !== evidence.headSha)
+			return "Release recovery checkout is not the current origin/main commit.";
+		if (evidence.tagAncestorOfMain !== true)
+			return "Release recovery tag is not an ancestor of current main.";
+	}
+	return null;
+}
+
 async function revParse(
 	runtime: PublicationRuntime,
 	revision: string,
@@ -273,6 +326,79 @@ export async function verifyReleaseRef(
 		const issue = requireCurrentMain
 			? releaseRefIssue(evidence)
 			: releaseTagIssue(evidence);
+		if (issue) throw new Error(issue);
+		return evidence;
+	} finally {
+		for (const ref of requireCurrentMain ? [mainRef, tagRef] : [tagRef]) {
+			await runtime.run(
+				"git",
+				["update-ref", "-d", ref],
+				LOCAL_COMMAND_TIMEOUT_MS,
+			);
+		}
+	}
+}
+
+export async function verifyReleaseRecoveryRef(
+	tag: string,
+	runtime: PublicationRuntime,
+	requireCurrentMain = true,
+): Promise<RecoveryRefEvidence> {
+	const packageJson = JSON.parse(await readFile("package.json", "utf8")) as {
+		version?: unknown;
+	};
+	if (typeof packageJson.version !== "string")
+		throw new Error("package.json does not contain a release version.");
+	if (
+		tag !== `v${packageJson.version}` ||
+		tag !== process.env.FLOW_RELEASE_RECOVERY_TAG
+	)
+		throw new Error("Release recovery tag differs from package or dispatch.");
+	const runIdentity = `${process.env.GITHUB_RUN_ID ?? "local"}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}`;
+	const mainRef = `refs/flow-release/${runIdentity}/recovery-main`;
+	const tagRef = `refs/flow-release/${runIdentity}/recovery-tag`;
+	const fetchArgs = [
+		"fetch",
+		"--force",
+		"--no-tags",
+		"origin",
+		...(requireCurrentMain ? [`+refs/heads/main:${mainRef}`] : []),
+		`+refs/tags/${tag}:${tagRef}`,
+	];
+	await checkedCommand(runtime, "git", fetchArgs, REMOTE_COMMAND_TIMEOUT_MS);
+	try {
+		const tagAncestorOfMain = requireCurrentMain
+			? await runtime.run(
+					"git",
+					["merge-base", "--is-ancestor", `${tagRef}^{commit}`, mainRef],
+					LOCAL_COMMAND_TIMEOUT_MS,
+				)
+			: null;
+		if (
+			tagAncestorOfMain &&
+			(tagAncestorOfMain.timedOut ||
+				(tagAncestorOfMain.exitCode !== 0 && tagAncestorOfMain.exitCode !== 1))
+		)
+			throw new Error("Release recovery ancestry check failed.");
+		const evidence: RecoveryRefEvidence = {
+			expectedTag: `v${packageJson.version}`,
+			requestedTag: process.env.FLOW_RELEASE_RECOVERY_TAG ?? "",
+			eventName: process.env.GITHUB_EVENT_NAME ?? "",
+			eventRefType: process.env.GITHUB_REF_TYPE ?? "",
+			eventRefName: process.env.GITHUB_REF_NAME ?? "",
+			eventSha: process.env.GITHUB_SHA ?? "",
+			headSha: await revParse(runtime, "HEAD^{commit}"),
+			localTagObjectSha: await revParse(runtime, `refs/tags/${tag}`),
+			localTagCommitSha: await revParse(runtime, `refs/tags/${tag}^{commit}`),
+			remoteTagObjectSha: await revParse(runtime, tagRef),
+			remoteTagCommitSha: await revParse(runtime, `${tagRef}^{commit}`),
+			mainCommitSha: requireCurrentMain
+				? await revParse(runtime, `${mainRef}^{commit}`)
+				: null,
+			tagAncestorOfMain:
+				tagAncestorOfMain === null ? null : tagAncestorOfMain.exitCode === 0,
+		};
+		const issue = releaseRecoveryRefIssue(evidence, requireCurrentMain);
 		if (issue) throw new Error(issue);
 		return evidence;
 	} finally {

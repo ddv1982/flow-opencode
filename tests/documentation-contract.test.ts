@@ -644,7 +644,9 @@ describe("Flow documentation contract", () => {
 		expect(release).toMatch(/^ {2}push:\n {4}branches:/m);
 		expect(release).toContain("tags:");
 		expect(release).toMatch(/tag="v\$\{version\}"/);
-		expect(release).toMatch(/--commit "\$\{GITHUB_SHA\}"/);
+		expect(release).toMatch(/commit="\$\{GITHUB_SHA\}"/);
+		expect(release).toContain('commit="$(git rev-parse "');
+		expect(release).toContain('--commit "$commit"');
 		expect(release).toContain("Verify selected release evidence");
 		expect(release).toContain("bun run eval:canary -- verify");
 		expect(release).toContain("--mode dry-run");

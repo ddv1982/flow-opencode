@@ -23,6 +23,7 @@ afterEach(async () => {
 		"GITHUB_REF_TYPE",
 		"GITHUB_REF_NAME",
 		"GITHUB_SHA",
+		"FLOW_RELEASE_RECOVERY_TAG",
 	]) {
 		if (previous[key] === undefined) delete process.env[key];
 		else process.env[key] = previous[key];
@@ -34,6 +35,7 @@ afterEach(async () => {
 	);
 });
 async function fixture() {
+	delete process.env.FLOW_RELEASE_RECOVERY_TAG;
 	delete process.env.GITHUB_RUN_ID;
 	delete process.env.GITHUB_RUN_ATTEMPT;
 	process.env.GITHUB_REF_TYPE = "tag";
@@ -66,6 +68,23 @@ async function fixture() {
 	await writeFile(join(directory, "release.json"), JSON.stringify(record));
 	return { directory, record, bytes };
 }
+
+test("recovery records require the matching dispatch mode before any mutation", async () => {
+	const input = await fixture();
+	const remote = transport(input);
+	await writeFile(
+		join(input.directory, "release.json"),
+		JSON.stringify({ ...input.record, publicationMode: "recovery" }),
+	);
+	await expect(
+		resumeRelease(input.directory, remote.runtime, async () => {}),
+	).rejects.toThrow("recovery mode");
+	process.env.FLOW_RELEASE_RECOVERY_TAG = "v0.0.0";
+	await expect(
+		resumeRelease(input.directory, remote.runtime, async () => {}),
+	).rejects.toThrow("recovery mode");
+	expect(remote.counts()).toEqual({ creates: 0, publishes: 0 });
+});
 function transport(input: Awaited<ReturnType<typeof fixture>>) {
 	const releases: Array<{
 		id: number;
