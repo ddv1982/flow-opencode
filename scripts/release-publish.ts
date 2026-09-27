@@ -62,8 +62,8 @@ export type RecoveryRefEvidence = {
 	readonly localTagCommitSha: string;
 	readonly remoteTagObjectSha: string;
 	readonly remoteTagCommitSha: string;
-	readonly mainCommitSha: string | null;
-	readonly tagAncestorOfMain: boolean | null;
+	readonly mainCommitSha: string;
+	readonly tagAncestorOfMain: boolean;
 };
 
 type NpmPublicationInput = {
@@ -252,12 +252,10 @@ export function releaseRecoveryRefIssue(
 		return "The remote tag object no longer matches the checked-out release tag.";
 	if (evidence.localTagCommitSha !== evidence.remoteTagCommitSha)
 		return "The remote tag commit no longer matches the checked-out release tag.";
-	if (requireCurrentMain) {
-		if (evidence.mainCommitSha !== evidence.headSha)
-			return "Release recovery checkout is not the current origin/main commit.";
-		if (evidence.tagAncestorOfMain !== true)
-			return "Release recovery tag is not an ancestor of current main.";
-	}
+	if (evidence.tagAncestorOfMain !== true)
+		return "Release recovery tag is not an ancestor of current main.";
+	if (requireCurrentMain && evidence.mainCommitSha !== evidence.headSha)
+		return "Release recovery checkout is not the current origin/main commit.";
 	return null;
 }
 
@@ -362,22 +360,19 @@ export async function verifyReleaseRecoveryRef(
 		"--force",
 		"--no-tags",
 		"origin",
-		...(requireCurrentMain ? [`+refs/heads/main:${mainRef}`] : []),
+		`+refs/heads/main:${mainRef}`,
 		`+refs/tags/${tag}:${tagRef}`,
 	];
 	await checkedCommand(runtime, "git", fetchArgs, REMOTE_COMMAND_TIMEOUT_MS);
 	try {
-		const tagAncestorOfMain = requireCurrentMain
-			? await runtime.run(
-					"git",
-					["merge-base", "--is-ancestor", `${tagRef}^{commit}`, mainRef],
-					LOCAL_COMMAND_TIMEOUT_MS,
-				)
-			: null;
+		const tagAncestorOfMain = await runtime.run(
+			"git",
+			["merge-base", "--is-ancestor", `${tagRef}^{commit}`, mainRef],
+			LOCAL_COMMAND_TIMEOUT_MS,
+		);
 		if (
-			tagAncestorOfMain &&
-			(tagAncestorOfMain.timedOut ||
-				(tagAncestorOfMain.exitCode !== 0 && tagAncestorOfMain.exitCode !== 1))
+			tagAncestorOfMain.timedOut ||
+			(tagAncestorOfMain.exitCode !== 0 && tagAncestorOfMain.exitCode !== 1)
 		)
 			throw new Error("Release recovery ancestry check failed.");
 		const evidence: RecoveryRefEvidence = {
@@ -392,17 +387,14 @@ export async function verifyReleaseRecoveryRef(
 			localTagCommitSha: await revParse(runtime, `refs/tags/${tag}^{commit}`),
 			remoteTagObjectSha: await revParse(runtime, tagRef),
 			remoteTagCommitSha: await revParse(runtime, `${tagRef}^{commit}`),
-			mainCommitSha: requireCurrentMain
-				? await revParse(runtime, `${mainRef}^{commit}`)
-				: null,
-			tagAncestorOfMain:
-				tagAncestorOfMain === null ? null : tagAncestorOfMain.exitCode === 0,
+			mainCommitSha: await revParse(runtime, `${mainRef}^{commit}`),
+			tagAncestorOfMain: tagAncestorOfMain.exitCode === 0,
 		};
 		const issue = releaseRecoveryRefIssue(evidence, requireCurrentMain);
 		if (issue) throw new Error(issue);
 		return evidence;
 	} finally {
-		for (const ref of requireCurrentMain ? [mainRef, tagRef] : [tagRef]) {
+		for (const ref of [mainRef, tagRef]) {
 			await runtime.run(
 				"git",
 				["update-ref", "-d", ref],

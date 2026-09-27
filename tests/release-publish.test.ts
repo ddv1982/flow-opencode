@@ -86,10 +86,18 @@ describe("release ref proof", () => {
 		expect(releaseRecoveryRefIssue(recoveryEvidence(), true)).toBeNull();
 		expect(
 			releaseRecoveryRefIssue(
-				recoveryEvidence({ mainCommitSha: null, tagAncestorOfMain: null }),
+				recoveryEvidence({
+					mainCommitSha: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+				}),
 				false,
 			),
 		).toBeNull();
+		expect(
+			releaseRecoveryRefIssue(
+				recoveryEvidence({ tagAncestorOfMain: false }),
+				false,
+			),
+		).toContain("ancestor");
 	});
 
 	test("recovery refuses a moved tag, unrelated main, or unreviewed dispatch", () => {
