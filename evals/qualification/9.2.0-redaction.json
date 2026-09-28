@@ -1,0 +1,32 @@
+{
+	"artifactSha256": "sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b",
+	"changes": [
+		{
+			"attemptId": "attempt-cell-24ef59d53176c72e4872254f6abf9475ff2deed91ca721e72d61abd139d3f665",
+			"fields": [
+				"/gradeInput/allCalls/14/output",
+				"/gradeInput/allCalls/14/rawOutput",
+				"/gradeInput/allCalls/14/metadata/output"
+			],
+			"newSha256": "sha256:84c9a5c1e8f6e846937ac0a064118101396d09a8e75eb404e4cf28e2b29b6540",
+			"oldSha256": "sha256:a3054802114758bcb4deb3bc0735bfe23b5b8eefac57f16e8d5282081d8939ba",
+			"reason": "Redact the local Bun executable home path; leave model decisions and Flow state unchanged.",
+			"transcript": "transcripts/YXR0ZW1wdC1jZWxsLTI0ZWY1OWQ1MzE3NmM3MmU0ODcyMjU0ZjZhYmY5NDc1ZmYyZGVlZDkxY2E3MjFlNzJkNjFhYmQxMzlkM2Y2NjU.json"
+		},
+		{
+			"attemptId": "attempt-cell-939bdc83e55dde978fb61a182cd32d50bb589b0c1bf3afbf29326827edd89d09",
+			"fields": [
+				"/gradeInput/allCalls/11/output",
+				"/gradeInput/allCalls/11/rawOutput",
+				"/gradeInput/allCalls/11/metadata/output"
+			],
+			"newSha256": "sha256:26e69daa0f09ecb7c933eb5d7ac48430dcc66a6b54d6826e0eb529da716980da",
+			"oldSha256": "sha256:bce1631758d5d02b7838173434efba77a8c2d60eec7bdba01abae79a670beb0b",
+			"reason": "Redact the local Bun executable home path; leave model decisions and Flow state unchanged.",
+			"transcript": "transcripts/YXR0ZW1wdC1jZWxsLTkzOWJkYzgzZTU1ZGRlOTc4ZmI2MWExODJjZDMyZDUwYmI1ODliMGMxYmYzYWZiZjI5MzI2ODI3ZWRkODlkMDk.json"
+		}
+	],
+	"derivedReportSha256": "sha256:6f3cd82088bbddd3c14b230d67c6408e06a48902bedbfca16730bf95e085105f",
+	"schemaVersion": 1,
+	"sourceReportSha256": "sha256:52e96c878151e7ca9ae6113b577957c8063bcecfb0cc0435cf5b740bfa008e51"
+}
