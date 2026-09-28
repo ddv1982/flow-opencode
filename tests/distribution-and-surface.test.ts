@@ -521,66 +521,58 @@ describe("command preflight", () => {
 });
 
 describe("flow-auto host continuation", () => {
-	test("owns only an anchor created by this auto command and respects plan-only timing", async () => {
-		for (const [kind, goal, expectedApproval] of [
-			[
-				"new-anchor",
-				"Review codebase, then create a phased plan with case named `audit finding`",
-				true,
-			],
-			[
-				"preexisting-anchor",
-				"Review codebase with case named `audit finding`",
-				false,
-			],
-			[
-				"plan-only",
-				"Just draft a Flow plan for case named `audit finding`",
-				false,
-			],
-			["plan-only", "I only want a plan for case named `audit finding`", false],
-			[
-				"plan-only",
-				"Just give me a plan for case named `audit finding`",
-				false,
-			],
-			[
-				"review-without-implementation",
-				"Review case named `audit finding`; do not implement yet",
-				true,
-			],
-			[
-				"review-without-implementation",
-				"Review the codebase and create a phased plan for case named `audit finding`; stop before implementation",
-				true,
-			],
-			[
-				"plan-only",
-				"Just create a phased plan for case named `audit finding`, then implement the improvements",
-				false,
-			],
-			[
-				"uncertain",
-				"Create a phased plan for case named `audit finding`",
-				false,
-			],
-			[
-				"uncertain",
-				"Create a Flow plan for reviewing the codebase later with case named `audit finding`",
-				false,
-			],
-			[
-				"uncertain",
-				"Create a Flow plan for review of the codebase later with case named `audit finding`",
-				false,
-			],
-			["plan-only", "Review case named `audit finding`; do not run", false],
-			[
-				"plan-only",
-				"Review case named `audit finding`; wait for approval",
-				false,
-			],
-		] as const) {
+	for (const [kind, goal, expectedApproval] of [
+		[
+			"new-anchor",
+			"Review codebase, then create a phased plan with case named `audit finding`",
+			true,
+		],
+		[
+			"preexisting-anchor",
+			"Review codebase with case named `audit finding`",
+			false,
+		],
+		[
+			"plan-only",
+			"Just draft a Flow plan for case named `audit finding`",
+			false,
+		],
+		["plan-only", "I only want a plan for case named `audit finding`", false],
+		["plan-only", "Just give me a plan for case named `audit finding`", false],
+		[
+			"review-without-implementation",
+			"Review case named `audit finding`; do not implement yet",
+			true,
+		],
+		[
+			"review-without-implementation",
+			"Review the codebase and create a phased plan for case named `audit finding`; stop before implementation",
+			true,
+		],
+		[
+			"plan-only",
+			"Just create a phased plan for case named `audit finding`, then implement the improvements",
+			false,
+		],
+		["uncertain", "Create a phased plan for case named `audit finding`", false],
+		[
+			"uncertain",
+			"Create a Flow plan for reviewing the codebase later with case named `audit finding`",
+			false,
+		],
+		[
+			"uncertain",
+			"Create a Flow plan for review of the codebase later with case named `audit finding`",
+			false,
+		],
+		["plan-only", "Review case named `audit finding`; do not run", false],
+		[
+			"plan-only",
+			"Review case named `audit finding`; wait for approval",
+			false,
+		],
+	] as const) {
+		test(`inspect approval for ${kind}: ${goal}`, async () => {
 			const workspace = await createTestWorkspace("flow-auto-inspect-anchor-");
 			const prompts: unknown[] = [];
 			const hooks = await loadPlugin(workspace, workspace, prompts);
@@ -661,8 +653,8 @@ describe("flow-auto host continuation", () => {
 				JSON.stringify(call).includes("Approve this one draft"),
 			);
 			expect(approvalPrompts.length, kind).toBe(Number(expectedApproval));
-		}
-	});
+		});
+	}
 	test("binds an explicitly named acceptance case to its originating host", async () => {
 		const workspace = await createTestWorkspace("flow-request-anchor-");
 		const hooks = await loadPlugin(workspace);
