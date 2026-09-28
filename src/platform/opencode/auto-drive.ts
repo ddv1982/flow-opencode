@@ -7,6 +7,10 @@ import {
 	isPendingReviewer,
 } from "./auto-drive-decision.js";
 export const FLOW_AUTO_METADATA_KEY = "opencode-plugin-flow/auto";
+export type AutoGoalIntent =
+	| "inspection-deliverable"
+	| "plan-only"
+	| "uncertain";
 export interface AutoDriveProjection {
 	readonly sessionId?: string | undefined;
 	readonly status: string;
@@ -71,6 +75,8 @@ export interface AutoTimingSnapshot {
 type Lease = {
 	hostSessionId: string;
 	requestGoal: string;
+	newlyAnchoredSessionId: string | null;
+	intent: AutoGoalIntent;
 	token: string;
 	baseline: AutoDriveProjection | null;
 	delivery: AutoDriveDelivery | null;
@@ -229,6 +235,10 @@ export class AutoDriveCoordinator {
 	async activate(
 		hostSessionId: string,
 		requestGoal = "",
+		options: Readonly<{
+			newlyAnchoredSessionId?: string | null;
+			intent?: AutoGoalIntent;
+		}> = {},
 	): Promise<Record<string, unknown>> {
 		const token = this.#options.createToken?.() ?? crypto.randomUUID();
 		this.#timing = {
@@ -240,6 +250,8 @@ export class AutoDriveCoordinator {
 		this.#lease = {
 			hostSessionId,
 			requestGoal,
+			newlyAnchoredSessionId: options.newlyAnchoredSessionId ?? null,
+			intent: options.intent ?? "uncertain",
 			token,
 			baseline: null,
 			delivery: null,
@@ -438,10 +450,19 @@ export class AutoDriveCoordinator {
 		if (origin === undefined) return void this.#rejectOrigin(lease, "mutation");
 		if (origin !== lease.messageId) return;
 		const baseline = lease.baseline;
+		const freshIdle =
+			baseline?.status === "idle" && baseline.sessionId === undefined;
+		const freshAnchor =
+			lease.newlyAnchoredSessionId !== null &&
+			baseline?.status === "planning" &&
+			baseline.revision === 0 &&
+			baseline.nextAction === "flow_plan_save" &&
+			baseline.sessionId === lease.newlyAnchoredSessionId;
 		if (
-			baseline?.status === "idle" &&
-			baseline.sessionId === undefined &&
+			(freshIdle || freshAnchor) &&
+			lease.intent === "inspection-deliverable" &&
 			created &&
+			(!freshAnchor || created === lease.newlyAnchoredSessionId) &&
 			revision === 1 &&
 			mutation?.tool === "flow_plan_save" &&
 			lease.requestGoal.trim().length > 0 &&

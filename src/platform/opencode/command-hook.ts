@@ -5,7 +5,7 @@ import type {
 } from "../../application/recovery-policy.js";
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
 import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
-import type { AutoDriveCoordinator } from "./auto-drive.js";
+import type { AutoDriveCoordinator, AutoGoalIntent } from "./auto-drive.js";
 import { FLOW_AUTO_METADATA_KEY } from "./auto-drive.js";
 import type { Hooks } from "./sdk.js";
 
@@ -17,6 +17,27 @@ type TextPart = Extract<Part, { type: "text" }>;
 // Host assigns id, sessionID and messageID after the command hook returns.
 type DraftTextPart = Omit<TextPart, "id" | "sessionID" | "messageID">;
 const AUTO_STOPPED = "Flow auto stopped.";
+const PLAN_ONLY_REQUEST = [
+	/\b(?:plan[- ]only|planning[- ]only)\b/i,
+	/\b(?:only|just)\s+(?:(?:want|need|draft|write|create|make|prepare|give\s+me|show\s+me)\s+)?(?:(?:a|an|the)\s+)?(?:(?:flow|phased|inspection)\s+)?plan\b/i,
+	/\b(?:draft|write|create|make|prepare)\s+(?:a\s+)?(?:flow\s+)?plan\s+only\b/i,
+	/\b(?:do not|don't)\s+(?:run|execute|start)\b/i,
+	/\b(?:wait|pause|stop)\s+for\s+(?:my\s+)?approval\b/i,
+];
+const REVIEW_DELIVERABLE =
+	/\b(?:review|inspect|audit|analy[sz]e|assess|survey)\b/i;
+const NO_PRODUCT_IMPLEMENTATION =
+	/\b(?:do not|don't)\s+implement\b|\bstop\s+before\s+implementation\b/i;
+function autoGoalIntent(goal: string): AutoGoalIntent {
+	const request = goal.replace(/`[^`]*`|"[^"]*"|'[^']*'/g, " ");
+	if (PLAN_ONLY_REQUEST.some((pattern) => pattern.test(request)))
+		return "plan-only";
+	const review = REVIEW_DELIVERABLE.exec(request);
+	const plan = /\bplan\b/i.exec(request);
+	if (review && (!plan || review.index < plan.index))
+		return "inspection-deliverable";
+	return NO_PRODUCT_IMPLEMENTATION.test(request) ? "plan-only" : "uncertain";
+}
 function isFlowCommand(command: string): command is FlowCommandName {
 	return Object.hasOwn(FLOW_CORE_COMMANDS, command);
 }
@@ -136,6 +157,7 @@ export function createCommandHook(
 		}
 		try {
 			assertOperational(`execute /${command}`);
+			let newlyAnchoredSessionId: string | null = null;
 			const settings =
 				command === "flow-auto" && !parsed.explicit
 					? (options.defaultRecovery?.() ?? null)
@@ -149,7 +171,10 @@ export function createCommandHook(
 				if (evidence) {
 					await flow.status({ request: { view: "compact" } });
 					assertCurrent();
-					await flow.requestAnchor({ goal: parsed.goal, evidence });
+					newlyAnchoredSessionId = await flow.requestAnchor({
+						goal: parsed.goal,
+						evidence,
+					});
 					assertCurrent();
 				}
 			}
@@ -171,7 +196,10 @@ export function createCommandHook(
 				if (!continuing) autoDrive.deactivate(input.sessionID);
 				return;
 			}
-			const metadata = await autoDrive.activate(input.sessionID, parsed.goal);
+			const metadata = await autoDrive.activate(input.sessionID, parsed.goal, {
+				newlyAnchoredSessionId,
+				intent: autoGoalIntent(parsed.goal),
+			});
 			assertCurrent();
 			if (autoDrive.continuationSupport() === "unsupported") {
 				output.parts.unshift(

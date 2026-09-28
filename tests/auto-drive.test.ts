@@ -4,6 +4,7 @@ import {
 	AutoDriveCoordinator,
 	type AutoDriveDelivery,
 	type AutoDriveProjection,
+	type AutoGoalIntent,
 	autoDriveDelivery,
 	FLOW_AUTO_METADATA_KEY,
 } from "../src/platform/opencode/auto-drive.js";
@@ -90,8 +91,12 @@ function harness(initial: AutoDriveProjection) {
 			delivery = DELIVERY,
 			messageId = "command-message",
 			goal = "",
+			options: Readonly<{
+				newlyAnchoredSessionId?: string | null;
+				intent?: AutoGoalIntent;
+			}> = {},
 		) {
-			const metadata = await driver.activate(sessionID, goal);
+			const metadata = await driver.activate(sessionID, goal, options);
 			await driver.observeMessage(
 				sessionID,
 				delivery,
@@ -2226,6 +2231,77 @@ describe("Flow auto-drive coordinator", () => {
 });
 
 describe("own inspection draft approval", () => {
+	test("only a newly anchored provisional session can own its revision-one draft", async () => {
+		for (const [anchored, expected] of [
+			["flow-1", true],
+			["flow-2", false],
+			[null, false],
+		] as const) {
+			const state = harness({
+				sessionId: "flow-1",
+				status: "planning",
+				revision: 0,
+				nextAction: "flow_plan_save",
+			});
+			await state.activate(
+				"host-1",
+				DELIVERY,
+				"command-message",
+				"Review codebase",
+				{ newlyAnchoredSessionId: anchored, intent: "inspection-deliverable" },
+			);
+			mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
+				tool: "flow_plan_save",
+				goal: "Review codebase",
+				features: [{ kind: "inspect" }],
+			});
+			state.setProjection({
+				sessionId: "flow-1",
+				status: "planning",
+				revision: 1,
+				nextAction: "flow_plan_approve",
+			});
+			await state.driver.onIdle("host-1");
+			expect(
+				state.prompts.some((prompt) =>
+					prompt.text.includes("Approve this one draft"),
+				),
+			).toBe(expected);
+		}
+	});
+	test("plan-only and unclassified requests never auto-approve", async () => {
+		for (const options of [{ intent: "plan-only" as const }, {}]) {
+			const state = harness({
+				status: "idle",
+				revision: 0,
+				nextAction: "flow_plan_save",
+			});
+			await state.activate(
+				"host-1",
+				DELIVERY,
+				"command-message",
+				"Just draft a Flow plan for inspection",
+				options,
+			);
+			mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
+				tool: "flow_plan_save",
+				goal: "Just draft a Flow plan for inspection",
+				features: [{ kind: "inspect" }],
+			});
+			state.setProjection({
+				sessionId: "flow-1",
+				status: "planning",
+				revision: 1,
+				nextAction: "flow_plan_approve",
+			});
+			await state.driver.onIdle("host-1");
+			expect(
+				state.prompts.some((prompt) =>
+					prompt.text.includes("Approve this one draft"),
+				),
+			).toBe(false);
+		}
+	});
 	test("prompts once for an accepted same-host, exact-goal inspect draft", async () => {
 		const state = harness({
 			status: "idle",
@@ -2237,6 +2313,7 @@ describe("own inspection draft approval", () => {
 			DELIVERY,
 			"command-message",
 			"Review codebase",
+			{ intent: "inspection-deliverable" },
 		);
 		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
 			tool: "flow_plan_save",
@@ -2296,6 +2373,7 @@ describe("own inspection draft approval", () => {
 				DELIVERY,
 				"command-message",
 				"Review codebase",
+				{ intent: "inspection-deliverable" },
 			);
 			if (!existing)
 				mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
@@ -2331,6 +2409,7 @@ describe("own inspection draft approval", () => {
 			DELIVERY,
 			"command-message",
 			"Review codebase",
+			{ intent: "inspection-deliverable" },
 		);
 		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
 			tool: "flow_plan_save",
@@ -2367,6 +2446,7 @@ describe("own inspection draft approval", () => {
 			DELIVERY,
 			"command-message",
 			"Review codebase",
+			{ intent: "inspection-deliverable" },
 		);
 		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
 			tool: "flow_plan_save",

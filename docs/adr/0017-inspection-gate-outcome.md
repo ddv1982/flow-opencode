@@ -11,3 +11,7 @@ named passing assertions. Its latest result must have a known exit code,
 complete output, current source, and the declared host. A failed exit remains
 failed in the reviewer projection and terminal delivery. A change plan cannot
 use this mode. This adds no authority to repair dependencies or product files.
+
+Auto approval is limited to a new exact-goal inspection draft owned by the
+current `/flow-auto` invocation. Ambiguous plan timing keeps the approval
+checkpoint.
