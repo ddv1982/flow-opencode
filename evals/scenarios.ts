@@ -336,16 +336,9 @@ function writtenFiles(outcome: ScenarioGradeInput, landed = false): string[] {
 		);
 }
 
-function writeTargetPaths(
-	outcome: ScenarioGradeInput,
-	landed = false,
-): string[] {
+function writeTargetPaths(outcome: ScenarioGradeInput): string[] {
 	return outcome.allCalls.flatMap((call) => {
-		if (
-			!WRITE_TOOLS.includes(call.tool) ||
-			(landed && call.status !== "completed")
-		)
-			return [];
+		if (!WRITE_TOOLS.includes(call.tool)) return [];
 		const input = call.input as {
 			filePath?: unknown;
 			path?: unknown;
@@ -721,9 +714,6 @@ function inspectionAuditIssues(outcome: ScenarioGradeInput): string[] {
 		path.endsWith("/docs/codebase-review.md");
 	if (targets.some((path) => !isRoadmapPath(path))) {
 		issues.push("inspection modified product, test, or gate files");
-	}
-	if (!writeTargetPaths(outcome, true).some(isRoadmapPath)) {
-		issues.push("inspection did not write the review and roadmap document");
 	}
 	const recordedArtifacts = closed.runs.flatMap(
 		(run) => run.artifactsChanged ?? [],

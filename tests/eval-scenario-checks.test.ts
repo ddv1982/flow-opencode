@@ -1697,19 +1697,27 @@ describe("inspection-failed-audit-completes", () => {
 		).toEqual([]);
 	});
 
-	test("rejects a document write that the host reported as failed", () => {
+	test("accepts a Bash-created roadmap recorded as a durable artifact", () => {
 		const given = recordedOutcome();
 		const firstCall = given.allCalls.at(0);
-		if (!firstCall) throw new Error("Expected a document write.");
-		const issues = check(
-			"inspection-failed-audit-completes",
-			recordedOutcome({
-				allCalls: [{ ...firstCall, status: "error" }],
-			}),
-		);
-		expect(issues).toContain(
-			"inspection did not write the review and roadmap document",
-		);
+		if (!firstCall) throw new Error("Expected a host call.");
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({
+					allCalls: [
+						{
+							...firstCall,
+							tool: "bash",
+							input: {
+								command:
+									"cat > docs/codebase-review.md <<'EOF'\nReview and roadmap\nEOF",
+							},
+						},
+					],
+				}),
+			),
+		).toEqual([]);
 	});
 
 	test("rejects a write with no durable roadmap artifact", () => {
