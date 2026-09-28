@@ -26,6 +26,7 @@ const TOOL_NAMES = [
 	"flow_feature_complete",
 	"flow_feature_reset",
 	"flow_guidance",
+	"flow_plan_amend",
 	"flow_plan_approve",
 	"flow_plan_save",
 	"flow_review_start",
@@ -226,7 +227,7 @@ afterEach(async () => {
 });
 
 describe("Flow distribution surface", () => {
-	test("ships ten tools, five commands, three hidden agent configs, and four guides", async () => {
+	test("ships eleven tools, five commands, three hidden agent configs, and four guides", async () => {
 		expect(new Set(Object.keys(createRegisteredTools()))).toEqual(
 			new Set(TOOL_NAMES),
 		);

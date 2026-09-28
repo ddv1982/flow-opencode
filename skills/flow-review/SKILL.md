@@ -63,11 +63,9 @@ unverified. Call it `residual` only when current evidence confirms the nonblocke
 remains. Escalate only when current evidence makes it outcome-blocking. A
 confirmed blocking recurrence stays blocking under the same ID.
 
-Use the manager-supplied baseline inventory in the assignment for Git-only
-metadata, and independently inspect the projected changed artifacts with your
-read-only access. It is evidence, not a verdict. Lack of shell access alone is
-not a failure; a missing or conflicting baseline fact, or a material mode,
-platform, race, or failure-path claim without proof, is.
+Use the manager's baseline for Git-only metadata and inspect changed artifacts
+independently. Missing baseline facts or material claims without proof block;
+lack of shell access alone does not.
 
 Flow deliberately projects no raw command output; use the durable command, exit
 code, completeness, digest, source binding, and your workspace inspection. A weak
@@ -93,6 +91,9 @@ work outside the approved plan, and identify the boundary in `evidence`. The
 runtime routes any scope blocker straight to the user instead of retrying, so
 missing outcome evidence is an ordinary blocking finding rather than a scope
 blocker. The field is valid only on a blocking finding.
+
+Review each `flow_plan_amend` against the failed gate, targets, and full diff.
+Attestations leave scope review intact; set `scopeBlocker: true` for new scope.
 
 Every blocker must map to an approved requirement, changed behavior, or exact
 missing evidence. Keep its summary precise. In `evidence`, cite a changed

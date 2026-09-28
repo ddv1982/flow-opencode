@@ -8,7 +8,7 @@ import type {
 import type { Hooks } from "./sdk.js";
 
 const MUTATION =
-	/^flow_(?:plan_save|plan_approve|run_start|review_start|feature_complete|feature_reset|session_close)$/;
+	/^flow_(?:plan_save|plan_approve|plan_amend|run_start|review_start|feature_complete|feature_reset|session_close)$/;
 function acceptedMutation(tool: string, output: string) {
 	if (!MUTATION.test(tool)) return null;
 	try {

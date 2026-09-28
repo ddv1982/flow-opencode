@@ -3,6 +3,7 @@ import type { RecoveryController } from "../../application/recovery-policy.js";
 import {
 	FeatureCompleteInputSchema,
 	FeatureResetInputSchema,
+	PlanAmendInputSchema,
 	PlanApproveInputSchema,
 	PlanSaveInputSchema,
 	ReviewStartInputSchema,
@@ -254,6 +255,15 @@ export function createTools(options: ToolOptions): FlowTools {
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>
 					workspace.planApprove(args, requestAuthority(context.sessionID)),
+				),
+		}),
+		flow_plan_amend: defineFlowTool({
+			description:
+				"Record at most three same-goal reversible prerequisite repairs after a failed canonical gate. This does not change the approved plan or bypass review.",
+			schema: PlanAmendInputSchema,
+			execute: (args, context) =>
+				executeMutation(context, options.validation, (workspace) =>
+					workspace.planAmend(args),
 				),
 		}),
 		flow_run_start: defineFlowTool({

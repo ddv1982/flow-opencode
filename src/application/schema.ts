@@ -255,6 +255,7 @@ const OperationRecordSchema = z
 		id: OperationIdSchema,
 		kind: z.enum([
 			"plan-save",
+			"plan-amend",
 			"plan-approve",
 			"run-start",
 			"review-start",
@@ -265,6 +266,21 @@ const OperationRecordSchema = z
 		inputDigest: SourceDigestSchema,
 		committedRevision: RevisionSchema,
 		entityId: z.string().min(1).max(1024).optional(),
+	})
+	.strict();
+
+const PlanAmendmentSchema = z
+	.object({
+		operationId: OperationIdSchema,
+		featureId: FeatureIdSchema,
+		runId: RunIdSchema,
+		validationId: z.string().min(1).max(MAX_VALIDATION_ID_LENGTH),
+		reason: boundedText("Amendment reason"),
+		repair: boundedText("Amendment repair"),
+		targets: z.array(boundedText("Amendment target")).min(1).max(8),
+		sameGoal: z.literal(true),
+		reversible: z.literal(true),
+		recordedRevision: RevisionSchema,
 	})
 	.strict();
 
@@ -296,6 +312,7 @@ export const SessionSchema: z.ZodType<Session> = z
 			.optional(),
 		approval: z.enum(["pending", "approved"]),
 		plan: PlanSchema.nullable(),
+		amendments: z.array(PlanAmendmentSchema).max(3).optional(),
 		runs: z.array(FeatureRunSchema).max(512),
 		operations: z.array(OperationRecordSchema),
 		closure: ClosureSchema.nullable(),
@@ -329,6 +346,14 @@ export const PlanSaveInputSchema = z
 
 export const PlanApproveInputSchema = z
 	.object({ request: z.object(guarded).strict() })
+	.strict();
+
+export const PlanAmendInputSchema = z
+	.object({
+		request: PlanAmendmentSchema.omit({ runId: true, recordedRevision: true })
+			.extend({ expectedRevision: RevisionSchema })
+			.strict(),
+	})
 	.strict();
 
 export const RunStartInputSchema = z

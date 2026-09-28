@@ -84,6 +84,7 @@ type Lease = {
 	assistantParents: Map<string, string>;
 	lastAssistantParent: string | null;
 	compaction: Compaction | null;
+	manualContinuation: { revision: number } | null;
 };
 type TimingField = "state" | "activeMs" | "waitingForUserMs";
 type Timing = {
@@ -242,6 +243,7 @@ export class AutoDriveCoordinator {
 			assistantParents: new Map(),
 			lastAssistantParent: null,
 			compaction: null,
+			manualContinuation: null,
 		};
 		const lease = this.#lease;
 		const baseline = await this.#read(lease);
@@ -256,6 +258,31 @@ export class AutoDriveCoordinator {
 		if (this.#lease?.hostSessionId !== hostSessionId) return false;
 		this.clear();
 		return true;
+	}
+	async resumeForCommand(hostSessionId: string): Promise<string | null> {
+		const lease = this.#lease;
+		if (lease?.hostSessionId !== hostSessionId) return null;
+		const projection = await this.#read(lease);
+		if (this.#lease !== lease || !projection) return null;
+		if (
+			projection.sessionId !== lease.baseline?.sessionId ||
+			projection.revision <
+				(lease.manualContinuation?.revision ??
+					lease.checkpoint?.revision ??
+					0) ||
+			!["blocked", "ready", "running"].includes(projection.status)
+		) {
+			this.#stop(lease);
+			return null;
+		}
+		if (projection.nextAction === "await-user-direction") {
+			lease.checkpoint = { revision: projection.revision, answered: false };
+			lease.manualContinuation = null;
+		} else {
+			lease.checkpoint = null;
+			lease.manualContinuation = { revision: projection.revision };
+		}
+		return lease.token;
 	}
 	clear(): void {
 		this.#options.recovery?.revoke();
@@ -283,7 +310,11 @@ export class AutoDriveCoordinator {
 				return "stale-continuation";
 			lease.delivery = delivery;
 			lease.messageId = messageId;
-			if (!lease.checkpoint && lease.lastPromptedRevision !== null)
+			if (
+				!lease.manualContinuation &&
+				!lease.checkpoint &&
+				lease.lastPromptedRevision !== null
+			)
 				lease.checkpoint = {
 					revision: lease.lastPromptedRevision,
 					answered: false,
@@ -439,6 +470,22 @@ export class AutoDriveCoordinator {
 			if (this.#lease !== lease) return;
 			const baseline = lease.baseline;
 			if (!baseline) return this.#stop(lease);
+			if (lease.manualContinuation) {
+				if (
+					projection.sessionId !== baseline.sessionId ||
+					projection.revision < lease.manualContinuation.revision
+				)
+					return this.#stop(lease);
+				if (
+					(projection.status === "ready" || projection.status === "running") &&
+					projection.nextAction !== "await-user-direction"
+				) {
+					lease.manualContinuation.revision = projection.revision;
+					this.#setTiming("paused");
+					return;
+				}
+				lease.manualContinuation = null;
+			}
 			const decision: IdleDecision = decideOnIdle(
 				{
 					baseline,

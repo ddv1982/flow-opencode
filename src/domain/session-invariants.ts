@@ -46,6 +46,14 @@ export function sessionInvariantIssues(session: Session): string[] {
 		) {
 			issues.push(`Operation '${operation.id}' has an invalid revision.`);
 		}
+		if (
+			operation.kind === "plan-amend" &&
+			!session.amendments?.some(
+				(amendment) => amendment.operationId === operation.id,
+			)
+		) {
+			issues.push(`Amendment operation '${operation.id}' has no record.`);
+		}
 	}
 	if (session.closure) {
 		const closureIssue = closureOperationIssue(session);
@@ -58,10 +66,72 @@ export function sessionInvariantIssues(session: Session): string[] {
 		if (session.approval === "approved")
 			issues.push("Approval requires a plan.");
 		if (session.runs.length > 0) issues.push("Runs require a plan.");
+		if ((session.amendments?.length ?? 0) > 0)
+			issues.push("Plan amendments require an approved plan.");
 		return issues;
 	}
+	if ((session.amendments?.length ?? 0) > 0 && session.approval !== "approved")
+		issues.push("Plan amendments require an approved plan.");
 	const planProblem = planIssue(session.plan);
 	if (planProblem) issues.push(planProblem);
+	if ((session.amendments?.length ?? 0) > 3)
+		issues.push("A session cannot have more than three plan amendments.");
+	for (const amendment of session.amendments ?? []) {
+		const operation = session.operations.find(
+			(item) => item.id === amendment.operationId,
+		);
+		const run = session.runs.find((item) => item.id === amendment.runId);
+		const observation = run?.validations.find(
+			(item) => item.id === amendment.validationId,
+		);
+		const latestCanonical = run?.validations
+			.filter(
+				(item) =>
+					item.scope === "broad" &&
+					item.command ===
+						session.plan?.evidence?.find((entry) => entry.scope === "gate")
+							?.command &&
+					item.recordedRevision < amendment.recordedRevision,
+			)
+			.at(-1);
+		if (
+			operation?.kind !== "plan-amend" ||
+			operation.committedRevision !== amendment.recordedRevision
+		)
+			issues.push(`Amendment '${amendment.operationId}' lacks its operation.`);
+		if (
+			!run ||
+			run.featureId !== amendment.featureId ||
+			run.startedRevision >= amendment.recordedRevision
+		)
+			issues.push(
+				`Amendment '${amendment.operationId}' has no prior matching run.`,
+			);
+		if (
+			!observation ||
+			latestCanonical?.id !== observation.id ||
+			observation.recordedRevision >= amendment.recordedRevision ||
+			observation.scope !== "broad" ||
+			observation.command !==
+				session.plan.evidence?.find((entry) => entry.scope === "gate")
+					?.command ||
+			observation.exitCode === null ||
+			observation.exitCode === 0 ||
+			!observation.outputComplete ||
+			observation.ineligibleReason !== undefined
+		)
+			issues.push(
+				`Amendment '${amendment.operationId}' lacks a prior failed canonical gate.`,
+			);
+		if (
+			run?.reviews.some(
+				(review) => review.createdRevision < amendment.recordedRevision,
+			)
+		)
+			issues.push(
+				`Amendment '${amendment.operationId}' postdates independent review.`,
+			);
+	}
 	const missing = missingRequestAssertions(
 		session.plan,
 		session.requestEvidence?.assertions ?? [],

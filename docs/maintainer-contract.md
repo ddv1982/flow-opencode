@@ -287,17 +287,18 @@ user starting point.
 | Tool | Contract |
 | --- | --- |
 | `flow_guidance` | Load one package-owned guide. |
-| `flow_status` | Read compact, execution, detail, or reviewer state; compact state includes the goal and derived blocked convergence summary. |
+| `flow_status` | Read compact, execution, detail, or reviewer state. |
 | `flow_plan_save` | Create or replace the active draft plan. |
+| `flow_plan_amend` | Record a bounded prerequisite repair after a failed canonical gate. |
 | `flow_plan_approve` | Approve and lock the draft plan. |
 | `flow_run_start` | Start one runnable approved feature. |
 | `flow_validation_start` | Arm observation of the exact next Bash command. |
 | `flow_review_start` | Create the run's independent review assignment. |
-| `flow_feature_complete` | Reviewer-only new result submission; exact accepted requests remain read-only replays while the Session v5 workflow is active. |
+| `flow_feature_complete` | Reviewer-only result submission; exact accepted requests replay read-only. |
 | `flow_feature_reset` | Supersede a failed attempt and optionally atomically start the exact authorized retry or dependency-independent feature through `nextFeatureId`. |
 | `flow_session_close` | Close and archive the session, returning the same concise derived delivery and tiered assurance on every durably accepted close path. |
 
-The nine lifecycle tools accept a nested `request`, return state under
+The ten lifecycle tools accept a nested `request`, return state under
 `workflowData`, and require the current revision plus a stable operation ID for
 mutations. `flow_session_close` additionally returns derived delivery under
 `workflowData`; `flow_guidance` instead accepts a guide ID and returns Markdown.

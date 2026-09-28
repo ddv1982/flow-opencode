@@ -106,6 +106,7 @@ const REAL_FLOW_TOOLS = new Set([
 	"flow_feature_complete",
 	"flow_feature_reset",
 	"flow_guidance",
+	"flow_plan_amend",
 	"flow_plan_approve",
 	"flow_plan_save",
 	"flow_review_start",

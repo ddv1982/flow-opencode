@@ -7,6 +7,7 @@ import { z } from "zod";
 import {
 	FeatureCompleteInputSchema,
 	FeatureResetInputSchema,
+	PlanAmendInputSchema,
 	PlanApproveInputSchema,
 	PlanSaveInputSchema,
 	ReviewStartInputSchema,
@@ -21,6 +22,7 @@ import { createTools } from "../src/platform/opencode/tools.js";
 const LIFECYCLE_TOOL_NAMES = [
 	"flow_status",
 	"flow_plan_save",
+	"flow_plan_amend",
 	"flow_plan_approve",
 	"flow_run_start",
 	"flow_validation_start",
@@ -121,6 +123,18 @@ const validInputs: Record<
 	flow_plan_save: {
 		request: { ...guard, goal: "Ship a simpler Flow", plan },
 	},
+	flow_plan_amend: {
+		request: {
+			...guard,
+			featureId,
+			validationId: "validation-1",
+			reason: "The canonical gate exposed a prerequisite failure.",
+			repair: "Repair the test setup.",
+			targets: ["tests/setup.ts"],
+			sameGoal: true,
+			reversible: true,
+		},
+	},
 	flow_plan_approve: { request: { ...guard } },
 	flow_run_start: { request: { ...guard, featureId } },
 	flow_validation_start: {
@@ -165,6 +179,7 @@ const validInputs: Record<
 const applicationSchemas = {
 	flow_status: StatusInputSchema,
 	flow_plan_save: PlanSaveInputSchema,
+	flow_plan_amend: PlanAmendInputSchema,
 	flow_plan_approve: PlanApproveInputSchema,
 	flow_run_start: RunStartInputSchema,
 	flow_validation_start: ValidationStartInputSchema,
@@ -497,6 +512,7 @@ describe("Flow OpenCode host schemas", () => {
 		} as ToolContext;
 		const managerMutations = [
 			"flow_plan_save",
+			"flow_plan_amend",
 			"flow_plan_approve",
 			"flow_run_start",
 			"flow_review_start",

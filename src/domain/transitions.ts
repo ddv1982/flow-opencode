@@ -25,6 +25,7 @@ import type {
 	OperationKind,
 	OperationRecord,
 	Plan,
+	PlanAmendment,
 	ReviewAssignment,
 	ReviewResult,
 	Session,
@@ -36,6 +37,7 @@ import {
 	featureKind,
 	firstBlockedRun,
 	planEvidence,
+	planGate,
 	reviewResultSemanticIssues,
 } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
@@ -64,6 +66,17 @@ type PlanSaveInput = Readonly<{
 	expectedRevision: number;
 	goal: string;
 	plan: Plan;
+}>;
+type PlanAmendInput = Readonly<{
+	operationId: string;
+	expectedRevision: number;
+	featureId: FeatureId;
+	validationId: string;
+	reason: string;
+	repair: string;
+	targets: string[];
+	sameGoal: true;
+	reversible: true;
 }>;
 type GuardedFeatureInput = Readonly<{
 	operationId: string;
@@ -351,6 +364,102 @@ export function approvePlan(
 		value: null,
 		replayed: false,
 	};
+}
+
+export function amendPlan(
+	session: Session,
+	input: PlanAmendInput,
+	currentSourceDigest: SourceDigest,
+): MutationResult<PlanAmendment> {
+	const replay = existingOperation(
+		session,
+		"plan-amend",
+		input.operationId,
+		input,
+	);
+	if (replay) {
+		const amendment = session.amendments?.find(
+			(item) => item.operationId === input.operationId,
+		);
+		if (!amendment) fail("The replayed plan amendment is missing.");
+		return { session, value: amendment, replayed: true };
+	}
+	assertRevision(session, input.expectedRevision);
+	assertMutable(session);
+	if (session.approval !== "approved" || !session.plan)
+		fail("A prerequisite amendment requires an approved plan.");
+	if (input.sameGoal !== true || input.reversible !== true)
+		fail("The amendment must attest same-goal, reversible prerequisite work.");
+	if (input.targets.length < 1 || input.targets.length > 8)
+		fail("An amendment needs 1-8 concrete targets.");
+	if ((session.amendments?.length ?? 0) >= 3)
+		fail("This session has used all three bounded prerequisite amendments.");
+	const run = activeRun(session);
+	if (!run || run.featureId !== input.featureId)
+		fail("An amendment must target the active feature run.");
+	if (run.reviews.length > 0)
+		fail("An amendment cannot bypass an existing independent review.");
+	if (
+		session.runs.some(
+			(candidate) =>
+				candidate.featureId === run.featureId &&
+				candidate.reviews.some((review) =>
+					review.result?.findings.some((finding) => finding.scopeBlocker),
+				),
+		)
+	)
+		fail("An independent review scope blocker requires user direction.");
+	const observation = run.validations.find(
+		(item) => item.id === input.validationId,
+	);
+	const latestCanonical = run.validations
+		.filter(
+			(item) =>
+				item.scope === "broad" && item.command === planGate(session.plan),
+		)
+		.at(-1);
+	if (!observation)
+		fail(
+			"An amendment requires a failed canonical-gate observation on the active run.",
+		);
+	if (
+		latestCanonical?.id !== observation.id ||
+		observation.scope !== "broad" ||
+		observation.command !== planGate(session.plan) ||
+		observation.exitCode === null ||
+		observation.exitCode === 0 ||
+		!observation.outputComplete ||
+		observation.ineligibleReason !== undefined ||
+		observation.sourceDigest !== currentSourceDigest
+	) {
+		fail(
+			"An amendment requires a complete failed canonical-gate observation for the current source.",
+		);
+	}
+	let created: PlanAmendment | null = null;
+	const next = commit(
+		session,
+		"plan-amend",
+		input.operationId,
+		input,
+		(draft, revision) => {
+			created = {
+				operationId: input.operationId,
+				featureId: input.featureId,
+				runId: run.id,
+				validationId: input.validationId,
+				reason: input.reason,
+				repair: input.repair,
+				targets: [...input.targets],
+				sameGoal: true,
+				reversible: true,
+				recordedRevision: revision,
+			};
+			return { ...draft, amendments: [...(draft.amendments ?? []), created] };
+		},
+	);
+	if (!created) fail("Flow could not record the amendment.");
+	return { session: next, value: created, replayed: false };
 }
 
 export function anchorRequest(
