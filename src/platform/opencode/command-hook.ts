@@ -26,17 +26,23 @@ const PLAN_ONLY_REQUEST = [
 ];
 const REVIEW_DELIVERABLE =
 	/\b(?:review|inspect|audit|analy[sz]e|assess|survey)\b/i;
+const PLAN_DELIVERABLE =
+	/\b(?:create|draft|write|make|produce|develop|prepare)\s+(?:(?:a|an|the)\s+)?(?:(?:phased|improvement|action|implementation)\s+)?(?:plan|roadmap)\b/i;
 const NO_PRODUCT_IMPLEMENTATION =
-	/\b(?:do not|don't)\s+implement\b|\bstop\s+before\s+implementation\b/i;
+	/\b(?:do not|don't)\s+implement\b|\bstop\s+before\s+implementation\b/gi;
+const PRODUCT_CHANGE =
+	/\b(?:implement|fix|repair|refactor|modify|edit|improve|build|apply\s+(?:the\s+)?changes?|update\s+(?:the\s+)?(?:code|deps|dependencies))\b/i;
 function autoGoalIntent(goal: string): AutoGoalIntent {
 	const request = goal.replace(/`[^`]*`|"[^"]*"|'[^']*'/g, " ");
 	if (PLAN_ONLY_REQUEST.some((pattern) => pattern.test(request)))
 		return "plan-only";
+	const withoutNegation = request.replace(NO_PRODUCT_IMPLEMENTATION, " ");
+	if (PRODUCT_CHANGE.test(withoutNegation)) return "uncertain";
 	const review = REVIEW_DELIVERABLE.exec(request);
-	const plan = /\bplan\b/i.exec(request);
-	if (review && (!plan || review.index < plan.index))
+	const plan = PLAN_DELIVERABLE.exec(request);
+	if (review && plan && review.index < plan.index)
 		return "inspection-deliverable";
-	return NO_PRODUCT_IMPLEMENTATION.test(request) ? "plan-only" : "uncertain";
+	return withoutNegation !== request ? "plan-only" : "uncertain";
 }
 function isFlowCommand(command: string): command is FlowCommandName {
 	return Object.hasOwn(FLOW_CORE_COMMANDS, command);

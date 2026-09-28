@@ -15,3 +15,5 @@ use this mode. This adds no authority to repair dependencies or product files.
 Auto approval is limited to a new exact-goal inspection draft owned by the
 current `/flow-auto` invocation. Ambiguous plan timing keeps the approval
 checkpoint.
+Intent matching recognizes a review followed by an explicit plan or roadmap
+request. It is conservative, not proof of every natural-language scope choice.

@@ -528,6 +528,41 @@ describe("flow-auto host continuation", () => {
 			true,
 		],
 		[
+			"new-anchor",
+			"Audit codebase with case named `audit finding` and produce a roadmap",
+			true,
+		],
+		[
+			"uncertain",
+			"Review codebase and improve architecture with case named `audit finding`",
+			false,
+		],
+		[
+			"uncertain",
+			"Review codebase and build a dashboard with case named `audit finding`",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review codebase with case named `audit finding`, create a phased plan, then improve architecture",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review codebase with case named `audit finding`, create a phased plan, then build a dashboard",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review the codebase with case named `audit finding`, then implement the fixes",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review case named `audit finding`, then repair the defects and update dependencies",
+			false,
+		],
+		[
 			"preexisting-anchor",
 			"Review codebase with case named `audit finding`",
 			false,
@@ -541,7 +576,7 @@ describe("flow-auto host continuation", () => {
 		["plan-only", "Just give me a plan for case named `audit finding`", false],
 		[
 			"review-without-implementation",
-			"Review case named `audit finding`; do not implement yet",
+			"Review case named `audit finding`, then create a roadmap; do not implement yet",
 			true,
 		],
 		[
