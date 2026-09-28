@@ -532,3 +532,197 @@ test("shadow recovery prompt does not add a second handback at one checkpoint", 
 	await auto.onIdle("host");
 	expect(prompts).toHaveLength(2);
 });
+
+test("running state cannot trigger Jev even with a direction-shaped next action", async () => {
+	const recovery = new RecoveryController(unavailable);
+	recovery.activate("host", { mode: "shadow", maxCalls: 2, maxUsd: 0.01 });
+	const prompts: string[] = [];
+	const auto = new AutoDriveCoordinator({
+		recovery,
+		readProjection: async () => ({
+			sessionId: "flow",
+			status: "running",
+			revision: 10,
+			nextAction: "await-user-direction",
+		}),
+		prompt: async (_host, prompt) => {
+			prompts.push(prompt);
+		},
+	});
+	const metadata = await auto.activate("host");
+	await auto.observeMessage(
+		"host",
+		delivery,
+		[{ synthetic: true, metadata }],
+		"initial",
+	);
+	await auto.onIdle("host");
+	expect(prompts).toEqual([]);
+	expect(recovery.snapshot("host")).toMatchObject({
+		mode: "shadow",
+		remainingCalls: 2,
+		reservedUsd: 0,
+	});
+});
+
+test("ordinary handback and flow-run keep one shadow lease for the next checkpoint", async () => {
+	const { createCommandHook } = await import(
+		"../src/platform/opencode/command-hook.js"
+	);
+	const { createFlowService } = await import(
+		"../src/application/flow-service.js"
+	);
+	const { MemorySessionRepository, deterministicEnvironment } = await import(
+		"./runtime-test-support.js"
+	);
+	let now = 0;
+	let projection: AutoDriveProjection = {
+		sessionId: "flow",
+		status: "blocked",
+		revision: 10,
+		nextAction: "await-user-direction",
+	};
+	const prompts: string[] = [];
+	const recovery = new RecoveryController(unavailable, { now: () => now });
+	const auto = new AutoDriveCoordinator({
+		recovery,
+		readProjection: async () => projection,
+		prompt: async (_host, prompt) => {
+			prompts.push(prompt);
+		},
+	});
+	const hook = createCommandHook({
+		recovery,
+		autoDrive: auto,
+		flow: createFlowService(
+			new MemorySessionRepository(),
+			deterministicEnvironment(),
+		),
+		assertOperational() {},
+	});
+	const output = () => ({ parts: [] }) as Parameters<typeof hook>[1];
+	const initial = output();
+	await hook(
+		{
+			command: "flow-auto",
+			sessionID: "host",
+			arguments:
+				"--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Fix parser",
+		},
+		initial,
+	);
+	const metadata = initial.parts.find(
+		(part) => part.type === "text" && part.synthetic === true,
+	);
+	if (metadata?.type !== "text") throw new Error("missing auto metadata");
+	await auto.observeMessage("host", delivery, [metadata], "initial");
+	recovery.observeMessage("host", "initial", true);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	expect(prompts[0]).toContain("recoveryProposal");
+
+	await auto.observeMessage(
+		"host",
+		delivery,
+		[{ text: "Continue this Flow task" }],
+		"reply",
+	);
+	recovery.observeMessage("host", "reply", false);
+	expect(recovery.snapshot("host")).toMatchObject({
+		mode: "shadow",
+		remainingCalls: 2,
+		reservedUsd: 0,
+		maxUsd: 0.01,
+	});
+	const inspected = output();
+	await hook(
+		{ command: "flow-status", sessionID: "host", arguments: "" },
+		inspected,
+	);
+	await auto.observeMessage(
+		"host",
+		delivery,
+		inspected.parts,
+		"status-command",
+	);
+	recovery.observeMessage("host", "status-command", false);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	now = 30 * 60 * 1000;
+	const resumed = output();
+	await hook(
+		{
+			command: "flow-run",
+			sessionID: "host",
+			arguments: "Continue parser repair",
+		},
+		resumed,
+	);
+	await auto.observeMessage("host", delivery, resumed.parts, "run-command");
+	recovery.observeMessage("host", "run-command", false);
+	auto.observeHostMessage("host", {
+		id: "reset-assistant",
+		role: "assistant",
+		parentID: "run-command",
+	});
+	auto.observeMutation("host", 11, undefined, "reset-assistant", false);
+	projection = {
+		sessionId: "flow",
+		status: "ready",
+		revision: 11,
+		nextAction: "flow_run_start",
+	};
+	const afterReset = output();
+	await hook(
+		{ command: "flow-status", sessionID: "host", arguments: "" },
+		afterReset,
+	);
+	await auto.observeMessage("host", delivery, afterReset.parts, "ready-status");
+	recovery.observeMessage("host", "ready-status", false);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	projection = {
+		sessionId: "flow",
+		status: "running",
+		revision: 12,
+		nextAction: "dispatch-flow-reviewer",
+	};
+	const afterRun = output();
+	await hook(
+		{
+			command: "flow-run",
+			sessionID: "host",
+			arguments: "Review parser repair",
+		},
+		afterRun,
+	);
+	await auto.observeMessage(
+		"host",
+		delivery,
+		afterRun.parts,
+		"running-command",
+	);
+	recovery.observeMessage("host", "running-command", false);
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(1);
+	projection = {
+		sessionId: "flow",
+		status: "blocked",
+		revision: 13,
+		nextAction: "await-user-direction",
+	};
+	await auto.onIdle("host");
+	expect(prompts).toHaveLength(2);
+	expect(prompts[1]).toContain("recoveryProposal");
+	expect(recovery.snapshot("host")).toMatchObject({
+		mode: "shadow",
+		remainingCalls: 2,
+		reservedUsd: 0,
+		maxUsd: 0.01,
+	});
+	now = 60 * 60 * 1000;
+	expect(
+		recovery.proposalPrompt("host", "flow", 12, "await-user-direction"),
+	).toBeNull();
+	expect(recovery.snapshot("host")).toEqual({ mode: "off" });
+});

@@ -165,6 +165,115 @@ const apply = (
 		? s.flow.featureReset({ request: mutation.request })
 		: s.flow.runStart({ request: mutation.request });
 describe("process-local recovery", () => {
+	test("an ordinary flow-run continuation spends from the existing shadow budget", async () => {
+		const { AutoDriveCoordinator } = await import(
+			"../src/platform/opencode/auto-drive.js"
+		);
+		const { createCommandHook } = await import(
+			"../src/platform/opencode/command-hook.js"
+		);
+		let assessments = 0;
+		const s = await setup("shadow", {
+			assess(packet, options) {
+				assessments++;
+				return provider.assess(packet, options);
+			},
+		});
+		expect(
+			(
+				await s.flow.status({
+					request: { view: "compact" },
+					recoveryProposal: s.proposal(),
+				})
+			).status,
+		).toBe("ok");
+		const firstReservedUsd = (
+			s.controller.snapshot("host") as {
+				reservedUsd: number;
+			}
+		).reservedUsd;
+		expect(s.controller.snapshot("host")).toMatchObject({
+			mode: "shadow",
+			remainingCalls: 5,
+			reservedUsd: firstReservedUsd,
+		});
+		const auto = new AutoDriveCoordinator({
+			recovery: s.controller,
+			readProjection: async () => {
+				const status = await s.flow.status({ request: { view: "compact" } });
+				if (
+					status.status !== "ok" ||
+					status.workflowData.projection.view !== "compact"
+				)
+					throw new Error("compact status unavailable");
+				return status.workflowData.projection;
+			},
+			prompt: async () => {},
+		});
+		const hook = createCommandHook({
+			autoDrive: auto,
+			recovery: s.controller,
+			flow: s.flow,
+			assertOperational() {},
+		});
+		const metadata = await auto.activate("host");
+		await auto.observeMessage(
+			"host",
+			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
+			[{ synthetic: true, metadata }],
+			"auto-start",
+		);
+		s.controller.observeMessage("host", "auto-start", true);
+		await auto.onIdle("host");
+		await auto.observeMessage(
+			"host",
+			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
+			[{ text: "Continue this repair" }],
+			"reply",
+		);
+		s.controller.observeMessage("host", "reply", false);
+		const output = { parts: [] } as Parameters<typeof hook>[1];
+		await hook(
+			{
+				command: "flow-run",
+				sessionID: "host",
+				arguments: "Continue this repair",
+			},
+			output,
+		);
+		await auto.observeMessage(
+			"host",
+			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
+			output.parts,
+			"run-command",
+		);
+		s.controller.observeMessage("host", "run-command", false);
+		s.controller.observeAssistant("host", "resumed-assistant", "run-command");
+		const resumedFlow = createFlowService(
+			s.repository,
+			s.env,
+			s.controller.guard({ ...context, messageId: "resumed-assistant" }),
+		);
+		const first = s.proposal();
+		const response = await resumedFlow.status({
+			request: { view: "compact" },
+			recoveryProposal: {
+				...first,
+				id: "second-proposal",
+				candidates: first.candidates.map((candidate) => ({
+					...candidate,
+					remedy: "Reject missing parser input before invoking parse",
+				})),
+			},
+		});
+		expect(response.status).toBe("ok");
+		expect(assessments).toBe(2);
+		expect(s.controller.snapshot("host")).toMatchObject({
+			mode: "shadow",
+			remainingCalls: 4,
+			reservedUsd: firstReservedUsd * 2,
+		});
+	});
 	test("an upgraded Jev response reports its version without granting a reset", async () => {
 		const s = await setup(
 			"delegated",

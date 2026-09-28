@@ -2158,4 +2158,60 @@ describe("Flow auto-drive coordinator", () => {
 			expect(driver.compactionContext("host-1")).toBeNull();
 		}
 	});
+
+	test("command resumption rejects a replacement session and an interrupted lease", async () => {
+		const replaced = harness({
+			sessionId: "flow-1",
+			status: "blocked",
+			revision: 4,
+			nextAction: "await-user-direction",
+		});
+		await replaced.activate();
+		replaced.setProjection({
+			sessionId: "flow-2",
+			status: "blocked",
+			revision: 5,
+			nextAction: "await-user-direction",
+		});
+		expect(await replaced.driver.resumeForCommand("host-1")).toBeNull();
+		expect(replaced.driver.compactionContext("host-1")).toBeNull();
+
+		const interrupted = harness({
+			sessionId: "flow-1",
+			status: "blocked",
+			revision: 4,
+			nextAction: "await-user-direction",
+		});
+		await interrupted.activate();
+		await interrupted.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ text: "Answer the blocker" }],
+			"first-reply",
+		);
+		await interrupted.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ text: "Start a different task" }],
+			"unrelated-turn",
+		);
+		expect(await interrupted.driver.resumeForCommand("host-1")).toBeNull();
+		expect(interrupted.driver.compactionContext("host-1")).toBeNull();
+
+		const dropped = harness({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 4,
+			nextAction: "flow_run_start",
+		});
+		await dropped.activate();
+		expect(await dropped.driver.resumeForCommand("host-1")).not.toBeNull();
+		await dropped.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ text: "Unrelated task after the command was dropped" }],
+			"unrelated-after-drop",
+		);
+		expect(dropped.driver.compactionContext("host-1")).toBeNull();
+	});
 });

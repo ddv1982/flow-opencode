@@ -6,6 +6,7 @@ import type {
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
 import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
 import type { AutoDriveCoordinator } from "./auto-drive.js";
+import { FLOW_AUTO_METADATA_KEY } from "./auto-drive.js";
 import type { Hooks } from "./sdk.js";
 
 type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
@@ -95,12 +96,16 @@ export function createCommandHook(
 		const action = input.arguments.trim();
 		const stopping =
 			command === "flow-auto" && /^(?:stop|cancel)$/i.test(action);
+		const continuationToken =
+			(command === "flow-run" || command === "flow-status") &&
+			(await autoDrive.resumeForCommand(input.sessionID));
+		const continuing = typeof continuationToken === "string";
 		let cancelledPending = false;
 		if (command === "flow-auto" && !stopping) {
 			invocation = { host: input.sessionID, generation: ++generation };
 			autoDrive.clear();
 			recovery?.revoke();
-		} else if (invocation?.host === input.sessionID) {
+		} else if (!continuing && invocation?.host === input.sessionID) {
 			cancelledPending = true;
 			invocation = null;
 			generation++;
@@ -138,7 +143,7 @@ export function createCommandHook(
 			if (settings) {
 				if (!recovery) throw new Error("Recovery is unavailable in this host.");
 				recovery.activate(input.sessionID, settings);
-			} else recovery?.revoke(input.sessionID);
+			} else if (!continuing) recovery?.revoke(input.sessionID);
 			if (command === "flow-auto" || command === "flow-plan") {
 				const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
 				if (evidence) {
@@ -150,8 +155,22 @@ export function createCommandHook(
 			}
 			assertCurrent();
 			rewriteCommand(command, parsed.goal, output);
-			if (command !== "flow-auto")
-				return void autoDrive.deactivate(input.sessionID);
+			if (command !== "flow-auto") {
+				if (continuing) {
+					const instruction = output.parts.find(
+						(part): part is TextPart =>
+							part.type === "text" && part.synthetic === true,
+					);
+					if (!instruction)
+						throw new Error("Flow continuation instruction missing.");
+					instruction.metadata = {
+						...instruction.metadata,
+						[FLOW_AUTO_METADATA_KEY]: continuationToken,
+					};
+				}
+				if (!continuing) autoDrive.deactivate(input.sessionID);
+				return;
+			}
 			const metadata = await autoDrive.activate(input.sessionID);
 			assertCurrent();
 			if (autoDrive.continuationSupport() === "unsupported") {
