@@ -134,6 +134,11 @@ generated artifacts, modes,
 and unrelated pre-existing work. Name missing/conflicting facts; Flow does not
 attest inventory completeness.
 
+For inspect deliverables, rerun focused checks and tool-version commands after
+the final document edit when claiming their results as current-source evidence.
+Link each resulting validation ID in the review packet. Otherwise qualify the
+claim as historical or remove it.
+
 For persistence, schema, migration, replay, or recovery work, add only
 the relevant full questions to `riskLenses`: can interruption leave partial
 state; are retry and replay idempotent; can older state or readers fail visibly;
