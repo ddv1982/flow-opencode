@@ -192,14 +192,14 @@ describe("repository-owned v2 qualification", () => {
 			}),
 		).toThrow(/noncanonical evidence path/);
 	});
-	test("derives all verdicts from the canonical 76-cell policy", () => {
+	test("derives all verdicts from the canonical 96-cell policy", () => {
 		const verified = qualifyV2({
 			reportInput: releaseReport(),
 			catalogInput: releaseCatalog(),
 			artifact: ARTIFACT,
 		});
 		expect(verified.decision.verdict).toBe("VERIFIED");
-		expect(verified.report.plan.cells).toHaveLength(92);
+		expect(verified.report.plan.cells).toHaveLength(114);
 		expect(decisionRecordFor(verified)).toEqual(decisionRecordFor(verified));
 
 		const notVerified = qualifyV2({
@@ -226,11 +226,11 @@ describe("repository-owned v2 qualification", () => {
 		});
 		expect(verified.decision.verdict).toBe("VERIFIED");
 		expect(verified.decision.reasons).toEqual([]);
-		expect(verified.report.attempts).toHaveLength(76);
+		expect(verified.report.attempts).toHaveLength(96);
 		expect(verified.decision.totals).toEqual({
-			scheduled: 76,
-			scored: 76,
-			passed: 76,
+			scheduled: 96,
+			scored: 96,
+			passed: 96,
 		});
 
 		const stopped = qualifyV2({
@@ -345,7 +345,7 @@ describe("repository-owned v2 qualification", () => {
 			artifact: ARTIFACT,
 		});
 		expect(result.decision.verdict).toBe("VERIFIED");
-		expect(result.report.attempts).toHaveLength(77);
+		expect(result.report.attempts).toHaveLength(97);
 	});
 
 	test("rejects every caller attempt to weaken or reorder policy", () => {

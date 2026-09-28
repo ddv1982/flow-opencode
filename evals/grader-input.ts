@@ -1,4 +1,6 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
+import { isArtifactPath } from "../src/domain/artifact.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import { mapStrings } from "./cassette.js";
 import type { ObservedToolCall, Outcome } from "./harness.js";
@@ -36,6 +38,54 @@ export const ScenarioGradeInputSchema = z
 		allCalls: z.array(ToolCallSchema).max(4096),
 		session: JsonRecordSchema.nullable(),
 		archives: z.array(JsonRecordSchema).max(512),
+		workspaceChanges: z
+			.discriminatedUnion("kind", [
+				z
+					.object({
+						kind: z.literal("observed"),
+						paths: z
+							.array(TextSchema.refine(isArtifactPath))
+							.max(4096)
+							.refine((paths) =>
+								paths.every(
+									(path, index) =>
+										index === 0 || (paths[index - 1] ?? "") < path,
+								),
+							),
+					})
+					.strict(),
+				z
+					.object({ kind: z.literal("unavailable"), reason: TextSchema })
+					.strict(),
+			])
+			.optional(),
+		reviewDocument: z
+			.discriminatedUnion("kind", [
+				z
+					.object({
+						kind: z.literal("observed"),
+						content: z
+							.string()
+							.refine((value) => Buffer.byteLength(value, "utf8") <= 64 * 1024),
+						sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+					})
+					.strict(),
+				z
+					.object({ kind: z.literal("unavailable"), reason: TextSchema })
+					.strict(),
+			])
+			.superRefine((value, context) => {
+				if (
+					value.kind === "observed" &&
+					value.sha256 !==
+						`sha256:${createHash("sha256").update(value.content).digest("hex")}`
+				)
+					context.addIssue({
+						code: "custom",
+						message: "Review document digest does not match content.",
+					});
+			})
+			.optional(),
 		finalText: z.string().max(4 * 1024 * 1024),
 		providerErrors: z.array(ProviderErrorEnvelopeSchema).max(64).default([]),
 	})
@@ -155,7 +205,13 @@ export const RetainedScenarioEvidenceSchema = z
 
 export type ScenarioGradeInput = Pick<
 	Outcome,
-	"flowCalls" | "allCalls" | "session" | "archives" | "finalText"
+	| "flowCalls"
+	| "allCalls"
+	| "session"
+	| "archives"
+	| "workspaceChanges"
+	| "reviewDocument"
+	| "finalText"
 >;
 export type RetainedScenarioGradeInput = z.infer<
 	typeof ScenarioGradeInputSchema
@@ -375,6 +431,12 @@ export function scenarioGradeInput(
 		allCalls: outcome.allCalls,
 		session: outcome.session,
 		archives: outcome.archives,
+		...(outcome.workspaceChanges === undefined
+			? {}
+			: { workspaceChanges: outcome.workspaceChanges }),
+		...(outcome.reviewDocument === undefined
+			? {}
+			: { reviewDocument: outcome.reviewDocument }),
 		finalText: outcome.finalText,
 		providerErrors: outcome.providerErrorObservation
 			? [outcome.providerErrorObservation]

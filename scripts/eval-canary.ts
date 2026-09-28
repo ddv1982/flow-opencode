@@ -860,6 +860,7 @@ export async function prepareCanary(input: {
 		`${JSON.stringify(
 			{
 				private: true,
+				version: packageMetadata.version,
 				dependencies: {
 					"@opencode-ai/plugin":
 						packageMetadata.devDependencies["@opencode-ai/plugin"],

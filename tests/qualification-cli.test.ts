@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -18,7 +19,7 @@ import {
 	retainedFailureEvidence,
 	scenarioGradeInput,
 } from "../evals/grader-input.js";
-import { packPlugin } from "../evals/harness.js";
+import { type Outcome, packPlugin } from "../evals/harness.js";
 import {
 	evaluatorIdentity,
 	inspectArtifact,
@@ -129,6 +130,88 @@ function retainedReplayOutcome(
 		Reflect.deleteProperty(call, "recordedStatus");
 	}
 	return retained;
+}
+
+function inspectionAuditOutcome(): Outcome {
+	const document =
+		"# Codebase review\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Phase 1\nAdd a focused regression test for inclusiveRangeLength(1,3).\n\n## Phase 2\nFix inclusiveRangeLength and rerun bun run verify.\n";
+	const call = (tool: string, input: Record<string, unknown> = {}) => ({
+		tool,
+		status: "completed" as const,
+		sessionIndex: 0,
+		agent: "build",
+		input,
+		output: null,
+		rawOutput: "",
+		metadata: {},
+	});
+	return {
+		flowCalls: [call("flow_review_start"), call("flow_session_close")],
+		allCalls: [
+			call("write", {
+				filePath: "docs/codebase-review.md",
+				content: "The audit failed. Phase one reviews src/count.ts.",
+			}),
+		],
+		session: null,
+		archives: [
+			{
+				version: 5,
+				goal: "Review the codebase and write a phased roadmap",
+				approval: "approved",
+				plan: {
+					features: [
+						{
+							id: "review-and-roadmap",
+							title: "Review and roadmap",
+							kind: "inspect",
+						},
+					],
+					evidence: [{ scope: "gate-observe", command: "bun run verify" }],
+				},
+				runs: [
+					{
+						featureId: "review-and-roadmap",
+						attempt: 1,
+						state: "completed",
+						artifactsChanged: [{ path: "docs/codebase-review.md" }],
+						validations: [
+							{
+								id: "audit-1",
+								command: "bun run verify",
+								scope: "broad",
+								exitCode: 1,
+								outputComplete: true,
+								sourceDigest: "sha256:current",
+							},
+						],
+						reviews: [
+							{
+								kind: "final",
+								sourceDigest: "sha256:current",
+								validationIds: ["audit-1"],
+								result: { verdict: "passed", terminalDisposition: "submitted" },
+							},
+						],
+					},
+				],
+				closure: { kind: "completed" },
+			},
+		],
+		workspaceChanges: { kind: "observed", paths: ["docs/codebase-review.md"] },
+		reviewDocument: {
+			kind: "observed",
+			content: document,
+			sha256: `sha256:${createHash("sha256").update(document).digest("hex")}`,
+		},
+		finalText:
+			"Review complete. bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved. See docs/codebase-review.md.",
+		tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
+		costUsd: null,
+		assistantMessages: 0,
+		durationMs: 0,
+		providerError: null,
+	};
 }
 
 function canaryTranscript(input: {
@@ -246,11 +329,14 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		await store.writeCatalog(releaseCatalog(artifact.packageVersion));
 		await store.writeArtifact(artifactPath);
 
-		const replayedByScenario = new Map<
-			string,
-			Awaited<ReturnType<typeof replayCassette>>
-		>();
+		const replayedByScenario = new Map<string, Outcome>();
 		for (const scenario of scenarios) {
+			if (scenario.id === "inspection-failed-audit-completes") {
+				const observed = inspectionAuditOutcome();
+				expect(scenario.check(observed)).toEqual([]);
+				replayedByScenario.set(scenario.id, observed);
+				continue;
+			}
 			const name = CASSETTES[scenario.id as keyof typeof CASSETTES];
 			if (!name) throw new Error(`No cassette fixture for ${scenario.id}.`);
 			const cassette = JSON.parse(
@@ -262,7 +348,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			const replayed = await replayCassette(cassette);
 			expect(replayed.divergences, scenario.id).toEqual([]);
 			expect(scenario.check(replayed.outcome), scenario.id).toEqual([]);
-			replayedByScenario.set(scenario.id, replayed);
+			replayedByScenario.set(scenario.id, replayed.outcome);
 		}
 
 		const primaryCells = plan.cells.filter(
@@ -334,7 +420,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 						})),
 						guidanceLoads: [],
 						gradeInput: pseudonymizeEvalIds(
-							scenarioGradeInput(retainedReplayOutcome(replayed.outcome)),
+							scenarioGradeInput(retainedReplayOutcome(replayed)),
 						),
 						usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
 						failure: null,
@@ -413,7 +499,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			completion,
 			allocationCommitmentSha256: null,
 		});
-		expect(report.attempts).toHaveLength(39);
+		expect(report.attempts).toHaveLength(49);
 
 		const preparedDirectory = join(temporary, "prepared-canary");
 		await mkdir(preparedDirectory, { recursive: true });
@@ -441,6 +527,14 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			recordedAt,
 		});
 		expect(canary.record.status).toBe("passed");
+		const diagnostic = qualifyV2({
+			reportInput: report,
+			catalogInput: releaseCatalog(artifact.packageVersion),
+			artifact,
+			canary: canary.record,
+		});
+		if (diagnostic.decision.verdict !== "VERIFIED")
+			throw new Error(JSON.stringify(diagnostic.decision.reasons));
 		const currentHostTranscript = canaryTranscript({
 			fixture: join(preparedDirectory, "fixture"),
 			packageVersion: artifact.packageVersion,
@@ -521,8 +615,8 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		const transcripts = bundle.files.filter(
 			({ ref }) => ref.role === "transcript",
 		);
-		expect(attempts).toHaveLength(39);
-		expect(transcripts).toHaveLength(39);
+		expect(attempts).toHaveLength(49);
+		expect(transcripts).toHaveLength(49);
 		expect(attempts.map(({ ref }) => ref.id).sort()).toEqual(
 			transcripts.map(({ ref }) => ref.id).sort(),
 		);

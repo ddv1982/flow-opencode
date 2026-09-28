@@ -102,7 +102,8 @@ export type FidelityNote =
 	| "run-unscored"
 	| "host-error"
 	| "provider-error"
-	| "evaluator-error";
+	| "evaluator-error"
+	| "workspace-diff-unreplayed";
 
 export type Cassette = Readonly<{
 	cassetteVersion: number;

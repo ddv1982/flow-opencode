@@ -14,13 +14,17 @@ import {
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
 	chmod,
 	cp,
+	lstat,
 	mkdir,
 	mkdtemp,
+	open,
 	readdir,
 	readFile,
+	readlink,
 	realpath,
 	rename,
 	rm,
@@ -32,8 +36,10 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { consumePaidDispatch } from "../scripts/paid-budget.js";
+import { isArtifactPath } from "../src/domain/artifact.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import { CampaignCancelled } from "./campaign-stop.js";
+import { normalizeRecorded } from "./cassette.js";
 import {
 	type AttemptFailure,
 	attemptFailure,
@@ -42,7 +48,10 @@ import {
 	preservePrimaryFailure,
 	providerFailure,
 } from "./failure-origin.js";
-import type { ScenarioGradeInput } from "./grader-input.js";
+import {
+	pseudonymizeEvalIds,
+	type ScenarioGradeInput,
+} from "./grader-input.js";
 import {
 	artifactFile,
 	type HostArtifactPaths,
@@ -325,7 +334,8 @@ export type Outcome = {
 	readonly session: Record<string, unknown> | null;
 	/** Parsed documents under `.flow/history/`. */
 	readonly archives: readonly Record<string, unknown>[];
-	/** Final assistant text, for reporting only — never assert on wording. */
+	readonly workspaceChanges?: WorkspaceChangeObservation | undefined;
+	readonly reviewDocument?: ReviewDocumentObservation | undefined;
 	readonly finalText: string;
 	readonly tokens: {
 		input: number;
@@ -352,6 +362,205 @@ export type Outcome = {
 	readonly providerError: AttemptFailure<"provider"> | null;
 	readonly providerErrorObservation?: ProviderErrorObservation | null;
 };
+
+export type WorkspaceChangeObservation =
+	| Readonly<{ kind: "observed"; paths: readonly string[] }>
+	| Readonly<{ kind: "unavailable"; reason: string }>;
+export type ReviewDocumentObservation =
+	| Readonly<{ kind: "observed"; content: string; sha256: string }>
+	| Readonly<{ kind: "unavailable"; reason: string }>;
+
+const SENSITIVE_DOCUMENT_ASSIGNMENT =
+	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization)[A-Za-z0-9_-]*\s*["'`]?\s*(?::|=)\s*["'`]?[\S]+/im;
+const SENSITIVE_INLINE_ASSIGNMENT =
+	/(?:token|password|passwd|secret|key|authorization)\s*=/i;
+
+const HOST_INTERNAL_DIRS = new Set([
+	".git",
+	".flow",
+	".opencode",
+	"node_modules",
+]);
+const ROOT_GENERATED_DIRS = new Set([
+	"dist",
+	"build",
+	"coverage",
+	"test-results",
+	".next",
+	".turbo",
+	".cache",
+]);
+
+type WorkspaceEntry = Readonly<{
+	kind: "file" | "symlink" | "directory";
+	mode: number;
+	identity: string | null;
+}>;
+export type WorkspaceSnapshot =
+	| Readonly<{ kind: "captured"; entries: ReadonlyMap<string, WorkspaceEntry> }>
+	| Readonly<{ kind: "unavailable"; reason: string }>;
+
+export async function captureWorkspaceSnapshot(
+	project: string,
+): Promise<WorkspaceSnapshot> {
+	const entries = new Map<string, WorkspaceEntry>();
+	let totalBytes = 0;
+	const visit = async (relative: string): Promise<void> => {
+		const directory = join(project, relative);
+		for (const item of await readdir(directory, { withFileTypes: true })) {
+			if (
+				HOST_INTERNAL_DIRS.has(item.name) ||
+				(relative === "" && ROOT_GENERATED_DIRS.has(item.name))
+			)
+				continue;
+			const path = relative ? `${relative}/${item.name}` : item.name;
+			if (!isArtifactPath(path) || entries.size >= 10_000)
+				throw new Error("invalid snapshot path");
+			const target = join(project, path);
+			const stat = await lstat(target);
+			if (stat.isDirectory()) {
+				entries.set(path, {
+					kind: "directory",
+					mode: stat.mode & 0o7777,
+					identity: null,
+				});
+				await visit(path);
+				continue;
+			}
+			let identity: string;
+			let kind: WorkspaceEntry["kind"];
+			if (stat.isSymbolicLink()) {
+				kind = "symlink";
+				identity = await readlink(target);
+			} else if (stat.isFile()) {
+				kind = "file";
+				if (
+					stat.size > 32 * 1024 * 1024 ||
+					totalBytes + stat.size > 256 * 1024 * 1024
+				)
+					throw new Error("snapshot size limit");
+				const handle = await open(
+					target,
+					constants.O_RDONLY | constants.O_NOFOLLOW,
+				);
+				try {
+					const opened = await handle.stat();
+					if (!opened.isFile()) throw new Error("snapshot file changed kind");
+					const bytes = await handle.readFile();
+					if (
+						bytes.length > 32 * 1024 * 1024 ||
+						totalBytes + bytes.length > 256 * 1024 * 1024
+					)
+						throw new Error("snapshot size limit");
+					totalBytes += bytes.length;
+					identity = createHash("sha256").update(bytes).digest("hex");
+				} finally {
+					await handle.close();
+				}
+			} else {
+				throw new Error("unsupported snapshot entry");
+			}
+			entries.set(path, { kind, mode: stat.mode & 0o7777, identity });
+		}
+	};
+	try {
+		await visit("");
+		return { kind: "captured", entries };
+	} catch {
+		return { kind: "unavailable", reason: "workspace-snapshot-failed" };
+	}
+}
+
+export async function observeWorkspaceChanges(
+	project: string,
+	baseline: WorkspaceSnapshot,
+): Promise<WorkspaceChangeObservation> {
+	return compareWorkspaceSnapshots(
+		baseline,
+		await captureWorkspaceSnapshot(project),
+	);
+}
+
+function compareWorkspaceSnapshots(
+	baseline: WorkspaceSnapshot,
+	current: WorkspaceSnapshot,
+): WorkspaceChangeObservation {
+	if (baseline.kind !== "captured")
+		return { kind: "unavailable", reason: baseline.reason };
+	if (current.kind !== "captured")
+		return { kind: "unavailable", reason: current.reason };
+	const paths = [
+		...new Set([...baseline.entries.keys(), ...current.entries.keys()]),
+	]
+		.filter((path) => {
+			const before = baseline.entries.get(path);
+			const after = current.entries.get(path);
+			return (
+				before?.kind !== after?.kind ||
+				before?.mode !== after?.mode ||
+				before?.identity !== after?.identity
+			);
+		})
+		.sort();
+	return { kind: "observed", paths };
+}
+
+export async function observeReviewDocument(
+	project: string,
+	current: WorkspaceSnapshot,
+): Promise<ReviewDocumentObservation> {
+	const path = "docs/codebase-review.md";
+	if (current.kind !== "captured" || current.entries.get(path)?.kind !== "file")
+		return { kind: "unavailable", reason: "review-document-not-regular" };
+	try {
+		const target = join(project, path);
+		const stat = await lstat(target);
+		if (!stat.isFile() || stat.size > 64 * 1024)
+			return {
+				kind: "unavailable",
+				reason: "review-document-not-regular-or-oversize",
+			};
+		const handle = await open(
+			target,
+			constants.O_RDONLY | constants.O_NOFOLLOW,
+		);
+		try {
+			if (!(await handle.stat()).isFile())
+				return { kind: "unavailable", reason: "review-document-not-regular" };
+			const bytes = await handle.readFile();
+			if (bytes.length > 64 * 1024)
+				return { kind: "unavailable", reason: "review-document-oversize" };
+			const sha256 = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+			if (
+				current.entries.get(path)?.identity !== sha256.slice("sha256:".length)
+			)
+				return {
+					kind: "unavailable",
+					reason: "review-document-changed-after-snapshot",
+				};
+			const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+			if (
+				!Buffer.from(content, "utf8").equals(bytes) ||
+				SENSITIVE_DOCUMENT_ASSIGNMENT.test(content) ||
+				SENSITIVE_INLINE_ASSIGNMENT.test(content) ||
+				pseudonymizeEvalIds(normalizeRecorded(content, project)) !== content
+			)
+				return {
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				};
+			return {
+				kind: "observed",
+				content,
+				sha256,
+			};
+		} finally {
+			await handle.close();
+		}
+	} catch {
+		return { kind: "unavailable", reason: "review-document-read-failed" };
+	}
+}
 
 /**
  * One measurable claim about Flow, and everything needed to price it.
@@ -1392,6 +1601,8 @@ export type EvalReviewerOptions = Readonly<{
 
 export class EvalHost {
 	private server: ChildProcess | null = null;
+	private workspaceBaseline: WorkspaceSnapshot | null = null;
+	private retainReviewDocument = false;
 	private serverLog = "";
 	private baseUrl = "";
 	/**
@@ -1473,6 +1684,7 @@ export class EvalHost {
 		ambientConfig?: "inherit" | "disabled";
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
+		retainReviewDocument?: boolean;
 		/** Configures the hidden reviewer through the same native tuple users set. */
 		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
@@ -1594,6 +1806,7 @@ export class EvalHost {
 		const scratch = await mkdtemp(join(tmpdir(), "workspace-"));
 		const project = join(scratch, "project");
 		const host = new EvalHost(project, scratch, options.signal);
+		host.retainReviewDocument = options.retainReviewDocument === true;
 		try {
 			checkCancellation(options.signal);
 			await chmod(scratch, 0o700);
@@ -2034,6 +2247,7 @@ export class EvalHost {
 									? "copied-files-and-linux-process"
 									: "copied-files-and-direct-spawn",
 						};
+					host.workspaceBaseline = await captureWorkspaceSnapshot(project);
 					return host;
 				},
 			);
@@ -2763,6 +2977,7 @@ export class EvalHost {
 			if (!providerError || !signal?.aborted || error !== signal.reason)
 				throw error;
 		}
+		const currentWorkspace = await captureWorkspaceSnapshot(this.project);
 		return {
 			allCalls,
 			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
@@ -2770,6 +2985,21 @@ export class EvalHost {
 			guidanceLoads,
 			session,
 			archives,
+			workspaceChanges: compareWorkspaceSnapshots(
+				this.workspaceBaseline ?? {
+					kind: "unavailable",
+					reason: "workspace-baseline-unavailable",
+				},
+				currentWorkspace,
+			),
+			...(this.retainReviewDocument
+				? {
+						reviewDocument: await observeReviewDocument(
+							this.project,
+							currentWorkspace,
+						),
+					}
+				: {}),
 			finalText,
 			tokens,
 			usageAvailability:

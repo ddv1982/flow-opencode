@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
 	deriveConformanceOutcome,
 	retainedInstructions,
@@ -16,6 +17,63 @@ import {
 } from "../evals/grader-input.js";
 
 describe("retained scenario grader input", () => {
+	test("keeps legacy v1 inputs while validating retained host changes", () => {
+		const legacy = {
+			schemaVersion: 1,
+			flowCalls: [],
+			allCalls: [],
+			session: null,
+			archives: [],
+			finalText: "",
+			providerErrors: [],
+		};
+		expect(
+			ScenarioGradeInputSchema.parse(legacy).workspaceChanges,
+		).toBeUndefined();
+		expect(
+			ScenarioGradeInputSchema.parse(legacy).reviewDocument,
+		).toBeUndefined();
+		const content = "# Review\n";
+		const reviewDocument = {
+			kind: "observed" as const,
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		};
+		expect(
+			ScenarioGradeInputSchema.parse({ ...legacy, reviewDocument })
+				.reviewDocument,
+		).toEqual(reviewDocument);
+		expect(
+			ScenarioGradeInputSchema.safeParse({
+				...legacy,
+				reviewDocument: { ...reviewDocument, content: "tampered" },
+			}).success,
+		).toBe(false);
+		expect(
+			ScenarioGradeInputSchema.parse({
+				...legacy,
+				workspaceChanges: {
+					kind: "observed",
+					paths: ["docs/codebase-review.md", "src/count.ts"],
+				},
+			}).workspaceChanges,
+		).toEqual({
+			kind: "observed",
+			paths: ["docs/codebase-review.md", "src/count.ts"],
+		});
+		for (const paths of [
+			["src/count.ts", "docs/codebase-review.md"],
+			["src/count.ts", "src/count.ts"],
+			["../escape"],
+		]) {
+			expect(
+				ScenarioGradeInputSchema.safeParse({
+					...legacy,
+					workspaceChanges: { kind: "observed", paths },
+				}).success,
+			).toBe(false);
+		}
+	});
 	test("retains a complete attempt envelope when the host produces no outcome", () => {
 		const evidence = retainedFailureEvidence({
 			attempt: {

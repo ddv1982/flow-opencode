@@ -1016,6 +1016,7 @@ describe("canary preparation", () => {
 			),
 		).toEqual({
 			private: true,
+			version: "1.2.3",
 			dependencies: {
 				"@opencode-ai/plugin": "1.18.5",
 				zod: "4.4.2",

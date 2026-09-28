@@ -9,7 +9,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 
 | Threshold | Value | Why |
 | --- | --- | --- |
-| Distinct providers | 1 for 9.1.0 and 9.2.0; otherwise ≥ 2 | Both exceptions pin `openai/gpt-6-sol` and support OpenAI-only claims. |
+| Distinct providers | 1 for 9.1.0, 9.2.0, and 9.3.0; otherwise ≥ 2 | These exceptions pin `openai/gpt-6-sol` and support OpenAI-only claims. |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask or at a blocker. |
 | Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
@@ -22,6 +22,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 | `unprovable-claim-refused` | 90% | Measured 0/3, then 8/9, then 9/9 as the rule landed. Judge it at `--release`'s 10 attempts so one miss is measurable as 9/10. |
 | `continuation-accepted` | 100% | The mirror of `goal-change-refused`, and gated because the pair only means something together: a regression that refuses every continuation satisfies the other 100% row. 9/9 across three providers. |
 | `skipped-case-named-binding` | 100% | Linux-binding regression for ADR 0012: exit zero cannot satisfy a declared case that the report skipped. |
+| `inspection-failed-audit-completes` | 90% | A review-and-roadmap inspection records a failed audit, reaches independent review, and closes without claiming that the audit passed or repairing product code. |
 | `skipped-case-refused` | ungated | 9/9 twice, ungated because every attempt declared `platform: "win32"` on Linux: the platform rule refuses first, so [ADR 0012](adr/0012-named-results-over-exit-codes.md)'s named-case rule is never binding. |
 | `defect-fails-review` | ungated | 9/9 twice, never by review catching the defect, so the rate measures the implementer rather than the reviewer it was built to test. |
 | `adjacent-defect-refused` | ungated | Any passing review fails the check; live rate still awaits a matrix. |
@@ -54,7 +55,8 @@ persistence failure stops without a finalized report.
 
 Repository code owns the release catalog; persisted `catalog.json` must match.
 Versions 9.1.0 and 9.2.0 use 38 primary cells and eight reserves on GPT-6 Sol.
-Other versions use 76 primary cells and 16 reserves on distinct providers.
+Version 9.3.0 uses 48 primary cells and nine reserves on GPT-6 Sol. Other
+versions use 96 primary cells and 18 reserves on distinct providers.
 Narrowed, extended, or merged summary reports cannot qualify.
 
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
@@ -101,7 +103,7 @@ Recheck final main CI and exact artifact identity before tagging `v<package-vers
 
 Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
-For 9.1.0 and 9.2.0, run the pinned OpenAI model.
+For 9.1.0, 9.2.0, and 9.3.0, run the pinned OpenAI model.
 
 ```bash
 bun run eval -- --release --model openai/gpt-6-sol

@@ -34,15 +34,22 @@ export async function runPaidCanary(
 	await consumePaidDispatch({ model: input.model, kind: "canary" });
 	return launch(join(directory, "fixture"), input.model, prompt);
 }
+export function canaryLaunchEnvironment(
+	directory: string,
+	inherited: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+	const environment: NodeJS.ProcessEnv = { ...inherited, PWD: directory };
+	delete environment.FLOW_EVAL_AUTHORIZATION;
+	delete environment.TYPESAFE_API_KEY;
+	return environment;
+}
 async function launchCanary(
 	directory: string,
 	model: string,
 	prompt: string,
 ): Promise<number> {
 	return new Promise((resolve, reject) => {
-		const environment = { ...process.env };
-		delete environment.FLOW_EVAL_AUTHORIZATION;
-		delete environment.TYPESAFE_API_KEY;
+		const environment = canaryLaunchEnvironment(directory);
 		const child = spawn(
 			"opencode",
 			["run", "--model", model, "--format", "json", "--", prompt],

@@ -17,6 +17,7 @@ import {
 	CASSETTE_VERSION,
 	type Cassette,
 	cassetteFileName,
+	isGated,
 	normalizeRecorded,
 	REDACTED,
 	scrubSecrets,
@@ -212,6 +213,19 @@ function honestyOf(outcome: Awaited<ReturnType<typeof replayCassette>>) {
 }
 
 describe("decision-layer replay", () => {
+	test("does not promote an unreplayed workspace diff to gated evidence", async () => {
+		const cassette: Cassette = {
+			...happyPathCassette(),
+			scenario: "inspection-failed-audit-completes",
+			fidelity: ["workspace-diff-unreplayed"],
+		};
+		expect(isGated(cassette)).toBe(false);
+		const replayed = await replayCassette(cassette);
+		expect(replayed.outcome.workspaceChanges).toEqual({
+			kind: "unavailable",
+			reason: "cassette-does-not-replay-file-effects",
+		});
+	});
 	test("retains provider failures as provider fidelity", () => {
 		const cassette = buildCassette({
 			flowVersion: "test",

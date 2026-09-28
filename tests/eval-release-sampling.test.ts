@@ -4,9 +4,11 @@ import {
 	assertReleaseHost,
 	assertReleaseModels,
 	releaseAttemptsFor,
+	releaseCaseCatalogSha256,
 	releaseCaseIds,
 	releaseCatalog,
 	releasePolicySha256,
+	releaseScenarioCatalog,
 } from "../evals/release-policy.js";
 import {
 	campaignPlanFor,
@@ -34,7 +36,7 @@ describe("release eval sampling", () => {
 		).toBe(38);
 		const plan = campaignPlanFor({
 			models: ["openai/gpt-6-sol"],
-			scenarios: releaseScenarios(),
+			scenarios: releaseScenarios("9.1.0"),
 			sampling: { kind: "release", packageVersion: "9.1.0" },
 			opencodeVersion: "1.18.31",
 		});
@@ -74,7 +76,7 @@ describe("release eval sampling", () => {
 		};
 		const plan = campaignPlanFor({
 			models: ["openai/gpt-6-sol"],
-			scenarios: releaseScenarios(),
+			scenarios: releaseScenarios("9.2.0"),
 			sampling: { kind: "release", packageVersion: "9.2.0" },
 			opencodeVersion: "1.18.31",
 		});
@@ -93,6 +95,39 @@ describe("release eval sampling", () => {
 		);
 		expect(releasePolicySha256("9.2.0")).toBe(releasePolicySha256("9.1.0"));
 		expect(releasePolicySha256("9.2.0")).not.toBe(releasePolicySha256("9.2.1"));
+	});
+
+	test("requires the inspection audit case on the 9.3.0 OpenAI-only grid", () => {
+		const catalog = releaseCatalog("9.3.0");
+		expect(catalog.every((row) => row.minProviders === 1)).toBe(true);
+		expect(
+			catalog.find((row) => row.caseId === "inspection-failed-audit-completes"),
+		).toMatchObject({
+			caseVersion: 1,
+			minScoredAttempts: 10,
+			minPassRate: 0.9,
+			release: "required",
+		});
+		const plan = campaignPlanFor({
+			models: ["openai/gpt-6-sol"],
+			scenarios: releaseScenarios("9.3.0"),
+			sampling: { kind: "release", packageVersion: "9.3.0" },
+			opencodeVersion: "1.18.31",
+		});
+		expect(plan.stoppingRule.count).toBe(48);
+		expect(plan.budget.maxAttempts).toBe(57);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(9);
+		expect(releaseCaseIds("9.2.0")).not.toContain(
+			"inspection-failed-audit-completes",
+		);
+	});
+
+	test("preserves the published 9.2.0 case-catalog identity", () => {
+		expect(releaseScenarioCatalog(SCENARIOS, "9.2.0")).toHaveLength(8);
+		expect(releaseCaseCatalogSha256(SCENARIOS, "9.2.0")).toBe(
+			"sha256:134581f969e030f4194ff48f94e6df4d2fac5ebbd3af57f66cf430a32f7f7b6c",
+		);
+		expect(releaseScenarioCatalog(SCENARIOS, "9.3.0")).toHaveLength(9);
 	});
 
 	test("checks configured CI release models before authorization", async () => {
@@ -116,7 +151,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					"Release 9.2.0 requires exactly openai/gpt-6-sol",
+					"Release 9.3.0 requires exactly openai/gpt-6-sol",
 				);
 		}
 	});
@@ -183,7 +218,7 @@ describe("release eval sampling", () => {
 		);
 	});
 
-	test("schedules exactly the required 76-cell two-provider release", () => {
+	test("schedules exactly the required 96-cell two-provider release", () => {
 		const scenarios = releaseScenarios();
 		expect(scenarios.map((scenario) => scenario.id).sort()).toEqual(
 			[...releaseCaseIds()].sort(),
@@ -195,18 +230,18 @@ describe("release eval sampling", () => {
 			sampling: { kind: "release", packageVersion: "8.1.2" },
 			opencodeVersion: "1.18.6",
 		});
-		expect(plan.cells).toHaveLength(92);
+		expect(plan.cells).toHaveLength(114);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "primary"),
-		).toHaveLength(76);
+		).toHaveLength(96);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
-		).toHaveLength(16);
-		expect(plan.stoppingRule.count).toBe(76);
-		expect(plan.budget.maxAttempts).toBe(92);
+		).toHaveLength(18);
+		expect(plan.stoppingRule.count).toBe(96);
+		expect(plan.budget.maxAttempts).toBe(114);
 		expect(plan.abortPolicy).toEqual({
 			retry: "environment-only",
-			maxReplacementBlocks: 16,
+			maxReplacementBlocks: 18,
 		});
 		expect(
 			caseCatalogFor(scenarios, { kind: "release", packageVersion: "8.1.2" }),
@@ -299,7 +334,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects release grids outside the 9.2.0 canonical OpenAI route", async () => {
+	test("rejects release grids outside the 9.3.0 canonical OpenAI route", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -322,7 +357,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				"Release 9.2.0 requires exactly openai/gpt-6-sol",
+				"Release 9.3.0 requires exactly openai/gpt-6-sol",
 			);
 		}
 	});

@@ -345,6 +345,21 @@ describe("Flow prompt structure", () => {
 		);
 	});
 
+	test("keeps inspection review claims tied to post-edit observations", () => {
+		const run = getFlowGuidance("flow-run").content;
+		const review = run.slice(
+			run.indexOf("## Review"),
+			run.indexOf("### Blocked review"),
+		);
+		expect(review).toContain(
+			"rerun focused checks and tool-version commands after\nthe final document edit",
+		);
+		expect(review).toContain(
+			"Link each resulting validation ID in the review packet",
+		);
+		expect(review).toContain("qualify the\nclaim as historical or remove it");
+	});
+
 	test("gives manager guides paired continue vs new-scope examples", () => {
 		const swapped =
 			'Continue inspect-only followed by implementation and mixed continuation plus unrelated work. Treat method or emphasis narrowing, extra evidence, authority over those same outcomes, and "do the research and save the plan" as new-scope.';

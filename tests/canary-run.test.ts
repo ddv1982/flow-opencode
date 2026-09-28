@@ -10,7 +10,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runPaidCanary } from "../scripts/canary-run.js";
+import {
+	canaryLaunchEnvironment,
+	runPaidCanary,
+} from "../scripts/canary-run.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
@@ -109,6 +112,17 @@ test("changed prepared bytes fail before consuming or launching", async () => {
 	expect((await paidRunStatus(directory)).consumed).toBe(0);
 });
 
+test("canary launch environment points PWD at the fixture", () => {
+	expect(
+		canaryLaunchEnvironment("/prepared/fixture", {
+			PWD: "/old/repository",
+			FLOW_EVAL_AUTHORIZATION: "/private/ledger",
+			TYPESAFE_API_KEY: "synthetic-not-real",
+			FLOW_CANARY_SENTINEL: "retained",
+		}),
+	).toEqual({ PWD: "/prepared/fixture", FLOW_CANARY_SENTINEL: "retained" });
+});
+
 test.skipIf(process.platform === "win32")(
 	"default canary launch excludes ambient TypeSafe credentials",
 	async () => {
@@ -117,26 +131,31 @@ test.skipIf(process.platform === "win32")(
 		const record = join(directory, "child-environment.txt");
 		await writeFile(
 			executable,
-			'#!/bin/sh\n{ printenv TYPESAFE_API_KEY >/dev/null && echo present || echo absent; printenv FLOW_EVAL_AUTHORIZATION >/dev/null && echo present || echo absent; echo "$FLOW_CANARY_SENTINEL"; } > "$FLOW_CANARY_RECORD"\n',
+			'#!/usr/bin/env node\nconst fs = require("node:fs");\nfs.writeFileSync(process.env.FLOW_CANARY_RECORD, [process.env.TYPESAFE_API_KEY ? "present" : "absent", process.env.FLOW_EVAL_AUTHORIZATION ? "present" : "absent", process.env.FLOW_CANARY_SENTINEL, process.env.PWD, process.cwd(), ""].join("\\n"));\n',
 		);
 		await chmod(executable, 0o755);
 		const original = {
 			path: process.env.PATH,
+			pwd: process.env.PWD,
 			key: process.env.TYPESAFE_API_KEY,
 			sentinel: process.env.FLOW_CANARY_SENTINEL,
 			record: process.env.FLOW_CANARY_RECORD,
 		};
 		try {
 			process.env.PATH = `${directory}:${original.path ?? ""}`;
+			process.env.PWD = directory;
 			process.env.TYPESAFE_API_KEY = "synthetic-not-real";
 			process.env.FLOW_CANARY_SENTINEL = "retained";
 			process.env.FLOW_CANARY_RECORD = record;
 			expect(await runPaidCanary(input)).toBe(0);
-			expect(await readFile(record, "utf8")).toBe("absent\nabsent\nretained\n");
+			expect(await readFile(record, "utf8")).toBe(
+				`absent\nabsent\nretained\n${join(directory, "fixture")}\n${join(directory, "fixture")}\n`,
+			);
 			expect((await paidRunStatus(directory)).consumed).toBe(1);
 		} finally {
 			for (const [name, value] of Object.entries({
 				PATH: original.path,
+				PWD: original.pwd,
 				TYPESAFE_API_KEY: original.key,
 				FLOW_CANARY_SENTINEL: original.sentinel,
 				FLOW_CANARY_RECORD: original.record,

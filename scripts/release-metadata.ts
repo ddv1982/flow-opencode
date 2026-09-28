@@ -329,7 +329,7 @@ export function qualificationRecordIssue(
 	}
 	const expectedEvaluator = evaluatorIdentity({
 		sourceCommit: parsedArtifact.data.sourceCommit,
-		caseCatalog: releaseScenarioCatalog(SCENARIOS),
+		caseCatalog: releaseScenarioCatalog(SCENARIOS, version),
 		policyCatalog: releaseCatalog(version),
 		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
 	});
