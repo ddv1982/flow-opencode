@@ -645,6 +645,13 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			heading.index > (first?.index ?? Infinity) &&
 			/^(?:2|two|ii)$/i.test(heading[1] ?? ""),
 	);
+	const phaseSection = (tail: string, marker: string) => {
+		const level = marker.match(/#{1,6}/)?.[0].length ?? 0;
+		const boundary = [...tail.matchAll(/\n(#{1,6})[ \t]+/g)].find(
+			(heading) => level === 0 || (heading[1]?.length ?? 0) <= level,
+		);
+		return tail.slice(0, boundary?.index);
+	};
 	let actions: readonly [string, string] | null = null;
 	if (first && second) {
 		const firstTail = content.slice(
@@ -653,8 +660,8 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		);
 		const secondTail = content.slice(second.index + second[0].length);
 		actions = [
-			`${first[2] ?? ""} ${firstTail.split(/\n#{1,6}\s+/)[0]}`,
-			`${second[2] ?? ""} ${secondTail.split(/\n#{1,6}\s+/)[0]}`,
+			`${first[2] ?? ""} ${phaseSection(firstTail, first[0])}`,
+			`${second[2] ?? ""} ${phaseSection(secondTail, second[0])}`,
 		];
 	} else {
 		const items = [...content.matchAll(/(?:^|\n)\s*(\d+)[.)]\s+([^\n]*)/g)];
@@ -685,26 +692,30 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		}
 	}
 	if (!actions) return false;
-	const affirmativeAction = (text: string) =>
-		[
-			...text.matchAll(
-				/\b(?:add|write|test|fix|correct|repair|measure|run|verify|audit|triage|update|reproduce|document|stabilize|investigate|review|refactor|assess|prioritize)\b/gi,
-			),
-		].some((match) => {
-			const before = text.slice(
-				Math.max(0, (match.index ?? 0) - 50),
-				match.index ?? 0,
-			);
-			const clause = before.split(/[.!?;\n]/).at(-1) ?? "";
-			return !/\b(?:not|never|no)\b(?:\s+\w+){0,2}\s*$/i.test(clause);
-		});
-	const concreteTarget =
-		/\binclusiveRangeLength\b|\b1\s*\.\.\s*3\b|\bbun run verify\b|\bfrontend:audit\b|\b(?:dependency|audit|validation)\s+gate\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i;
+	const substantive = (value: string) => {
+		const plain = value
+			.replace(/[`*_#]/g, " ")
+			.replace(/\s+/g, " ")
+			.trim()
+			.replace(/^[:;.,\-—\s]+/, "")
+			.trim();
+		return (
+			plain.length >= 24 &&
+			(plain.match(/\b[a-z][a-z-]*\b/gi)?.length ?? 0) >= 4 &&
+			!/^(?:tbd|todo|none|no action|do not|don't|skip)\b/i.test(plain) &&
+			!/\?\s*(?:no|none|not necessary)\b/i.test(plain)
+		);
+	};
+	const plan = actions.join(" ");
 	return (
-		affirmativeAction(actions[0]) &&
-		concreteTarget.test(actions[0]) &&
-		affirmativeAction(actions[1]) &&
-		concreteTarget.test(actions[1])
+		substantive(actions[0]) &&
+		substantive(actions[1]) &&
+		/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i.test(
+			plan,
+		) &&
+		/\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
+			plan,
+		)
 	);
 }
 

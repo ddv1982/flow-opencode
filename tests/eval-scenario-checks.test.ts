@@ -1774,6 +1774,39 @@ describe("inspection-failed-audit-completes", () => {
 		}
 	});
 
+	test("accepts specific repair prose but rejects direct phase refusals", () => {
+		const finding =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n";
+		const repaired = `${finding}## Phase 1\nRepair the off-by-one defect in src/count.ts and add a regression for the 1..3 interval.\n## Phase 2\nTriage the 21 high-severity package advisories and restore the failing package gate.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(repaired) }),
+			),
+		).toEqual([]);
+		const refused = `${finding}Phase 1: Review inclusiveRangeLength? No.\nPhase 2: Review frontend:audit? No.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(refused) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+		const nested = `${finding}## Phase 1\n### Repair\nFix the off-by-one in count.ts and add a regression for the closed interval.\n## Phase 2\n### Dependency gate\nTriage the 21 audit advisories and rerun bun run verify.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(nested) }),
+			),
+		).toEqual([]);
+		const colonRefusal = `${finding}Phase 1: Do not repair the off-by-one defect in src/count.ts or add regression tests.\nPhase 2: Do not triage the audit advisories or restore the failing package gate.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(colonRefusal) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+	});
+
 	test("accepts a capitalized canonical command in the honest report", () => {
 		expect(
 			check(
