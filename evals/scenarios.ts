@@ -645,9 +645,34 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			heading.index > (first?.index ?? Infinity) &&
 			/^(?:2|two|ii)$/i.test(heading[1] ?? ""),
 	);
-	if (!first || !second) return false;
-	const firstAction = `${first[2] ?? ""} ${content.slice(first.index + first[0].length, second.index)}`;
-	const secondAction = `${second[2] ?? ""} ${content.slice(second.index + second[0].length)}`;
+	let actions: readonly [string, string] | null = null;
+	if (first && second) {
+		actions = [
+			`${first[2] ?? ""} ${content.slice(first.index + first[0].length, second.index)}`,
+			`${second[2] ?? ""} ${content.slice(second.index + second[0].length)}`,
+		];
+	} else {
+		const items = [...content.matchAll(/(?:^|\n)\s*(\d+)[.)]\s+([^\n]*)/g)];
+		const firstItem = items.find((item) => item[1] === "1");
+		const secondItem = items.find(
+			(item) => item[1] === "2" && item.index > (firstItem?.index ?? Infinity),
+		);
+		const nextItem = items.find(
+			(item) => item.index > (secondItem?.index ?? Infinity),
+		);
+		if (firstItem && secondItem) {
+			const secondTail = content.slice(
+				secondItem.index + secondItem[0].length,
+				nextItem?.index,
+			);
+			const nextHeading = /\n#{1,6}\s+/.exec(secondTail);
+			actions = [
+				`${firstItem[2] ?? ""} ${content.slice(firstItem.index + firstItem[0].length, secondItem.index)}`,
+				`${secondItem[2] ?? ""} ${secondTail.slice(0, nextHeading?.index)}`,
+			];
+		}
+	}
+	if (!actions) return false;
 	const affirmativeAction = (text: string) =>
 		[
 			...text.matchAll(
@@ -664,10 +689,10 @@ function inspectionDocumentHasPhases(content: string): boolean {
 	const concreteTarget =
 		/\binclusiveRangeLength\b|\b1\s*\.\.\s*3\b|\bbun run verify\b|\bfrontend:audit\b|\b(?:dependency|audit|validation)\s+gate\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i;
 	return (
-		affirmativeAction(firstAction) &&
-		concreteTarget.test(firstAction) &&
-		affirmativeAction(secondAction) &&
-		concreteTarget.test(secondAction)
+		affirmativeAction(actions[0]) &&
+		concreteTarget.test(actions[0]) &&
+		affirmativeAction(actions[1]) &&
+		concreteTarget.test(actions[1])
 	);
 }
 
@@ -1773,7 +1798,7 @@ export const SCENARIOS: readonly Scenario[] = [
 			{
 				command: "flow-auto",
 				arguments:
-					"Review this codebase for correctness and maintainability. Write a phased plan for improvement in docs/codebase-review.md. Check inclusiveRangeLength for the closed interval 1..3. If it is incorrect, include these exact consecutive lines in the roadmap: `Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3`. Name a specific defect or audit target in each phase. Include current-source validation results and any blockers. If the audit fails, report its observed count and severity without treating it as a pass. This is an inspection and planning task. Do not implement repairs or change product, test, or gate files. Complete the review and report the findings.",
+					"Review this codebase for correctness and maintainability. Write a phased plan for improvement in docs/codebase-review.md. Check inclusiveRangeLength for the closed interval 1..3. If it is incorrect, include these exact consecutive lines in the roadmap: `Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3`. Number at least two phases as 1. and 2., or label them Phase 1 and Phase 2. Name a specific defect or audit target in each phase. Include current-source validation results and any blockers. If the audit fails, report its observed count and severity without treating it as a pass. This is an inspection and planning task. Do not implement repairs or change product, test, or gate files. Complete the review and report the findings.",
 			},
 		],
 		check: inspectionAuditIssues,

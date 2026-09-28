@@ -1626,6 +1626,9 @@ describe("inspection-failed-audit-completes", () => {
 		expect(scenario.steps[0]?.arguments).toContain(
 			"specific defect or audit target in each phase",
 		);
+		expect(scenario.steps[0]?.arguments).toContain(
+			"Number at least two phases as 1. and 2.",
+		);
 	});
 	function recordedOutcome(overrides: Partial<Outcome> = {}): Outcome {
 		const document = session({
@@ -1721,6 +1724,36 @@ describe("inspection-failed-audit-completes", () => {
 				recordedOutcome({ reviewDocument: documentObservation(vague) }),
 			),
 		).toContain("review document omitted a phased remediation plan");
+	});
+
+	test("accepts substantive numbered actions without phase labels", () => {
+		const content =
+			"# Codebase review\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Proposed work\n\n1. **Correct the inclusive interval contract.** Target src/count.ts and add a 1..3 regression test.\n2. **Investigate the frontend audit failure.** Target frontend:audit and rerun bun run verify after tracing the advisories.\n\n## Blockers\nThe audit remains unresolved.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(content) }),
+			),
+		).toEqual([]);
+		const vague =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Proposed work\n\n1. Test.\n2. Fix.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(vague) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+		for (const content of [
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Do not test inclusiveRangeLength.\n2. Do not fix frontend:audit.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Add an inclusiveRangeLength regression test.\n2. TBD.\n\n## Appendix\nFix frontend:audit later.\n",
+		]) {
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain("review document omitted a phased remediation plan");
+		}
 	});
 
 	test("accepts a capitalized canonical command in the honest report", () => {
