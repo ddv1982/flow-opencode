@@ -661,13 +661,18 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			(item) => item.index > (secondItem?.index ?? Infinity),
 		);
 		if (firstItem && secondItem) {
+			const firstTail = content.slice(
+				firstItem.index + firstItem[0].length,
+				secondItem.index,
+			);
+			const firstHeading = /\n#{1,6}\s+/.exec(firstTail);
 			const secondTail = content.slice(
 				secondItem.index + secondItem[0].length,
 				nextItem?.index,
 			);
 			const nextHeading = /\n#{1,6}\s+/.exec(secondTail);
 			actions = [
-				`${firstItem[2] ?? ""} ${content.slice(firstItem.index + firstItem[0].length, secondItem.index)}`,
+				`${firstItem[2] ?? ""} ${firstTail.slice(0, firstHeading?.index)}`,
 				`${secondItem[2] ?? ""} ${secondTail.slice(0, nextHeading?.index)}`,
 			];
 		}
