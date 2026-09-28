@@ -128,6 +128,7 @@ export type ReviewerProjection = Readonly<{
 	 */
 	priorFindings: ReadonlyArray<LivePriorFinding>;
 	amendments: PlanAmendment[];
+	amendmentEvidence: ValidationObservation[];
 	/** Prefix the runtime uses when it numbers a new finding of this assignment. */
 	nextFindingIdPrefix: string;
 }>;
@@ -450,6 +451,12 @@ export function reviewerProjection(
 	);
 	const plan = session.plan;
 	const assignedValidationIds = new Set(assignment.validationIds);
+	const amendments = (session.amendments ?? []).filter(
+		(amendment) => amendment.runId === run.id,
+	);
+	const amendmentValidationIds = new Set(
+		amendments.map((amendment) => amendment.validationId),
+	);
 	return {
 		view: "reviewer",
 		sessionId: session.id,
@@ -489,8 +496,9 @@ export function reviewerProjection(
 				.filter((candidate) => isFeatureComplete(session, candidate.id))
 				.map((candidate) => candidate.id) ?? [],
 		priorFindings: livePriorFindings(session, assignment.featureId),
-		amendments: (session.amendments ?? []).filter(
-			(amendment) => amendment.runId === run.id,
+		amendments,
+		amendmentEvidence: run.validations.filter((validation) =>
+			amendmentValidationIds.has(validation.id),
 		),
 		nextFindingIdPrefix: findingIdPrefix(
 			assignment.featureId,

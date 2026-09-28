@@ -31,6 +31,48 @@ import {
 } from "./runtime-test-support.js";
 
 describe("Flow application runtime gates", () => {
+	test("reviewer sees the failed gate that justified an amendment after the gate passes", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await startSession(repository, deterministicEnvironment());
+		const failed = await recordObservedValidation(repository, {
+			captureId: "failed-gate-for-amendment",
+			exitCode: 1,
+		});
+		expectOk(
+			await flow.planAmend({
+				request: {
+					operationId: "amend-failed-gate",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					validationId: failed.id,
+					reason: "The canonical gate found a prerequisite failure.",
+					repair: "Correct the test setup before review.",
+					targets: ["tests/setup.ts"],
+					sameGoal: true,
+					reversible: true,
+				},
+			}),
+		);
+		const passed = await recordObservedValidation(repository, {
+			captureId: "passing-gate-after-amendment",
+		});
+		const review = await flow.reviewStart({
+			request: {
+				operationId: "review-amended-gate",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "tests/setup.ts" }],
+				packet: { summary: "Review the prerequisite repair.", riskLenses: [] },
+			},
+		});
+		expectOk(review);
+		expect(review.workflowData.projection).toMatchObject({
+			validations: [passed],
+			amendments: [{ validationId: failed.id }],
+			amendmentEvidence: [failed],
+		});
+	});
+
 	test("keeps the active goal visible in the compact projection", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());
