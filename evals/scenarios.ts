@@ -965,6 +965,8 @@ const BROKEN_GATE_FIXTURE: Record<string, string> = {
 
 const INSPECTION_AUDIT_FIXTURE: Record<string, string> = {
 	...INSPECT_INTERVAL_FIXTURE,
+	"docs/README.md":
+		"# Project notes\n\nReview findings and plans live in this directory.\n",
 	"package.json": `${JSON.stringify(
 		{
 			name: "review-workspace",
@@ -1699,7 +1701,7 @@ export const SCENARIOS: readonly Scenario[] = [
 			{
 				command: "flow-auto",
 				arguments:
-					"Review this codebase for correctness and maintainability. Write a phased plan for improvement in docs/codebase-review.md. Include current-source validation results and any blockers. This is an inspection and planning task. Do not implement repairs or change product, test, or gate files. Complete the review and report the findings.",
+					"Review this codebase for correctness and maintainability. Write a phased plan for improvement in docs/codebase-review.md. Include current-source validation results and any blockers. If the audit fails, report its observed count and severity without treating it as a pass. This is an inspection and planning task. Do not implement repairs or change product, test, or gate files. Complete the review and report the findings.",
 			},
 		],
 		check: inspectionAuditIssues,

@@ -380,9 +380,9 @@ const ROOT_GENERATED_DIRS = new Set([
 ]);
 
 type WorkspaceEntry = Readonly<{
-	kind: "file" | "symlink";
+	kind: "file" | "symlink" | "directory";
 	mode: number;
-	identity: string;
+	identity: string | null;
 }>;
 export type WorkspaceSnapshot =
 	| Readonly<{ kind: "captured"; entries: ReadonlyMap<string, WorkspaceEntry> }>
@@ -407,6 +407,11 @@ export async function captureWorkspaceSnapshot(
 			const target = join(project, path);
 			const stat = await lstat(target);
 			if (stat.isDirectory()) {
+				entries.set(path, {
+					kind: "directory",
+					mode: stat.mode & 0o7777,
+					identity: null,
+				});
 				await visit(path);
 				continue;
 			}

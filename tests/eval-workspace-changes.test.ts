@@ -58,6 +58,7 @@ test("host snapshot observes edits, untracked files, deletions, and both sides o
 		expect(await observeWorkspaceChanges(root, baseline)).toEqual({
 			kind: "observed",
 			paths: [
+				"docs",
 				"docs/codebase-review.md",
 				"src/build/rule.ts",
 				"src/count.ts",
@@ -129,6 +130,24 @@ test("host snapshot compares file mode and symlink target without following link
 		expect(await observeWorkspaceChanges(root, baseline)).toEqual({
 			kind: "observed",
 			paths: ["src/count.ts", "src/link.ts"],
+		});
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("host snapshot observes directory chmod and empty directory changes", async () => {
+	const root = workspace();
+	try {
+		write(root, "src/count.ts", "one\n");
+		mkdirSync(join(root, "old-empty"));
+		const baseline = await captureWorkspaceSnapshot(root);
+		chmodSync(join(root, "src"), 0o700);
+		rmSync(join(root, "old-empty"), { recursive: true });
+		mkdirSync(join(root, "new-empty"));
+		expect(await observeWorkspaceChanges(root, baseline)).toEqual({
+			kind: "observed",
+			paths: ["new-empty", "old-empty", "src"],
 		});
 	} finally {
 		rmSync(root, { recursive: true, force: true });

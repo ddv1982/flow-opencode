@@ -1602,6 +1602,17 @@ describe("inspect-goal-delivers-findings", () => {
 });
 
 describe("inspection-failed-audit-completes", () => {
+	test("asks for observed audit count and severity without planting the answer", () => {
+		const scenario = SCENARIOS.find(
+			(entry) => entry.id === "inspection-failed-audit-completes",
+		);
+		if (!scenario) throw new Error("Expected the inspection scenario.");
+		expect(Object.hasOwn(scenario.files, "docs/README.md")).toBe(true);
+		expect(scenario.steps[0]?.arguments).toContain(
+			"observed count and severity",
+		);
+		expect(scenario.steps[0]?.arguments).not.toContain("21");
+	});
 	function recordedOutcome(overrides: Partial<Outcome> = {}): Outcome {
 		const document = session({
 			goal: "Review the codebase and write a phased roadmap",
