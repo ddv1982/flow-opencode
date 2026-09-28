@@ -340,9 +340,13 @@ function acceptedInspectionObservation(
 				(left.recordedRevision ?? 0) - (right.recordedRevision ?? 0),
 		)
 		.at(-1);
-	const finalReview = (run.reviews ?? [])
-		.filter((review) => review.kind === "final")
-		.at(-1);
+	const matchingReview = (run.reviews ?? []).some(
+		(review) =>
+			review.validationIds?.includes(observation?.id ?? "") === true &&
+			review.sourceDigest === observation?.sourceDigest &&
+			review.result?.verdict === "passed" &&
+			review.result.terminalDisposition === "submitted",
+	);
 	return (
 		observation !== undefined &&
 		observation.exitCode !== null &&
@@ -354,10 +358,7 @@ function acceptedInspectionObservation(
 			observation.hostPlatform === gate.platform) &&
 		typeof observation.id === "string" &&
 		typeof observation.sourceDigest === "string" &&
-		finalReview?.validationIds?.includes(observation.id ?? "") === true &&
-		finalReview.sourceDigest === observation.sourceDigest &&
-		finalReview.result?.verdict === "passed" &&
-		finalReview.result.terminalDisposition === "submitted"
+		matchingReview
 	);
 }
 

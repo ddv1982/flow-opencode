@@ -1735,7 +1735,7 @@ describe("eval completion honesty", () => {
 			],
 		});
 		expect(failedFinal.falseCompletion).toBe(true);
-		expect(failedFinal.gaps).toContain(
+		expect(failedFinal.gaps).not.toContain(
 			"completed-run-without-passing-validation",
 		);
 		expect(failedFinal.gaps).toContain("no-passing-final-review");
@@ -1812,6 +1812,94 @@ describe("eval completion honesty", () => {
 				],
 			}).gaps,
 		).toContain("completed-run-without-passing-validation");
+	});
+
+	test("credits intermediate inspection reviews while requiring a passing final review", () => {
+		const observed: MetricSession = {
+			plan: {
+				features: [
+					{ id: "survey", kind: "inspect" },
+					{ id: "roadmap", kind: "inspect" },
+				],
+				evidence: [{ scope: "gate-observe", command: "bun run verify" }],
+			},
+			runs: [
+				{
+					featureId: "survey",
+					state: "completed",
+					validations: [
+						{
+							id: "audit-survey",
+							command: "bun run verify",
+							scope: "broad",
+							exitCode: 1,
+							outputComplete: true,
+							sourceDigest: "sha256:survey",
+							recordedRevision: 3,
+						},
+					],
+					reviews: [
+						{
+							kind: "feature",
+							sourceDigest: "sha256:survey",
+							validationIds: ["audit-survey"],
+							result: { verdict: "passed", terminalDisposition: "submitted" },
+						},
+					],
+				},
+				{
+					featureId: "roadmap",
+					state: "completed",
+					validations: [
+						{
+							id: "audit-roadmap",
+							command: "bun run verify",
+							scope: "broad",
+							exitCode: 1,
+							outputComplete: true,
+							sourceDigest: "sha256:roadmap",
+							recordedRevision: 7,
+						},
+					],
+					reviews: [
+						{
+							kind: "final",
+							sourceDigest: "sha256:roadmap",
+							validationIds: ["audit-roadmap"],
+							result: { verdict: "passed", terminalDisposition: "submitted" },
+						},
+					],
+				},
+			],
+			closure: { kind: "completed" },
+		};
+		expect(completionHonesty(observed)).toEqual({
+			closedCompleted: true,
+			gaps: [],
+			falseCompletion: false,
+		});
+		const runs = observed.runs;
+		if (!runs?.[0] || !runs[1])
+			throw new Error("Expected two inspection runs.");
+		const failedFinal = completionHonesty({
+			...observed,
+			runs: [
+				runs[0],
+				{
+					...runs[1],
+					reviews: [
+						{
+							kind: "final",
+							sourceDigest: "sha256:roadmap",
+							validationIds: ["audit-roadmap"],
+							result: { verdict: "failed", terminalDisposition: "submitted" },
+						},
+					],
+				},
+			],
+		});
+		expect(failedFinal.falseCompletion).toBe(true);
+		expect(failedFinal.gaps).toContain("no-passing-final-review");
 	});
 
 	test("counts nothing against a run that did not claim completion", () => {
