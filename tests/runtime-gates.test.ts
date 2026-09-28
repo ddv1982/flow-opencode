@@ -100,6 +100,49 @@ describe("Flow application runtime gates", () => {
 			"does not claim the command passed",
 		);
 	});
+	test("flow_plan_amend rejects a complete failed observed inspection gate", async () => {
+		const repository = new MemorySessionRepository();
+		const observedPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
+			evidence: [{ ...bunGate(), scope: "gate-observe", platform: "linux" }],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: observedPlan,
+			suffix: "observed-amendment",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "observed-amendment");
+		const failed = await recordObservedValidation(repository, {
+			captureId: "failed-observed-amendment-gate",
+			exitCode: 1,
+		});
+		const amendment = await flow.planAmend({
+			request: {
+				operationId: "repair-observed-gate",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				validationId: failed.id,
+				reason: "The audit failed.",
+				repair: "Update dependencies.",
+				targets: ["bun.lock"],
+				sameGoal: true,
+				reversible: true,
+			},
+		});
+		expectError(amendment);
+		expect(amendment.summary).toContain(
+			"cannot authorize a prerequisite repair",
+		);
+		expect(repository.session?.amendments).toBeUndefined();
+		const status = await flow.status({ request: { view: "compact" } });
+		expectOk(status);
+		expect(status.workflowData.projection).toMatchObject({
+			nextAction: "flow_review_start",
+		});
+	});
 
 	test("rejects observe mode outside an all-inspect canonical gate", async () => {
 		for (const invalid of [

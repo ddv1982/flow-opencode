@@ -371,6 +371,10 @@ export function amendPlan(
 	input: PlanAmendInput,
 	currentSourceDigest: SourceDigest,
 ): MutationResult<PlanAmendment> {
+	if (session.plan?.evidence?.some((entry) => entry.scope === "gate-observe"))
+		fail(
+			"An observed inspection gate cannot authorize a prerequisite repair amendment.",
+		);
 	const replay = existingOperation(
 		session,
 		"plan-amend",
