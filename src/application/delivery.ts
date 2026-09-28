@@ -153,6 +153,28 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 	const observedGate = session.plan?.evidence?.find(
 		(entry) => entry.scope === "gate-observe",
 	);
+	const reviewedGate = runs
+		.filter((run) => run.state === "completed" || run.state === "blocked")
+		.flatMap((run) =>
+			run.reviews.flatMap((review) => {
+				const result = review.result;
+				if (!result) return [];
+				const references = new Set(review.validationIds);
+				return run.validations
+					.filter(
+						(observation) =>
+							references.has(observation.id) &&
+							observation.command === gate &&
+							observation.scope === "broad",
+					)
+					.map((observation) => ({ observation, verdict: result.verdict }));
+			}),
+		)
+		.toSorted(
+			(left, right) =>
+				left.observation.recordedRevision - right.observation.recordedRevision,
+		)
+		.at(-1);
 	const acceptedGate = accepted.findLast(
 		(observation) =>
 			observation.command === gate && observation.scope === "broad",
@@ -170,9 +192,12 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 					"canonical-gate",
 					observedGate ? "Canonical gate observation" : "Canonical gate",
 					"host-attested",
-					acceptedGate !== undefined,
 					observedGate
-						? `${JSON.stringify(gate)} was observed with exit ${acceptedGate?.exitCode ?? "unavailable"}; this does not claim the command passed.`
+						? reviewedGate?.verdict === "passed" &&
+								isAcceptedValidation(session, reviewedGate.observation)
+						: acceptedGate !== undefined,
+					observedGate
+						? `${JSON.stringify(gate)} was observed with exit ${reviewedGate?.observation.exitCode ?? "unavailable"}; this does not claim the command passed.`
 						: `${JSON.stringify(gate)} must have passing broad evidence accepted by review.`,
 				),
 	);
