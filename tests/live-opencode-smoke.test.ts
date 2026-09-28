@@ -51,6 +51,7 @@ const EXPECTED_TOOLS = [
 	"flow_feature_complete",
 	"flow_feature_reset",
 	"flow_guidance",
+	"flow_plan_amend",
 	"flow_plan_approve",
 	"flow_plan_save",
 	"flow_review_start",
@@ -588,7 +589,7 @@ describe("live OpenCode smoke configuration", () => {
 				: PINNED_OPENCODE_VERSION,
 		).toBe(OPENCODE_VERSION);
 		expect(EXPECTED_COMMANDS).toHaveLength(5);
-		expect(EXPECTED_TOOLS).toHaveLength(10);
+		expect(EXPECTED_TOOLS).toHaveLength(11);
 		expect(EXPECTED_AGENTS).toHaveLength(2);
 	});
 });
