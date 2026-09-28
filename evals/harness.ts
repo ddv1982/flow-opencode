@@ -39,6 +39,7 @@ import { consumePaidDispatch } from "../scripts/paid-budget.js";
 import { isArtifactPath } from "../src/domain/artifact.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import { CampaignCancelled } from "./campaign-stop.js";
+import { normalizeRecorded } from "./cassette.js";
 import {
 	type AttemptFailure,
 	attemptFailure,
@@ -47,7 +48,10 @@ import {
 	preservePrimaryFailure,
 	providerFailure,
 } from "./failure-origin.js";
-import type { ScenarioGradeInput } from "./grader-input.js";
+import {
+	pseudonymizeEvalIds,
+	type ScenarioGradeInput,
+} from "./grader-input.js";
 import {
 	artifactFile,
 	type HostArtifactPaths,
@@ -331,7 +335,7 @@ export type Outcome = {
 	/** Parsed documents under `.flow/history/`. */
 	readonly archives: readonly Record<string, unknown>[];
 	readonly workspaceChanges?: WorkspaceChangeObservation | undefined;
-	/** Final assistant text, for reporting only — never assert on wording. */
+	readonly reviewDocument?: ReviewDocumentObservation | undefined;
 	readonly finalText: string;
 	readonly tokens: {
 		input: number;
@@ -362,6 +366,14 @@ export type Outcome = {
 export type WorkspaceChangeObservation =
 	| Readonly<{ kind: "observed"; paths: readonly string[] }>
 	| Readonly<{ kind: "unavailable"; reason: string }>;
+export type ReviewDocumentObservation =
+	| Readonly<{ kind: "observed"; content: string; sha256: string }>
+	| Readonly<{ kind: "unavailable"; reason: string }>;
+
+const SENSITIVE_DOCUMENT_ASSIGNMENT =
+	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization)[A-Za-z0-9_-]*\s*["'`]?\s*(?::|=)\s*["'`]?[\S]+/im;
+const SENSITIVE_INLINE_ASSIGNMENT =
+	/(?:token|password|passwd|secret|key|authorization)\s*=/i;
 
 const HOST_INTERNAL_DIRS = new Set([
 	".git",
@@ -463,9 +475,18 @@ export async function observeWorkspaceChanges(
 	project: string,
 	baseline: WorkspaceSnapshot,
 ): Promise<WorkspaceChangeObservation> {
+	return compareWorkspaceSnapshots(
+		baseline,
+		await captureWorkspaceSnapshot(project),
+	);
+}
+
+function compareWorkspaceSnapshots(
+	baseline: WorkspaceSnapshot,
+	current: WorkspaceSnapshot,
+): WorkspaceChangeObservation {
 	if (baseline.kind !== "captured")
 		return { kind: "unavailable", reason: baseline.reason };
-	const current = await captureWorkspaceSnapshot(project);
 	if (current.kind !== "captured")
 		return { kind: "unavailable", reason: current.reason };
 	const paths = [
@@ -482,6 +503,63 @@ export async function observeWorkspaceChanges(
 		})
 		.sort();
 	return { kind: "observed", paths };
+}
+
+export async function observeReviewDocument(
+	project: string,
+	current: WorkspaceSnapshot,
+): Promise<ReviewDocumentObservation> {
+	const path = "docs/codebase-review.md";
+	if (current.kind !== "captured" || current.entries.get(path)?.kind !== "file")
+		return { kind: "unavailable", reason: "review-document-not-regular" };
+	try {
+		const target = join(project, path);
+		const stat = await lstat(target);
+		if (!stat.isFile() || stat.size > 64 * 1024)
+			return {
+				kind: "unavailable",
+				reason: "review-document-not-regular-or-oversize",
+			};
+		const handle = await open(
+			target,
+			constants.O_RDONLY | constants.O_NOFOLLOW,
+		);
+		try {
+			if (!(await handle.stat()).isFile())
+				return { kind: "unavailable", reason: "review-document-not-regular" };
+			const bytes = await handle.readFile();
+			if (bytes.length > 64 * 1024)
+				return { kind: "unavailable", reason: "review-document-oversize" };
+			const sha256 = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+			if (
+				current.entries.get(path)?.identity !== sha256.slice("sha256:".length)
+			)
+				return {
+					kind: "unavailable",
+					reason: "review-document-changed-after-snapshot",
+				};
+			const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+			if (
+				!Buffer.from(content, "utf8").equals(bytes) ||
+				SENSITIVE_DOCUMENT_ASSIGNMENT.test(content) ||
+				SENSITIVE_INLINE_ASSIGNMENT.test(content) ||
+				pseudonymizeEvalIds(normalizeRecorded(content, project)) !== content
+			)
+				return {
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				};
+			return {
+				kind: "observed",
+				content,
+				sha256,
+			};
+		} finally {
+			await handle.close();
+		}
+	} catch {
+		return { kind: "unavailable", reason: "review-document-read-failed" };
+	}
 }
 
 /**
@@ -1524,6 +1602,7 @@ export type EvalReviewerOptions = Readonly<{
 export class EvalHost {
 	private server: ChildProcess | null = null;
 	private workspaceBaseline: WorkspaceSnapshot | null = null;
+	private retainReviewDocument = false;
 	private serverLog = "";
 	private baseUrl = "";
 	/**
@@ -1605,6 +1684,7 @@ export class EvalHost {
 		ambientConfig?: "inherit" | "disabled";
 		opencodeVersion: string;
 		files: Readonly<Record<string, string>>;
+		retainReviewDocument?: boolean;
 		/** Configures the hidden reviewer through the same native tuple users set. */
 		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
@@ -1726,6 +1806,7 @@ export class EvalHost {
 		const scratch = await mkdtemp(join(tmpdir(), "workspace-"));
 		const project = join(scratch, "project");
 		const host = new EvalHost(project, scratch, options.signal);
+		host.retainReviewDocument = options.retainReviewDocument === true;
 		try {
 			checkCancellation(options.signal);
 			await chmod(scratch, 0o700);
@@ -2896,6 +2977,7 @@ export class EvalHost {
 			if (!providerError || !signal?.aborted || error !== signal.reason)
 				throw error;
 		}
+		const currentWorkspace = await captureWorkspaceSnapshot(this.project);
 		return {
 			allCalls,
 			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
@@ -2903,13 +2985,21 @@ export class EvalHost {
 			guidanceLoads,
 			session,
 			archives,
-			workspaceChanges: await observeWorkspaceChanges(
-				this.project,
+			workspaceChanges: compareWorkspaceSnapshots(
 				this.workspaceBaseline ?? {
 					kind: "unavailable",
 					reason: "workspace-baseline-unavailable",
 				},
+				currentWorkspace,
 			),
+			...(this.retainReviewDocument
+				? {
+						reviewDocument: await observeReviewDocument(
+							this.project,
+							currentWorkspace,
+						),
+					}
+				: {}),
 			finalText,
 			tokens,
 			usageAvailability:

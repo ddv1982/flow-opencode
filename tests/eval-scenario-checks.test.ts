@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import type { Outcome } from "../evals/harness.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 
@@ -1602,6 +1603,13 @@ describe("inspect-goal-delivers-findings", () => {
 });
 
 describe("inspection-failed-audit-completes", () => {
+	const validDocument =
+		"# Codebase review\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Phase 1\nAdd a focused regression test for inclusiveRangeLength(1,3).\n\n## Phase 2\nFix inclusiveRangeLength and rerun bun run verify.\n";
+	const documentObservation = (content: string) => ({
+		kind: "observed" as const,
+		content,
+		sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+	});
 	test("asks for observed audit count and severity without planting the answer", () => {
 		const scenario = SCENARIOS.find(
 			(entry) => entry.id === "inspection-failed-audit-completes",
@@ -1612,6 +1620,12 @@ describe("inspection-failed-audit-completes", () => {
 			"observed count and severity",
 		);
 		expect(scenario.steps[0]?.arguments).not.toContain("21");
+		expect(scenario.steps[0]?.arguments).toContain(
+			"Finding: inclusiveRangeLength is incorrect for 1..3.",
+		);
+		expect(scenario.steps[0]?.arguments).toContain(
+			"specific defect or audit target in each phase",
+		);
 	});
 	function recordedOutcome(overrides: Partial<Outcome> = {}): Outcome {
 		const document = session({
@@ -1663,6 +1677,7 @@ describe("inspection-failed-audit-completes", () => {
 		});
 		return outcome({
 			archives: [document],
+			reviewDocument: documentObservation(validDocument),
 			workspaceChanges: {
 				kind: "observed",
 				paths: ["docs/codebase-review.md"],
@@ -1678,7 +1693,7 @@ describe("inspection-failed-audit-completes", () => {
 				},
 			],
 			finalText:
-				"Review complete. bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved.",
+				"Review complete. bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved. See docs/codebase-review.md.",
 			...overrides,
 		});
 	}
@@ -1695,7 +1710,7 @@ describe("inspection-failed-audit-completes", () => {
 				"inspection-failed-audit-completes",
 				recordedOutcome({
 					finalText:
-						"Review complete. Bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved.",
+						"Review complete. Bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved. See docs/codebase-review.md.",
 				}),
 			),
 		).toEqual([]);
@@ -1737,14 +1752,138 @@ describe("inspection-failed-audit-completes", () => {
 							...firstCall,
 							tool: "bash",
 							input: {
-								command:
-									"cat > docs/codebase-review.md <<'EOF'\nReview and roadmap\nEOF",
+								command: `cat > docs/codebase-review.md <<'EOF'\n${validDocument}EOF`,
 							},
 						},
 					],
 				}),
 			),
 		).toEqual([]);
+	});
+
+	test("rejects empty or irrelevant roadmap content despite claimed completion", () => {
+		for (const content of [
+			"",
+			"# Review\n\nAll good.\n\n## Phase 1\nDo research.\n\n## Phase 2\nShip.\n",
+		]) {
+			const issues = check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({
+					reviewDocument: documentObservation(content),
+				}),
+			);
+			expect(issues).toContain(
+				"review document omitted the planted inclusive interval defect",
+			);
+		}
+	});
+
+	test("rejects a negated defect and phase headings without actions", () => {
+		const negated =
+			"# Finding\n\ninclusiveRangeLength is not off-by-one and does not drop the endpoint.\n\n## Phase 1\nAdd a test.\n\n## Phase 2\nVerify the behavior.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(negated) }),
+			),
+		).toContain(
+			"review document omitted the planted inclusive interval defect",
+		);
+		for (const content of [
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Phase 1\n\n## Phase 2\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Phase 1\nTBD\n\n## Phase 2\nTBD\n",
+		]) {
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain("review document omitted a phased remediation plan");
+		}
+	});
+
+	test("rejects a disowned exact finding and phases with no concrete targets", () => {
+		const disowned =
+			"This claim is false; the implementation is correct.\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\nPhase 1\nAdd a regression test for inclusiveRangeLength.\n\nPhase 2\nFix inclusiveRangeLength.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(disowned) }),
+			),
+		).toContain(
+			"review document omitted the planted inclusive interval defect",
+		);
+		const vague =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\nPhase 1\nTest.\n\nPhase 2\nFix.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(vague) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+	});
+
+	test("rejects denied numeric witnesses and negated phase actions", () => {
+		for (const finding of [
+			"inclusiveRangeLength(1,3) does not return 2. Expected: 3.",
+			"inclusiveRangeLength(1,3) returns 3, not 2. Actual: 2 is false. Expected: 3.",
+		]) {
+			const content = `# Finding\n\n${finding}\n\nPhase 1\nAdd a test.\n\nPhase 2\nFix the count.\n`;
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain(
+				"review document omitted the planted inclusive interval defect",
+			);
+		}
+		const deniedPlan =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\nPhase 1\nDo not test inclusiveRangeLength.\n\nPhase 2\nDo not fix inclusiveRangeLength.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(deniedPlan) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+	});
+
+	test("accepts alternate phase headings with the exact finding witness", () => {
+		const content =
+			"# Findings\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\nPhase one\nAdd a regression case for inclusiveRangeLength.\n\nPhase two\nRepair the inclusive range count and verify bun run verify.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(content) }),
+			),
+		).toEqual([]);
+	});
+
+	test("rejects a numeric paraphrase without the requested exact witness", () => {
+		const content =
+			"# Finding\n\ninclusiveRangeLength(1, 3) returns 2 instead of 3.\n\nStep 1\nAdd a regression case.\n\nStep 2\nCorrect the count and rerun checks.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(content) }),
+			),
+		).toContain(
+			"review document omitted the planted inclusive interval defect",
+		);
+	});
+
+	test("rejects unavailable final document", () => {
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({
+					reviewDocument: {
+						kind: "unavailable",
+						reason: "review-document-read-failed",
+					},
+				}),
+			),
+		).toContain("host could not read the final review document");
 	});
 
 	test("rejects Bash product edits omitted from the manager artifact list", () => {

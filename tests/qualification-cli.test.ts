@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -132,6 +133,8 @@ function retainedReplayOutcome(
 }
 
 function inspectionAuditOutcome(): Outcome {
+	const document =
+		"# Codebase review\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Phase 1\nAdd a focused regression test for inclusiveRangeLength(1,3).\n\n## Phase 2\nFix inclusiveRangeLength and rerun bun run verify.\n";
 	const call = (tool: string, input: Record<string, unknown> = {}) => ({
 		tool,
 		status: "completed" as const,
@@ -196,8 +199,13 @@ function inspectionAuditOutcome(): Outcome {
 			},
 		],
 		workspaceChanges: { kind: "observed", paths: ["docs/codebase-review.md"] },
+		reviewDocument: {
+			kind: "observed",
+			content: document,
+			sha256: `sha256:${createHash("sha256").update(document).digest("hex")}`,
+		},
 		finalText:
-			"Review complete. bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved.",
+			"Review complete. bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved. See docs/codebase-review.md.",
 		tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },
 		costUsd: null,
 		assistantMessages: 0,

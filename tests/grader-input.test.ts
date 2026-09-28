@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import {
 	deriveConformanceOutcome,
 	retainedInstructions,
@@ -29,6 +30,25 @@ describe("retained scenario grader input", () => {
 		expect(
 			ScenarioGradeInputSchema.parse(legacy).workspaceChanges,
 		).toBeUndefined();
+		expect(
+			ScenarioGradeInputSchema.parse(legacy).reviewDocument,
+		).toBeUndefined();
+		const content = "# Review\n";
+		const reviewDocument = {
+			kind: "observed" as const,
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		};
+		expect(
+			ScenarioGradeInputSchema.parse({ ...legacy, reviewDocument })
+				.reviewDocument,
+		).toEqual(reviewDocument);
+		expect(
+			ScenarioGradeInputSchema.safeParse({
+				...legacy,
+				reviewDocument: { ...reviewDocument, content: "tampered" },
+			}).success,
+		).toBe(false);
 		expect(
 			ScenarioGradeInputSchema.parse({
 				...legacy,

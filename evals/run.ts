@@ -1013,6 +1013,9 @@ export async function runCampaign(
 							packageCache,
 							opencodeVersion,
 							files: scenario.files,
+							...(scenario.id === "inspection-failed-audit-completes"
+								? { retainReviewDocument: true }
+								: {}),
 							signal,
 							...(reviewer.pluginOptions
 								? { reviewer: reviewer.pluginOptions }

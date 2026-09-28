@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
 	chmodSync,
 	mkdirSync,
@@ -12,10 +13,13 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { ScenarioGradeInputSchema } from "../evals/grader-input.js";
 import {
 	captureWorkspaceSnapshot,
+	observeReviewDocument,
 	observeWorkspaceChanges,
 } from "../evals/harness.js";
+import { redactTranscript } from "../evals/provenance.js";
 
 const workspace = () => mkdtempSync(join(tmpdir(), "flow-workspace-observe-"));
 const write = (root: string, path: string, content: string) => {
@@ -162,4 +166,125 @@ test("host marks failed snapshots unavailable", async () => {
 		kind: "unavailable",
 		reason: "workspace-snapshot-failed",
 	});
+});
+
+test("host retains only the bounded regular review document bound to its snapshot", async () => {
+	const root = workspace();
+	try {
+		const content = "# Findings\n\ninclusiveRangeLength is off-by-one.\n";
+		write(root, "docs/codebase-review.md", content);
+		const current = await captureWorkspaceSnapshot(root);
+		expect(await observeReviewDocument(root, current)).toEqual({
+			kind: "observed",
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		});
+		write(root, "docs/codebase-review.md", "changed after snapshot\n");
+		expect(await observeReviewDocument(root, current)).toEqual({
+			kind: "unavailable",
+			reason: "review-document-changed-after-snapshot",
+		});
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("host fails closed on symlink, oversize, and invalid UTF-8 review documents", async () => {
+	const root = workspace();
+	try {
+		write(root, "src/count.ts", "source\n");
+		mkdirSync(join(root, "docs"));
+		symlinkSync("../src/count.ts", join(root, "docs/codebase-review.md"));
+		expect(
+			(await observeReviewDocument(root, await captureWorkspaceSnapshot(root)))
+				.kind,
+		).toBe("unavailable");
+		unlinkSync(join(root, "docs/codebase-review.md"));
+		write(root, "docs/codebase-review.md", "x".repeat(64 * 1024 + 1));
+		expect(
+			(await observeReviewDocument(root, await captureWorkspaceSnapshot(root)))
+				.kind,
+		).toBe("unavailable");
+		writeFileSync(join(root, "docs/codebase-review.md"), Buffer.from([0xff]));
+		expect(
+			(await observeReviewDocument(root, await captureWorkspaceSnapshot(root)))
+				.kind,
+		).toBe("unavailable");
+		write(
+			root,
+			"docs/codebase-review.md",
+			"credential: sk-proj-ABCDEFGHIJKLMNOPQRST\n",
+		);
+		expect(
+			(await observeReviewDocument(root, await captureWorkspaceSnapshot(root)))
+				.kind,
+		).toBe("unavailable");
+		for (const key of [
+			"GH_TOKEN",
+			"NPM_TOKEN",
+			"TOKEN",
+			"PASSWORD",
+			"API_KEY",
+			"KEY",
+		]) {
+			write(root, "docs/codebase-review.md", `${key}=synthetic-value-123456\n`);
+			expect(
+				await observeReviewDocument(root, await captureWorkspaceSnapshot(root)),
+			).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		}
+		for (const content of [
+			"https://example.com/?token=synthetic-value-1234567890\n",
+			"https://example.com/#GH_TOKEN=synthetic-value-1234567890\n",
+		]) {
+			write(root, "docs/codebase-review.md", content);
+			expect(
+				await observeReviewDocument(root, await captureWorkspaceSnapshot(root)),
+			).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
+});
+
+test("host rejects review text that transcript normalization would alter", async () => {
+	const root = workspace();
+	try {
+		for (const content of [
+			`Workspace: ${root}\n`,
+			"Session: ses_ABC123DEF\n",
+		]) {
+			write(root, "docs/codebase-review.md", content);
+			const observation = await observeReviewDocument(
+				root,
+				await captureWorkspaceSnapshot(root),
+			);
+			expect(observation).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+			const input = ScenarioGradeInputSchema.parse({
+				schemaVersion: 1,
+				flowCalls: [],
+				allCalls: [],
+				session: null,
+				archives: [],
+				reviewDocument: observation,
+				finalText: "",
+				providerErrors: [],
+			});
+			const retained = ScenarioGradeInputSchema.parse(
+				JSON.parse(redactTranscript({ value: input, projectPath: root }).text),
+			);
+			expect(retained.reviewDocument).toEqual(observation);
+			expect(JSON.stringify(retained)).not.toContain(content.trim());
+		}
+	} finally {
+		rmSync(root, { recursive: true, force: true });
+	}
 });

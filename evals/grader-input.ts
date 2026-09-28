@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { isArtifactPath } from "../src/domain/artifact.js";
 import { canonicalSha256 } from "./canonical-json.js";
@@ -57,6 +58,33 @@ export const ScenarioGradeInputSchema = z
 					.object({ kind: z.literal("unavailable"), reason: TextSchema })
 					.strict(),
 			])
+			.optional(),
+		reviewDocument: z
+			.discriminatedUnion("kind", [
+				z
+					.object({
+						kind: z.literal("observed"),
+						content: z
+							.string()
+							.refine((value) => Buffer.byteLength(value, "utf8") <= 64 * 1024),
+						sha256: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+					})
+					.strict(),
+				z
+					.object({ kind: z.literal("unavailable"), reason: TextSchema })
+					.strict(),
+			])
+			.superRefine((value, context) => {
+				if (
+					value.kind === "observed" &&
+					value.sha256 !==
+						`sha256:${createHash("sha256").update(value.content).digest("hex")}`
+				)
+					context.addIssue({
+						code: "custom",
+						message: "Review document digest does not match content.",
+					});
+			})
 			.optional(),
 		finalText: z.string().max(4 * 1024 * 1024),
 		providerErrors: z.array(ProviderErrorEnvelopeSchema).max(64).default([]),
@@ -182,6 +210,7 @@ export type ScenarioGradeInput = Pick<
 	| "session"
 	| "archives"
 	| "workspaceChanges"
+	| "reviewDocument"
 	| "finalText"
 >;
 export type RetainedScenarioGradeInput = z.infer<
@@ -405,6 +434,9 @@ export function scenarioGradeInput(
 		...(outcome.workspaceChanges === undefined
 			? {}
 			: { workspaceChanges: outcome.workspaceChanges }),
+		...(outcome.reviewDocument === undefined
+			? {}
+			: { reviewDocument: outcome.reviewDocument }),
 		finalText: outcome.finalText,
 		providerErrors: outcome.providerErrorObservation
 			? [outcome.providerErrorObservation]
