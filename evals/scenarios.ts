@@ -702,7 +702,9 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		return (
 			plain.length >= 24 &&
 			(plain.match(/\b[a-z][a-z-]*\b/gi)?.length ?? 0) >= 4 &&
-			!/^(?:tbd|todo|none|no action|do not|don't|skip)\b/i.test(plain) &&
+			!/^(?:tbd|todo|none|no action|do not|don't|skip|(?:we|i|the team)\s+(?:(?:will|would|should|can|do)\s+not|won't|don't|cannot))\b/i.test(
+				plain,
+			) &&
 			!/\?\s*(?:no|none|not necessary)\b/i.test(plain)
 		);
 	};
