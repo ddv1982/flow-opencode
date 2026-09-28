@@ -282,7 +282,10 @@ export function caseCatalogFor(
 	sampling: EvalSampling,
 ): ValidatedCaseCatalog {
 	if (sampling.kind === "release") {
-		assertReleaseScenarioOrder(scenarios);
+		assertReleaseScenarioOrder(
+			scenarios,
+			sampling.packageVersion ?? packageJson.version,
+		);
 		return releaseCatalog(sampling.packageVersion ?? packageJson.version);
 	}
 	const parsed = parseCaseCatalog(
@@ -320,8 +323,10 @@ export function attemptsForScenario(
 	return releaseAttemptsFor(scenarioId);
 }
 
-export function releaseScenarios(): readonly (typeof SCENARIOS)[number][] {
-	return selectReleaseScenarios(SCENARIOS);
+export function releaseScenarios(
+	packageVersion = packageJson.version,
+): readonly (typeof SCENARIOS)[number][] {
+	return selectReleaseScenarios(SCENARIOS, packageVersion);
 }
 
 export function campaignPlanFor(input: {
@@ -331,7 +336,10 @@ export function campaignPlanFor(input: {
 	readonly opencodeVersion: string;
 }): CampaignPlan {
 	if (input.sampling.kind === "release") {
-		assertReleaseScenarioOrder(input.scenarios);
+		assertReleaseScenarioOrder(
+			input.scenarios,
+			input.sampling.packageVersion ?? packageJson.version,
+		);
 		assertReleaseModels(
 			input.models.map(legacyRequestedModel),
 			input.sampling.packageVersion ?? packageJson.version,
@@ -787,7 +795,7 @@ export async function runCampaign(
 	if (import.meta.main) await requirePaidAuthorization();
 	const selected =
 		sampling.kind === "release"
-			? releaseScenarios()
+			? releaseScenarios(sampling.packageVersion ?? packageJson.version)
 			: scenarios.length
 				? SCENARIOS.filter((scenario) => scenarios.includes(scenario.id))
 				: SCENARIOS;
@@ -877,7 +885,7 @@ export async function runCampaign(
 			sourceCommit: artifact.sourceCommit,
 			caseCatalog:
 				sampling.kind === "release"
-					? releaseScenarioCatalog(selected)
+					? releaseScenarioCatalog(selected, artifact.packageVersion)
 					: selected.map((scenario) => ({
 							id: scenario.id,
 							files: Object.keys(scenario.files).sort(),

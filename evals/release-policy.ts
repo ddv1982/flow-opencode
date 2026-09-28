@@ -98,15 +98,33 @@ const RELEASE_POLICY_INPUT = [
 
 const parsed = parseCaseCatalog(RELEASE_POLICY_INPUT);
 if (!parsed.ok) throw new Error("Repository release policy is invalid.");
-const STANDARD_RELEASE_CATALOG = parsed.value;
+const HISTORICAL_RELEASE_CATALOG = parsed.value;
+const inspectionCase = {
+	caseId: "inspection-failed-audit-completes",
+	caseVersion: 1,
+	evidenceClass: "conformance",
+	oracle: "durable-state",
+	release: "required",
+	minProviders: 2,
+	minScoredAttempts: 10,
+	minPassRate: 0.9,
+	reviewerPromotionRecordSha256: null,
+} as const;
+const standardParsed = parseCaseCatalog([
+	...RELEASE_POLICY_INPUT,
+	inspectionCase,
+]);
+if (!standardParsed.ok)
+	throw new Error("Repository release policy is invalid.");
+const STANDARD_RELEASE_CATALOG = standardParsed.value;
 
 export type ReleaseProfile = {
 	readonly catalog: ValidatedCaseCatalog;
 	readonly requiredModels: readonly ModelIdentity[] | null;
 };
 
-const OPENAI_ONLY_RELEASE: ReleaseProfile = {
-	catalog: STANDARD_RELEASE_CATALOG.map((row) => ({ ...row, minProviders: 1 })),
+const openAiOnlyRelease = (catalog: ValidatedCaseCatalog): ReleaseProfile => ({
+	catalog: catalog.map((row) => ({ ...row, minProviders: 1 })),
 	requiredModels: [
 		{
 			routeProvider: "openai",
@@ -116,7 +134,7 @@ const OPENAI_ONLY_RELEASE: ReleaseProfile = {
 			revision: null,
 		},
 	],
-};
+});
 
 const STANDARD_RELEASE: ReleaseProfile = {
 	catalog: STANDARD_RELEASE_CATALOG,
@@ -124,8 +142,11 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
-	return packageVersion === "9.1.0" || packageVersion === "9.2.0"
-		? OPENAI_ONLY_RELEASE
+	if (packageVersion === "9.1.0" || packageVersion === "9.2.0") {
+		return openAiOnlyRelease(HISTORICAL_RELEASE_CATALOG);
+	}
+	return packageVersion === "9.3.0"
+		? openAiOnlyRelease(STANDARD_RELEASE_CATALOG)
 		: STANDARD_RELEASE;
 }
 
@@ -168,8 +189,8 @@ export function releaseCatalog(
 	return releaseProfile(packageVersion).catalog;
 }
 
-export function releaseCaseIds(): readonly string[] {
-	return STANDARD_RELEASE_CATALOG.map((policy) => policy.caseId);
+export function releaseCaseIds(packageVersion = "standard"): readonly string[] {
+	return releaseCatalog(packageVersion).map((policy) => policy.caseId);
 }
 
 export function releaseAttemptsFor(caseId: string): number {
@@ -273,7 +294,7 @@ export function releaseRandomizationSeed(
 ): string {
 	return canonicalSha256("flow-v2-seed-v1", {
 		models: models.map((model) => `${model.routeProvider}/${model.model}`),
-		scenarios: releaseCaseIds(),
+		scenarios: releaseCaseIds(packageVersion),
 		releasePolicySha256: releasePolicySha256(packageVersion),
 	});
 }
@@ -313,10 +334,11 @@ export function assertReleaseHost(input: {
 
 export function assertReleaseScenarioOrder(
 	scenarios: readonly { readonly id: string }[],
+	packageVersion = "standard",
 ): void {
 	if (
 		scenarios.map((scenario) => scenario.id).join("\u0000") !==
-		releaseCaseIds().join("\u0000")
+		releaseCaseIds(packageVersion).join("\u0000")
 	) {
 		throw new Error(
 			"Release scenarios do not match repository release policy.",
@@ -343,8 +365,11 @@ export function assertExactReleaseCatalog(
 
 export function selectReleaseScenarios<
 	Scenario extends { readonly id: string },
->(scenarios: readonly Scenario[]): readonly Scenario[] {
-	return releaseCaseIds().map((caseId) => {
+>(
+	scenarios: readonly Scenario[],
+	packageVersion = "standard",
+): readonly Scenario[] {
+	return releaseCaseIds(packageVersion).map((caseId) => {
 		const scenario = scenarios.find((candidate) => candidate.id === caseId);
 		if (!scenario) throw new Error(`Release scenario ${caseId} is missing.`);
 		return scenario;
@@ -361,8 +386,9 @@ export function releaseScenarioCatalog(
 			readonly freshSession?: boolean;
 		}[];
 	}[],
+	packageVersion = "standard",
 ) {
-	return selectReleaseScenarios(scenarios).map((scenario) => ({
+	return selectReleaseScenarios(scenarios, packageVersion).map((scenario) => ({
 		id: scenario.id,
 		files: Object.keys(scenario.files).sort(),
 		steps: scenario.steps.map((step) => ({
@@ -375,10 +401,11 @@ export function releaseScenarioCatalog(
 
 export function releaseCaseCatalogSha256(
 	scenarios: Parameters<typeof releaseScenarioCatalog>[0],
+	packageVersion = "standard",
 ): string {
 	return canonicalSha256(
 		"flow-evaluator-case-catalog-v1",
-		releaseScenarioCatalog(scenarios),
+		releaseScenarioCatalog(scenarios, packageVersion),
 	);
 }
 

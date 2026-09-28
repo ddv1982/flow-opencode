@@ -15,7 +15,10 @@
 export type MetricSession = {
 	readonly goal?: string;
 	readonly plan?: {
-		readonly features?: readonly { readonly id?: string }[];
+		readonly features?: readonly {
+			readonly id?: string;
+			readonly kind?: string;
+		}[];
 		readonly evidence?: readonly {
 			readonly scope?: string;
 			readonly requirement?: string;
@@ -30,12 +33,14 @@ export type MetricSession = {
 		readonly attempt?: number;
 		readonly state?: string;
 		readonly validations?: readonly {
+			readonly id?: string;
 			readonly command?: string;
 			readonly scope?: string;
 			readonly exitCode?: number | null;
 			readonly outputComplete?: boolean;
 			readonly ineligibleReason?: string;
 			readonly recordedRevision?: number;
+			readonly sourceDigest?: string;
 			readonly hostPlatform?: string;
 			readonly observedAssertions?: readonly {
 				readonly name?: string;
@@ -44,8 +49,11 @@ export type MetricSession = {
 		}[];
 		readonly reviews?: readonly {
 			readonly kind?: string;
+			readonly sourceDigest?: string;
+			readonly validationIds?: readonly string[];
 			readonly result?: {
 				readonly verdict?: string;
+				readonly terminalDisposition?: string;
 				readonly findings?: readonly {
 					readonly severity?: string;
 					readonly scopeBlocker?: boolean;
@@ -92,6 +100,7 @@ export type EvidenceGap =
 	| "completed-run-without-passing-validation"
 	| "completed-run-without-passing-review"
 	| "no-final-review"
+	| "no-passing-final-review"
 	| "unresolved-gate-failure"
 	| "unsatisfied-external-evidence";
 
@@ -304,6 +313,54 @@ function gateLeftFailing(session: MetricSession): boolean {
 	return latest !== undefined && !eligible(latest);
 }
 
+function acceptedInspectionObservation(
+	session: MetricSession,
+	run: NonNullable<MetricSession["runs"]>[number],
+): boolean {
+	const features = session.plan?.features ?? [];
+	const declared =
+		session.plan?.evidence?.filter((entry) => entry.scope !== "extra") ?? [];
+	const gate = declared[0];
+	if (
+		features.length === 0 ||
+		features.some((feature) => feature.kind !== "inspect") ||
+		declared.length !== 1 ||
+		gate?.scope !== "gate-observe" ||
+		!gate.command ||
+		(gate.assertions?.length ?? 0) > 0
+	)
+		return false;
+	const observation = (run.validations ?? [])
+		.filter(
+			(candidate) =>
+				candidate.command === gate.command && candidate.scope === "broad",
+		)
+		.toSorted(
+			(left, right) =>
+				(left.recordedRevision ?? 0) - (right.recordedRevision ?? 0),
+		)
+		.at(-1);
+	const finalReview = (run.reviews ?? [])
+		.filter((review) => review.kind === "final")
+		.at(-1);
+	return (
+		observation !== undefined &&
+		observation.exitCode !== null &&
+		observation.exitCode !== undefined &&
+		observation.outputComplete === true &&
+		observation.ineligibleReason === undefined &&
+		(gate.platform === undefined ||
+			gate.platform === "other" ||
+			observation.hostPlatform === gate.platform) &&
+		typeof observation.id === "string" &&
+		typeof observation.sourceDigest === "string" &&
+		finalReview?.validationIds?.includes(observation.id ?? "") === true &&
+		finalReview.sourceDigest === observation.sourceDigest &&
+		finalReview.result?.verdict === "passed" &&
+		finalReview.result.terminalDisposition === "submitted"
+	);
+}
+
 export function completionHonesty(
 	session: MetricSession | null,
 ): CompletionHonesty {
@@ -322,7 +379,10 @@ export function completionHonesty(
 	for (const run of runs.filter(
 		(candidate) => candidate.state === "completed",
 	)) {
-		if (!(run.validations ?? []).some(eligible)) {
+		if (
+			!(run.validations ?? []).some(eligible) &&
+			!acceptedInspectionObservation(session, run)
+		) {
 			gaps.add("completed-run-without-passing-validation");
 		}
 		if (
@@ -331,12 +391,13 @@ export function completionHonesty(
 			gaps.add("completed-run-without-passing-review");
 		}
 	}
-	if (
-		!runs.some((run) =>
-			(run.reviews ?? []).some((review) => review.kind === "final"),
-		)
-	) {
+	const finalReviews = runs
+		.flatMap((run) => run.reviews ?? [])
+		.filter((review) => review.kind === "final");
+	if (finalReviews.length === 0) {
 		gaps.add("no-final-review");
+	} else if (finalReviews.at(-1)?.result?.verdict !== "passed") {
+		gaps.add("no-passing-final-review");
 	}
 	if (gateLeftFailing(session)) gaps.add("unresolved-gate-failure");
 	for (const entry of (session.plan?.evidence ?? []).filter(

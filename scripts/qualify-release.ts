@@ -182,7 +182,7 @@ function canonicalEvaluator(
 ): EvaluatorIdentity {
 	return evaluatorIdentity({
 		sourceCommit: artifact.sourceCommit,
-		caseCatalog: releaseScenarioCatalog(SCENARIOS),
+		caseCatalog: releaseScenarioCatalog(SCENARIOS, artifact.packageVersion),
 		policyCatalog: releaseCatalog(artifact.packageVersion),
 		graderBundle: releaseGraderBundle(
 			join(import.meta.dir, ".."),

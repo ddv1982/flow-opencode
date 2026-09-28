@@ -105,6 +105,12 @@ const signalTest = ["linux", "darwin"].includes(process.platform)
 	? test
 	: test.skip;
 describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", () => {
+	const catalog = releaseCatalog(packageJson.version);
+	const primaryCount = catalog.reduce(
+		(total, row) => total + row.minScoredAttempts,
+		0,
+	);
+	const reserveCount = catalog.length;
 	for (const signal of ["SIGINT", "SIGTERM"] as const) {
 		for (const mode of ["handoff", "reserve"] as const) {
 			const label =
@@ -122,8 +128,10 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						expect(result.signal).toBeNull();
 						expect(result.events).not.toContain("unexpected-network");
 						expect(result.events).toContain("returned");
-						const retained = mode === "handoff" ? 38 : 39;
-						const started = mode === "handoff" ? 38 : 40;
+						const retained =
+							mode === "handoff" ? primaryCount : primaryCount + 1;
+						const started =
+							mode === "handoff" ? primaryCount : primaryCount + 2;
 						expect(result.events).toContain(`durable:${retained}`);
 						expect(
 							result.events.filter((event) => event.startsWith("signal:")),
@@ -168,8 +176,8 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						const reserves = report.plan.cells.filter(
 							(cell) => cell.schedule === "environment-reserve",
 						);
-						expect(primary).toHaveLength(38);
-						expect(reserves).toHaveLength(8);
+						expect(primary).toHaveLength(primaryCount);
+						expect(reserves).toHaveLength(reserveCount);
 						expect(report.attempts.map((attempt) => attempt.cellId)).toEqual([
 							...primary.map((cell) => cell.cellId),
 							...(mode === "reserve" ? [required(reserves[0]).cellId] : []),

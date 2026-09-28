@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { withCampaignSignals } from "../../evals/campaign-stop.js";
 import { providerFailure } from "../../evals/failure-origin.js";
 import type { Outcome } from "../../evals/harness.js";
+import packageJson from "../../package.json" with { type: "json" };
 
 const [root, mode] = process.argv.slice(2);
 if (!root || (mode !== "handoff" && mode !== "reserve"))
@@ -27,6 +28,9 @@ const realHarness = { ...(await import("../../evals/harness.js")) };
 const realProvenance = { ...(await import("../../evals/provenance.js")) };
 const realPolicy = { ...(await import("../../evals/release-policy.js")) };
 const realScenarios = { ...(await import("../../evals/scenarios.js")) };
+const primaryCount = realPolicy
+	.releaseCatalog(packageJson.version)
+	.reduce((total, row) => total + row.minScoredAttempts, 0);
 // runCampaign hashes the real grader dependency closure relative to its output
 // root. Copy those exact source bytes; do not substitute a fake grader bundle.
 for (const { path, source } of realPolicy.releaseGraderSourceBundle(
@@ -99,8 +103,8 @@ class FakeReleaseHost {
 		return `fixture-session-${this.attempt}`;
 	}
 	async runCommand(): Promise<"quiet"> {
-		if (mode === "reserve" && this.attempt === 40)
-			await stopHere(this.signal, 39);
+		if (mode === "reserve" && this.attempt === primaryCount + 2)
+			await stopHere(this.signal, primaryCount + 1);
 		return "quiet";
 	}
 	async outcome(sessionIds: string[]): Promise<Outcome> {
@@ -143,8 +147,8 @@ class FakeReleaseHost {
 	}
 	async stop() {
 		event(`stop:${this.attempt}`);
-		if (mode === "handoff" && this.attempt === 38)
-			await stopHere(this.signal, 38).catch((error: unknown) => {
+		if (mode === "handoff" && this.attempt === primaryCount)
+			await stopHere(this.signal, primaryCount).catch((error: unknown) => {
 				if (error !== this.signal.reason) throw error;
 			});
 		if (this.signal.aborted) await cleanupGate();
