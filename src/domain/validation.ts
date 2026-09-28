@@ -341,7 +341,9 @@ export function evidenceStatus(
 	const candidates =
 		entry.scope === "gate-observe" ? matching.slice(-1) : matching;
 	const eligible = candidates.filter((observation) =>
-		isAcceptedValidation(session, observation, sourceDigest),
+		entry.scope === "gate-observe"
+			? isAcceptedValidation(session, observation, sourceDigest)
+			: isValidationEligible(observation, sourceDigest),
 	);
 	const onHost = eligible.filter((observation) =>
 		isObservedOnDeclaredPlatform(entry, observation),
