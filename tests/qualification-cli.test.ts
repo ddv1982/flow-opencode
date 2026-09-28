@@ -224,11 +224,11 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			tarballPath: artifactPath,
 		});
 		const scenarios = releaseScenarios();
-		const models = ["openai/gpt-6-sol", "xai/grok-4.6"];
+		const models = ["openai/gpt-6-sol"];
 		const plan = campaignPlanFor({
 			models,
 			scenarios,
-			sampling: { kind: "release" },
+			sampling: { kind: "release", packageVersion: artifact.packageVersion },
 			opencodeVersion: RELEASE_HOST_POLICY.opencodeVersion,
 		});
 		const evaluator = evaluatorIdentity({
@@ -413,7 +413,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			completion,
 			allocationCommitmentSha256: null,
 		});
-		expect(report.attempts).toHaveLength(77);
+		expect(report.attempts).toHaveLength(39);
 
 		const preparedDirectory = join(temporary, "prepared-canary");
 		await mkdir(preparedDirectory, { recursive: true });
@@ -521,8 +521,8 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		const transcripts = bundle.files.filter(
 			({ ref }) => ref.role === "transcript",
 		);
-		expect(attempts).toHaveLength(77);
-		expect(transcripts).toHaveLength(77);
+		expect(attempts).toHaveLength(39);
+		expect(transcripts).toHaveLength(39);
 		expect(attempts.map(({ ref }) => ref.id).sort()).toEqual(
 			transcripts.map(({ ref }) => ref.id).sort(),
 		);
@@ -569,7 +569,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			canarySha256: canary.record.recordSha256,
 			artifact,
 		});
-		expect(releaseAuthority.summary.providers).toHaveLength(2);
+		expect(releaseAuthority.summary.providers).toHaveLength(1);
 		const notesPath = join(temporary, "release-notes.md");
 		const metadata = Bun.spawn(
 			[

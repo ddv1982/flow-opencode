@@ -16,6 +16,8 @@ commands.
   ends recovery. Jev advice does not authorize edits or delegated recovery.
 - Session v5 schema gains an optional amendment record. Existing sessions remain
   readable. The public tool count rises from ten to eleven.
+- The 9.2.0 release profile measures GPT-6 Sol on OpenAI only. It does not
+  establish cross-provider reliability or qualify delegated Jev recovery.
 
 Upgrade with `opencode plugin opencode-plugin-flow@9.2.0 --global --force`.
 

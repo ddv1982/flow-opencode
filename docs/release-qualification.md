@@ -9,7 +9,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 
 | Threshold | Value | Why |
 | --- | --- | --- |
-| Distinct providers | ≥ 2; 9.1.0 only: 1 | 9.1.0 pins `openai/gpt-6-sol`. Its evidence covers OpenAI only. Later releases require two routes. |
+| Distinct providers | 1 for 9.1.0 and 9.2.0; otherwise ≥ 2 | Both exceptions pin `openai/gpt-6-sol` and support OpenAI-only claims. |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask or at a blocker. |
 | Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
@@ -52,8 +52,8 @@ second external failure or an unallowed ask leaves a gap. Product and evaluator
 failures never activate reserves. Evaluator failure is `NOT VERIFIED`;
 persistence failure stops without a finalized report.
 
-Repository code owns the ordered release catalog; persisted `catalog.json` must
-match. Version 9.1.0 uses 38 primary cells and eight reserves on GPT-6 Sol only.
+Repository code owns the release catalog; persisted `catalog.json` must match.
+Versions 9.1.0 and 9.2.0 use 38 primary cells and eight reserves on GPT-6 Sol.
 Other versions use 76 primary cells and 16 reserves on distinct providers.
 Narrowed, extended, or merged summary reports cannot qualify.
 
@@ -101,7 +101,7 @@ Recheck final main CI and exact artifact identity before tagging `v<package-vers
 
 Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
-For 9.1.0, run the pinned OpenAI model.
+For 9.1.0 and 9.2.0, run the pinned OpenAI model.
 
 ```bash
 bun run eval -- --release --model openai/gpt-6-sol
