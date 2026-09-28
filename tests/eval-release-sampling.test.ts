@@ -64,10 +64,41 @@ describe("release eval sampling", () => {
 		expect(() => assertExactReleaseCatalog(catalog, "9.1.1")).toThrow();
 	});
 
+	test("pins the 9.2.0 OpenAI-only grid and restores two providers in 9.2.1", () => {
+		const model = {
+			routeProvider: "openai",
+			gateway: null,
+			family: "gpt-6-sol",
+			model: "gpt-6-sol",
+			revision: null,
+		};
+		const plan = campaignPlanFor({
+			models: ["openai/gpt-6-sol"],
+			scenarios: releaseScenarios(),
+			sampling: { kind: "release", packageVersion: "9.2.0" },
+			opencodeVersion: "1.18.31",
+		});
+		expect(plan.stoppingRule.count).toBe(38);
+		expect(plan.budget.maxAttempts).toBe(46);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(8);
+		expect(releaseCatalog("9.2.0").every((row) => row.minProviders === 1)).toBe(
+			true,
+		);
+		expect(() => assertReleaseModels([model], "9.2.0")).not.toThrow();
+		expect(() => assertReleaseModels([model], "9.2.1")).toThrow(
+			"exactly 2 models",
+		);
+		expect(() => assertReleaseModels([model, model], "9.2.0")).toThrow(
+			"openai/gpt-6-sol",
+		);
+		expect(releasePolicySha256("9.2.0")).toBe(releasePolicySha256("9.1.0"));
+		expect(releasePolicySha256("9.2.0")).not.toBe(releasePolicySha256("9.2.1"));
+	});
+
 	test("checks configured CI release models before authorization", async () => {
 		for (const [configured, expectedCode] of [
-			["openai/gpt-6-sol", 1],
-			["openai/gpt-6-sol,xai/grok-4.6", 0],
+			["openai/gpt-6-sol", 0],
+			["openai/gpt-6-sol,xai/grok-4.6", 1],
 			["xai/grok-4.6", 1],
 		] as const) {
 			const child = Bun.spawn(
@@ -85,7 +116,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					"exactly 2 models on distinct route providers",
+					"Release 9.2.0 requires exactly openai/gpt-6-sol",
 				);
 		}
 	});
@@ -268,7 +299,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects release grids without exactly two distinct providers", async () => {
+	test("rejects release grids outside the 9.2.0 canonical OpenAI route", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -291,7 +322,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				"Release requires exactly 2 models on distinct route providers",
+				"Release 9.2.0 requires exactly openai/gpt-6-sol",
 			);
 		}
 	});
@@ -304,8 +335,6 @@ describe("release eval sampling", () => {
 				"evals/run.ts",
 				"--model",
 				"openai/gpt-6-sol",
-				"--model",
-				"xai/grok-4.6",
 				"--release",
 				"--concurrency",
 				"2",

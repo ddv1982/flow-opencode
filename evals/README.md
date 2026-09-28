@@ -56,8 +56,8 @@ plugin tuple configuration, and records the same selection in provenance.
 Release sampling rejects reviewer overrides.
 
 Ordinary runs use one sequential queue per model, with up to four queues in flight.
-Release mode is strictly sequential (`--concurrency 1`). Version 9.1.0 pins
-`openai/gpt-6-sol` with 38 primary targets and eight reserves. Other versions
+Release mode is strictly sequential (`--concurrency 1`). Versions 9.1.0 and
+9.2.0 pin `openai/gpt-6-sol` with 38 primary targets and eight reserves. Other versions
 require two providers, 76 primary targets and 16 reserves. Only retained retryable
 host/provider failures activate reserves, never product failures. Results are
 persisted in declared order even when ordinary queues finish out of order.
@@ -424,8 +424,8 @@ about the prompts; a single attempt of a stochastic scenario is not a rate.
 
 ## Multi-model matrix
 
-Version 9.1.0 requires only `openai/gpt-6-sol`; it makes no cross-provider claim.
-Other versions require two distinct providers. `.github/workflows/evals.yml`
+Versions 9.1.0 and 9.2.0 require only `openai/gpt-6-sol`; neither makes a
+cross-provider claim. Other versions require two distinct providers. `.github/workflows/evals.yml`
 runs the matrix weekly and on demand, outside contributor gates.
 
 ## Using evals to change prompts
@@ -579,8 +579,8 @@ distinction that matters: one pass in six and six in six are different findings.
 
 ## Cost
 
-Version 9.1.0 schedules 38 primary attempts and eight reserves on GPT-6 Sol.
-Its evidence supports only that route. Other versions schedule 76 primary attempts
+Versions 9.1.0 and 9.2.0 schedule 38 primary attempts and eight reserves on GPT-6 Sol.
+Their evidence supports only that route. Other versions schedule 76 primary attempts
 and 16 reserves across two providers. Ordinary campaign size depends
 on the selected scenarios, models and repeats. Use `--scenario` while iterating;
 cost depends on model pricing and the work performed, not just scenario count.

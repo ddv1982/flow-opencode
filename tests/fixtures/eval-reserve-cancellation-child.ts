@@ -12,7 +12,7 @@ const [root, mode] = process.argv.slice(2);
 if (!root || (mode !== "handoff" && mode !== "reserve"))
 	throw new Error("Expected temporary root and handoff/reserve mode.");
 const repositoryRoot = root;
-const models = ["openai/gpt-6-sol", "xai/grok-4.6"] as const;
+const models = ["openai/gpt-6-sol"] as const;
 const event = (name: string) =>
 	process.stdout.write(`\n@@eval-reserve:${name}\n`);
 process.stdin.resume(); // Keep the child alive until the parent releases cleanup.
@@ -99,8 +99,8 @@ class FakeReleaseHost {
 		return `fixture-session-${this.attempt}`;
 	}
 	async runCommand(): Promise<"quiet"> {
-		if (mode === "reserve" && this.attempt === 78)
-			await stopHere(this.signal, 77);
+		if (mode === "reserve" && this.attempt === 40)
+			await stopHere(this.signal, 39);
 		return "quiet";
 	}
 	async outcome(sessionIds: string[]): Promise<Outcome> {
@@ -143,8 +143,8 @@ class FakeReleaseHost {
 	}
 	async stop() {
 		event(`stop:${this.attempt}`);
-		if (mode === "handoff" && this.attempt === 76)
-			await stopHere(this.signal, 76).catch((error: unknown) => {
+		if (mode === "handoff" && this.attempt === 38)
+			await stopHere(this.signal, 38).catch((error: unknown) => {
 				if (error !== this.signal.reason) throw error;
 			});
 		if (this.signal.aborted) await cleanupGate();

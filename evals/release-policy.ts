@@ -105,7 +105,7 @@ export type ReleaseProfile = {
 	readonly requiredModels: readonly ModelIdentity[] | null;
 };
 
-const OPENAI_ONLY_9_1_0: ReleaseProfile = {
+const OPENAI_ONLY_RELEASE: ReleaseProfile = {
 	catalog: STANDARD_RELEASE_CATALOG.map((row) => ({ ...row, minProviders: 1 })),
 	requiredModels: [
 		{
@@ -124,7 +124,9 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
-	return packageVersion === "9.1.0" ? OPENAI_ONLY_9_1_0 : STANDARD_RELEASE;
+	return packageVersion === "9.1.0" || packageVersion === "9.2.0"
+		? OPENAI_ONLY_RELEASE
+		: STANDARD_RELEASE;
 }
 
 export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {
