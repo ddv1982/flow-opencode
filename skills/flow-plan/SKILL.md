@@ -72,7 +72,7 @@ Save one plan with:
 - `overview`: the implementation approach and important boundaries.
 - `requirements`: acceptance criteria, constraints, and non-goals.
 - `decisions`: assumptions and architecture or scope choices already made.
-- `evidence`: one `scope: "gate"` entry for the canonical whole-repository
+- `evidence`: one `scope: "gate"` or inspect-only `scope: "gate-observe"` entry for the canonical whole-repository
   command, plus `scope: "extra"` entries for observations this host may lack.
   Each entry names `requirement`, `environment`, `command`, `platform`
   (`win32`, `darwin`, `linux`, or `other`), and `assertions`. When acceptance
@@ -92,8 +92,9 @@ Save one plan with:
   byte-for-byte. Extra entries may be omitted when the goal is fully observable
   here. Final review and completed closure stay refused until every extra
   entry is satisfied on its declared platform with named cases passing. The
-  gate is the command every broad observation must run; a failed or
-  claimed-broad gate still vetoes review.
+  gate is the command every broad observation must run; a failed `gate` or
+  claimed-broad gate still vetoes review. A complete failed `gate-observe`
+  remains a finding that the reviewer must see.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, `dependsOn` ids, and
   optional `kind`.
@@ -113,7 +114,11 @@ If the request is inspect-only (review, audit, survey, no promised edit), invent
 no repair features. Save at most a small set of inspect features with
 `kind: "inspect"`, whose `validation` is reviewer inspection, whose `targets`
 are existing paths, and whose `decisions` state that no source edit is
-authorized. The gate may be the repo's existing check. Ask before turning an
+authorized. If the gate's result is itself a finding, declare
+`scope: "gate-observe"` on that gate with `assertions: []`. This requires a
+complete current-source observation with a known exit code on the declared
+host; an exit failure remains a failure in the reviewer packet and delivery.
+`scope: "gate"` still requires a pass. Ask before turning an
 inspect request into repairs.
 
 Confirm:

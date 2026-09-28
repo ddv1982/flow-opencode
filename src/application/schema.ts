@@ -90,7 +90,7 @@ const EvidenceEntrySchema = z
 		requirement: boundedText("Evidence requirement"),
 		environment: boundedText("Evidence environment"),
 		command: boundedText("Evidence command"),
-		scope: z.enum(["gate", "extra"]),
+		scope: z.enum(["gate", "gate-observe", "extra"]),
 		platform: z.enum(EVIDENCE_PLATFORMS).optional(),
 		assertions: z
 			.array(boundedText("Evidence assertion"))

@@ -13,7 +13,7 @@ are measured. Optional fields may be added. Removal or rename requires a major
 announced one release ahead.
 A new required-at-save plan declaration is a major. `evidence` entries own
 `scope`, `platform`, and `assertions`; named commands bind `.flow/results.xml`.
-Do not add another evidence field to close a measured cheat.
+`scope: "gate-observe"` records inspect-only audit outcomes; `gate` still requires pass.
 [Release qualification](release-qualification.md) owns the thresholds and cadence.
 
 Flow owns a serial durable lifecycle with planning, one active run, observed

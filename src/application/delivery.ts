@@ -7,7 +7,7 @@ import type {
 import { currentRun, planGate } from "../domain/session.js";
 import { isFeatureComplete } from "../domain/session-queries.js";
 import {
-	isValidationEligible,
+	isAcceptedValidation,
 	unsatisfiedEvidence,
 } from "../domain/validation.js";
 import {
@@ -86,7 +86,7 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 		);
 		return run.validations.filter(
 			(observation) =>
-				ids.has(observation.id) && isValidationEligible(observation),
+				ids.has(observation.id) && isAcceptedValidation(session, observation),
 		);
 	});
 	const check = (
@@ -150,6 +150,13 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 		),
 	];
 	const gate = planGate(session.plan);
+	const observedGate = session.plan?.evidence?.find(
+		(entry) => entry.scope === "gate-observe",
+	);
+	const acceptedGate = accepted.findLast(
+		(observation) =>
+			observation.command === gate && observation.scope === "broad",
+	);
 	checks.push(
 		gate === undefined
 			? {
@@ -161,13 +168,12 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 				}
 			: check(
 					"canonical-gate",
-					"Canonical gate",
+					observedGate ? "Canonical gate observation" : "Canonical gate",
 					"host-attested",
-					accepted.some(
-						(observation) =>
-							observation.command === gate && observation.scope === "broad",
-					),
-					`${JSON.stringify(gate)} must have eligible broad evidence accepted by review.`,
+					acceptedGate !== undefined,
+					observedGate
+						? `${JSON.stringify(gate)} was observed with exit ${acceptedGate?.exitCode ?? "unavailable"}; this does not claim the command passed.`
+						: `${JSON.stringify(gate)} must have passing broad evidence accepted by review.`,
 				),
 	);
 	const declared = session.plan?.evidence;
@@ -186,7 +192,7 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 					"Declared evidence",
 					declared.length === 0 ? "caller-declared" : "host-attested",
 					missing === 0,
-					`${declared.length - missing}/${declared.length} declared obligations have eligible evidence on their declared host with named cases passing.`,
+					`${declared.length - missing}/${declared.length} declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.`,
 				),
 	);
 	return {

@@ -30,7 +30,7 @@ export type PlanFeature = Readonly<{
 	kind?: FeatureKind | undefined;
 }>;
 
-type EvidenceScope = "gate" | "extra";
+type EvidenceScope = "gate" | "gate-observe" | "extra";
 
 export type EvidenceEntry = Readonly<{
 	requirement: string;
@@ -67,7 +67,7 @@ export function planEvidence(
 }
 
 export function planGate(plan: Plan | null | undefined): string | undefined {
-	return planEvidence(plan).find((entry) => entry.scope === "gate")?.command;
+	return planEvidence(plan).find((entry) => entry.scope !== "extra")?.command;
 }
 
 /** Absent `kind` is `change`, so existing Session v5 documents keep the repair loop. */

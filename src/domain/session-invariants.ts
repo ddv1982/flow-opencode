@@ -6,7 +6,7 @@ import { missingRequestAssertions } from "./request-evidence.js";
 import type { Session } from "./session.js";
 import { featureKind, reviewResultSemanticIssues } from "./session.js";
 import { isFeatureComplete } from "./session-queries.js";
-import { isValidationEligible } from "./validation.js";
+import { isAcceptedValidation } from "./validation.js";
 
 function featureSettledBefore(
 	session: Session,
@@ -89,7 +89,7 @@ export function sessionInvariantIssues(session: Session): string[] {
 				(item) =>
 					item.scope === "broad" &&
 					item.command ===
-						session.plan?.evidence?.find((entry) => entry.scope === "gate")
+						session.plan?.evidence?.find((entry) => entry.scope !== "extra")
 							?.command &&
 					item.recordedRevision < amendment.recordedRevision,
 			)
@@ -113,7 +113,7 @@ export function sessionInvariantIssues(session: Session): string[] {
 			observation.recordedRevision >= amendment.recordedRevision ||
 			observation.scope !== "broad" ||
 			observation.command !==
-				session.plan.evidence?.find((entry) => entry.scope === "gate")
+				session.plan.evidence?.find((entry) => entry.scope !== "extra")
 					?.command ||
 			observation.exitCode === null ||
 			observation.exitCode === 0 ||
@@ -223,7 +223,7 @@ export function sessionInvariantIssues(session: Session): string[] {
 			if (
 				referenced.some(
 					(validation) =>
-						!isValidationEligible(validation, review.sourceDigest),
+						!isAcceptedValidation(session, validation, review.sourceDigest),
 				)
 			) {
 				issues.push(`Review '${review.id}' uses inapplicable validation.`);
