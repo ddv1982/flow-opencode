@@ -671,10 +671,12 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				nextItem?.index,
 			);
 			const nextHeading = /\n#{1,6}\s+/.exec(secondTail);
-			actions = [
-				`${firstItem[2] ?? ""} ${firstTail.slice(0, firstHeading?.index)}`,
-				`${secondItem[2] ?? ""} ${secondTail.slice(0, nextHeading?.index)}`,
-			];
+			if (!firstHeading) {
+				actions = [
+					`${firstItem[2] ?? ""} ${firstTail}`,
+					`${secondItem[2] ?? ""} ${secondTail.slice(0, nextHeading?.index)}`,
+				];
+			}
 		}
 	}
 	if (!actions) return false;
