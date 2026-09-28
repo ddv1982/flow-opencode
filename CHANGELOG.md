@@ -2,6 +2,27 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.3.0] - 2026-09-28
+
+`/flow-auto` can complete an inspection review when the declared audit fails,
+without treating that failure as a passing product gate.
+
+- An all-inspect plan may declare `gate-observe`. Flow records a complete failed
+  gate as evidence for independent review and reports its exit in delivery.
+  Change plans and extra evidence still require passing results. An observed
+  gate cannot authorize a prerequisite repair amendment.
+- For a fresh, exact-goal review-and-roadmap request, `/flow-auto` may approve
+  its own inspection draft. Plan-only, mixed implementation, ambiguous, and
+  pre-existing drafts retain the approval checkpoint.
+- Session v5 schema accepts the `gate-observe` evidence-scope value. Existing plans keep their
+  pass-required gate semantics. Active sessions should be finished or closed
+  before upgrading.
+- The 9.3.0 qualification profile adds a required failed-audit inspection case
+  and measures GPT-6 Sol on OpenAI only. It makes no cross-provider reliability
+  or delegated Jev qualification claim.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.3.0 --global --force`.
+
 ## [9.2.0] - 2026-09-28
 
 `/flow-auto` can finish a same-goal repair when the approved gate exposes a

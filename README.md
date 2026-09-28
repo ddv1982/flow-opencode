@@ -40,7 +40,7 @@ expensive, and it is overhead when it is not.
 Install the exact npm release through OpenCode:
 
 ```bash
-opencode plugin opencode-plugin-flow@9.2.0 --global --force
+opencode plugin opencode-plugin-flow@9.3.0 --global --force
 ```
 
 Omit `--global` for project scope. Version pins are exact and never update on
@@ -50,7 +50,7 @@ Manual setup needs this entry in both `opencode.json` and `tui.json`:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@9.2.0"]
+  "plugin": ["opencode-plugin-flow@9.3.0"]
 }
 ```
 
@@ -65,7 +65,7 @@ and implementation. `/models` selects the coding model.
 
 ```json
 {
-  "plugin": [["opencode-plugin-flow@9.2.0", {
+  "plugin": [["opencode-plugin-flow@9.3.0", {
     "reviewer": { "model": "provider/model", "steps": 80 }
   }]]
 }
@@ -200,7 +200,7 @@ failure, follow [troubleshooting](docs/troubleshooting.md).
 
 ## Development
 
-Requirements: Git, Node.js 24 or newer, Bun 1.3.14, and the versions pinned in
+Requirements: Git, Node.js 24 or newer, Bun 1.4.0, and the versions pinned in
 `package.json`.
 
 ```bash
