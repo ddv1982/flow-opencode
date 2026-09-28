@@ -2,6 +2,23 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.2.0] - 2026-09-28
+
+`/flow-auto` can finish a same-goal repair when the approved gate exposes a
+reversible prerequisite, and Jev shadow advice survives ordinary Flow recovery
+commands.
+
+- `flow_plan_amend` records up to three gate-triggered repairs before review.
+  It leaves the approved plan and gate fixed. The reviewer sees both the failed
+  gate observation and the later evidence for the repaired source.
+- Same-session `/flow-run` and `/flow-status` keep the original Jev shadow
+  budget and expiry. A new goal, unrelated turn, stop, or expired lease still
+  ends recovery. Jev advice does not authorize edits or delegated recovery.
+- Session v5 schema gains an optional amendment record. Existing sessions remain
+  readable. The public tool count rises from ten to eleven.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.2.0 --global --force`.
+
 ## [9.1.0] - 2026-09-27
 
 `/flow-auto` can show bounded Jev recovery advice when TypeSafe is configured.

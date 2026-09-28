@@ -11,6 +11,7 @@ import {
 } from "../evals/grader-input.js";
 import { releaseCatalog } from "../evals/release-policy.js";
 import { EvalReportV2Schema, parseReport } from "../evals/report.js";
+import packageJson from "../package.json" with { type: "json" };
 
 const readJson = async (path: string) =>
 	JSON.parse(await readFile(path, "utf8"));
@@ -121,8 +122,8 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						expect(result.signal).toBeNull();
 						expect(result.events).not.toContain("unexpected-network");
 						expect(result.events).toContain("returned");
-						const retained = mode === "handoff" ? 38 : 39;
-						const started = mode === "handoff" ? 38 : 40;
+						const retained = mode === "handoff" ? 76 : 77;
+						const started = mode === "handoff" ? 76 : 78;
 						expect(result.events).toContain(`durable:${retained}`);
 						expect(
 							result.events.filter((event) => event.startsWith("signal:")),
@@ -153,11 +154,11 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						expect(reports).toHaveLength(1);
 						const directory = join(results, required(reports[0]));
 						expect(await readJson(join(directory, "catalog.json"))).toEqual(
-							releaseCatalog("9.1.0"),
+							releaseCatalog(packageJson.version),
 						);
 						const parsed = parseReport(
 							await readJson(join(directory, "report.json")),
-							releaseCatalog("9.1.0"),
+							releaseCatalog(packageJson.version),
 						);
 						if (!parsed.ok) throw new Error(JSON.stringify(parsed.issues));
 						const report = parsed.value;
@@ -167,8 +168,8 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 						const reserves = report.plan.cells.filter(
 							(cell) => cell.schedule === "environment-reserve",
 						);
-						expect(primary).toHaveLength(38);
-						expect(reserves).toHaveLength(8);
+						expect(primary).toHaveLength(76);
+						expect(reserves).toHaveLength(16);
 						expect(report.attempts.map((attempt) => attempt.cellId)).toEqual([
 							...primary.map((cell) => cell.cellId),
 							...(mode === "reserve" ? [required(reserves[0]).cellId] : []),
@@ -253,7 +254,7 @@ describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", 
 							throw new Error("Expected packed artifact identity.");
 						const decision = deriveReleaseDecision({
 							report,
-							catalog: releaseCatalog("9.1.0"),
+							catalog: releaseCatalog(packageJson.version),
 							expected: {
 								kind: "release",
 								artifact: first.artifact,
