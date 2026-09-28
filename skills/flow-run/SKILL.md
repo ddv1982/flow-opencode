@@ -101,11 +101,15 @@ Flow records the host observation; copy no host-observed fields.
 
 `scope: "broad"` runs the plan's gate evidence command and nothing else.
 
-A failed or stale planned command blocks review until that exact command passes
-for current source.
+For a complete failed broad gate before review, use `flow_plan_amend` for a
+reversible same-goal prerequisite. Supply the validation id, reason, repair,
+targets, and truthful attestations. Keep the plan and gate fixed, rerun the
+gate, and review the diff. New outcomes, reviewer scope blockers, and missing
+environment evidence still stop.
 
 A gate that cannot pass must first name the failing case or output that blocks
-it, then leave this exact handoff before returning:
+it. If the bounded amendment rule above does not apply, leave this exact
+handoff before returning:
 `Environment: <declared environment>`, `Command: <exact planned command>`, and
 `Next step: Run this command there and resume Flow, or choose defer/abandon.`
 

@@ -12,6 +12,7 @@ import type {
 	FeatureRun,
 	OperationRecord,
 	Plan,
+	PlanAmendment,
 	PlanFeature,
 	ReviewAssignment,
 	Session,
@@ -80,6 +81,7 @@ export type CompactProjection = Readonly<{
 	nextAction: FlowNextAction;
 	archiveRetry: ArchiveRetryProjection | null;
 	findingsDigest: FindingsDigest;
+	amendments: PlanAmendment[];
 }>;
 
 export type ArchivedProjection = Readonly<
@@ -125,6 +127,7 @@ export type ReviewerProjection = Readonly<{
 	 * from the manager's packet prose.
 	 */
 	priorFindings: ReadonlyArray<LivePriorFinding>;
+	amendments: PlanAmendment[];
 	/** Prefix the runtime uses when it numbers a new finding of this assignment. */
 	nextFindingIdPrefix: string;
 }>;
@@ -177,7 +180,7 @@ function actionGuidance(projection: RoutedStatusProjection): string {
 		case "dispatch-flow-reviewer":
 			return "Action guidance: dispatch the existing pending assignment to flow-reviewer.";
 		case "flow_validation_start":
-			return "Action guidance: arm the exact next validation command with flow_validation_start.";
+			return "Action guidance: arm the exact next validation command with flow_validation_start. If a complete failed canonical gate exposes a reversible same-goal prerequisite before review, record its bounded scope with flow_plan_amend.";
 		case "flow_review_start":
 			return "Action guidance: create one independent review assignment with flow_review_start.";
 		default: {
@@ -391,6 +394,7 @@ export function compactProjection(
 		nextAction: nextAction(session, pendingReviewSourceStale, blockedFeature),
 		archiveRetry: retryRequest ? { request: retryRequest } : null,
 		findingsDigest: findingsDigest(session),
+		amendments: [...(session.amendments ?? [])],
 	};
 }
 
@@ -485,6 +489,9 @@ export function reviewerProjection(
 				.filter((candidate) => isFeatureComplete(session, candidate.id))
 				.map((candidate) => candidate.id) ?? [],
 		priorFindings: livePriorFindings(session, assignment.featureId),
+		amendments: (session.amendments ?? []).filter(
+			(amendment) => amendment.runId === run.id,
+		),
 		nextFindingIdPrefix: findingIdPrefix(
 			assignment.featureId,
 			assignment.createdRevision,

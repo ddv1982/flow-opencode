@@ -31,6 +31,7 @@ function compact(
 		nextAction,
 		archiveRetry: null,
 		findingsDigest: [],
+		amendments: [],
 	};
 }
 

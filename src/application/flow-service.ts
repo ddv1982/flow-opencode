@@ -7,6 +7,7 @@ import type { FeatureRun, Session } from "../domain/session.js";
 import { featureKind } from "../domain/session.js";
 import { activeRun } from "../domain/session-queries.js";
 import {
+	amendPlan,
 	anchorRequest,
 	approvePlan,
 	completeFeature,
@@ -37,6 +38,7 @@ import {
 	FeatureCompleteInputSchema,
 	type FeatureCompleteRequest,
 	FeatureResetInputSchema,
+	PlanAmendInputSchema,
 	PlanApproveInputSchema,
 	PlanSaveInputSchema,
 	ReviewStartInputSchema,
@@ -97,6 +99,7 @@ export type FlowService = Readonly<{
 		input: unknown,
 		authority?: RequestAuthority,
 	): Promise<CompactMutationResponse>;
+	planAmend(input: unknown): Promise<CompactMutationResponse>;
 	runStart(
 		input: unknown,
 	): Promise<FlowResponse<MutationWorkflowData<ExecutionProjection>>>;
@@ -368,6 +371,22 @@ export function createFlowService(
 					Promise.resolve(approvePlan(session, request, authority)),
 				(result) => ({
 					summary: "Plan approved.",
+					projection: compactProjection(result.session),
+				}),
+				(request) => request.operationId,
+			);
+		},
+
+		planAmend(input) {
+			return mutate(
+				repository,
+				PlanAmendInputSchema,
+				input,
+				async ({ session, transaction }, request) =>
+					amendPlan(session, request, await transaction.computeSourceDigest()),
+				(result) => ({
+					summary:
+						"Bounded prerequisite amendment recorded for independent review.",
 					projection: compactProjection(result.session),
 				}),
 				(request) => request.operationId,

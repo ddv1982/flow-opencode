@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { SessionSchema } from "../src/application/schema.js";
-import { compactProjection } from "../src/application/session-projection.js";
+import {
+	compactProjection,
+	reviewerProjection,
+} from "../src/application/session-projection.js";
 import {
 	MAX_PLAN_FEATURES,
 	MAX_VALIDATIONS_PER_RUN,
@@ -22,6 +25,7 @@ import { firstBlockedRun, planGate } from "../src/domain/session.js";
 import { sessionInvariantIssues } from "../src/domain/session-invariants.js";
 import { sessionStatus } from "../src/domain/session-queries.js";
 import {
+	amendPlan,
 	approvePlan,
 	closeSession,
 	completeFeature,
@@ -59,6 +63,119 @@ function repositoryEvidence(command: string): EvidenceEntry[] {
 		},
 	];
 }
+
+describe("bounded prerequisite amendments", () => {
+	function failedGateSession(): Session {
+		const environment = deterministicEnvironment();
+		const saved = saveDraft(environment, {
+			plan: oneFeaturePlan([PROSE_VALIDATION]),
+		});
+		const running = begin(approve(saved), DELIVERY, environment);
+		return validate(running, {
+			id: "failed-canonical-gate",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 1,
+		});
+	}
+
+	function amendment(session: Session, operationId = "plan-amend-1") {
+		return {
+			operationId,
+			expectedRevision: session.revision,
+			featureId: DELIVERY,
+			validationId: "failed-canonical-gate",
+			reason: "The canonical suite reports a prerequisite failure.",
+			repair: "Stabilize the test setup before validating the delivery.",
+			targets: ["tests/setup.ts"],
+			sameGoal: true as const,
+			reversible: true as const,
+		};
+	}
+
+	test("records a same-goal repair without rewriting the approved plan and replays exactly", () => {
+		const session = failedGateSession();
+		const input = amendment(session);
+		const recorded = amendPlan(session, input, SOURCE_A);
+		expect(recorded.session.plan).toEqual(session.plan);
+		expect(recorded.session.goal).toBe(session.goal);
+		expect(recorded.session.amendments?.[0]?.validationId).toBe(
+			"failed-canonical-gate",
+		);
+		expect(recorded.session.amendments?.[0]?.runId).toBe(session.runs[0]?.id);
+		expect(recorded.session.operations.at(-1)?.kind).toBe("plan-amend");
+		expect(sessionInvariantIssues(recorded.session)).toEqual([]);
+		expect(SessionSchema.safeParse(recorded.session).success).toBe(true);
+		const passing = validate(recorded.session, {
+			id: "repaired-canonical-gate",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 0,
+		});
+		const reviewed = requestReview(
+			passing,
+			DELIVERY,
+			deterministicEnvironment(),
+		);
+		expect(
+			reviewerProjection(reviewed.session, reviewed.assignment.id).amendments,
+		).toEqual(recorded.session.amendments ?? []);
+		expect(
+			sessionInvariantIssues({ ...recorded.session, plan: null }),
+		).toContain("Plan amendments require an approved plan.");
+		const replay = amendPlan(recorded.session, input, SOURCE_B);
+		expect(replay.replayed).toBe(true);
+		expect(replay.session).toBe(recorded.session);
+	});
+
+	test("rejects stale source, weak attestations, and requests after independent review", () => {
+		const session = failedGateSession();
+		expect(() => amendPlan(session, amendment(session), SOURCE_B)).toThrow(
+			/current source/,
+		);
+		expect(() =>
+			amendPlan(
+				session,
+				{ ...amendment(session), sameGoal: false as never },
+				SOURCE_A,
+			),
+		).toThrow(/same-goal/);
+		const passing = validate(session, {
+			id: "passed-canonical-gate",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 0,
+		});
+		expect(() => amendPlan(passing, amendment(passing), SOURCE_A)).toThrow(
+			/current source/,
+		);
+		const withReview = requestReview(
+			passing,
+			DELIVERY,
+			deterministicEnvironment(),
+		).session;
+		expect(() =>
+			amendPlan(withReview, amendment(withReview), SOURCE_A),
+		).toThrow(/independent review/);
+	});
+
+	test("caps the session at three recorded amendments", () => {
+		let session = failedGateSession();
+		for (let index = 1; index <= 3; index++) {
+			session = amendPlan(
+				session,
+				amendment(session, `plan-amend-${index}`),
+				SOURCE_A,
+			).session;
+		}
+		expect(() =>
+			amendPlan(session, amendment(session, "plan-amend-4"), SOURCE_A),
+		).toThrow(/all three/);
+	});
+});
 
 function withExtraEvidence(
 	base: Plan,

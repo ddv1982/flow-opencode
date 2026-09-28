@@ -240,6 +240,7 @@ export type FeatureRun = Readonly<{
 
 export type OperationKind =
 	| "plan-save"
+	| "plan-amend"
 	| "plan-approve"
 	| "run-start"
 	| "review-start"
@@ -262,6 +263,19 @@ export type SessionClosure = Readonly<{
 	recordedRevision: number;
 }>;
 
+export type PlanAmendment = Readonly<{
+	operationId: string;
+	featureId: FeatureId;
+	runId: string;
+	validationId: string;
+	reason: string;
+	repair: string;
+	targets: string[];
+	sameGoal: true;
+	reversible: true;
+	recordedRevision: number;
+}>;
+
 /**
  * Session v5 is a deliberate hard cutover. Older active sessions must be
  * closed before upgrading; archived documents are inert history.
@@ -279,6 +293,7 @@ export type Session = Readonly<{
 		| undefined;
 	approval: "pending" | "approved";
 	plan: Plan | null;
+	amendments?: PlanAmendment[] | undefined;
 	runs: FeatureRun[];
 	operations: OperationRecord[];
 	closure: SessionClosure | null;

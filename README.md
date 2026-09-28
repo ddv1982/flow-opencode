@@ -155,10 +155,9 @@ you granted.
    with explicit limitations. Delivery grants no PR, merge, publish, or release
    authority.
 
-Findings keep stable ids across retries, and a failed review must carry every
-still-live finding forward — the runtime rejects a submission that drops one. A
-reviewer marks a finding as out of scope only when the repair would materially
-exceed the approved plan.
+Failed reviews retain finding ids; dropped live findings fail.
+`flow_plan_amend` records a bounded gate repair before review. The plan stays
+fixed; passing evidence and review still apply.
 
 ## Bounded parallelism
 
