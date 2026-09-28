@@ -1689,6 +1689,18 @@ describe("inspection-failed-audit-completes", () => {
 		).toEqual([]);
 	});
 
+	test("accepts a capitalized canonical command in the honest report", () => {
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({
+					finalText:
+						"Review complete. Bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved.",
+				}),
+			),
+		).toEqual([]);
+	});
+
 	test("allows the roadmap document to cite source paths", () => {
 		const given = recordedOutcome();
 		const firstCall = given.allCalls.at(0);
