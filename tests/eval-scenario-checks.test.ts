@@ -1758,6 +1758,22 @@ describe("inspection-failed-audit-completes", () => {
 		}
 	});
 
+	test("does not borrow actions from unrelated sections for labeled phases", () => {
+		const finding =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n";
+		for (const content of [
+			`${finding}## Phase 1\nTBD.\n\n## Notes\nAdd an inclusiveRangeLength regression test.\n\n## Phase 2\nInvestigate frontend:audit and rerun bun run verify.\n`,
+			`${finding}## Phase 1\nAdd an inclusiveRangeLength regression test.\n\n## Phase 2\nTBD.\n\n## Appendix\nInvestigate frontend:audit and rerun bun run verify.\n`,
+		]) {
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain("review document omitted a phased remediation plan");
+		}
+	});
+
 	test("accepts a capitalized canonical command in the honest report", () => {
 		expect(
 			check(

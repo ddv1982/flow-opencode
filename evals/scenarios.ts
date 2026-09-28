@@ -647,9 +647,14 @@ function inspectionDocumentHasPhases(content: string): boolean {
 	);
 	let actions: readonly [string, string] | null = null;
 	if (first && second) {
+		const firstTail = content.slice(
+			first.index + first[0].length,
+			second.index,
+		);
+		const secondTail = content.slice(second.index + second[0].length);
 		actions = [
-			`${first[2] ?? ""} ${content.slice(first.index + first[0].length, second.index)}`,
-			`${second[2] ?? ""} ${content.slice(second.index + second[0].length)}`,
+			`${first[2] ?? ""} ${firstTail.split(/\n#{1,6}\s+/)[0]}`,
+			`${second[2] ?? ""} ${secondTail.split(/\n#{1,6}\s+/)[0]}`,
 		];
 	} else {
 		const items = [...content.matchAll(/(?:^|\n)\s*(\d+)[.)]\s+([^\n]*)/g)];
