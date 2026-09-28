@@ -100,6 +100,99 @@ describe("Flow application runtime gates", () => {
 			"does not claim the command passed",
 		);
 	});
+	test("a focused same-command pass does not supersede an observed broad gate", async () => {
+		for (const exitCode of [0, 1]) {
+			const repository = new MemorySessionRepository();
+			const observedPlan: Plan = {
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+				evidence: [{ ...bunGate(), scope: "gate-observe", platform: "linux" }],
+			};
+			const flow = await approveSession(
+				repository,
+				deterministicEnvironment(),
+				{
+					plan: observedPlan,
+					suffix: `broad-then-focused-${exitCode}`,
+				},
+			);
+			await startFeatureRun(
+				flow,
+				repository,
+				FEATURE,
+				`broad-then-focused-${exitCode}`,
+			);
+			const broad = await recordObservedValidation(repository, {
+				captureId: `broad-${exitCode}`,
+				exitCode,
+			});
+			await recordObservedValidation(repository, {
+				captureId: `focused-${exitCode}`,
+				command: "bun test",
+				scope: "focused",
+				exitCode: 0,
+			});
+			const review = await flow.reviewStart({
+				request: {
+					operationId: `review-broad-then-focused-${exitCode}`,
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [],
+					packet: { summary: "Review observed audit.", riskLenses: [] },
+				},
+			});
+			expectOk(review);
+			expect(review.workflowData.projection).toMatchObject({
+				validations: [broad],
+			});
+		}
+	});
+	test("a later broad observation still supersedes the earlier observed gate", async () => {
+		const repository = new MemorySessionRepository();
+		const observedPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
+			evidence: [{ ...bunGate(), scope: "gate-observe", platform: "linux" }],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: observedPlan,
+			suffix: "later-broad",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "later-broad");
+		await recordObservedValidation(repository, {
+			captureId: "earlier-broad",
+			exitCode: 1,
+		});
+		await recordObservedValidation(repository, {
+			captureId: "between-focused",
+			command: "bun test",
+			scope: "focused",
+			exitCode: 0,
+		});
+		const latest = await recordObservedValidation(repository, {
+			captureId: "later-broad",
+			exitCode: 0,
+		});
+		const review = await flow.reviewStart({
+			request: {
+				operationId: "review-later-broad",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [],
+				packet: { summary: "Review latest observed audit.", riskLenses: [] },
+			},
+		});
+		expectOk(review);
+		expect(review.workflowData.projection).toMatchObject({
+			validations: [latest],
+		});
+	});
 	test("flow_plan_amend rejects a complete failed observed inspection gate", async () => {
 		const repository = new MemorySessionRepository();
 		const observedPlan: Plan = {

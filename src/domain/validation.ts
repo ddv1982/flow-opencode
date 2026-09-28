@@ -441,7 +441,10 @@ export function isValidationFresh(
 			session.runs
 				.filter((candidate) => candidate.featureId === run.featureId)
 				.flatMap((candidate) => candidate.validations)
-				.filter((candidate) => candidate.command === gate.command)
+				.filter(
+					(candidate) =>
+						candidate.command === gate.command && candidate.scope === "broad",
+				)
 				.at(-1)?.id === observation.id
 		);
 	return session.runs
