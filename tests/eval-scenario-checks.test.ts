@@ -1652,6 +1652,10 @@ describe("inspection-failed-audit-completes", () => {
 		});
 		return outcome({
 			archives: [document],
+			workspaceChanges: {
+				kind: "observed",
+				paths: ["docs/codebase-review.md"],
+			},
 			flowCalls: [
 				flowCall("flow_review_start"),
 				flowCall("flow_session_close"),
@@ -1718,6 +1722,45 @@ describe("inspection-failed-audit-completes", () => {
 				}),
 			),
 		).toEqual([]);
+	});
+
+	test("rejects Bash product edits omitted from the manager artifact list", () => {
+		const given = recordedOutcome();
+		const firstCall = given.allCalls.at(0);
+		if (!firstCall) throw new Error("Expected a host call.");
+		const issues = check(
+			"inspection-failed-audit-completes",
+			recordedOutcome({
+				allCalls: [
+					{
+						...firstCall,
+						tool: "bash",
+						input: { command: "printf changed > src/count.ts" },
+					},
+				],
+				workspaceChanges: {
+					kind: "observed",
+					paths: ["docs/codebase-review.md", "src/count.ts"],
+				},
+			}),
+		);
+		expect(issues).toContain(
+			"host workspace changes differ from the roadmap-only scope",
+		);
+	});
+
+	test("rejects unavailable host observation", () => {
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({
+					workspaceChanges: {
+						kind: "unavailable",
+						reason: "git-status-failed",
+					},
+				}),
+			),
+		).toContain("host workspace changes were unavailable");
 	});
 
 	test("rejects a write with no durable roadmap artifact", () => {

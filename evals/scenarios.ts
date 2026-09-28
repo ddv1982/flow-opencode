@@ -732,6 +732,14 @@ function inspectionAuditIssues(outcome: ScenarioGradeInput): string[] {
 	) {
 		issues.push("inspection recorded an out-of-scope changed artifact");
 	}
+	if (outcome.workspaceChanges?.kind !== "observed") {
+		issues.push("host workspace changes were unavailable");
+	} else if (
+		outcome.workspaceChanges.paths.length !== 1 ||
+		outcome.workspaceChanges.paths[0] !== "docs/codebase-review.md"
+	) {
+		issues.push("host workspace changes differ from the roadmap-only scope");
+	}
 	if (
 		!/21\s+high|21\s+sever|21\s+advisories/i.test(outcome.finalText) ||
 		!/bun run verify|frontend:audit/.test(outcome.finalText) ||

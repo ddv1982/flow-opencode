@@ -195,6 +195,7 @@ function inspectionAuditOutcome(): Outcome {
 				closure: { kind: "completed" },
 			},
 		],
+		workspaceChanges: { kind: "observed", paths: ["docs/codebase-review.md"] },
 		finalText:
 			"Review complete. bun run verify failed at frontend:audit with 21 high-severity advisories. The audit remains unresolved.",
 		tokens: { input: 0, output: 0, reasoning: 0, cacheRead: 0, cacheWrite: 0 },

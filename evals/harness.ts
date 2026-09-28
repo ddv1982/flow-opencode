@@ -14,13 +14,17 @@ import {
 
 import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { constants } from "node:fs";
 import {
 	chmod,
 	cp,
+	lstat,
 	mkdir,
 	mkdtemp,
+	open,
 	readdir,
 	readFile,
+	readlink,
 	realpath,
 	rename,
 	rm,
@@ -32,6 +36,7 @@ import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import packageJson from "../package.json" with { type: "json" };
 import { consumePaidDispatch } from "../scripts/paid-budget.js";
+import { isArtifactPath } from "../src/domain/artifact.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import { CampaignCancelled } from "./campaign-stop.js";
 import {
@@ -325,6 +330,7 @@ export type Outcome = {
 	readonly session: Record<string, unknown> | null;
 	/** Parsed documents under `.flow/history/`. */
 	readonly archives: readonly Record<string, unknown>[];
+	readonly workspaceChanges?: WorkspaceChangeObservation | undefined;
 	/** Final assistant text, for reporting only — never assert on wording. */
 	readonly finalText: string;
 	readonly tokens: {
@@ -352,6 +358,126 @@ export type Outcome = {
 	readonly providerError: AttemptFailure<"provider"> | null;
 	readonly providerErrorObservation?: ProviderErrorObservation | null;
 };
+
+export type WorkspaceChangeObservation =
+	| Readonly<{ kind: "observed"; paths: readonly string[] }>
+	| Readonly<{ kind: "unavailable"; reason: string }>;
+
+const HOST_INTERNAL_DIRS = new Set([
+	".git",
+	".flow",
+	".opencode",
+	"node_modules",
+]);
+const ROOT_GENERATED_DIRS = new Set([
+	"dist",
+	"build",
+	"coverage",
+	"test-results",
+	".next",
+	".turbo",
+	".cache",
+]);
+
+type WorkspaceEntry = Readonly<{
+	kind: "file" | "symlink";
+	mode: number;
+	identity: string;
+}>;
+export type WorkspaceSnapshot =
+	| Readonly<{ kind: "captured"; entries: ReadonlyMap<string, WorkspaceEntry> }>
+	| Readonly<{ kind: "unavailable"; reason: string }>;
+
+export async function captureWorkspaceSnapshot(
+	project: string,
+): Promise<WorkspaceSnapshot> {
+	const entries = new Map<string, WorkspaceEntry>();
+	let totalBytes = 0;
+	const visit = async (relative: string): Promise<void> => {
+		const directory = join(project, relative);
+		for (const item of await readdir(directory, { withFileTypes: true })) {
+			if (
+				HOST_INTERNAL_DIRS.has(item.name) ||
+				(relative === "" && ROOT_GENERATED_DIRS.has(item.name))
+			)
+				continue;
+			const path = relative ? `${relative}/${item.name}` : item.name;
+			if (!isArtifactPath(path) || entries.size >= 10_000)
+				throw new Error("invalid snapshot path");
+			const target = join(project, path);
+			const stat = await lstat(target);
+			if (stat.isDirectory()) {
+				await visit(path);
+				continue;
+			}
+			let identity: string;
+			let kind: WorkspaceEntry["kind"];
+			if (stat.isSymbolicLink()) {
+				kind = "symlink";
+				identity = await readlink(target);
+			} else if (stat.isFile()) {
+				kind = "file";
+				if (
+					stat.size > 32 * 1024 * 1024 ||
+					totalBytes + stat.size > 256 * 1024 * 1024
+				)
+					throw new Error("snapshot size limit");
+				const handle = await open(
+					target,
+					constants.O_RDONLY | constants.O_NOFOLLOW,
+				);
+				try {
+					const opened = await handle.stat();
+					if (!opened.isFile()) throw new Error("snapshot file changed kind");
+					const bytes = await handle.readFile();
+					if (
+						bytes.length > 32 * 1024 * 1024 ||
+						totalBytes + bytes.length > 256 * 1024 * 1024
+					)
+						throw new Error("snapshot size limit");
+					totalBytes += bytes.length;
+					identity = createHash("sha256").update(bytes).digest("hex");
+				} finally {
+					await handle.close();
+				}
+			} else {
+				throw new Error("unsupported snapshot entry");
+			}
+			entries.set(path, { kind, mode: stat.mode & 0o7777, identity });
+		}
+	};
+	try {
+		await visit("");
+		return { kind: "captured", entries };
+	} catch {
+		return { kind: "unavailable", reason: "workspace-snapshot-failed" };
+	}
+}
+
+export async function observeWorkspaceChanges(
+	project: string,
+	baseline: WorkspaceSnapshot,
+): Promise<WorkspaceChangeObservation> {
+	if (baseline.kind !== "captured")
+		return { kind: "unavailable", reason: baseline.reason };
+	const current = await captureWorkspaceSnapshot(project);
+	if (current.kind !== "captured")
+		return { kind: "unavailable", reason: current.reason };
+	const paths = [
+		...new Set([...baseline.entries.keys(), ...current.entries.keys()]),
+	]
+		.filter((path) => {
+			const before = baseline.entries.get(path);
+			const after = current.entries.get(path);
+			return (
+				before?.kind !== after?.kind ||
+				before?.mode !== after?.mode ||
+				before?.identity !== after?.identity
+			);
+		})
+		.sort();
+	return { kind: "observed", paths };
+}
 
 /**
  * One measurable claim about Flow, and everything needed to price it.
@@ -1392,6 +1518,7 @@ export type EvalReviewerOptions = Readonly<{
 
 export class EvalHost {
 	private server: ChildProcess | null = null;
+	private workspaceBaseline: WorkspaceSnapshot | null = null;
 	private serverLog = "";
 	private baseUrl = "";
 	/**
@@ -2034,6 +2161,7 @@ export class EvalHost {
 									? "copied-files-and-linux-process"
 									: "copied-files-and-direct-spawn",
 						};
+					host.workspaceBaseline = await captureWorkspaceSnapshot(project);
 					return host;
 				},
 			);
@@ -2770,6 +2898,13 @@ export class EvalHost {
 			guidanceLoads,
 			session,
 			archives,
+			workspaceChanges: await observeWorkspaceChanges(
+				this.project,
+				this.workspaceBaseline ?? {
+					kind: "unavailable",
+					reason: "workspace-baseline-unavailable",
+				},
+			),
 			finalText,
 			tokens,
 			usageAvailability:

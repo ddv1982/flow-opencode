@@ -443,6 +443,14 @@ export async function replayCassette(
 		const outcome: Outcome = {
 			allCalls: calls,
 			flowCalls: calls.filter((call) => call.tool.startsWith("flow_")),
+			...(cassette.scenario === "inspection-failed-audit-completes"
+				? {
+						workspaceChanges: {
+							kind: "unavailable" as const,
+							reason: "cassette-does-not-replay-file-effects",
+						},
+					}
+				: {}),
 			session: await readJson(join(workspace, ".flow", "session.json")),
 			archives: await readArchives(workspace),
 			finalText: cassette.finalText,

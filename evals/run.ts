@@ -1255,6 +1255,8 @@ export async function runCampaign(
 						// of 63 cassettes advisory, and every refusal scenario — the runs
 						// most worth gating — was among them.
 						if (outcome.providerError) fidelity.push("provider-error");
+						if (scenario.id === "inspection-failed-audit-completes")
+							fidelity.push("workspace-diff-unreplayed");
 						cassette = buildCassette({
 							flowVersion: packageJson.version,
 							scenario: scenario.id,
