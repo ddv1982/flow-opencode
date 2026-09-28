@@ -1,4 +1,5 @@
 import { dataNote } from "../../application/flow-response.js";
+import { PlanSaveInputSchema } from "../../application/schema.js";
 import type { AutoDriveCoordinator } from "./auto-drive.js";
 import type {
 	FlowLeadershipHandle,
@@ -100,7 +101,11 @@ export function guardTools(
 					const output = await definition.execute(...args);
 					const mutation = acceptedMutation(name, String(output));
 					const context = args[1];
-					if (mutation)
+					if (mutation) {
+						const saved =
+							name === "flow_plan_save"
+								? PlanSaveInputSchema.safeParse(args[0])
+								: null;
 						autoDrive.observeMutation(
 							context.sessionID,
 							mutation.revision,
@@ -109,7 +114,15 @@ export function guardTools(
 								: undefined,
 							context.messageID,
 							name === "flow_review_start",
+							saved?.success
+								? {
+										tool: name,
+										goal: saved.data.request.goal,
+										features: saved.data.request.plan.features,
+									}
+								: undefined,
 						);
+					}
 					return output;
 				},
 			},

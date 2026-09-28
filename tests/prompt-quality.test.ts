@@ -334,6 +334,16 @@ describe("Flow prompt structure", () => {
 			"controls timing, not scope",
 		);
 	});
+	test("executes inspection deliverables while stopping true plan-only requests", () => {
+		const auto = compileFlowPromptSurface("flow-auto");
+		expect(auto).toContain(
+			"Stop at planning only for a Flow-plan-only request",
+		);
+		expect(auto).toContain("execute inspection deliverables");
+		expect(getFlowGuidance("flow").content).toContain(
+			"inspection report or review-and-roadmap deliverable is work to execute",
+		);
+	});
 
 	test("gives manager guides paired continue vs new-scope examples", () => {
 		const swapped =

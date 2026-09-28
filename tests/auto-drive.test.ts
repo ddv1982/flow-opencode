@@ -20,10 +20,18 @@ function mutate(
 	created?: string,
 	parent = "command-message",
 	reviewerPending = false,
+	mutation?: { tool: string; goal: string; features: Array<{ kind?: string }> },
 ): void {
 	const id = `assistant-${++assistantSequence}`;
 	driver.observeHostMessage(host, { id, role: "assistant", parentID: parent });
-	driver.observeMutation(host, revision, created, id, reviewerPending);
+	driver.observeMutation(
+		host,
+		revision,
+		created,
+		id,
+		reviewerPending,
+		mutation,
+	);
 }
 function compact(
 	driver: AutoDriveCoordinator,
@@ -81,8 +89,9 @@ function harness(initial: AutoDriveProjection) {
 			sessionID = "host-1",
 			delivery = DELIVERY,
 			messageId = "command-message",
+			goal = "",
 		) {
-			const metadata = await driver.activate(sessionID);
+			const metadata = await driver.activate(sessionID, goal);
 			await driver.observeMessage(
 				sessionID,
 				delivery,
@@ -2213,5 +2222,180 @@ describe("Flow auto-drive coordinator", () => {
 			"unrelated-after-drop",
 		);
 		expect(dropped.driver.compactionContext("host-1")).toBeNull();
+	});
+});
+
+describe("own inspection draft approval", () => {
+	test("prompts once for an accepted same-host, exact-goal inspect draft", async () => {
+		const state = harness({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await state.activate(
+			"host-1",
+			DELIVERY,
+			"command-message",
+			"Review codebase",
+		);
+		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
+			tool: "flow_plan_save",
+			goal: "Review codebase",
+			features: [{ kind: "inspect" }],
+		});
+		state.setProjection({
+			sessionId: "flow-1",
+			status: "planning",
+			revision: 1,
+			nextAction: "flow_plan_approve",
+		});
+		await state.driver.onIdle("host-1");
+		expect(state.prompts.at(-1)?.text).toContain("Approve this one draft");
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		const metadata = state.prompts[0]?.metadata;
+		if (!metadata) throw new Error("Expected approval prompt.");
+		await state.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ synthetic: true, metadata }],
+			"approval-message",
+		);
+		mutate(state.driver, "host-1", 2, undefined, "approval-message");
+		state.setProjection({
+			sessionId: "flow-1",
+			status: "ready",
+			revision: 2,
+			nextAction: "flow_run_start",
+		});
+		await state.driver.onIdle("host-1");
+		expect(state.prompts.at(-1)?.text).toContain(
+			"Continue the same user-authorized /flow-auto lifecycle",
+		);
+	});
+	test("does not approve an existing, changed, revised, or paraphrased draft", async () => {
+		for (const variant of [
+			"existing",
+			"change",
+			"revised",
+			"paraphrase",
+		] as const) {
+			const existing = variant === "existing";
+			const state = harness(
+				existing
+					? {
+							sessionId: "flow-1",
+							status: "planning",
+							revision: 1,
+							nextAction: "flow_plan_approve",
+						}
+					: { status: "idle", revision: 0, nextAction: "flow_plan_save" },
+			);
+			await state.activate(
+				"host-1",
+				DELIVERY,
+				"command-message",
+				"Review codebase",
+			);
+			if (!existing)
+				mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
+					tool: "flow_plan_save",
+					goal:
+						variant === "paraphrase"
+							? "Review the codebase"
+							: "Review codebase",
+					features: [{ kind: variant === "change" ? "change" : "inspect" }],
+				});
+			state.setProjection({
+				sessionId: "flow-1",
+				status: "planning",
+				revision: variant === "revised" ? 2 : 1,
+				nextAction: "flow_plan_approve",
+			});
+			await state.driver.onIdle("host-1");
+			expect(
+				state.prompts.some((prompt) =>
+					prompt.text.includes("Approve this one draft"),
+				),
+			).toBe(false);
+		}
+	});
+	test("does not auto-approve after a real user interruption", async () => {
+		const state = harness({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await state.activate(
+			"host-1",
+			DELIVERY,
+			"command-message",
+			"Review codebase",
+		);
+		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
+			tool: "flow_plan_save",
+			goal: "Review codebase",
+			features: [{ kind: "inspect" }],
+		});
+		state.setProjection({
+			sessionId: "flow-1",
+			status: "planning",
+			revision: 1,
+			nextAction: "flow_plan_approve",
+		});
+		await state.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ text: "Change the plan." }],
+			"interruption",
+		);
+		await state.driver.onIdle("host-1");
+		expect(
+			state.prompts.some((prompt) =>
+				prompt.text.includes("Approve this one draft"),
+			),
+		).toBe(false);
+	});
+	test("revokes a queued approval continuation when the user interrupts", async () => {
+		const state = harness({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await state.activate(
+			"host-1",
+			DELIVERY,
+			"command-message",
+			"Review codebase",
+		);
+		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
+			tool: "flow_plan_save",
+			goal: "Review codebase",
+			features: [{ kind: "inspect" }],
+		});
+		state.setProjection({
+			sessionId: "flow-1",
+			status: "planning",
+			revision: 1,
+			nextAction: "flow_plan_approve",
+		});
+		await state.driver.onIdle("host-1");
+		const metadata = state.prompts.at(-1)?.metadata;
+		if (!metadata) throw new Error("Expected approval prompt.");
+		await state.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ text: "Change the plan." }],
+			"user-interruption",
+		);
+		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(
+			await state.driver.observeMessage(
+				"host-1",
+				DELIVERY,
+				[{ synthetic: true, metadata }],
+				"late-approval",
+			),
+		).toBe("stale-continuation");
 	});
 });

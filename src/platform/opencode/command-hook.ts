@@ -171,7 +171,7 @@ export function createCommandHook(
 				if (!continuing) autoDrive.deactivate(input.sessionID);
 				return;
 			}
-			const metadata = await autoDrive.activate(input.sessionID);
+			const metadata = await autoDrive.activate(input.sessionID, parsed.goal);
 			assertCurrent();
 			if (autoDrive.continuationSupport() === "unsupported") {
 				output.parts.unshift(
