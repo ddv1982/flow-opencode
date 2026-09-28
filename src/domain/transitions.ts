@@ -208,10 +208,10 @@ function assertDeclaredEvidence(plan: Plan): void {
 			'A saved plan must declare `evidence`: one `scope: "gate"` command that validates the whole repository, plus every extra observation this host may be unable to produce. Extra entries may be an empty list when the goal is fully observable here.',
 		);
 	}
-	const gates = planEvidence(plan).filter((entry) => entry.scope === "gate");
+	const gates = planEvidence(plan).filter((entry) => entry.scope !== "extra");
 	if (gates.length !== 1) {
 		fail(
-			'A saved plan must declare exactly one `evidence` entry with `scope: "gate"`: the exact canonical command every broad observation then has to run.',
+			'A saved plan must declare exactly one `evidence` entry with `scope: "gate"` (or `gate-observe` for an all-inspect plan): the exact canonical command every broad observation then has to run.',
 		);
 	}
 	if (plan.evidence.some((entry) => entry.platform === undefined)) {
@@ -371,6 +371,10 @@ export function amendPlan(
 	input: PlanAmendInput,
 	currentSourceDigest: SourceDigest,
 ): MutationResult<PlanAmendment> {
+	if (session.plan?.evidence?.some((entry) => entry.scope === "gate-observe"))
+		fail(
+			"An observed inspection gate cannot authorize a prerequisite repair amendment.",
+		);
 	const replay = existingOperation(
 		session,
 		"plan-amend",
@@ -612,20 +616,31 @@ export function startReview(
 		input.sourceDigest,
 	);
 	if (readiness.kind === "vetoed") {
+		const observedGate = session.plan?.evidence?.find(
+			(entry) => entry.scope === "gate-observe",
+		);
 		fail(
-			`Review requires passing these exact commands for the current workspace content: ${readiness.commands.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
+			`Review requires ${observedGate && readiness.commands.includes(observedGate.command) ? "an accepted observation of" : "passing"} these exact commands for the current workspace content: ${readiness.commands.map((command) => JSON.stringify(command)).join(", ")}. A different command cannot discharge one that failed.`,
 		);
 	}
 	if (readiness.kind === "needs-validation") {
+		const observedGate = session.plan?.evidence?.some(
+			(entry) => entry.scope === "gate-observe",
+		);
 		fail(
 			readiness.reviewKind === "final"
-				? "Final review requires passing broad validation for the current workspace content."
+				? observedGate
+					? "Final review requires a complete broad gate observation for the current workspace content."
+					: "Final review requires passing broad validation for the current workspace content."
 				: "Review requires passing validation for the current workspace content.",
 		);
 	}
 	if (readiness.kind === "evidence-unsatisfied") {
+		const observedGate = readiness.entries.some(
+			(entry) => entry.scope === "gate-observe",
+		);
 		fail(
-			`Final review requires the plan's declared evidence to pass for the current workspace content: ${readiness.entries
+			`Final review requires the plan's declared evidence to ${observedGate ? "be accepted" : "pass"} for the current workspace content: ${readiness.entries
 				.map((entry) => evidenceRefusal(session, entry, input.sourceDigest))
 				.join(
 					", ",

@@ -521,6 +521,175 @@ describe("command preflight", () => {
 });
 
 describe("flow-auto host continuation", () => {
+	for (const [kind, goal, expectedApproval] of [
+		[
+			"new-anchor",
+			"Review codebase, then create a phased plan with case named `audit finding`",
+			true,
+		],
+		[
+			"new-anchor",
+			"Audit codebase with case named `audit finding` and produce a roadmap",
+			true,
+		],
+		[
+			"uncertain",
+			"Review codebase and improve architecture with case named `audit finding`",
+			false,
+		],
+		[
+			"uncertain",
+			"Review codebase and build a dashboard with case named `audit finding`",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review codebase with case named `audit finding`, create a phased plan, then improve architecture",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review codebase with case named `audit finding`, create a phased plan, then build a dashboard",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review the codebase with case named `audit finding`, then implement the fixes",
+			false,
+		],
+		[
+			"mixed-work",
+			"Review case named `audit finding`, then repair the defects and update dependencies",
+			false,
+		],
+		[
+			"preexisting-anchor",
+			"Review codebase with case named `audit finding`",
+			false,
+		],
+		[
+			"plan-only",
+			"Just draft a Flow plan for case named `audit finding`",
+			false,
+		],
+		["plan-only", "I only want a plan for case named `audit finding`", false],
+		["plan-only", "Just give me a plan for case named `audit finding`", false],
+		[
+			"review-without-implementation",
+			"Review case named `audit finding`, then create a roadmap; do not implement yet",
+			true,
+		],
+		[
+			"review-without-implementation",
+			"Review the codebase and create a phased plan for case named `audit finding`; stop before implementation",
+			true,
+		],
+		[
+			"plan-only",
+			"Just create a phased plan for case named `audit finding`, then implement the improvements",
+			false,
+		],
+		["uncertain", "Create a phased plan for case named `audit finding`", false],
+		[
+			"uncertain",
+			"Create a Flow plan for reviewing the codebase later with case named `audit finding`",
+			false,
+		],
+		[
+			"uncertain",
+			"Create a Flow plan for review of the codebase later with case named `audit finding`",
+			false,
+		],
+		["plan-only", "Review case named `audit finding`; do not run", false],
+		[
+			"plan-only",
+			"Review case named `audit finding`; wait for approval",
+			false,
+		],
+	] as const) {
+		test(`inspect approval for ${kind}: ${goal}`, async () => {
+			const workspace = await createTestWorkspace("flow-auto-inspect-anchor-");
+			const prompts: unknown[] = [];
+			const hooks = await loadPlugin(workspace, workspace, prompts);
+			const before = hooks["command.execute.before"];
+			const chat = hooks["chat.message"];
+			const save = hooks.tool?.flow_plan_save;
+			const status = hooks.tool?.flow_status;
+			if (!before || !chat || !save || !status || !hooks.event)
+				throw new Error("Missing Flow hooks.");
+			const output = () =>
+				({ parts: [{ type: "text", text: "stale" }] }) as unknown as Parameters<
+					typeof before
+				>[1];
+			if (kind === "preexisting-anchor")
+				await before(
+					{ command: "flow-plan", sessionID: "inspect-host", arguments: goal },
+					output(),
+				);
+			const commandOutput = output();
+			await before(
+				{ command: "flow-auto", sessionID: "inspect-host", arguments: goal },
+				commandOutput,
+			);
+			const provisional = JSON.parse(
+				String(
+					await status.execute(
+						{ request: { view: "compact" } },
+						toolContext(workspace, "inspect-host"),
+					),
+				),
+			);
+			expect(provisional.workflowData.projection).toMatchObject({
+				status: "planning",
+				revision: 0,
+				goal,
+			});
+			const provisionalId = provisional.workflowData.projection.sessionId;
+			await chat({ sessionID: "inspect-host" }, {
+				message: {
+					id: "inspect-command",
+					agent: "build",
+					model: { providerID: "provider", modelID: "model" },
+				},
+				parts: commandOutput.parts,
+			} as unknown as Parameters<typeof chat>[1]);
+			await emitAssistant(hooks, "inspect-host", "inspect-command");
+			const inspectPlan = {
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect" as const,
+				})),
+			};
+			const saved = JSON.parse(
+				String(
+					await save.execute(
+						{
+							request: {
+								operationId: `inspect-save-${kind}`,
+								expectedRevision: 0,
+								goal,
+								plan: inspectPlan,
+							},
+						},
+						toolContext(workspace, "inspect-host", "inspect-command"),
+					),
+				),
+			);
+			expect(saved.status).toBe("ok");
+			expect(saved.workflowData.projection.sessionId).toBe(provisionalId);
+			await hooks.event({
+				event: {
+					type: "session.idle",
+					properties: { sessionID: "inspect-host" },
+				},
+			} as Parameters<NonNullable<typeof hooks.event>>[0]);
+			const approvalPrompts = prompts.filter((call) =>
+				JSON.stringify(call).includes("Approve this one draft"),
+			);
+			expect(approvalPrompts.length, kind).toBe(Number(expectedApproval));
+		});
+	}
 	test("binds an explicitly named acceptance case to its originating host", async () => {
 		const workspace = await createTestWorkspace("flow-request-anchor-");
 		const hooks = await loadPlugin(workspace);

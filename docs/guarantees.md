@@ -25,15 +25,19 @@ model judgments. Each tier names what can fail.
 - Only the reserved `flow-reviewer` identity may submit a new review result.
 - A failed verdict needs a blocking finding; a passing verdict cannot carry one.
 - A failed review must carry every still-live prior finding id forward.
-- Review is refused while a vetoed command's latest evidence is not a pass:
-  any command an observation claimed at `broad` scope, any command whose bytes
-  match the feature's plan-listed validation, and the plan's gate command.
+- Review is refused while a vetoed command lacks a fresh accepted observation:
+  any command observed at `broad` scope, the feature's plan-listed validation,
+  and the plan's gate command. Acceptance requires a pass except for an
+  all-inspect plan's `gate-observe` command.
 - A `broad` observation must run the plan's gate command byte-for-byte, and may
   not select which tests it runs.
-- Final review requires a passing broad observation for current source.
-- Final review and `completed` closure are refused while any `plan.evidence`
-  entry has not passed on the OS that entry declared. Feature reviews are not,
-  so a goal can be split into the half this host can prove and the half it cannot.
+- Final review requires a broad observation for current source. A `gate` must
+  pass. An all-inspect plan may use `gate-observe` to accept its latest complete
+  broad observation on the declared OS with a known exit code, even if nonzero.
+- Final review and `completed` closure require every `plan.evidence` entry to
+  be satisfied on its declared OS. `gate-observe` uses the observation rule above;
+  `gate` and `extra` still require a pass. Feature reviews do not require every
+  entry, so a goal can split by what this host can prove.
 - One revision per accepted mutation; an operation id replays exactly or conflicts.
   Validation observations replay by capture id, not operation id.
 - Every mutation validates the whole schema and writes atomically under one
@@ -81,7 +85,7 @@ The runtime cannot enforce these judgments. Read the review before trusting its 
   manager's model; independence rests on structure alone.
 - **Evidence completeness.** Whether an entry names the requested observation,
   a suitable command, and the required platform. Plan approval and review judge
-  fitness. The runtime checks that the declared command passed on the declared OS.
+  fitness. The runtime checks passage or accepted `gate-observe` on the declared OS.
 - **Scope discipline.** That implementation stayed inside the approved plan, and
   that a worker wave respected its assigned paths.
 - **Honest reporting.** That the closing summary matches what happened.

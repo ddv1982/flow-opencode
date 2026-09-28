@@ -90,7 +90,7 @@ export type FlowService = Readonly<{
 	requestAnchor(input: {
 		goal: string;
 		evidence: RequestEvidenceAnchor;
-	}): Promise<void>;
+	}): Promise<string | null>;
 	planSave(
 		input: unknown,
 		authority?: RequestAuthority,
@@ -215,10 +215,12 @@ export function createFlowService(
 ): FlowService {
 	return {
 		async requestAnchor(input) {
-			await repository.transact(async (transaction) => {
+			return repository.transact(async (transaction) => {
 				const current = await transaction.load();
 				const anchored = anchorRequest(current, input, environment);
-				if (anchored !== current) await transaction.save(anchored);
+				if (anchored === current) return null;
+				await transaction.save(anchored);
+				return anchored.id;
 			});
 		},
 		async status(input) {

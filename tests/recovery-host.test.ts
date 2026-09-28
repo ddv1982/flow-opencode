@@ -325,6 +325,7 @@ test("overlapping command setup cannot revive or revoke a newer invocation", asy
 					await barrier;
 					throw new Error("old anchor failed");
 				}
+				return null;
 			},
 		};
 		const recovery = new RecoveryController(unavailable);
@@ -407,6 +408,7 @@ test("same-host stop invalidates a pending request-anchor setup", async () => {
 		requestAnchor: async () => {
 			entered();
 			await barrier;
+			return null;
 		},
 	};
 	const recovery = new RecoveryController(unavailable);

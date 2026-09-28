@@ -101,30 +101,32 @@ Flow records the host observation; copy no host-observed fields.
 
 `scope: "broad"` runs the plan's gate evidence command and nothing else.
 
-For a complete failed broad gate before review, use `flow_plan_amend` for a
+For a complete failed broad gate that requires `pass` before review, use `flow_plan_amend` for a
 reversible same-goal prerequisite. Supply the validation id, reason, repair,
 targets, and truthful attestations. Keep the plan and gate fixed, rerun the
 gate, and review the diff. New outcomes, reviewer scope blockers, and missing
 environment evidence still stop.
 
 A gate that cannot pass must first name the failing case or output that blocks
-it. If the bounded amendment rule above does not apply, leave this exact
+it for `scope: "gate"`. If the bounded amendment rule above does not apply, leave this exact
 handoff before returning:
 `Environment: <declared environment>`, `Command: <exact planned command>`, and
 `Next step: Run this command there and resume Flow, or choose defer/abandon.`
 
 Every host-observed validation advances revision. The `[flow-validation]`
 marker reports `passed`, `recordedRevision`, and declared `assertions`. Use
-`recordedRevision` for the next `flow_validation_start`, or for
-`flow_review_start` only when `passed: true`. If the marker is absent, refresh
-compact status before mutating.
+`recordedRevision` for the next `flow_validation_start`. An all-inspect plan
+whose gate declares `scope: "gate-observe"` may continue after `passed: false`
+only when `flow_status` projects `flow_review_start`; put the exit code and
+failure in the review packet. Otherwise require `passed: true`. If the marker
+is absent, refresh compact status before mutating.
 
 For the final feature, run the plan's gate command at broad scope after the
 last relevant edit.
 
 ## Review
 
-After successful applicable validation, call `flow_review_start` with a fresh
+After applicable validation is accepted by Flow, call `flow_review_start` with a fresh
 operation id, current revision, feature id, `artifactsChanged`, and a bounded
 packet. Compare current state with the captured baseline for the complete feature
 diff. In its summary, report additions, modifications, deletions, renames, types,

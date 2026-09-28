@@ -7,6 +7,10 @@ import {
 	isPendingReviewer,
 } from "./auto-drive-decision.js";
 export const FLOW_AUTO_METADATA_KEY = "opencode-plugin-flow/auto";
+export type AutoGoalIntent =
+	| "inspection-deliverable"
+	| "plan-only"
+	| "uncertain";
 export interface AutoDriveProjection {
 	readonly sessionId?: string | undefined;
 	readonly status: string;
@@ -70,6 +74,9 @@ export interface AutoTimingSnapshot {
 /** The single in-memory continuation lease; nothing here is durable. */
 type Lease = {
 	hostSessionId: string;
+	requestGoal: string;
+	newlyAnchoredSessionId: string | null;
+	intent: AutoGoalIntent;
 	token: string;
 	baseline: AutoDriveProjection | null;
 	delivery: AutoDriveDelivery | null;
@@ -85,6 +92,11 @@ type Lease = {
 	lastAssistantParent: string | null;
 	compaction: Compaction | null;
 	manualContinuation: { revision: number } | null;
+	ownInspectDraft: {
+		sessionId: string;
+		revision: number;
+		prompted: boolean;
+	} | null;
 };
 type TimingField = "state" | "activeMs" | "waitingForUserMs";
 type Timing = {
@@ -220,7 +232,14 @@ export class AutoDriveCoordinator {
 			return null;
 		}
 	}
-	async activate(hostSessionId: string): Promise<Record<string, unknown>> {
+	async activate(
+		hostSessionId: string,
+		requestGoal = "",
+		options: Readonly<{
+			newlyAnchoredSessionId?: string | null;
+			intent?: AutoGoalIntent;
+		}> = {},
+	): Promise<Record<string, unknown>> {
 		const token = this.#options.createToken?.() ?? crypto.randomUUID();
 		this.#timing = {
 			state: "active",
@@ -230,6 +249,9 @@ export class AutoDriveCoordinator {
 		};
 		this.#lease = {
 			hostSessionId,
+			requestGoal,
+			newlyAnchoredSessionId: options.newlyAnchoredSessionId ?? null,
+			intent: options.intent ?? "uncertain",
 			token,
 			baseline: null,
 			delivery: null,
@@ -244,6 +266,7 @@ export class AutoDriveCoordinator {
 			lastAssistantParent: null,
 			compaction: null,
 			manualContinuation: null,
+			ownInspectDraft: null,
 		};
 		const lease = this.#lease;
 		const baseline = await this.#read(lease);
@@ -324,6 +347,11 @@ export class AutoDriveCoordinator {
 		}
 		if (lease?.hostSessionId !== hostSessionId || !message.user)
 			return "accepted";
+		if (lease.ownInspectDraft?.prompted) {
+			this.deactivate(hostSessionId);
+			return "accepted";
+		}
+		lease.ownInspectDraft = null;
 		if (lease.checkpoint?.answered || lease.pendingReply) {
 			this.deactivate(hostSessionId);
 			return "accepted";
@@ -410,6 +438,11 @@ export class AutoDriveCoordinator {
 		created: string | undefined,
 		assistantId: string,
 		reviewerPending: boolean,
+		mutation?: Readonly<{
+			tool: string;
+			goal: string;
+			features: ReadonlyArray<Readonly<{ kind?: string | undefined }>>;
+		}>,
 	): void {
 		const lease = this.#lease;
 		if (lease?.hostSessionId !== host || !lease.messageId) return;
@@ -417,6 +450,27 @@ export class AutoDriveCoordinator {
 		if (origin === undefined) return void this.#rejectOrigin(lease, "mutation");
 		if (origin !== lease.messageId) return;
 		const baseline = lease.baseline;
+		const freshIdle =
+			baseline?.status === "idle" && baseline.sessionId === undefined;
+		const freshAnchor =
+			lease.newlyAnchoredSessionId !== null &&
+			baseline?.status === "planning" &&
+			baseline.revision === 0 &&
+			baseline.nextAction === "flow_plan_save" &&
+			baseline.sessionId === lease.newlyAnchoredSessionId;
+		if (
+			(freshIdle || freshAnchor) &&
+			lease.intent === "inspection-deliverable" &&
+			created &&
+			(!freshAnchor || created === lease.newlyAnchoredSessionId) &&
+			revision === 1 &&
+			mutation?.tool === "flow_plan_save" &&
+			lease.requestGoal.trim().length > 0 &&
+			mutation.goal === lease.requestGoal.trim() &&
+			mutation.features.length > 0 &&
+			mutation.features.every((feature) => feature.kind === "inspect")
+		)
+			lease.ownInspectDraft = { sessionId: created, revision, prompted: false };
 		if (baseline && baseline.sessionId === undefined && created)
 			lease.baseline = { ...baseline, sessionId: created };
 		const point = lease.checkpoint;
@@ -485,6 +539,35 @@ export class AutoDriveCoordinator {
 					return;
 				}
 				lease.manualContinuation = null;
+			}
+			const draft = lease.ownInspectDraft;
+			if (
+				draft &&
+				!draft.prompted &&
+				!lease.pendingReply &&
+				projection.sessionId === draft.sessionId &&
+				projection.revision === draft.revision &&
+				projection.status === "planning" &&
+				projection.nextAction === "flow_plan_approve" &&
+				lease.delivery
+			) {
+				draft.prompted = true;
+				lease.messageId = null;
+				lease.inFlight = "prompt";
+				try {
+					await this.#options.prompt(
+						hostSessionId,
+						`The accepted draft belongs to this /flow-auto invocation, keeps its exact goal, and contains only inspect features. Approve this one draft, then continue the ordinary Flow lifecycle. Do not edit product files.\n\n${FLOW_MANAGER_KERNEL}`,
+						lease.delivery,
+						{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+					);
+				} catch (error) {
+					this.#stop(
+						lease,
+						`Flow inspection approval prompt failed: ${String(error)}`,
+					);
+				}
+				return;
 			}
 			const decision: IdleDecision = decideOnIdle(
 				{

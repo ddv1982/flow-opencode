@@ -87,6 +87,37 @@ function session(observations: ValidationObservation[]): Session {
 }
 
 describe("evidenceStatus", () => {
+	test("a failed observed gate does not satisfy a same-command extra assertion", () => {
+		const extra: EvidenceEntry = {
+			...entry,
+			scope: "extra",
+			requirement: "Named case passes",
+		};
+		const failed = observation({ exitCode: 1 });
+		const observedGate: EvidenceEntry = {
+			...entry,
+			scope: "gate-observe",
+			assertions: [],
+		};
+		const s = session([failed]);
+		if (!s.plan) throw new Error("Expected plan.");
+		const inspect: Session = {
+			...s,
+			plan: {
+				...s.plan,
+				features: s.plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+				evidence: [observedGate, extra],
+			},
+		};
+		expect(evidenceStatus(inspect, observedGate, SOURCE_A).kind).toBe(
+			"satisfied",
+		);
+		expect(evidenceStatus(inspect, extra, SOURCE_A).kind).toBe("missing");
+		expect(unsatisfiedEvidence(inspect, SOURCE_A)).toEqual([extra]);
+	});
 	test("is satisfied by a passing observation on the declared host with the declared cases", () => {
 		const s = session([observation({})]);
 		expect(evidenceStatus(s, entry, SOURCE_A)).toEqual({

@@ -68,6 +68,26 @@ export function isValidationEligible(
 	);
 }
 
+export function isAcceptedValidation(
+	session: Session,
+	observation: ValidationObservation,
+	sourceDigest?: SourceDigest,
+): boolean {
+	const gate = planEvidence(session.plan).find(
+		(entry) => entry.scope === "gate-observe",
+	);
+	if (!gate || observation.command !== gate.command)
+		return isValidationEligible(observation, sourceDigest);
+	return (
+		observation.scope === "broad" &&
+		observation.exitCode !== null &&
+		observation.outputComplete &&
+		observation.ineligibleReason === undefined &&
+		isObservedOnDeclaredPlatform(gate, observation) &&
+		(sourceDigest === undefined || observation.sourceDigest === sourceDigest)
+	);
+}
+
 /** Explicit file/name filters contradict a `broad` claim (ADR 0009). */
 const NARROWING_FLAGS = new Set([
 	"-t",
@@ -310,14 +330,21 @@ export function evidenceStatus(
 	entry: EvidenceEntry,
 	sourceDigest?: SourceDigest,
 ): EvidenceStatus {
-	const eligible = session.runs
+	const matching = session.runs
 		.flatMap((run) => run.validations)
 		.filter(
 			(observation) =>
 				observation.command === entry.command &&
-				isObservedAtDeclaredPath(entry, observation) &&
-				isValidationEligible(observation, sourceDigest),
+				(entry.scope !== "gate-observe" || observation.scope === "broad") &&
+				isObservedAtDeclaredPath(entry, observation),
 		);
+	const candidates =
+		entry.scope === "gate-observe" ? matching.slice(-1) : matching;
+	const eligible = candidates.filter((observation) =>
+		entry.scope === "gate-observe"
+			? isAcceptedValidation(session, observation, sourceDigest)
+			: isValidationEligible(observation, sourceDigest),
+	);
 	const onHost = eligible.filter((observation) =>
 		isObservedOnDeclaredPlatform(entry, observation),
 	);
@@ -338,9 +365,20 @@ export function evidenceStatus(
 		)
 		.filter((names) => names.length > 0)
 		.at(-1);
+	const wrongHostCandidates =
+		entry.scope === "gate-observe"
+			? candidates.filter(
+					(observation) =>
+						observation.exitCode !== null &&
+						observation.outputComplete &&
+						observation.ineligibleReason === undefined &&
+						(sourceDigest === undefined ||
+							observation.sourceDigest === sourceDigest),
+				)
+			: eligible;
 	const wrongHosts = [
 		...new Set(
-			eligible
+			wrongHostCandidates
 				.filter(
 					(observation) => !isObservedOnDeclaredPlatform(entry, observation),
 				)
@@ -371,7 +409,9 @@ export function evidenceRefusal(
 			: `${entry.environment} on ${entry.platform}`;
 	const detail =
 		status.kind === "wrong-host"
-			? `passed on ${status.hosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
+			? entry.scope === "gate-observe"
+				? `observed on ${status.hosts.join(", ")} but this entry declares ${entry.platform}`
+				: `passed on ${status.hosts.join(", ")} but this entry declares ${entry.platform}, so that run observed something else — a skipped case exits zero too`
 			: status.kind === "unmet-cases"
 				? `passed on ${entry.platform ?? "the declared host"} but reported no passing result for ${status.cases.join(", ")}; rerun the exact approved command so ${commandUsesManagedJUnitPath(entry.command) ? MANAGED_JUNIT_PATH : "a fresh resultsPath"} reports those cases passing`
 				: `needs ${needs}`;
@@ -393,13 +433,27 @@ export function isValidationFresh(
 	run: FeatureRun,
 	observation: ValidationObservation,
 ): boolean {
+	const gate = planEvidence(session.plan).find(
+		(entry) => entry.scope === "gate-observe",
+	);
+	if (gate && observation.command === gate.command)
+		return (
+			session.runs
+				.filter((candidate) => candidate.featureId === run.featureId)
+				.flatMap((candidate) => candidate.validations)
+				.filter(
+					(candidate) =>
+						candidate.command === gate.command && candidate.scope === "broad",
+				)
+				.at(-1)?.id === observation.id
+		);
 	return session.runs
 		.filter((candidate) => candidate.featureId === run.featureId)
 		.flatMap((candidate) => candidate.validations)
 		.every(
 			(candidate) =>
 				candidate.command !== observation.command ||
-				isValidationEligible(candidate) ||
+				isAcceptedValidation(session, candidate) ||
 				candidate.recordedRevision < observation.recordedRevision,
 		);
 }
@@ -422,7 +476,7 @@ export function unresolvedVetoedCommands(
 	const failed = session.runs
 		.filter((candidate) => candidate.featureId === run.featureId)
 		.flatMap((candidate) => candidate.validations)
-		.filter((observation) => !isValidationEligible(observation));
+		.filter((observation) => !isAcceptedValidation(session, observation));
 	const commands = [
 		...new Set(
 			failed
@@ -439,7 +493,7 @@ export function unresolvedVetoedCommands(
 			!run.validations.some(
 				(observation) =>
 					observation.command === command &&
-					isValidationEligible(observation, sourceDigest) &&
+					isAcceptedValidation(session, observation, sourceDigest) &&
 					isValidationFresh(session, run, observation),
 			),
 	);

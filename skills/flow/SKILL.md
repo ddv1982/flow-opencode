@@ -38,7 +38,12 @@ never silently fall back.
 2. For a plan-only request with an approved same-goal session, read detail once,
    report the immutable plan and progress, and stop.
 3. With no session or a draft, load `flow_guidance { id: "flow-plan" }`; stop
-   after planning if implementation was not authorized.
+   after planning only when the request solely asks for a Flow plan. An
+   inspection report or review-and-roadmap deliverable is work to execute
+   within the original scope.
+   For a new `/flow-auto` session, save the exact command goal as the Flow goal.
+   An accepted same-host, all-inspect draft may receive one runtime approval
+   continuation; an existing or changed draft still waits for user direction.
 4. For an approved ready, running, or blocked feature, load
    `flow_guidance { id: "flow-run" }` and follow it for exactly that feature.
 5. After `flow-run`, reload compact status. Route blocked outcomes through the

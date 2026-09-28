@@ -148,6 +148,11 @@ describe("assurance projection", () => {
 			...session,
 			plan: {
 				...session.plan,
+				evidence: session.plan.evidence?.map((entry) => ({
+					...entry,
+					scope: "gate-observe",
+					assertions: [],
+				})),
 				features: session.plan.features.map((feature) => ({
 					...feature,
 					kind: "inspect",
@@ -155,6 +160,10 @@ describe("assurance projection", () => {
 			},
 			runs: session.runs.map((run) => ({
 				...run,
+				validations: run.validations.map((observation) => ({
+					...observation,
+					exitCode: 1,
+				})),
 				reviews: run.reviews.map((review) => ({
 					...review,
 					result: {
@@ -188,6 +197,123 @@ describe("assurance projection", () => {
 				}),
 			]),
 		);
+		expect(assurance.checks).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					id: "canonical-gate",
+					status: "unsatisfied",
+					explanation: expect.stringContaining("exit 1"),
+				}),
+			]),
+		);
+	});
+
+	test("uses latest reviewed gate revision when feature order differs from execution order", () => {
+		const base = completedSession();
+		const plan = base.plan;
+		const originalRun = base.runs[0];
+		const originalFeature = plan?.features[0];
+		const originalObservation = originalRun?.validations[0];
+		const originalReview = originalRun?.reviews[0];
+		if (
+			!plan ||
+			!originalRun ||
+			!originalFeature ||
+			!originalObservation ||
+			!originalReview?.result ||
+			!base.closure
+		)
+			throw new Error("Expected completed fixture.");
+		const laterObservation = {
+			...originalObservation,
+			id: "validation-2",
+			featureId: "later",
+			runId: "run-2",
+			exitCode: 2,
+			recordedRevision: 8,
+		};
+		const earlierRun = {
+			...originalRun,
+			reviews: originalRun.reviews.map((review) => ({
+				...review,
+				kind: "feature" as const,
+			})),
+		};
+		const laterRun = {
+			...originalRun,
+			id: "run-2",
+			featureId: "later",
+			startedRevision: 7,
+			validations: [laterObservation],
+			reviews: [
+				{
+					...originalReview,
+					id: "review-2",
+					featureId: "later",
+					runId: "run-2",
+					validationIds: [laterObservation.id],
+					createdRevision: 9,
+					result: { ...originalReview.result, recordedRevision: 10 },
+				},
+			],
+		};
+		const reversed: Session = {
+			...base,
+			revision: 11,
+			plan: {
+				...plan,
+				evidence: plan.evidence?.map((entry) => ({
+					...entry,
+					scope: "gate-observe",
+				})),
+				features: [
+					{ ...originalFeature, id: "later", kind: "inspect" },
+					{ ...originalFeature, kind: "inspect" },
+				],
+			},
+			runs: [earlierRun, laterRun],
+			closure: { ...base.closure, recordedRevision: 11 },
+		};
+		const gate = assuranceProjection(reversed).checks.find(
+			(check) => check.id === "canonical-gate",
+		);
+		expect(gate).toMatchObject({
+			status: "satisfied",
+			explanation: expect.stringContaining("exit 2"),
+		});
+		const failedLatest: Session = {
+			...reversed,
+			runs: [
+				earlierRun,
+				{
+					...laterRun,
+					reviews: laterRun.reviews.map((review) => ({
+						...review,
+						result: {
+							...originalReview.result,
+							verdict: "failed",
+							terminalDisposition: "submitted",
+							findings: [
+								{
+									severity: "blocking",
+									summary: "Inspection failed.",
+									evidence: "docs/review.md",
+								},
+							],
+							recordedRevision: 10,
+						},
+					})),
+				},
+			],
+		};
+		expect(
+			assuranceProjection(failedLatest).checks.find(
+				(check) => check.id === "canonical-gate",
+			),
+		).toMatchObject({
+			status: "unsatisfied",
+			explanation: expect.stringContaining("exit 2"),
+		});
 	});
 
 	test("reports a contradictory completed document without throwing", () => {

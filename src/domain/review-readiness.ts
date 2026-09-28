@@ -7,7 +7,7 @@ import type {
 } from "./session.js";
 import { isFinalFeatureRun } from "./session-queries.js";
 import {
-	isValidationEligible,
+	isAcceptedValidation,
 	isValidationFresh,
 	unresolvedVetoedCommands,
 	unsatisfiedEvidence,
@@ -46,7 +46,7 @@ export function reviewReadiness(
 	if (vetoed.length > 0) return { kind: "vetoed", commands: vetoed };
 	const applicable = run.validations.filter(
 		(validation) =>
-			isValidationEligible(validation, sourceDigest) &&
+			isAcceptedValidation(session, validation, sourceDigest) &&
 			isValidationFresh(session, run, validation),
 	);
 	const hasRequired =

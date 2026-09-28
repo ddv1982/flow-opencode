@@ -12,6 +12,13 @@ function gateIssue(gate: string): string | null {
 }
 
 export function planIssue(plan: Plan): string | null {
+	for (const entry of plan.evidence ?? []) {
+		if (entry.scope !== "gate-observe") continue;
+		if (plan.features.some((feature) => feature.kind !== "inspect"))
+			return "Observed evidence requires a canonical gate in an all-inspect plan.";
+		if ((entry.assertions?.length ?? 0) > 0)
+			return "Observed evidence cannot claim passing named assertions.";
+	}
 	const gate = planGate(plan);
 	if (gate !== undefined) {
 		const issue = gateIssue(gate);

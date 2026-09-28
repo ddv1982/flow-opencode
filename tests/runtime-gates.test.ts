@@ -8,6 +8,7 @@ import {
 import type { ReviewerProjection } from "../src/application/session-projection.js";
 import { liveFindingIds } from "../src/domain/review-findings.js";
 import type { Plan } from "../src/domain/session.js";
+import { evidenceRefusal, evidenceStatus } from "../src/domain/validation.js";
 import {
 	activeReview,
 	approveSession,
@@ -31,6 +32,395 @@ import {
 } from "./runtime-test-support.js";
 
 describe("Flow application runtime gates", () => {
+	function bunGate() {
+		const gate = repositoryEvidence("bun test")[0];
+		if (!gate) throw new Error("Expected canonical gate.");
+		return gate;
+	}
+	test("observes a failed canonical gate for inspection without calling it a pass", async () => {
+		const repository = new MemorySessionRepository();
+		const observedPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
+			evidence: [{ ...bunGate(), platform: "linux", scope: "gate-observe" }],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: observedPlan,
+			suffix: "observe-gate",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "observe-gate");
+		const failed = await recordObservedValidation(repository, {
+			captureId: "observed-failed-gate",
+			exitCode: 1,
+		});
+		const ready = await flow.status({ request: { view: "compact" } });
+		expectOk(ready);
+		expect(ready.workflowData.projection).toMatchObject({
+			nextAction: "flow_review_start",
+		});
+		const review = await flow.reviewStart({
+			request: {
+				operationId: "review-observed-failure",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [{ path: "docs/review.md" }],
+				packet: {
+					summary: "Review findings including failed audit.",
+					riskLenses: ["Audit exit 1 must remain visible."],
+				},
+			},
+		});
+		expectOk(review);
+		expect(review.workflowData.projection).toMatchObject({
+			validations: [failed],
+		});
+		await submitReview(flow, repository, {
+			suffix: "observed-failure",
+			summary: "Audit failed; findings documented.",
+			verdict: "passed",
+			findings: [{ severity: "advisory", summary: "Audit exited 1." }],
+		});
+		const id = repository.session?.id;
+		if (!id) throw new Error("Expected session.");
+		const closed = await flow.sessionClose({
+			request: {
+				operationId: "close-observed-failure",
+				expectedRevision: revision(repository),
+				sessionId: id,
+				kind: "completed",
+				summary: "Review completed; audit failed.",
+			},
+		});
+		expectOk(closed);
+		expect(closed.workflowData.delivery.report.join("\n")).toContain("exit 1");
+		expect(closed.workflowData.delivery.report.join("\n")).toContain(
+			"does not claim the command passed",
+		);
+	});
+	test("a focused same-command pass does not supersede an observed broad gate", async () => {
+		for (const exitCode of [0, 1]) {
+			const repository = new MemorySessionRepository();
+			const observedPlan: Plan = {
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+				evidence: [{ ...bunGate(), scope: "gate-observe", platform: "linux" }],
+			};
+			const flow = await approveSession(
+				repository,
+				deterministicEnvironment(),
+				{
+					plan: observedPlan,
+					suffix: `broad-then-focused-${exitCode}`,
+				},
+			);
+			await startFeatureRun(
+				flow,
+				repository,
+				FEATURE,
+				`broad-then-focused-${exitCode}`,
+			);
+			const broad = await recordObservedValidation(repository, {
+				captureId: `broad-${exitCode}`,
+				exitCode,
+			});
+			await recordObservedValidation(repository, {
+				captureId: `focused-${exitCode}`,
+				command: "bun test",
+				scope: "focused",
+				exitCode: 0,
+			});
+			const review = await flow.reviewStart({
+				request: {
+					operationId: `review-broad-then-focused-${exitCode}`,
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [],
+					packet: { summary: "Review observed audit.", riskLenses: [] },
+				},
+			});
+			expectOk(review);
+			expect(review.workflowData.projection).toMatchObject({
+				validations: [broad],
+			});
+		}
+	});
+	test("a later broad observation still supersedes the earlier observed gate", async () => {
+		const repository = new MemorySessionRepository();
+		const observedPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
+			evidence: [{ ...bunGate(), scope: "gate-observe", platform: "linux" }],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: observedPlan,
+			suffix: "later-broad",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "later-broad");
+		await recordObservedValidation(repository, {
+			captureId: "earlier-broad",
+			exitCode: 1,
+		});
+		await recordObservedValidation(repository, {
+			captureId: "between-focused",
+			command: "bun test",
+			scope: "focused",
+			exitCode: 0,
+		});
+		const latest = await recordObservedValidation(repository, {
+			captureId: "later-broad",
+			exitCode: 0,
+		});
+		const review = await flow.reviewStart({
+			request: {
+				operationId: "review-later-broad",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [],
+				packet: { summary: "Review latest observed audit.", riskLenses: [] },
+			},
+		});
+		expectOk(review);
+		expect(review.workflowData.projection).toMatchObject({
+			validations: [latest],
+		});
+	});
+	test("flow_plan_amend rejects a complete failed observed inspection gate", async () => {
+		const repository = new MemorySessionRepository();
+		const observedPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
+			evidence: [{ ...bunGate(), scope: "gate-observe", platform: "linux" }],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: observedPlan,
+			suffix: "observed-amendment",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "observed-amendment");
+		const failed = await recordObservedValidation(repository, {
+			captureId: "failed-observed-amendment-gate",
+			exitCode: 1,
+		});
+		const amendment = await flow.planAmend({
+			request: {
+				operationId: "repair-observed-gate",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				validationId: failed.id,
+				reason: "The audit failed.",
+				repair: "Update dependencies.",
+				targets: ["bun.lock"],
+				sameGoal: true,
+				reversible: true,
+			},
+		});
+		expectError(amendment);
+		expect(amendment.summary).toContain(
+			"cannot authorize a prerequisite repair",
+		);
+		expect(repository.session?.amendments).toBeUndefined();
+		const status = await flow.status({ request: { view: "compact" } });
+		expectOk(status);
+		expect(status.workflowData.projection).toMatchObject({
+			nextAction: "flow_review_start",
+		});
+	});
+
+	test("rejects observe mode outside an all-inspect canonical gate", async () => {
+		for (const invalid of [
+			{ ...plan, evidence: [{ ...bunGate(), scope: "gate-observe" as const }] },
+			{
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect" as const,
+				})),
+				evidence: [
+					{
+						...bunGate(),
+						scope: "gate-observe" as const,
+					},
+					bunGate(),
+				],
+			},
+			{
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect" as const,
+				})),
+				evidence: [
+					{
+						...bunGate(),
+						scope: "gate-observe" as const,
+						assertions: ["test case"],
+					},
+				],
+			},
+		]) {
+			const repository = new MemorySessionRepository();
+			const flow = createFlowService(repository, deterministicEnvironment());
+			expectError(
+				await flow.planSave({
+					request: {
+						operationId: "invalid-observe",
+						expectedRevision: 0,
+						goal: "Inspect",
+						plan: invalid,
+					},
+				}),
+			);
+		}
+	});
+	test("requires a complete, current-source gate observation on the declared host", async () => {
+		for (const failure of [
+			"wrong-host",
+			"incomplete",
+			"stale-source",
+		] as const) {
+			const repository = new MemorySessionRepository();
+			const observedPlan: Plan = {
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+				evidence: [
+					{
+						...bunGate(),
+						platform: failure === "wrong-host" ? "win32" : "linux",
+						scope: "gate-observe",
+					},
+				],
+			};
+			const flow = await approveSession(
+				repository,
+				deterministicEnvironment(),
+				{ plan: observedPlan, suffix: failure },
+			);
+			await startFeatureRun(flow, repository, FEATURE, failure);
+			const prepared = await prepareValidation(
+				repository,
+				{
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					command: "bun test",
+					scope: "broad",
+				},
+				"linux",
+			);
+			await persistObservedValidation(repository, {
+				...prepared,
+				captureId: `capture-${failure}`,
+				exitCode: 1,
+				outputDigest: OUTPUT,
+				outputComplete: failure !== "incomplete",
+			});
+			if (failure === "stale-source") repository.sourceDigest = SOURCE_B;
+			const review = await flow.reviewStart({
+				request: {
+					operationId: `review-${failure}`,
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [],
+					packet: { summary: "Review observed audit.", riskLenses: [] },
+				},
+			});
+			expectError(review);
+		}
+	});
+	test("a focused passing command cannot satisfy an observed broad gate", async () => {
+		const repository = new MemorySessionRepository();
+		const gate = {
+			...bunGate(),
+			scope: "gate-observe" as const,
+			platform: "linux" as const,
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: {
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+				evidence: [gate],
+			},
+			suffix: "focused-observe",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "focused-observe");
+		await recordObservedValidation(repository, {
+			captureId: "focused-pass",
+			scope: "focused",
+			exitCode: 0,
+		});
+		const session = repository.session;
+		if (!session) throw new Error("Expected session.");
+		expect(evidenceStatus(session, gate, repository.sourceDigest).kind).toBe(
+			"missing",
+		);
+	});
+	test("wrong-host observed gate cannot admit the first of two inspect reviews", async () => {
+		const repository = new MemorySessionRepository();
+		const observedPlan: Plan = {
+			...plan,
+			features: [
+				...plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect" as const,
+				})),
+				{
+					id: "second-review",
+					title: "Second review",
+					summary: "Inspect another area",
+					targets: ["docs"],
+					validation: ["Review findings"],
+					dependsOn: [FEATURE],
+					kind: "inspect",
+				},
+			],
+			evidence: [{ ...bunGate(), scope: "gate-observe", platform: "win32" }],
+		};
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: observedPlan,
+			suffix: "wrong-host-first",
+		});
+		await startFeatureRun(flow, repository, FEATURE, "wrong-host-first");
+		await recordObservedValidation(repository, {
+			captureId: "linux-observation",
+			exitCode: 1,
+			hostPlatform: "linux",
+		});
+		const current = repository.session;
+		const gate = observedPlan.evidence?.[0];
+		if (!current || !gate) throw new Error("Expected observation context.");
+		expect(evidenceStatus(current, gate, repository.sourceDigest).kind).toBe(
+			"wrong-host",
+		);
+		expect(evidenceRefusal(current, gate, repository.sourceDigest)).toContain(
+			"observed on linux",
+		);
+		const review = await flow.reviewStart({
+			request: {
+				operationId: "first-wrong-host-review",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [],
+				packet: { summary: "Review first area", riskLenses: [] },
+			},
+		});
+		expectError(review);
+	});
 	test("reviewer sees the failed gate that justified an amendment after the gate passes", async () => {
 		const repository = new MemorySessionRepository();
 		const flow = await startSession(repository, deterministicEnvironment());

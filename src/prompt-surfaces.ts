@@ -100,7 +100,7 @@ function skillBody(id: FlowGuidanceId): string {
 
 const FLOW_AUTO_PROMPT = [
 	"# Flow router",
-	"Drive the Flow lifecycle only within the user's authorized scope. Stop after planning when implementation was not authorized: $ARGUMENTS",
+	"Stay within authorized scope. Stop at planning only for a Flow-plan-only request; execute inspection deliverables: $ARGUMENTS",
 	[
 		'Call `flow_status { request: { view: "compact" } }` first.',
 		"If the top-level response is an error, report its exact summary and recovery; stop without another mutation.",
