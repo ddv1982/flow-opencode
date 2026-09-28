@@ -50,35 +50,37 @@ persisted directly on the run.
 Validation commands are durable and must not contain inline secrets. Raw output
 is neither persisted nor projected; the command, exit code, completeness,
 output digest, and source binding are the evidence. `broad` means an observation of
-the plan's gate command: `savePlan` requires exactly one `scope: "gate"` evidence
-entry and refuses a gate that selects its own tests. `recordValidation` refuses a
-broad claim on any other command. Nothing decides whether the declared command is
-a test; [ADR 0010](adr/0010-declared-canonical-gate.md) records why that stays a
-caller declaration made at planning time.
+the plan's gate command. `savePlan` requires exactly one `gate`, or one
+`gate-observe` for an all-inspect plan, and refuses a gate that selects its own
+tests. `recordValidation` refuses a broad claim on another command. Nothing
+decides whether the declared command is a test; [ADR 0010](adr/0010-declared-canonical-gate.md)
+records why that stays a caller declaration made at planning time.
 
 For truncated Bash output, Flow hashes the host `outputPath` only if its
 bounded regular `tool-output` file matches the visible tail. Missing or
 mismatched files stay incomplete; the exact command and exit code still bind.
 
 `savePlan` requires `evidence`: one gate plus optional extra observations. Every
-entry names its command, `platform`, and `assertions`. One satisfaction rule
-applies to all entries: an eligible exact-command observation on the declared
-platform with every declared case `passed`. Named commands write changed JUnit to
-`.flow/results.xml`; legacy plans may supply `resultsPath`
-([ADR 0012](adr/0012-named-results-over-exit-codes.md)). Final review and
-`completed` closure refuse any unsatisfied entry. The gate also requires broad
-scope and remains subject to command vetoes. Feature reviews are not vetoed, so a
-goal can split into the half this host can prove and the half it cannot.
+entry names its command, `platform`, and `assertions`. A `gate` or `extra` needs
+an eligible exact-command pass on its declared platform with every named case
+`passed`. Only an all-inspect plan may use `gate-observe`, without named
+assertions. Its latest exact-command broad observation must have a known exit
+code, complete output, current source, and the declared platform. A nonzero
+exit remains failed in review and delivery; it satisfies observation, not
+validation. Named commands write changed JUnit to `.flow/results.xml`; legacy
+plans may supply `resultsPath` ([ADR 0012](adr/0012-named-results-over-exit-codes.md)).
+Final review and `completed` closure refuse any unsatisfied entry. Feature
+reviews do not require every entry, so a goal can split by what this host can
+prove.
 [ADR 0014](adr/0014-one-evidence-record.md) records the collapse of `gate` and
 `externalEvidence` into this one field.
 
 A failed, incomplete, or source-drifted observation creates a freshness boundary
-for its command across attempts. Prospectively, review remains unavailable until
-the active run holds a complete exit-zero observation of that same command which
-matches the review's current source and is newer than the latest relevant
-failure or drift. Returning to an older source digest does not revive a pass
-from before that boundary, and no other passing command discharges it — neither
-a substitute broad gate nor a narrower command relabelled `broad`. Three command
+for its command across attempts. Review requires a newer accepted observation
+of that exact command for current source. Acceptance requires complete exit-zero
+output except for the `gate-observe` command, whose latest broad observation may
+have a nonzero exit. Returning to an older source digest does not revive an
+earlier result, and no other command discharges it. Three command
 sets are vetoed this way: any command whose stored bytes equal an entry in the
 active feature's validation list, since Flow does not parse validation prose
 into commands; the plan's gate command; and any command an observation recorded
