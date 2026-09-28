@@ -35,7 +35,7 @@ describe("release eval sampling", () => {
 		const plan = campaignPlanFor({
 			models: ["openai/gpt-6-sol"],
 			scenarios: releaseScenarios(),
-			sampling: { kind: "release" },
+			sampling: { kind: "release", packageVersion: "9.1.0" },
 			opencodeVersion: "1.18.31",
 		});
 		expect(plan.stoppingRule.count).toBe(38);
@@ -66,8 +66,8 @@ describe("release eval sampling", () => {
 
 	test("checks configured CI release models before authorization", async () => {
 		for (const [configured, expectedCode] of [
-			["openai/gpt-6-sol", 0],
-			["openai/gpt-6-sol,xai/grok-4.6", 1],
+			["openai/gpt-6-sol", 1],
+			["openai/gpt-6-sol,xai/grok-4.6", 0],
 			["xai/grok-4.6", 1],
 		] as const) {
 			const child = Bun.spawn(
@@ -83,7 +83,10 @@ describe("release eval sampling", () => {
 				new Response(child.stderr).text(),
 			]);
 			expect(code).toBe(expectedCode);
-			if (expectedCode !== 0) expect(stderr).toContain("openai/gpt-6-sol");
+			if (expectedCode !== 0)
+				expect(stderr).toContain(
+					"exactly 2 models on distinct route providers",
+				);
 		}
 	});
 	test("gives 90 percent cases ten attempts and 100 percent cases three", () => {
@@ -265,7 +268,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects every 9.1.0 release grid except GPT-6 Sol", async () => {
+	test("rejects release grids without exactly two distinct providers", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -288,7 +291,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				"Release 9.1.0 requires exactly openai/gpt-6-sol",
+				"Release requires exactly 2 models on distinct route providers",
 			);
 		}
 	});
@@ -301,6 +304,8 @@ describe("release eval sampling", () => {
 				"evals/run.ts",
 				"--model",
 				"openai/gpt-6-sol",
+				"--model",
+				"xai/grok-4.6",
 				"--release",
 				"--concurrency",
 				"2",

@@ -70,17 +70,35 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           REQUESTED: ${{ inputs.models }}
           CONFIGURED: ${{ vars.FLOW_EVAL_MODELS }}
         run: |
+          set -euo pipefail
           models="${REQUESTED:-$CONFIGURED}"
-          if [ -z "$models" ] || { [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$OPENAI_API_KEY" ]; }; then
-            echo "::notice::No eval model matrix or provider credentials configured; skipping."
+          if [ -z "$models" ]; then
+            echo "::notice::No eval model matrix configured; skipping."
             echo "models=" >> "$GITHUB_OUTPUT"
-          else
-            FLOW_EVAL_MODEL="$models" bun run scripts/check-release-models.ts
-            echo "models=$models" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
+          IFS=',' read -ra requested_models <<< "$models"
+          for requested_model in "${requested_models[@]}"; do
+            provider="${requested_model//[[:space:]]/}"
+            provider="${provider%%/*}"
+            case "$provider" in
+              openai) credential="$OPENAI_API_KEY" ;;
+              anthropic) credential="$ANTHROPIC_API_KEY" ;;
+              xai) credential="$XAI_API_KEY" ;;
+              *) echo "::error::No CI credential route for provider $provider."; exit 1 ;;
+            esac
+            if [ -z "$credential" ]; then
+              echo "::notice::No $provider credential configured; skipping the matrix."
+              echo "models=" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          FLOW_EVAL_MODEL="$models" bun run scripts/check-release-models.ts
+          echo "models=$models" >> "$GITHUB_OUTPUT"
 
       - name: Authorize the configured dispatch budget
         if: steps.matrix.outputs.models != ''
@@ -100,6 +118,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           FLOW_EVAL_MODEL: ${{ steps.matrix.outputs.models }}
           FLOW_EVAL_NO_AUTH_COPY: "1"
           FLOW_EVAL_AUTHORIZATION: ${{ github.workspace }}/.paid-budget
