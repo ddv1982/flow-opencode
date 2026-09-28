@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       recover_tag:
-        description: Recover the verified 9.1.0 release without moving its tag
+        description: Recover the verified 9.2.0 release without moving its tag
         required: true
         type: choice
         options:
-          - v9.1.0
+          - v9.2.0
   push:
     branches:
       - main
@@ -42,8 +42,8 @@ jobs:
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
 
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            if [[ "${GITHUB_REF}" != "refs/heads/main" || "${RECOVERY_TAG}" != "v9.1.0" || "${RECOVERY_TAG}" != "${tag}" ]]; then
-              echo "::error::Release recovery requires main and the exact v9.1.0 tag."
+            if [[ "${GITHUB_REF}" != "refs/heads/main" || "${RECOVERY_TAG}" != "v9.2.0" || "${RECOVERY_TAG}" != "${tag}" ]]; then
+              echo "::error::Release recovery requires main and the exact v9.2.0 tag."
               exit 1
             fi
             echo "publish=true" >> "$GITHUB_OUTPUT"
@@ -99,9 +99,9 @@ jobs:
           bun pm pack --destination .
           if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
             bun run scripts/restore-exact-release-artifact.ts \
-              opencode-plugin-flow-9.1.0.tgz \
-              evals/qualification/bundles/qb1-86bbc934222c2715d315521ff5041edc718eba6492ff679db50a6d494fc1bd6d/objects/sha256-0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24 \
-              sha256:0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24
+              opencode-plugin-flow-9.2.0.tgz \
+              evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b \
+              sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b
           fi
 
       - name: Report release evidence readiness without publishing
@@ -112,7 +112,7 @@ jobs:
           tarball="$(ls opencode-plugin-flow-*.tgz)"
           bun run release:metadata -- --artifact "$tarball"
           if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
-            bun run release:metadata -- --tag "$FLOW_RELEASE_RECOVERY_TAG" --artifact "$tarball" --canary evals/canary/9.1.0.json
+            bun run release:metadata -- --tag "$FLOW_RELEASE_RECOVERY_TAG" --artifact "$tarball" --canary evals/canary/9.2.0.json
             bun run eval:canary -- verify --artifact "$tarball" --mode strict
           else
             bun run eval:canary -- verify --artifact "$tarball" --mode dry-run
@@ -180,9 +180,9 @@ jobs:
           bun pm pack --destination .
           if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
             bun run scripts/restore-exact-release-artifact.ts \
-              opencode-plugin-flow-9.1.0.tgz \
-              evals/qualification/bundles/qb1-86bbc934222c2715d315521ff5041edc718eba6492ff679db50a6d494fc1bd6d/objects/sha256-0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24 \
-              sha256:0b7f7a66bf1910b5d0da3a235f891d532b4aa352a2dbd25e398325c18e051b24
+              opencode-plugin-flow-9.2.0.tgz \
+              evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b \
+              sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b
           fi
 
       - name: Restore release record from this workflow run

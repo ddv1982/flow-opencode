@@ -12,9 +12,27 @@ const MUTATION_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 5_000;
 const MAX_COMMAND_OUTPUT_BYTES = 1_000_000;
 const MAX_RELEASE_PAGES = 10;
-const RECOVERY_TAG = "v9.1.0";
-const RECOVERY_TAG_OBJECT = "c629deb583185b977908f2203fab0caee69484a9";
-const RECOVERY_TAG_COMMIT = "727308d2ccd5761f03024341328cff06887ebae1";
+const RECOVERY_RELEASES = {
+	"v9.1.0": {
+		tagObject: "c629deb583185b977908f2203fab0caee69484a9",
+		commit: "727308d2ccd5761f03024341328cff06887ebae1",
+	},
+	"v9.2.0": {
+		tagObject: "811f909b2e86e2701d934e9f5b2bf38573ed7509",
+		commit: "5f89772d9048285eae54741f2da814529041e04e",
+	},
+} as const satisfies Record<
+	string,
+	{ readonly tagObject: string; readonly commit: string }
+>;
+
+function recoveryRelease(
+	tag: string,
+): (typeof RECOVERY_RELEASES)[keyof typeof RECOVERY_RELEASES] | undefined {
+	return Object.hasOwn(RECOVERY_RELEASES, tag)
+		? RECOVERY_RELEASES[tag as keyof typeof RECOVERY_RELEASES]
+		: undefined;
+}
 
 export type CommandResult = {
 	readonly exitCode: number;
@@ -231,6 +249,7 @@ export function releaseRecoveryRefIssue(
 	evidence: RecoveryRefEvidence,
 	requireCurrentMain: boolean,
 ): string | null {
+	const pinnedRelease = recoveryRelease(evidence.expectedTag);
 	if (
 		evidence.eventName !== "workflow_dispatch" ||
 		evidence.eventRefType !== "branch" ||
@@ -238,16 +257,16 @@ export function releaseRecoveryRefIssue(
 	)
 		return "Release recovery requires a dispatch from the main branch.";
 	if (
-		evidence.expectedTag !== RECOVERY_TAG ||
+		!pinnedRelease ||
 		evidence.requestedTag !== evidence.expectedTag ||
 		evidence.eventSha !== evidence.headSha
 	)
 		return "Release recovery input or checkout differs from the dispatch.";
 	if (
-		evidence.localTagObjectSha !== RECOVERY_TAG_OBJECT ||
-		evidence.localTagCommitSha !== RECOVERY_TAG_COMMIT
+		evidence.localTagObjectSha !== pinnedRelease.tagObject ||
+		evidence.localTagCommitSha !== pinnedRelease.commit
 	)
-		return "Release recovery tag no longer identifies the pinned 9.1.0 release.";
+		return `Release recovery tag no longer identifies the pinned ${evidence.expectedTag} release.`;
 	if (evidence.localTagObjectSha !== evidence.remoteTagObjectSha)
 		return "The remote tag object no longer matches the checked-out release tag.";
 	if (evidence.localTagCommitSha !== evidence.remoteTagCommitSha)
