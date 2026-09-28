@@ -1704,6 +1704,25 @@ describe("inspection-failed-audit-completes", () => {
 		).toEqual([]);
 	});
 
+	test("accepts numbered bold roadmap phases from the live inspection", () => {
+		const content =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Roadmap\n\n1. **Phase 1 — inclusiveRangeLength off-by-one defect.** Correct the count and add 1..3 regression cases.\n2. **Phase 2 — frontend:audit advisory report.** Trace the 21 advisories and rerun bun run verify.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(content) }),
+			),
+		).toEqual([]);
+		const vague =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. **Phase 1.** Test.\n2. **Phase 2.** Fix.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(vague) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+	});
+
 	test("accepts a capitalized canonical command in the honest report", () => {
 		expect(
 			check(

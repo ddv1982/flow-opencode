@@ -634,7 +634,7 @@ function inspectGoalIssues(outcome: ScenarioGradeInput): string[] {
 function inspectionDocumentHasPhases(content: string): boolean {
 	const headings = [
 		...content.matchAll(
-			/(?:^|\n)\s*(?:#{1,6}\s*)?(?:phase|step)\s*(1|one|i|2|two|ii)\b([^\n]*)/gi,
+			/(?:^|\n)\s*(?:(?:#{1,6}|\d+[.)])\s*)?(?:\*\*)?(?:phase|step)\s*(1|one|i|2|two|ii)\b([^\n]*)/gi,
 		),
 	];
 	const first = headings.find((heading) =>
