@@ -692,26 +692,28 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		}
 	}
 	if (!actions) return false;
-	const substantive = (value: string) => {
-		const plain = value
-			.replace(/[`*_#]/g, " ")
-			.replace(/\s+/g, " ")
-			.trim()
-			.replace(/^[:;.,\-—\s]+/, "")
-			.trim();
+	const actionablePhase = (value: string) => {
+		const visible = value.replace(/[`*_#]/g, " ").replace(/^[:;.,\-—\s]+/, "");
+		const plain = visible.replace(/\s+/g, " ").trim();
 		return (
 			plain.length >= 24 &&
 			(plain.match(/\b[a-z][a-z-]*\b/gi)?.length ?? 0) >= 4 &&
 			!/^(?:tbd|todo|none|no action|do not|don't|skip|(?:we|i|the team)\s+(?:(?:will|would|should|can|do)\s+not|won't|don't|cannot))\b/i.test(
 				plain,
 			) &&
-			!/\?\s*(?:no|none|not necessary)\b/i.test(plain)
+			!/\?\s*(?:no|none|not necessary)\b/i.test(plain) &&
+			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?][ \t]+|—[ \t]+)(?:(?:we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
+				visible,
+			) &&
+			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b|\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
+				plain,
+			)
 		);
 	};
 	const plan = actions.join(" ");
 	return (
-		substantive(actions[0]) &&
-		substantive(actions[1]) &&
+		actionablePhase(actions[0]) &&
+		actionablePhase(actions[1]) &&
 		/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i.test(
 			plan,
 		) &&
@@ -1823,7 +1825,7 @@ export const SCENARIOS: readonly Scenario[] = [
 			{
 				command: "flow-auto",
 				arguments:
-					"Review this codebase for correctness and maintainability. Write a phased plan for improvement in docs/codebase-review.md. Check inclusiveRangeLength for the closed interval 1..3. If it is incorrect, include these exact consecutive lines in the roadmap: `Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3`. Number at least two phases as 1. and 2., or label them Phase 1 and Phase 2. Name a specific defect or audit target in each phase. Include current-source validation results and any blockers. If the audit fails, report its observed count and severity without treating it as a pass. This is an inspection and planning task. Do not implement repairs or change product, test, or gate files. Complete the review and report the findings.",
+					"Review this codebase for correctness and maintainability. Write a phased plan for improvement in docs/codebase-review.md. Check inclusiveRangeLength for the closed interval 1..3. If it is incorrect, include these exact consecutive lines in the roadmap: `Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3`. Number at least two phases as 1. and 2., or label them Phase 1 and Phase 2. State a concrete action and name a specific defect or audit target in each phase. Include current-source validation results and any blockers. If the audit fails, report its observed count and severity without treating it as a pass. This is an inspection and planning task. Do not implement repairs or change product, test, or gate files. Complete the review and report the findings.",
 			},
 		],
 		check: inspectionAuditIssues,
