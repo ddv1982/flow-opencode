@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { gzipSync } from "node:zlib";
@@ -489,6 +489,53 @@ describe("eval provenance", () => {
 		expect(transcript.text).not.toContain("ses_parentSecret123");
 		expect(transcript.text).not.toContain("session:review-child-123");
 		expect(transcript.text).toMatch(/id_[a-f0-9]{16}/);
+		expect(transcript.sha256).toMatch(/^sha256:[a-f0-9]{64}$/);
+	});
+
+	test("redacts host home paths repeated in tool output fields", () => {
+		const home = homedir();
+		const executable = join(home, ".bun", "bin", "bun");
+		const escapedExecutable = executable
+			.replaceAll("\\", "\\\\")
+			.replaceAll("/", "\\/");
+		const mixedHome = home.includes("/")
+			? home.replace(/\/(?=[^/]+$)/, "\\/")
+			: home.replace(/\\(?=[^\\]+$)/, "\\\\");
+		const unicodeHome = home
+			.replaceAll("\\", "\\u005c")
+			.replaceAll("/", "\\u002f");
+		const percentHome = home.replaceAll("/", "%2F").replaceAll("\\", "%5C");
+		const transcript = redactTranscript({
+			projectPath: "/tmp/eval-project",
+			value: {
+				gradeInput: {
+					allCalls: [
+						{
+							metadata: {
+								output: `Linux\n${executable}\n`,
+								escapedOutput: escapedExecutable,
+								mixedOutput: `${mixedHome}/.bun/bin/bun`,
+								unicodeOutput: `${unicodeHome}/.bun/bin/bun`,
+								percentOutput: `${percentHome}/.bun/bin/bun`,
+							},
+							output: executable,
+							rawOutput: executable,
+						},
+					],
+				},
+			},
+		});
+		expect(transcript.text).not.toContain(homedir());
+		expect(transcript.text).toContain("<redacted-home>");
+		const retained = JSON.parse(transcript.text);
+		expect(retained.gradeInput.allCalls[0].metadata.escapedOutput).toContain(
+			"<redacted-home>",
+		);
+		for (const field of ["mixedOutput", "unicodeOutput", "percentOutput"]) {
+			expect(retained.gradeInput.allCalls[0].metadata[field]).toContain(
+				"<redacted-home>",
+			);
+		}
 		expect(transcript.sha256).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 
