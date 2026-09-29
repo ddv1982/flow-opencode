@@ -1736,6 +1736,14 @@ describe("inspection-failed-audit-completes", () => {
 				recordedOutcome({ reviewDocument: documentObservation(content) }),
 			),
 		).toEqual([]);
+		const colonActions =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. **Closed interval defect:** Add an inclusiveRangeLength regression for 1..3.\n2. **Dependency audit:** Investigate the advisories and rerun bun run verify.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(colonActions) }),
+			),
+		).toEqual([]);
 		const vague =
 			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Proposed work\n\n1. Test.\n2. Fix.\n";
 		expect(
@@ -1746,6 +1754,7 @@ describe("inspection-failed-audit-completes", () => {
 		).toContain("review document omitted a phased remediation plan");
 		for (const content of [
 			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Do not test inclusiveRangeLength.\n2. Do not fix frontend:audit.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Add an inclusiveRangeLength regression for 1..3.\n\nThis paragraph starts a different list.\n\n2. Investigate frontend:audit and rerun bun run verify.\n",
 			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. We will not change inclusiveRangeLength or add the 1..3 regression.\n2. We will not investigate the audit advisories or rerun the verification gate.\n",
 			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. TBD.\n\n## Notes\nAdd an inclusiveRangeLength test.\n\n2. Investigate frontend:audit and rerun bun run verify.\n",
 			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Regression notes\n1. Add an inclusiveRangeLength regression test.\n\n## Audit notes\n2. Investigate frontend:audit and rerun bun run verify.\n",
