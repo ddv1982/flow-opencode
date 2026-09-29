@@ -21,6 +21,10 @@ const RECOVERY_RELEASES = {
 		tagObject: "811f909b2e86e2701d934e9f5b2bf38573ed7509",
 		commit: "5f89772d9048285eae54741f2da814529041e04e",
 	},
+	"v9.3.0": {
+		tagObject: "879b9b11860cb7c51caa1803e133842805845020",
+		commit: "7c7a8669e2ba5d88d94d4940824c8f57a37b4362",
+	},
 } as const satisfies Record<
 	string,
 	{ readonly tagObject: string; readonly commit: string }
