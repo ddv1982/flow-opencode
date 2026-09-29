@@ -14,6 +14,10 @@ import type {
 } from "../../domain/session.js";
 import { isValidationEligible } from "../../domain/validation.js";
 import { observeAssertions } from "../../infrastructure/junit-results.js";
+import type {
+	AutoValidationOrigin,
+	AutoValidationReceipt,
+} from "./auto-drive.js";
 import type { Hooks } from "./sdk.js";
 
 const MAX_CAPTURES = 128;
@@ -26,6 +30,7 @@ type PendingCapture = PreparedValidation &
 		sessionID: string;
 		workspace: string;
 		armedAt: number;
+		origin: AutoValidationOrigin | null;
 	}> & {
 		callID: string | null;
 		priorReport: { digest: string; modifiedMs: number } | null;
@@ -45,6 +50,8 @@ type ValidationCaptureOptions = Readonly<{
 	now?: (() => number) | undefined;
 	randomId?: (() => string) | undefined;
 	readFullOutput?: ((path: string) => Promise<string | null>) | undefined;
+	onRecorded?: (receipt: AutoValidationReceipt) => void;
+	onReceiptError?: (error: unknown) => void;
 }>;
 
 type BeforeInput = Parameters<NonNullable<Hooks["tool.execute.before"]>>[0];
@@ -133,6 +140,8 @@ export class ValidationCaptureCoordinator {
 	readonly #randomId: () => string;
 	readonly #readFullOutput: (path: string) => Promise<string | null>;
 	readonly #pending = new Map<string, PendingCapture>();
+	readonly #onRecorded: ValidationCaptureOptions["onRecorded"];
+	readonly #onReceiptError: ValidationCaptureOptions["onReceiptError"];
 
 	constructor(options: ValidationCaptureOptions) {
 		this.#persist = options.persistObservation;
@@ -140,6 +149,8 @@ export class ValidationCaptureCoordinator {
 		this.#now = options.now ?? Date.now;
 		this.#randomId = options.randomId ?? randomUUID;
 		this.#readFullOutput = options.readFullOutput ?? readHostToolOutput;
+		this.#onRecorded = options.onRecorded;
+		this.#onReceiptError = options.onReceiptError;
 	}
 
 	async #completeSpilledOutput(
@@ -224,6 +235,7 @@ export class ValidationCaptureCoordinator {
 		sessionID: string,
 		workspace: string,
 		prepared: PreparedValidation,
+		origin: AutoValidationOrigin | null = null,
 	): Readonly<{ captureId: string; expiresInMs: number }> {
 		this.#prune();
 		if (this.#pending.has(sessionID)) {
@@ -252,6 +264,7 @@ export class ValidationCaptureCoordinator {
 			sessionID,
 			workspace,
 			armedAt: this.#now(),
+			origin,
 			callID: null,
 			priorReport: null,
 		});
@@ -351,6 +364,19 @@ export class ValidationCaptureCoordinator {
 				: {}),
 			...(fullOutput ? { fullOutputDigest: observation.outputDigest } : {}),
 		})}`;
+		if (capture.origin) {
+			try {
+				this.#onRecorded?.({
+					origin: capture.origin,
+					captureId: capture.captureId,
+					observation,
+				});
+			} catch (error) {
+				try {
+					this.#onReceiptError?.(error);
+				} catch {}
+			}
+		}
 		return observation;
 	}
 

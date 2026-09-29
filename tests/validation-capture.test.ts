@@ -11,6 +11,7 @@ import type {
 	SourceDigest,
 	ValidationObservation,
 } from "../src/domain/session.js";
+import type { AutoValidationReceipt } from "../src/platform/opencode/auto-drive.js";
 import {
 	readHostToolOutput,
 	ValidationCaptureCoordinator,
@@ -56,6 +57,106 @@ function persistedObservation(
 }
 
 const REPORT = `<testsuites><testcase name="on Windows" classname="s"/></testsuites>`;
+
+test("emits one source-bound receipt after observation persistence", async () => {
+	const origin = {
+		hostSessionId: "host",
+		sessionId: "flow",
+		authority: "user",
+		assistantId: "manager",
+		assertions: prepared.assertions,
+		featureId: prepared.featureId,
+		runId: prepared.runId,
+		sourceDigest: SOURCE,
+	};
+	const receipts: AutoValidationReceipt[] = [];
+	let accept!: (observation: ValidationObservation) => void;
+	let pending: ObservedValidation | undefined;
+	const capture = new ValidationCaptureCoordinator({
+		randomId: () => "armed-capture",
+		persistObservation: (_workspace, input) => {
+			pending = input;
+			return new Promise((resolve) => {
+				accept = resolve;
+			});
+		},
+		onRecorded: (receipt) => {
+			receipts.push(receipt);
+		},
+	});
+	const command = prepared.command;
+	capture.arm("host", "/workspace", prepared, origin);
+	await capture.observeToolBefore(
+		{ tool: "bash", sessionID: "host", callID: "bash" },
+		{ args: { command } },
+	);
+	const output = {
+		title: "check",
+		output: "passed",
+		metadata: { exit: 0, truncated: false },
+	};
+	const input = {
+		tool: "bash",
+		sessionID: "host",
+		callID: "bash",
+		args: { command },
+	};
+	const completing = capture.observeToolAfter(input, output);
+	await Promise.resolve();
+	expect(receipts).toEqual([]);
+	if (!pending) throw new Error("Observation persistence did not start.");
+	const observed = persistedObservation(pending, 4);
+	accept(observed);
+	expect(await completing).toEqual(observed);
+	expect(receipts).toEqual([
+		{ origin, captureId: "armed-capture", observation: observed },
+	]);
+	expect(pending).not.toHaveProperty("origin");
+	expect(await capture.observeToolAfter(input, output)).toBeNull();
+	expect(receipts).toHaveLength(1);
+});
+
+test("a continuation diagnostic failure cannot erase a durable observation", async () => {
+	const origin = {
+		hostSessionId: "host",
+		sessionId: "flow",
+		authority: "user",
+		assistantId: "manager",
+		assertions: prepared.assertions,
+		featureId: prepared.featureId,
+		runId: prepared.runId,
+		sourceDigest: SOURCE,
+	};
+	const capture = new ValidationCaptureCoordinator({
+		randomId: () => "accepted-capture",
+		persistObservation: async (_workspace, input) =>
+			persistedObservation(input),
+		onRecorded: () => {
+			throw new Error("diagnostic sink unavailable");
+		},
+		onReceiptError: () => {
+			throw new Error("warning sink unavailable");
+		},
+	});
+	const command = prepared.command;
+	capture.arm("host", "/workspace", prepared, origin);
+	await capture.observeToolBefore(
+		{ tool: "bash", sessionID: "host", callID: "bash" },
+		{ args: { command } },
+	);
+	const output = {
+		title: "check",
+		output: "passed",
+		metadata: { exit: 0, truncated: false },
+	};
+	const result = await capture.observeToolAfter(
+		{ tool: "bash", sessionID: "host", callID: "bash", args: { command } },
+		output,
+	);
+	expect(result?.id).toBe("accepted-capture");
+	expect(output.output).toContain('"passed":true');
+	expect(output.output).toContain('"recordedRevision":4');
+});
 
 test("reads only bounded OpenCode tool-output files", async () => {
 	const dataHome = await mkdtemp(join(tmpdir(), "flow-host-output-"));

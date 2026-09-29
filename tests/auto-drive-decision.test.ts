@@ -84,9 +84,26 @@ describe("decideOnIdle", () => {
 	});
 
 	test("treats a non-mechanical projection as handback-or-deactivate", () => {
-		expect(decideOnIdle(lease(), running)).toEqual({
+		expect(
+			decideOnIdle(lease(), { ...running, nextAction: "flow_status" }),
+		).toEqual({
 			kind: "handback-or-deactivate",
 		});
+	});
+	test("continues owned running preparation only after authenticated progress", () => {
+		for (const nextAction of ["flow_validation_start", "flow_review_start"]) {
+			const projection = { ...running, nextAction };
+			expect(
+				decideOnIdle(
+					lease({ checkpoint: { revision: 4, answered: true, advance: 5 } }),
+					projection,
+				),
+			).toEqual({ kind: "continue", clearCheckpoint: true });
+			expect(decideOnIdle(lease(), projection)).toEqual({
+				kind: "stop",
+				warning: "Flow auto-drive stopped: no progress.",
+			});
+		}
 	});
 
 	test("continues on a mechanical advance past an answered checkpoint", () => {

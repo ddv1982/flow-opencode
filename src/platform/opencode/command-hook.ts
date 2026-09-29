@@ -137,7 +137,10 @@ export function createCommandHook(
 			invocation = null;
 			generation++;
 			recovery?.revoke(input.sessionID);
-			autoDrive.deactivate(input.sessionID);
+			autoDrive.deactivate(
+				input.sessionID,
+				stopping ? "cancelled" : "interrupted",
+			);
 		}
 		const entryGeneration = generation;
 		const assertCurrent = () => {
@@ -154,7 +157,9 @@ export function createCommandHook(
 			);
 			recovery?.revoke(input.sessionID);
 			const response =
-				autoDrive.deactivate(input.sessionID) || cancelledPending || confirmed
+				autoDrive.deactivate(input.sessionID, "cancelled") ||
+				cancelledPending ||
+				confirmed
 					? AUTO_STOPPED
 					: "No Flow auto lease was active in this OpenCode session.";
 			output.parts[0] = asHostTextPart(textPart(response));

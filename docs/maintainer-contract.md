@@ -161,23 +161,9 @@ Revision and durable record order are authoritative. Session correctness must
 not depend on UTC time, model-provided time, elapsed duration, or timestamp
 repair.
 
-`flow_status` may add process-local `/flow-auto` context to top-level workflow data:
-`autoContinuation` reports whether this host has been observed to report assistant
-message parentage, which continuation depends on. Two values are surfaced:
-`supported`, and `unsupported` with a reason and recovery. Before any assistant
-message exists the field is omitted rather than reported `unknown`, since the absence
-of a signal is not a limitation. `/flow-auto` activation states an `unsupported` host
-plainly instead of letting continuation fail silently after every feature. This
-adds no Session v5 field and never blocks a transition.
-
-`flow_status` may also add timing for the latest `/flow-auto` invocation in the
-current plugin process to top-level workflow data, and only on `view: "detail"`.
-Compact status omits it. `activeMs` is process-local wall time while the
-coordinator classifies the lease as active, not CPU time or pure coding time.
-`waitingForUserMs` counts only recognized projected `flow_plan_approve` and
-`await-user-direction` checkpoints. Paused, inactive, errored, and unprojected
-waits are excluded. Timing resets on plugin reload, never enters Session v5 or a
-projection, and never authorizes or blocks a transition.
+`flow_status` adds process-local host capability, activity, and detail timing.
+[Automatic continuation](automatic-continuation.md) defines these fields and
+source-bound progress. They add no Session v5 state or authority.
 
 Every successful status read also derives `statusReport` from its typed
 projection. The report owns human lifecycle and recovery text and is not stored.
