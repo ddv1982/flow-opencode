@@ -703,7 +703,7 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				plain,
 			) &&
 			!/\?\s*(?:no|none|not necessary)\b/i.test(plain) &&
-			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
+			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
 				visible,
 			) &&
 			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b|\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
@@ -718,7 +718,7 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i.test(
 			plan,
 		) &&
-		/\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
+		/\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bbun run verify\b|\b(?:package|failed) gate\b/i.test(
 			plan,
 		)
 	);

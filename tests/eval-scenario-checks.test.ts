@@ -1828,8 +1828,16 @@ describe("inspection-failed-audit-completes", () => {
 	test("requires an action and a fixture target in each phase", () => {
 		const finding =
 			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n";
+		const firstPerson = `${finding}Phase 1: I will add a regression for inclusiveRangeLength over 1..3.\nPhase 2: I should investigate the audit advisories and rerun bun run verify.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(firstPerson) }),
+			),
+		).toEqual([]);
 		for (const content of [
 			`${finding}Phase 1: inclusiveRangeLength has an off-by-one defect in count.ts.\nPhase 2: The dependency audit contains many high-severity advisories.\n`,
+			`${finding}Phase 1: Fix the off-by-one in count.ts and add a regression.\nPhase 2: Verify inclusiveRangeLength over the closed interval.\n`,
 			`${finding}1. Fix inclusiveRangeLength and investigate the dependency audit failure.\n2. Schedule a follow-up meeting with the maintenance team.\n`,
 		]) {
 			expect(
