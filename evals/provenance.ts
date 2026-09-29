@@ -1,11 +1,12 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { isAbsolute, normalize, sep } from "node:path";
 import { promisify } from "node:util";
 import { createFileSourceIdentityProvider } from "../src/infrastructure/fs/source-identity.js";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
-import { normalizeRecorded, REDACTED } from "./cassette.js";
+import { mapStrings, normalizeRecorded, REDACTED } from "./cassette.js";
 import { pseudonymizeEvalIds } from "./grader-input.js";
 import type {
 	HostActorObservation,
@@ -390,14 +391,41 @@ function redactSensitiveFields(value: unknown): unknown {
 	return value;
 }
 
+export function redactHostHome<T>(value: T, hostHome: string): T {
+	const home = hostHome.replace(/[/\\]+$/, "");
+	if (home.length <= 1) return value;
+	const homeSeparator = String.raw`(?:/|\\+/|\\+|\\u002[fF]|\\u005[cC]|%2[fF]|%5[cC])`;
+	const regexEscape = (part: string) =>
+		part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+	const homePattern = new RegExp(
+		home
+			.split(/[/\\]/)
+			.map((part) =>
+				[...part]
+					.map((character) => {
+						const encoded = [...Buffer.from(character, "utf8")]
+							.map((byte) => `%${byte.toString(16).padStart(2, "0")}`)
+							.join("");
+						return `(?:${regexEscape(character)}|${encoded})`;
+					})
+					.join(""),
+			)
+			.join(homeSeparator),
+		"gi",
+	);
+	return mapStrings(value, (text) =>
+		text.replace(homePattern, "<redacted-home>"),
+	) as T;
+}
+
 export function redactTranscript(input: {
 	readonly value: unknown;
 	readonly projectPath: string;
 }): RedactedTranscript {
+	const normalized = normalizeRecorded(input.value, input.projectPath);
+	const withoutHome = redactHostHome(normalized, homedir());
 	const text = canonicalJson(
-		pseudonymizeEvalIds(
-			redactSensitiveFields(normalizeRecorded(input.value, input.projectPath)),
-		),
+		pseudonymizeEvalIds(redactSensitiveFields(withoutHome)),
 	);
 	return { text, sha256: sha256(new TextEncoder().encode(text)) };
 }
