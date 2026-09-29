@@ -26,6 +26,10 @@ const RECOVERY_RELEASES = {
 		commit: "5f89772d9048285eae54741f2da814529041e04e",
 		tagObject: "811f909b2e86e2701d934e9f5b2bf38573ed7509",
 	},
+	"v9.3.0": {
+		commit: "7c7a8669e2ba5d88d94d4940824c8f57a37b4362",
+		tagObject: "879b9b11860cb7c51caa1803e133842805845020",
+	},
 } as const;
 
 function refEvidence(
@@ -92,7 +96,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("release ref proof", () => {
-	test.each(["v9.1.0", "v9.2.0"] as const)(
+	test.each(["v9.1.0", "v9.2.0", "v9.3.0"] as const)(
 		"accepts a main dispatch for unchanged ancestor tag %s",
 		(tag) => {
 			expect(
@@ -151,48 +155,54 @@ describe("release ref proof", () => {
 		).toContain("current origin/main");
 	});
 
-	test("v9.2.0 recovery rejects unknown and mismatched dispatch tags", () => {
+	test("v9.3.0 recovery rejects unknown and mismatched dispatch tags", () => {
 		for (const overrides of [
-			{ expectedTag: "v9.3.0", requestedTag: "v9.3.0" },
+			{ expectedTag: "v9.4.0", requestedTag: "v9.4.0" },
 			{ requestedTag: "v9.1.0" },
 			{ eventSha: COMMIT },
 		]) {
 			expect(
-				releaseRecoveryRefIssue(recoveryEvidence(overrides, "v9.2.0"), true),
+				releaseRecoveryRefIssue(recoveryEvidence(overrides, "v9.3.0"), true),
 			).toContain("input or checkout");
 		}
 	});
 
-	test("v9.2.0 recovery rejects pinned and remote tag drift", () => {
-		for (const overrides of [
-			{ localTagObjectSha: COMMIT },
-			{ localTagCommitSha: COMMIT },
-		]) {
-			expect(
-				releaseRecoveryRefIssue(recoveryEvidence(overrides, "v9.2.0"), true),
-			).toContain("pinned v9.2.0");
-		}
-		for (const overrides of [
-			{ remoteTagObjectSha: COMMIT },
-			{ remoteTagCommitSha: COMMIT },
-		]) {
-			expect(
-				releaseRecoveryRefIssue(recoveryEvidence(overrides, "v9.2.0"), true),
-			).toContain("remote tag");
-		}
-	});
+	test.each(["v9.2.0", "v9.3.0"] as const)(
+		"%s recovery rejects pinned and remote tag drift",
+		(tag) => {
+			for (const overrides of [
+				{ localTagObjectSha: COMMIT },
+				{ localTagCommitSha: COMMIT },
+			]) {
+				expect(
+					releaseRecoveryRefIssue(recoveryEvidence(overrides, tag), true),
+				).toContain(`pinned ${tag}`);
+			}
+			for (const overrides of [
+				{ remoteTagObjectSha: COMMIT },
+				{ remoteTagCommitSha: COMMIT },
+			]) {
+				expect(
+					releaseRecoveryRefIssue(recoveryEvidence(overrides, tag), true),
+				).toContain("remote tag");
+			}
+		},
+	);
 
-	test("v9.2.0 recovery rejects non-main dispatch", () => {
-		for (const overrides of [
-			{ eventName: "push" },
-			{ eventRefType: "tag" },
-			{ eventRefName: "release" },
-		]) {
-			expect(
-				releaseRecoveryRefIssue(recoveryEvidence(overrides, "v9.2.0"), true),
-			).toContain("main branch");
-		}
-	});
+	test.each(["v9.2.0", "v9.3.0"] as const)(
+		"%s recovery rejects non-main dispatch",
+		(tag) => {
+			for (const overrides of [
+				{ eventName: "push" },
+				{ eventRefType: "tag" },
+				{ eventRefName: "release" },
+			]) {
+				expect(
+					releaseRecoveryRefIssue(recoveryEvidence(overrides, tag), true),
+				).toContain("main branch");
+			}
+		},
+	);
 	test("obsolete publication commands fail with migration guidance", () => {
 		const legacy = spawnSync(
 			"bun",
