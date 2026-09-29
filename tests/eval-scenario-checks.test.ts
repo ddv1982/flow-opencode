@@ -1626,6 +1626,10 @@ describe("inspection-failed-audit-completes", () => {
 		expect(scenario.steps[0]?.arguments).toContain(
 			"specific defect or audit target in each phase",
 		);
+		expect(scenario.steps[0]?.arguments).toContain(
+			"Number at least two phases as 1. and 2.",
+		);
+		expect(scenario.steps[0]?.arguments).toContain("State a concrete action");
 	});
 	function recordedOutcome(overrides: Partial<Outcome> = {}): Outcome {
 		const document = session({
@@ -1721,6 +1725,128 @@ describe("inspection-failed-audit-completes", () => {
 				recordedOutcome({ reviewDocument: documentObservation(vague) }),
 			),
 		).toContain("review document omitted a phased remediation plan");
+	});
+
+	test("accepts substantive numbered actions without phase labels", () => {
+		const content =
+			"# Codebase review\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Proposed work\n\n1. **Correct the inclusive interval contract.** Target src/count.ts and add a 1..3 regression test.\n2. **Investigate the frontend audit failure.** Target frontend:audit and rerun bun run verify after tracing the advisories.\n\n## Blockers\nThe audit remains unresolved.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(content) }),
+			),
+		).toEqual([]);
+		const colonActions =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. **Closed interval defect:** Add an inclusiveRangeLength regression for 1..3.\n2. **Dependency audit:** Investigate the advisories and rerun bun run verify.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(colonActions) }),
+			),
+		).toEqual([]);
+		const vague =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Proposed work\n\n1. Test.\n2. Fix.\n";
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(vague) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+		for (const content of [
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Do not test inclusiveRangeLength.\n2. Do not fix frontend:audit.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Add an inclusiveRangeLength regression for 1..3.\n\nThis paragraph starts a different list.\n\n2. Investigate frontend:audit and rerun bun run verify.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. We will not change inclusiveRangeLength or add the 1..3 regression.\n2. We will not investigate the audit advisories or rerun the verification gate.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. TBD.\n\n## Notes\nAdd an inclusiveRangeLength test.\n\n2. Investigate frontend:audit and rerun bun run verify.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n## Regression notes\n1. Add an inclusiveRangeLength regression test.\n\n## Audit notes\n2. Investigate frontend:audit and rerun bun run verify.\n",
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n1. Add an inclusiveRangeLength regression test.\n2. TBD.\n\n## Appendix\nFix frontend:audit later.\n",
+		]) {
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain("review document omitted a phased remediation plan");
+		}
+	});
+
+	test("does not borrow actions from unrelated sections for labeled phases", () => {
+		const finding =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n";
+		for (const content of [
+			`${finding}## Phase 1\nTBD.\n\n## Notes\nAdd an inclusiveRangeLength regression test.\n\n## Phase 2\nInvestigate frontend:audit and rerun bun run verify.\n`,
+			`${finding}## Phase 1\nAdd an inclusiveRangeLength regression test.\n\n## Phase 2\nTBD.\n\n## Appendix\nInvestigate frontend:audit and rerun bun run verify.\n`,
+		]) {
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain("review document omitted a phased remediation plan");
+		}
+	});
+
+	test("accepts specific repair prose but rejects direct phase refusals", () => {
+		const finding =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n";
+		const repaired = `${finding}## Phase 1\nRepair the off-by-one defect in src/count.ts and add a regression for the 1..3 interval.\n## Phase 2\nTriage the 21 high-severity package advisories and restore the failing package gate.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(repaired) }),
+			),
+		).toEqual([]);
+		const refused = `${finding}Phase 1: Review inclusiveRangeLength? No.\nPhase 2: Review frontend:audit? No.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(refused) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+		const nested = `${finding}## Phase 1\n### Repair\nFix the off-by-one in count.ts and add a regression for the closed interval.\n## Phase 2\n### Dependency gate\nTriage the 21 audit advisories and rerun bun run verify.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(nested) }),
+			),
+		).toEqual([]);
+		const bulletActions = `${finding}## Phase 1\nThe first phase covers the range defect.\n- Fix the off-by-one in count.ts and add regression coverage for 1..3.\n## Phase 2\nThe second phase covers the failed gate.\n- Triage the high-severity dependency audit advisories and rerun bun run verify.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(bulletActions) }),
+			),
+		).toEqual([]);
+		const colonRefusal = `${finding}Phase 1: Do not repair the off-by-one defect in src/count.ts or add regression tests.\nPhase 2: Do not triage the audit advisories or restore the failing package gate.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(colonRefusal) }),
+			),
+		).toContain("review document omitted a phased remediation plan");
+	});
+
+	test("requires an action and a fixture target in each phase", () => {
+		const finding =
+			"Finding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\n";
+		const firstPerson = `${finding}Phase 1: I will add a regression for inclusiveRangeLength over 1..3.\nPhase 2: I should investigate the audit advisories and rerun bun run verify.\n`;
+		expect(
+			check(
+				"inspection-failed-audit-completes",
+				recordedOutcome({ reviewDocument: documentObservation(firstPerson) }),
+			),
+		).toEqual([]);
+		for (const content of [
+			`${finding}Phase 1: inclusiveRangeLength has an off-by-one defect in count.ts.\nPhase 2: The dependency audit contains many high-severity advisories.\n`,
+			`${finding}Phase 1: Fix the off-by-one in count.ts and add a regression.\nPhase 2: Verify inclusiveRangeLength over the closed interval.\n`,
+			`${finding}1. Fix inclusiveRangeLength and investigate the dependency audit failure.\n2. Schedule a follow-up meeting with the maintenance team.\n`,
+		]) {
+			expect(
+				check(
+					"inspection-failed-audit-completes",
+					recordedOutcome({ reviewDocument: documentObservation(content) }),
+				),
+			).toContain("review document omitted a phased remediation plan");
+		}
 	});
 
 	test("accepts a capitalized canonical command in the honest report", () => {
