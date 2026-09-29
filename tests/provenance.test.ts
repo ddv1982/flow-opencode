@@ -18,6 +18,7 @@ import {
 	inspectWorkingSource,
 	instructionDelivery,
 	normalizeRequestedModel,
+	redactHostHome,
 	redactTranscript,
 	samePackedArtifact,
 	unpackedManifestSha256,
@@ -537,6 +538,23 @@ describe("eval provenance", () => {
 			);
 		}
 		expect(transcript.sha256).toMatch(/^sha256:[a-f0-9]{64}$/);
+	});
+
+	test("redacts encoded characters inside Windows home components", () => {
+		const home = "C:\\Users\\Jane Doe";
+		const paths = redactHostHome(
+			{
+				raw: "C:\\Users\\Jane Doe\\AppData\\bun",
+				encoded: "C%3A%5CUsers%5CJane%20Doe%5CAppData%5Cbun",
+				mixed: "C:%5CUsers%5CJane%20Doe%5CAppData%5Cbun",
+			},
+			home,
+		);
+		for (const path of Object.values(paths)) {
+			expect(path).toStartWith("<redacted-home>");
+			expect(path).not.toContain("Jane Doe");
+			expect(path).not.toContain("Jane%20Doe");
+		}
 	});
 
 	test("redacts transcript object keys as well as values", () => {
