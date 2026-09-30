@@ -65,6 +65,12 @@ function compact(
 		summary: true,
 	});
 	driver.observeHostMessage(host, { id: successor, role: "user" });
+	driver.observeHostPart(host, {
+		type: "text",
+		messageID: successor,
+		synthetic: true,
+		metadata: { compaction_continue: true },
+	});
 	driver.observeCompaction(host);
 }
 
@@ -737,6 +743,12 @@ describe("Flow auto-drive coordinator", () => {
 			id: "compaction-continuation",
 			role: "user",
 		});
+		state.driver.observeHostPart("host-1", {
+			type: "text",
+			messageID: "compaction-continuation",
+			synthetic: true,
+			metadata: { compaction_continue: true },
+		});
 		state.driver.observeCompaction("host-1");
 
 		expect(state.prompts).toHaveLength(0);
@@ -837,6 +849,12 @@ describe("Flow auto-drive coordinator", () => {
 		state.driver.observeHostMessage("host-1", {
 			id: "compaction-continuation",
 			role: "user",
+		});
+		state.driver.observeHostPart("host-1", {
+			type: "text",
+			messageID: "compaction-continuation",
+			synthetic: true,
+			metadata: { compaction_continue: true },
 		});
 
 		state.driver.observeCompaction("host-2");
@@ -3079,3 +3097,156 @@ describe("own inspection draft approval", () => {
 		).toBe("stale-continuation");
 	});
 });
+
+test("native historical user summary updates cannot replace the compaction successor", async () => {
+	const state = harness({
+		sessionId: "flow-1",
+		status: "planning",
+		revision: 4,
+		nextAction: "flow_plan_approve",
+	});
+	await state.activate();
+	await state.driver.observeMessage(
+		"host-1",
+		DELIVERY,
+		[{ text: "Approve the existing plan." }],
+		"checkpoint-reply",
+	);
+	state.driver.observeHostMessage("host-1", {
+		id: "manager-before-compaction",
+		role: "assistant",
+		parentID: "checkpoint-reply",
+	});
+	state.driver.observeHostPart("host-1", {
+		type: "compaction",
+		messageID: "native-compaction",
+		auto: true,
+	});
+	const summary = {
+		id: "native-summary",
+		role: "assistant",
+		parentID: "native-compaction",
+		summary: true,
+	};
+	state.driver.observeHostMessage("host-1", summary);
+	state.driver.observeHostMessage("host-1", {
+		id: "command-message",
+		role: "user",
+		summary: { diffs: [] },
+	});
+	state.driver.observeHostMessage("host-1", summary);
+	state.driver.observeHostMessage("host-1", summary);
+	state.driver.observeHostMessage("host-1", {
+		id: "native-successor",
+		role: "user",
+	});
+	const continuation = {
+		type: "text",
+		messageID: "native-successor",
+		synthetic: true,
+		metadata: { compaction_continue: true },
+	};
+	state.driver.observeHostMessage("host-1", {
+		id: "command-message",
+		role: "user",
+		summary: { diffs: [] },
+	});
+	state.driver.observeHostPart("host-1", continuation);
+	state.driver.observeHostPart("host-1", continuation);
+	state.driver.observeHostMessage("host-1", summary);
+	state.driver.observeHostMessage("host-1", {
+		id: "command-message",
+		role: "user",
+		summary: { diffs: [] },
+	});
+	state.driver.observeHostPart("host-1", {
+		type: "compaction",
+		messageID: "native-compaction",
+		auto: true,
+	});
+	state.driver.observeCompaction("host-1");
+	expect(state.driver.compactionContext("host-1")).not.toBeNull();
+	state.setProjection({
+		sessionId: "flow-1",
+		status: "ready",
+		revision: 5,
+		nextAction: "flow_run_start",
+	});
+	mutate(state.driver, "host-1", 5, undefined, "native-successor");
+	await state.driver.onIdle("host-1");
+	expect(state.prompts).toHaveLength(1);
+});
+
+test.each([
+	{ label: "missing marker", marker: null },
+	{ label: "manual marker", marker: { synthetic: false } },
+	{ label: "unclassified marker", marker: { synthetic: undefined } },
+	{ label: "unknown native user", marker: { messageID: "unknown-user" } },
+	{ label: "wrong part type", marker: { type: "tool" } },
+	{
+		label: "false marker",
+		marker: { metadata: { compaction_continue: false } },
+	},
+	{
+		label: "string marker",
+		marker: { metadata: { compaction_continue: "true" } },
+	},
+	{ label: "wrong host", marker: {}, host: "host-2" },
+	{ label: "marker before summary", marker: {}, early: true },
+	{ label: "replaced authority", marker: {}, freshDirection: true },
+])(
+	"rejects compaction continuation with $label",
+	async ({ marker, host, early, freshDirection }) => {
+		const state = harness({
+			sessionId: "flow-1",
+			status: "planning",
+			revision: 4,
+			nextAction: "flow_plan_approve",
+		});
+		await state.activate();
+		state.driver.observeHostMessage("host-1", {
+			id: "manager",
+			role: "assistant",
+			parentID: "command-message",
+		});
+		state.driver.observeHostPart("host-1", {
+			type: "compaction",
+			messageID: "compaction",
+			auto: true,
+		});
+		const part = {
+			type: "text",
+			messageID: "successor",
+			synthetic: true,
+			metadata: { compaction_continue: true },
+			...marker,
+		};
+		const { synthetic, ...unclassified } = part;
+		const nativePart =
+			synthetic === undefined ? unclassified : { ...unclassified, synthetic };
+		if (early) state.driver.observeHostPart("host-1", nativePart);
+		state.driver.observeHostMessage("host-1", {
+			id: "summary",
+			role: "assistant",
+			parentID: "compaction",
+			summary: true,
+		});
+		state.driver.observeHostMessage("host-1", {
+			id: "successor",
+			role: "user",
+		});
+		if (freshDirection)
+			await state.driver.observeMessage(
+				"host-1",
+				DELIVERY,
+				[{ text: "Continue from my new direction." }],
+				"new-user",
+			);
+		if (marker) state.driver.observeHostPart(host ?? "host-1", nativePart);
+		state.driver.observeCompaction("host-1");
+		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.warnings.at(-1)).toContain(
+			"compaction origin was unavailable",
+		);
+	},
+);

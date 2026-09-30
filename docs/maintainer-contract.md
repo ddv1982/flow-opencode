@@ -62,13 +62,12 @@ when the tool assistant ID resolves through the cached `message.updated`
 closed. Another host cannot establish that reply authority, though a reviewer
 child may contribute only the one state-constrained successor revision after an
 authenticated `flow_review_start`; every other mechanical projection must equal
-the credited mutation revision. Compaction transfers authority only
-after the same host authenticates the trigger assistant → automatic compaction
-marker → summary assistant → successor user lineage while the captured
-authority remains unchanged. Missing, stale, or unrelated lineage fails closed.
-This provenance remains process-local and adds no Session v5 field. Flow never
-returns “ready for the next feature” while that proven lease can safely start
-it.
+the credited mutation revision. Compaction requires a same-host trigger,
+automatic compaction part, matching summary, and successor user with a synthetic
+`compaction_continue` marker. Captured authority must match. Earlier user metadata
+updates grant nothing. Missing or stale lineage fails closed. This remains
+process-local and adds no Session v5 field. Flow starts the next feature whenever
+the proven lease permits it.
 
 `/flow-auto stop` and `/flow-auto cancel` revoke only the process-local lease in
 that OpenCode session. They do not mutate or close the durable Flow session.

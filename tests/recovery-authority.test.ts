@@ -1024,3 +1024,96 @@ test("obsolete initial prompt failure preserves a renewed checkpoint reply", asy
 	expect(observed).toBe("stale-continuation");
 	expect(driver.compactionContext("host")).not.toBeNull();
 });
+
+test.each([
+	{ mode: "off", failures: 1 },
+	{ mode: "off", failures: 2 },
+	{ mode: "shadow", failures: 1 },
+	{ mode: "shadow", failures: 2 },
+] as const)(
+	"authenticated compaction keeps $mode retry policy after $failures failed reviews",
+	async ({ mode, failures }) => {
+		const state = await failedTwice(failures);
+		const authority = automatic(state, mode);
+		const driver = new AutoDriveCoordinator({
+			recovery: authority.controller,
+			readProjection: async () => ({
+				sessionId: state.repository.session?.id,
+				status: "blocked",
+				revision: revision(state.repository),
+				nextAction:
+					failures === 1 ? "flow_feature_reset" : "await-user-direction",
+			}),
+			prompt: async () => {},
+		});
+		const delivery = {
+			agent: "build",
+			model: { providerID: "fixture", modelID: "scripted" },
+		};
+		const metadata = await driver.activate("host");
+		await driver.observeMessage(
+			"host",
+			delivery,
+			[{ type: "text", synthetic: true, metadata }],
+			"original",
+		);
+		driver.observeHostMessage("host", {
+			id: "manager",
+			role: "assistant",
+			parentID: "original",
+		});
+		driver.observeHostPart("host", {
+			type: "compaction",
+			messageID: "compaction",
+			auto: true,
+		});
+		const summary = {
+			id: "summary",
+			role: "assistant",
+			parentID: "compaction",
+			summary: true,
+		};
+		driver.observeHostMessage("host", summary);
+		driver.observeHostMessage("host", {
+			id: "original",
+			role: "user",
+			summary: { diffs: [] },
+		});
+		driver.observeHostMessage("host", summary);
+		driver.observeHostMessage("host", { id: "successor", role: "user" });
+		driver.observeHostMessage("host", {
+			id: "original",
+			role: "user",
+			summary: { diffs: [] },
+		});
+		driver.observeHostPart("host", {
+			type: "text",
+			messageID: "successor",
+			synthetic: true,
+			metadata: { compaction_continue: true },
+		});
+		driver.observeCompaction("host");
+		expect(driver.compactionContext("host")).not.toBeNull();
+		const before = revision(state.repository);
+		const result = await authority
+			.service("successor-manager", "successor")
+			.featureReset({
+				request: {
+					operationId: "after-native-compaction",
+					expectedRevision: before,
+					featureId: FEATURE,
+					nextFeatureId: FEATURE,
+				},
+			});
+		if (failures === 1) {
+			expect(result.status).toBe("ok");
+			expect(revision(state.repository)).toBe(before + 1);
+		} else {
+			expect(result.status).toBe("error");
+			expect(result.summary).toBe(
+				"This checkpoint requires explicit user direction or exact host-authorized recovery.",
+			);
+			expect(revision(state.repository)).toBe(before);
+		}
+	},
+);

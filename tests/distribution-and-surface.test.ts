@@ -204,6 +204,22 @@ async function emitAutoCompaction(
 	});
 	await emitMessage(hooks, { id: successor, sessionID, role: "user" });
 	await hooks.event?.({
+		event: {
+			type: "message.part.updated",
+			properties: {
+				part: {
+					id: `${successor}-continuation`,
+					messageID: successor,
+					sessionID,
+					type: "text",
+					text: "Continue the same task.",
+					synthetic: true,
+					metadata: { compaction_continue: true },
+				},
+			},
+		},
+	});
+	await hooks.event?.({
 		event: { type: "session.compacted", properties: { sessionID } },
 	} as Parameters<NonNullable<typeof hooks.event>>[0]);
 }

@@ -3,6 +3,14 @@ import type { RecoveryController } from "../../application/recovery-policy.js";
 import type { SourceDigest } from "../../domain/session.js";
 import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
 import {
+	authenticatedCompactionSuccessor,
+	type Compaction,
+	type HostMessage,
+	type HostPart,
+	observeCompactionMessage,
+	observeCompactionPart,
+} from "./auto-compaction.js";
+import {
 	decideOnIdle,
 	type IdleDecision,
 	isHandback,
@@ -107,13 +115,6 @@ export function autoDriveDelivery(
 		...(variant === undefined ? {} : { variant }),
 	};
 }
-type HostMessage = Record<"id" | "role", string> & {
-	parentID?: string;
-	summary?: unknown;
-};
-type HostPart = { type: string; messageID: string; auto?: boolean };
-type Compaction = Record<"authority" | "user", string> &
-	Partial<Record<"summary" | "successor", string>>;
 type Checkpoint = { revision: number; answered: boolean; advance?: number };
 export type ProcessLocalAutoContinuationSupport =
 	| "supported"
@@ -483,8 +484,6 @@ export class AutoDriveCoordinator {
 		return `${context}\n\n${FLOW_MANAGER_KERNEL}`;
 	}
 	observeHostMessage(host: string, message: HostMessage): void {
-		// Recorded before the lease guard: parentage is a property of the host, not
-		// of the session that happens to hold the lease.
 		if (message.role === "assistant") {
 			if (message.parentID === undefined) this.#hostMissingParentage = true;
 			else this.#hostParentage = true;
@@ -493,49 +492,36 @@ export class AutoDriveCoordinator {
 		if (lease?.hostSessionId !== host) return;
 		if (message.role === "assistant" && message.parentID !== undefined) {
 			lease.assistantParents.set(message.id, message.parentID);
-			if (message.summary !== true) {
+			if (message.summary !== true)
 				lease.lastAssistantParent = message.parentID;
-				if (lease.compaction) lease.compaction = null;
-			} else if (lease.compaction) {
-				if (
-					message.parentID === lease.compaction.user &&
-					lease.messageId === lease.compaction.authority
-				)
-					lease.compaction.summary = message.id;
-				else lease.compaction = null;
-			}
-		} else if (message.role === "user" && lease.compaction) {
-			const compaction = lease.compaction;
-			if (
-				compaction.summary &&
-				(!compaction.successor || compaction.successor === message.id)
-			)
-				compaction.successor = message.id;
-			else lease.compaction = null;
 		}
+		lease.compaction = observeCompactionMessage(
+			lease.compaction,
+			lease.messageId,
+			message,
+		);
 	}
 	observeHostPart(host: string, part: HostPart): void {
 		const lease = this.#lease;
-		if (
-			lease?.hostSessionId !== host ||
-			part.type !== "compaction" ||
-			part.auto !== true
-		)
-			return;
-		lease.compaction =
-			lease.lastAssistantParent && lease.lastAssistantParent === lease.messageId
-				? { authority: lease.lastAssistantParent, user: part.messageID }
-				: null;
+		if (lease?.hostSessionId !== host) return;
+		lease.compaction = observeCompactionPart(
+			lease.compaction,
+			lease.messageId,
+			lease.lastAssistantParent,
+			part,
+		);
 	}
 	observeCompaction(host: string): void {
 		const lease = this.#lease;
 		if (lease?.hostSessionId !== host || lease.messageId === null) return;
-		const compaction = lease.compaction;
+		const successor = authenticatedCompactionSuccessor(
+			lease.compaction,
+			lease.messageId,
+		);
 		lease.compaction = null;
-		if (!compaction?.successor || lease.messageId !== compaction.authority)
-			return void this.#rejectOrigin(lease, "compaction");
-		lease.messageId = compaction.successor;
-		this.#options.recovery?.observeMessage(host, lease.messageId, true, true);
+		if (!successor) return void this.#rejectOrigin(lease, "compaction");
+		lease.messageId = successor;
+		this.#options.recovery?.observeMessage(host, successor, true, true);
 	}
 	observeMutation(
 		host: string,
