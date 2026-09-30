@@ -84,7 +84,10 @@ type GuardedFeatureInput = Readonly<{
 	featureId: FeatureId;
 }>;
 type FeatureResetInput = GuardedFeatureInput &
-	Readonly<{ nextFeatureId?: FeatureId | undefined }>;
+	Readonly<{
+		nextFeatureId?: FeatureId | undefined;
+		existingWork?: import("./session.js").ExistingWork | undefined;
+	}>;
 type ReviewStartInput = GuardedFeatureInput &
 	Readonly<{
 		sourceDigest: SourceDigest;
@@ -538,6 +541,7 @@ export function startRun(
 		operationId: string;
 		expectedRevision: number;
 		featureId?: FeatureId | undefined;
+		existingWork?: import("./session.js").ExistingWork | undefined;
 	}>,
 	environment: TransitionEnvironment,
 ): MutationResult<FeatureRun> {

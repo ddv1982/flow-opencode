@@ -1294,6 +1294,31 @@ test("registered tools share the controller across file-backed service instances
 		);
 		const s = await setup("delegated", provider, true);
 		if (!s.repository.session) throw new Error("fixture");
+		const { createFileReviewEvidenceProvider } = await import(
+			"../src/infrastructure/fs/review-evidence.js"
+		);
+		const { createFileSourceIdentityProvider } = await import(
+			"../src/infrastructure/fs/source-identity.js"
+		);
+		const originalRun = s.repository.session.runs.find(
+			(run) => run.featureId === FEATURE,
+		);
+		if (!originalRun) throw new Error("Missing original synthetic run.");
+		const baseline = await createFileReviewEvidenceProvider(
+			directory,
+		).captureBaseline({
+			sessionId: s.repository.session.id,
+			featureId: FEATURE,
+			originRunId: originalRun.id,
+			sourceDigest:
+				await createFileSourceIdentityProvider(directory).computeSourceDigest(),
+		});
+		s.repository.session = {
+			...s.repository.session,
+			runs: s.repository.session.runs.map((run) =>
+				run.featureId === FEATURE ? { ...run, baseline } : run,
+			),
+		};
 		await saveSession(directory, s.repository.session);
 		const { AutoDriveCoordinator } = await import(
 			"../src/platform/opencode/auto-drive.js"

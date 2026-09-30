@@ -1,45 +1,29 @@
 # Validation and Review
 
-This document defines the validation, review, and closure invariants Flow must
-preserve. It is part of [the maintainer contract](maintainer-contract.md), split out
-because it is over a third of it.
+These are the validation, review, and closure invariants in
+[the maintainer contract](maintainer-contract.md).
 
-Before implementation, the manager inventories every exact and
-behavior-oriented evidence requirement, its required environment, and its
-authorized execution path. It also prepares an adversarial acceptance and risk
-checklist covering failure ordering, adjacent state transitions, repeated and
-interrupted operations, overlapping feature invariants, and relevant
-platform/file-mode risks. That checklist is supplied to every worker before
-editing and later to review. Concurrency and state-machine work expresses the
-bounded checklist as a matrix of state/interleaving, event, expected outcome,
-cleanup/invariant, and evidence. Race-heavy lifecycle invariants are planned
-separately from independently acceptable UI, persistence, or accessibility
-outcomes.
+Before edits, inventory exact and behavioral evidence, required environments,
+and authorized commands. Give workers and reviewers the relevant adversarial
+checklist for failure ordering, adjacent transitions, repeated/interrupted
+operations, overlapping invariants, and platform/mode risks. Concurrency work
+uses a bounded matrix of state/interleaving, event, outcome, cleanup/invariant,
+and evidence. Keep race-heavy lifecycle invariants separate from independent
+UI, persistence, and accessibility outcomes.
 
-Canonical-gate discovery follows one order: repository instructions, maintained
-docs, CI workflow, build/test manifests, then task fit. When the right gate is
-still ambiguous after that pass, the manager records the chosen source and
-rationale in plan `decisions`.
+Discover the gate from repository instructions, docs, CI, then manifests and task
+fit. Record the source and rationale in `decisions` when ambiguous.
 
-The manager reuses one conversational baseline inventory across a run and
-refreshes changed facts. A feature review receives only baseline facts it
-changes or depends on; final review receives the full inventory. Its bounded
-packet maps IDs to current-source evidence, carries the feature risk checklist
-represented as a transition matrix when applicable, and preserves prior finding
-dispositions. Empty optional sections are omitted rather than repeated as a text
-manifest.
+The host retains one immutable feature baseline across retries. Review packets
+map IDs to current evidence and relevant risk matrices, preserving prior findings.
 When resuming attempt 2 or later without prior findings in conversation, the
 manager reads detail once and recovers their IDs from superseded runs before
 preflight.
 
-When required behavior or environment evidence is knowingly skipped,
-unavailable, or inapplicable, manager workflow policy forbids calling
-`flow_review_start` even when a substitute broad command passes. If such a gap
-reaches review, the reviewer records proof required to approve the outcome as a
-precise blocker. Beyond the declared entries below, the runtime persists no
-skipped-evidence field and keeps no parallel blocker ledger: missing evidence
-checkpoints for user direction, and the existing reset or explicit closure path
-handles the decision.
+Known missing required behavior or environment proof forbids review, even after
+an unrelated broad pass. The reviewer blocks if that gap reaches review.
+Beyond declared entries, no skipped-evidence field or parallel blocker ledger
+exists. Missing evidence checkpoints for direction through reset or explicit closure.
 
 `flow_validation_start` prepares the active run, exact next Bash command, scope,
 current workspace-content digest, and the host platform, which infrastructure reads
@@ -109,8 +93,7 @@ context — including `plan.evidence`, so the commands it
 is asked about are in hand rather than inferred — its full assignment, declared
 artifacts, assignment-linked validation with each observation's recorded host, and
 completed feature IDs. It is workspace-read-only; its allowed Flow tools are
-`flow_status` and `flow_feature_complete`, while its guidance restricts status
-use to the assigned reviewer view. The platform accepts a new completion only
+`flow_status` and `flow_feature_complete`, while guidance limits status to its assignment and evidence pages. The platform accepts a new completion only
 from the reserved reviewer identity. While that Session v5 workflow remains
 active, every caller with tool access may receive the read-only result of an
 exact previously accepted completion request without validation cancellation or
@@ -181,8 +164,31 @@ Result submission is the reviewer's sole lifecycle mutation. `flow_status` may
 fail-closed quarantine unreadable active state; that is recovery maintenance,
 not a lifecycle transition.
 
-The manager creates and dispatches the assignment, then reads compact status;
-it never copies or submits the verdict. A pending assignment may be redispatched
+New runs pin an immutable Git tree plus effective dirty bytes and modes; unborn
+repositories use an empty tree. Accepted existing work requires `existingWork`
+with a full local commit ID and exact `ownedPaths`, granting no new scope.
+Retries retain the original feature baseline. Legacy implementation runs need an explicit
+existing-work declaration on a fresh/reset run or a preparation blocker. Legacy
+inspection retains current-source assurance without captured baseline provenance.
+
+Preparation verifies complete current-source evidence before assignment creation.
+Missing, tampered, stale, unsafe, oversized, or changed unrelated dirty evidence
+blocks without spending a review attempt. Packets allow 256 changed entries and
+4 MiB total; baseline bounds are separate. Binary semantics remain review judgment.
+Parent/leaf checks reject symlinks. Portable revalidation cannot promise zero
+external reads during a malicious concurrent parent-directory swap.
+
+`reviewerPager` gives context/diff page counts. Query `reviewer-evidence` status
+with assignment ID, `part` and zero-based `page`, concatenating `projection.text`
+in order. Each chunk is at most 8 KiB. `complete` describes the whole packet,
+not one page. Context pages recover initial host truncation; no shell or private
+output path is needed. Submission rechecks source and evidence.
+
+New readers hydrate legacy v5 without inventing provenance. Older plugins may
+quarantine new optional fields, retaining raw bytes.
+Close active sessions before version changes; no-write downgrade is not promised.
+
+The manager dispatches and reads compact status; it never submits the verdict. A pending assignment may be redispatched
 after interruption or an unconfirmed reviewer return. A source-binding failure
 instead requires reset, fresh validation, and a new review.
 Manager status rechecks workspace content only while a review is pending and
@@ -192,18 +198,14 @@ does not recommend redispatch.
 Observed-but-unsubmitted work fails closed. [ADR
 0007](adr/0007-reviewer-owned-submission.md) records the rationale.
 
-Every host-observed validation advances the revision indirectly through the
-after-hook. An accepted `[flow-validation]` marker returns `passed` and the
-observation's `recordedRevision`. That revision is only a concurrency token. A
-`passed: true` marker may supply it for `flow_review_start` only while all
-runtime review gates still hold; it may also arm another validation. Failed,
-incomplete, and ineligible markers report `passed: false` and their revision
-may arm only fresh validation, never review. An ineligible marker exposes
-`ineligibleReason`: `source-drift`, or `exit-code-unavailable` and
-`output-completeness-unknown` when the host reports no structured exit code or
-truncation flag. Those two record a durable never-passing observation rather than
-failing the capture, so Flow stays usable on any host; `exitCode` is `null` for
-the first. No compact refresh is needed solely to recover an
-eligible token; missing, malformed, or rejected capture and uncertain routing
-still require one. The revision used to arm the completed command is no longer
-current.
+Every captured validation advances revision. The `[flow-validation]` marker
+returns `passed` and `recordedRevision`. The revision is a concurrency token,
+never permission. Reuse it for the next arm or review only while runtime gates
+permit that action. Required failures block review; an accepted inspection
+`gate-observe` follows the domain route. Missing or malformed markers require
+compact refresh before mutation.
+
+`source-drift`, `exit-code-unavailable`, and `output-completeness-unknown`
+observations remain durable and never pass. Missing exit status records
+`exitCode: null`; missing structured completeness also fails closed. Declared
+named cases must pass in a fresh report; a skipped case cannot prove acceptance.

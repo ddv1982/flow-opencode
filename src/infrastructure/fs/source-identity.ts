@@ -121,78 +121,183 @@ function sameStat(
 	);
 }
 
+export type WorkspaceSourceEntry = Readonly<{
+	path: string;
+	kind: "missing" | "file" | "symlink";
+	mode: number;
+	bytes: Buffer;
+}>;
+
+async function sourceParents(root: string, relativePath: string) {
+	const paths = [root];
+	const parts = relativePath.split(sep);
+	for (let index = 1; index < parts.length; index += 1) {
+		paths.push(join(root, ...parts.slice(0, index)));
+	}
+	const parents: { path: string; stat: Awaited<ReturnType<typeof lstat>> }[] =
+		[];
+	for (const path of paths) {
+		let stat: Awaited<ReturnType<typeof lstat>>;
+		try {
+			stat = await lstat(path);
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+			throw error;
+		}
+		if (!stat.isDirectory() || stat.isSymbolicLink()) {
+			fail(
+				"Flow refuses a symbolic link or non-directory in a source parent path.",
+			);
+		}
+		parents.push({ path, stat });
+	}
+	return parents;
+}
+
+export async function workspaceSourcePathExists(
+	root: string,
+	relativePath: string,
+): Promise<boolean> {
+	const safePath = safeRelativePath(relativePath);
+	if (!(await sourceParents(root, safePath))) return false;
+	try {
+		await lstat(join(root, safePath));
+		return true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+		throw error;
+	}
+}
+
+async function readWorkspaceSourceEntry(
+	root: string,
+	relativePath: string,
+): Promise<WorkspaceSourceEntry> {
+	const safePath = safeRelativePath(relativePath);
+	const missing: WorkspaceSourceEntry = {
+		path: safePath,
+		kind: "missing",
+		mode: 0,
+		bytes: Buffer.alloc(0),
+	};
+	const parents = await sourceParents(root, safePath);
+	if (!parents) return missing;
+	const path = join(root, safePath);
+	let before: Awaited<ReturnType<typeof lstat>>;
+	try {
+		before = await lstat(path);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return missing;
+		fail("Flow could not inspect workspace content.", error);
+	}
+	let kind: WorkspaceSourceEntry["kind"];
+	let bytes: Buffer;
+	let mode = 0;
+	if (before.isSymbolicLink()) {
+		kind = "symlink";
+		bytes = await readlink(path, { encoding: "buffer" });
+		try {
+			new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+		} catch (error) {
+			fail("Flow requires UTF-8 symbolic-link targets.", error);
+		}
+	} else {
+		if (!before.isFile())
+			fail("Flow fingerprints only regular files and symbolic links.");
+		if (before.size > MAX_SOURCE_FILE_BYTES)
+			fail(`A workspace file exceeds ${MAX_SOURCE_FILE_BYTES} bytes.`);
+		kind = "file";
+		mode = before.mode & 0o111;
+		const noFollow = process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
+		const handle = await open(path, constants.O_RDONLY | noFollow);
+		try {
+			if (!sameStat(before, await handle.stat()))
+				fail("Workspace content changed during fingerprinting.");
+			bytes = await handle.readFile();
+		} finally {
+			await handle.close();
+		}
+	}
+	if (
+		!sameStat(before, await lstat(path)) ||
+		(kind === "file" && bytes.length !== before.size)
+	) {
+		fail("Workspace content changed during fingerprinting.");
+	}
+	for (const parent of parents) {
+		const after = await lstat(parent.path);
+		if (
+			parent.stat.dev !== after.dev ||
+			parent.stat.ino !== after.ino ||
+			parent.stat.mode !== after.mode
+		) {
+			fail("Workspace parent changed during fingerprinting.");
+		}
+	}
+	return { path: safePath, kind, mode, bytes };
+}
+
+async function scanWorkspaceSource(
+	workspace: string,
+	accept: (entry: WorkspaceSourceEntry) => void,
+): Promise<SourceDigest> {
+	const root = workspace;
+	const rootStat = await lstat(root);
+	if (!rootStat.isDirectory() || rootStat.isSymbolicLink())
+		fail("Flow refuses a symbolic link or non-directory for the source root.");
+	const paths = [
+		...new Set(
+			(await gitWorkspacePaths(root))
+				.filter((path) => !isFlowRuntimePath(path))
+				.map(safeRelativePath),
+		),
+	].sort();
+	if (paths.length > MAX_SOURCE_FILES)
+		fail(`Workspace exceeds the ${MAX_SOURCE_FILES}-file fingerprint limit.`);
+	const hash = createHash("sha256");
+	hash.update("flow-workspace-content-v1\0");
+	let totalBytes = 0;
+	for (const path of paths) {
+		const entry = await readWorkspaceSourceEntry(root, path);
+		accept(entry);
+		hashField(hash, path);
+		hashField(hash, entry.kind);
+		if (entry.kind === "missing") continue;
+		if (entry.kind === "file") {
+			totalBytes += entry.bytes.length;
+			if (totalBytes > MAX_SOURCE_TOTAL_BYTES)
+				fail(`Workspace content exceeds ${MAX_SOURCE_TOTAL_BYTES} bytes.`);
+			hashField(hash, String(entry.mode));
+		}
+		hashField(hash, entry.bytes);
+	}
+	return `sha256:${hash.digest("hex")}`;
+}
+
+export async function captureWorkspaceSource(workspace: string): Promise<
+	Readonly<{
+		digest: SourceDigest;
+		entries: readonly WorkspaceSourceEntry[];
+	}>
+> {
+	const rootStat = await lstat(workspace);
+	if (!rootStat.isDirectory() || rootStat.isSymbolicLink())
+		fail("Flow refuses a symbolic link or non-directory for the source root.");
+	const root = assertMutableWorkspaceRoot(workspace);
+	const entries: WorkspaceSourceEntry[] = [];
+	const digest = await scanWorkspaceSource(root, (entry) => {
+		entries.push(entry);
+	});
+	return { digest, entries };
+}
+
 export function createFileSourceIdentityProvider(
 	workspace: string,
 ): SourceIdentityProvider {
 	const root = assertMutableWorkspaceRoot(workspace);
 	return {
-		async computeSourceDigest(): Promise<SourceDigest> {
-			const paths = [
-				...new Set(
-					(await gitWorkspacePaths(root))
-						.filter((path) => !isFlowRuntimePath(path))
-						.map(safeRelativePath),
-				),
-			].sort();
-			if (paths.length > MAX_SOURCE_FILES) {
-				fail(
-					`Workspace exceeds the ${MAX_SOURCE_FILES}-file fingerprint limit.`,
-				);
-			}
-			const hash = createHash("sha256");
-			hash.update("flow-workspace-content-v1\0");
-			let totalBytes = 0;
-			for (const relativePath of paths) {
-				const path = join(root, relativePath);
-				let before: Awaited<ReturnType<typeof lstat>>;
-				try {
-					before = await lstat(path);
-				} catch (error) {
-					if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-						hashField(hash, relativePath);
-						hashField(hash, "missing");
-						continue;
-					}
-					fail("Flow could not inspect workspace content.", error);
-				}
-				hashField(hash, relativePath);
-				if (before.isSymbolicLink()) {
-					const target = await readlink(path);
-					const after = await lstat(path);
-					if (!sameStat(before, after))
-						fail("Workspace content changed during fingerprinting.");
-					hashField(hash, "symlink");
-					hashField(hash, target);
-					continue;
-				}
-				if (!before.isFile()) {
-					fail("Flow fingerprints only regular files and symbolic links.");
-				}
-				if (before.size > MAX_SOURCE_FILE_BYTES) {
-					fail(`A workspace file exceeds ${MAX_SOURCE_FILE_BYTES} bytes.`);
-				}
-				totalBytes += before.size;
-				if (totalBytes > MAX_SOURCE_TOTAL_BYTES) {
-					fail(`Workspace content exceeds ${MAX_SOURCE_TOTAL_BYTES} bytes.`);
-				}
-				const noFollow =
-					process.platform === "win32" ? 0 : constants.O_NOFOLLOW;
-				const handle = await open(path, constants.O_RDONLY | noFollow);
-				let contents: Buffer;
-				try {
-					contents = await handle.readFile();
-				} finally {
-					await handle.close();
-				}
-				const after = await lstat(path);
-				if (!sameStat(before, after) || contents.byteLength !== before.size) {
-					fail("Workspace content changed during fingerprinting.");
-				}
-				hashField(hash, "file");
-				hashField(hash, String(before.mode & 0o111));
-				hashField(hash, contents);
-			}
-			return `sha256:${hash.digest("hex")}`;
+		computeSourceDigest() {
+			return scanWorkspaceSource(root, () => {});
 		},
 	};
 }

@@ -219,6 +219,7 @@ export type ReviewAssignment = Readonly<{
 	}>;
 	createdRevision: number;
 	result: ReviewResult | null;
+	evidence?: ReviewEvidenceReference | undefined;
 }>;
 
 /**
@@ -236,6 +237,16 @@ export type FeatureRun = Readonly<{
 	artifactsChanged: Artifact[];
 	validations: ValidationObservation[];
 	reviews: ReviewAssignment[];
+	baseline?: ReviewEvidenceReference | undefined;
+}>;
+
+export type ReviewEvidenceReference = Readonly<{
+	version: 1;
+	sha256: SourceDigest;
+}>;
+export type ExistingWork = Readonly<{
+	baseCommit: string;
+	ownedPaths: readonly string[];
 }>;
 
 export type OperationKind =

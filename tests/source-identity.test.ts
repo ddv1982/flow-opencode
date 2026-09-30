@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { MAX_SOURCE_FILE_BYTES } from "../src/domain/limits.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
 import {
+	captureWorkspaceSource,
 	createFileSourceIdentityProvider,
 	SourceIdentityError,
 } from "../src/infrastructure/fs/source-identity.js";
@@ -276,3 +277,64 @@ describe("workspace content fingerprint", () => {
 		expect(result).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 });
+
+test("preserves the literal v1 digest encoding while exposing raw snapshots", async () => {
+	const root = await repository();
+	await writeFile(join(root, "a.txt"), "alpha\n");
+	expect(await digest(root)).toBe(
+		"sha256:9247e0c612fd0403ec0827be68b56369cfcfd81e35af58eb5d2229e9f08d68a0",
+	);
+	const snapshot = await captureWorkspaceSource(root);
+	expect(snapshot.entries).toEqual([
+		{ path: "a.txt", kind: "file", mode: 0, bytes: Buffer.from("alpha\n") },
+	]);
+});
+
+test.skipIf(process.platform === "win32")(
+	"refuses a tracked child beneath a symbolic-link parent",
+	async () => {
+		const root = await repository();
+		await mkdir(join(root, "parent"));
+		await writeFile(join(root, "parent", "source.txt"), "source\n");
+		await git(root, "add", "parent/source.txt");
+		const outside = await temporaryRoot();
+		await writeFile(join(outside, "source.txt"), "external\n");
+		await rm(join(root, "parent"), { recursive: true });
+		await symlink(outside, join(root, "parent"));
+		await expect(digest(root)).rejects.toThrow("source parent path");
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"rejects invalid UTF-8 symlink targets rather than hashing replacement characters",
+	async () => {
+		const root = await repository();
+		const target = Buffer.from([
+			0x2f, 0x70, 0x72, 0x69, 0x76, 0x61, 0x74, 0x65, 0x2f, 0xff,
+		]);
+		await symlink(target, join(root, "invalid-link"));
+		await expect(digest(root)).rejects.toThrow("UTF-8 symbolic-link targets");
+		await expect(captureWorkspaceSource(root)).rejects.toThrow(
+			"UTF-8 symbolic-link targets",
+		);
+	},
+);
+
+test.skipIf(process.platform === "win32")(
+	"retains the literal valid UTF-8 symlink fingerprint without following its missing target",
+	async () => {
+		const root = await repository();
+		await symlink("/missing/caf\u00e9", join(root, "link"));
+		expect(await digest(root)).toBe(
+			"sha256:efb7cce5f43ae138d3804b083407559ff44aea6ae1cfc3df097c16c4acf4341a",
+		);
+		expect((await captureWorkspaceSource(root)).entries).toEqual([
+			{
+				path: "link",
+				kind: "symlink",
+				mode: 0,
+				bytes: Buffer.from("/missing/caf\u00e9"),
+			},
+		]);
+	},
+);

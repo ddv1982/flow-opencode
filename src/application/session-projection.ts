@@ -133,6 +133,30 @@ export type ReviewerProjection = Readonly<{
 	nextFindingIdPrefix: string;
 }>;
 
+type ReviewerEvidenceProjection = Readonly<{
+	view: "reviewer-evidence";
+	sessionId: string;
+	revision: number;
+	assignmentId: string;
+	sourceDigest: import("../domain/session.js").SourceDigest;
+	part: "context" | "diff";
+	page: number;
+	totalPages: number;
+	complete: true;
+	assurance: "host-evidence" | "legacy-no-baseline";
+	text: string;
+}>;
+type ReviewerOverviewProjection = Readonly<{
+	view: "reviewer";
+	sessionId: string;
+	revision: number;
+	inlineContext: "paged";
+	assignment: Pick<
+		ReviewAssignment,
+		"id" | "featureId" | "runId" | "kind" | "sourceDigest"
+	>;
+}>;
+
 type IdleProjection = Readonly<{
 	view: StatusRequest["view"];
 	status: "idle";
@@ -147,9 +171,16 @@ export type ActiveSessionProjection =
 	| ExecutionProjection
 	| ReviewerProjection;
 
-export type StatusProjection = ActiveSessionProjection | IdleProjection;
+export type StatusProjection =
+	| ActiveSessionProjection
+	| IdleProjection
+	| ReviewerEvidenceProjection
+	| ReviewerOverviewProjection;
 
-type RoutedStatusProjection = Exclude<StatusProjection, ReviewerProjection>;
+type RoutedStatusProjection = Exclude<
+	StatusProjection,
+	ReviewerProjection | ReviewerEvidenceProjection | ReviewerOverviewProjection
+>;
 
 function actionGuidance(projection: RoutedStatusProjection): string {
 	const action = projection.nextAction;
@@ -230,6 +261,20 @@ function retryRequiredFeatureIds(projection: DetailProjection): string[] {
 }
 
 export function statusReport(projection: StatusProjection): readonly string[] {
+	if (projection.view === "reviewer" && "inlineContext" in projection)
+		return [
+			"View: reviewer",
+			`Reviewer assignment: ${projection.assignment.id}`,
+			"Reviewer context is paged. Read the context pages; this header omits the full context.",
+		];
+	if (projection.view === "reviewer-evidence" && "totalPages" in projection)
+		return [
+			"View: reviewer-evidence",
+			`Reviewer assignment: ${projection.assignmentId}`,
+			`Part: ${projection.part}`,
+			`Page: ${projection.page + 1} of ${projection.totalPages}`,
+			"Complete refers to the prepared packet. Read every page; a single page is only a chunk.",
+		];
 	if (!("sessionId" in projection)) {
 		return [
 			`View: ${projection.view}`,
@@ -452,7 +497,7 @@ export function reviewerProjection(
 	const plan = session.plan;
 	const assignedValidationIds = new Set(assignment.validationIds);
 	const amendments = (session.amendments ?? []).filter(
-		(amendment) => amendment.runId === run.id,
+		(amendment) => amendment.featureId === run.featureId,
 	);
 	const amendmentValidationIds = new Set(
 		amendments.map((amendment) => amendment.validationId),
@@ -497,9 +542,10 @@ export function reviewerProjection(
 				.map((candidate) => candidate.id) ?? [],
 		priorFindings: livePriorFindings(session, assignment.featureId),
 		amendments,
-		amendmentEvidence: run.validations.filter((validation) =>
-			amendmentValidationIds.has(validation.id),
-		),
+		amendmentEvidence: session.runs
+			.filter((candidate) => candidate.featureId === run.featureId)
+			.flatMap((candidate) => candidate.validations)
+			.filter((validation) => amendmentValidationIds.has(validation.id)),
 		nextFindingIdPrefix: findingIdPrefix(
 			assignment.featureId,
 			assignment.createdRevision,
@@ -545,5 +591,9 @@ export function project(
 			return executionProjection(session, pendingReviewSourceStale);
 		case "reviewer":
 			return reviewerProjection(session, request.assignmentId);
+		case "reviewer-evidence":
+			throw new Error(
+				"Reviewer evidence requires the workspace evidence reader.",
+			);
 	}
 }

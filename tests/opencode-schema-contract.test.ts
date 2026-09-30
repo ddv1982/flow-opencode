@@ -266,6 +266,7 @@ describe("Flow OpenCode host schemas", () => {
 				"summary",
 			],
 			flow_feature_reset: [
+				"existingWork",
 				"expectedRevision",
 				"featureId",
 				"nextFeatureId",
@@ -289,7 +290,7 @@ describe("Flow OpenCode host schemas", () => {
 		}
 		expect(
 			property(emittedHostSchema("flow_status"), "request").anyOf,
-		).toHaveLength(4);
+		).toHaveLength(5);
 		expectParity(
 			"flow_feature_reset",
 			{

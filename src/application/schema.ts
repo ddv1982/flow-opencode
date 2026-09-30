@@ -231,6 +231,10 @@ const ReviewAssignmentSchema = z
 		packet: ReviewPacketSchema,
 		createdRevision: RevisionSchema,
 		result: PersistedReviewResultSchema.nullable(),
+		evidence: z
+			.object({ version: z.literal(1), sha256: SourceDigestSchema })
+			.strict()
+			.optional(),
 	})
 	.strict();
 
@@ -247,6 +251,10 @@ const FeatureRunSchema = z
 			.array(ValidationObservationSchema)
 			.max(MAX_VALIDATIONS_PER_RUN),
 		reviews: z.array(ReviewAssignmentSchema).max(1),
+		baseline: z
+			.object({ version: z.literal(1), sha256: SourceDigestSchema })
+			.strict()
+			.optional(),
 	})
 	.strict();
 
@@ -356,10 +364,41 @@ export const PlanAmendInputSchema = z
 	})
 	.strict();
 
+const ExistingWorkSchema = z
+	.object({
+		baseCommit: z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/),
+		ownedPaths: z
+			.array(
+				boundedText("Existing work path", { maxBytes: MAX_PATH_BYTES }).refine(
+					(path) =>
+						isArtifactPath(path) &&
+						![".git", ".flow"].some(
+							(root) => path === root || path.startsWith(`${root}/`),
+						),
+					ARTIFACT_PATH_MESSAGE,
+				),
+			)
+			.min(1)
+			.max(256),
+	})
+	.strict()
+	.superRefine((input, context) => {
+		if (new Set(input.ownedPaths).size !== input.ownedPaths.length)
+			context.addIssue({
+				code: "custom",
+				message: "Existing-work ownership paths must be unique.",
+				path: ["ownedPaths"],
+			});
+	});
+
 export const RunStartInputSchema = z
 	.object({
 		request: z
-			.object({ ...guarded, featureId: FeatureIdSchema.optional() })
+			.object({
+				...guarded,
+				featureId: FeatureIdSchema.optional(),
+				existingWork: ExistingWorkSchema.optional(),
+			})
 			.strict(),
 	})
 	.strict();
@@ -398,6 +437,7 @@ export const FeatureResetInputSchema = z
 				...guarded,
 				featureId: FeatureIdSchema,
 				nextFeatureId: FeatureIdSchema.optional(),
+				existingWork: ExistingWorkSchema.optional(),
 			})
 			.strict(),
 	})
@@ -445,6 +485,14 @@ export const StatusInputSchema = z
 				.object({
 					view: z.literal("reviewer"),
 					assignmentId: ReviewAssignmentIdSchema,
+				})
+				.strict(),
+			z
+				.object({
+					view: z.literal("reviewer-evidence"),
+					assignmentId: ReviewAssignmentIdSchema,
+					part: z.enum(["context", "diff"]).default("diff"),
+					page: z.number().int().safe().nonnegative().default(0),
 				})
 				.strict(),
 		]),

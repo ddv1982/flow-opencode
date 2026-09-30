@@ -1,6 +1,7 @@
 import { createFlowService } from "../../application/flow-service.js";
 import type { RecoveryGuard } from "../../application/recovery-policy.js";
 import { systemTransitionEnvironment } from "../system/transition-environment.js";
+import { createFileReviewEvidenceProvider } from "./review-evidence.js";
 import { createFileSessionRepository } from "./session-repository.js";
 
 export const createWorkspaceFlowService = (
@@ -11,4 +12,5 @@ export const createWorkspaceFlowService = (
 		createFileSessionRepository(workspace),
 		systemTransitionEnvironment,
 		recovery,
+		createFileReviewEvidenceProvider(workspace),
 	);
