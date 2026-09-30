@@ -568,7 +568,7 @@ export function autoQualifiedOutcome(
 		},
 		finalText:
 			kind === "audit"
-				? "Audit failed with exit 12; required parser gate passed."
+				? "Audit found 12 outstanding advisory items and exited 12; required parser gate passed."
 				: "Implementation passed the required gate and independent review.",
 	};
 }

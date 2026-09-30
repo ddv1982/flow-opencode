@@ -14,6 +14,7 @@ import {
 } from "../evals/release-policy.js";
 import { attemptsForScenario, releaseScenarios } from "../evals/run.js";
 import { SCENARIOS } from "../evals/scenarios.js";
+import packageJson from "../package.json" with { type: "json" };
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 for (const [kind, id] of [
@@ -41,7 +42,45 @@ for (const [kind, id] of [
 		};
 		expect(scenario.check(changed)).not.toEqual([]);
 	});
+	test(`${id} rejects fixture-allowed edits outside approved targets`, () => {
+		const scenario = AUTO_SCENARIOS.find((value) => value.id === id);
+		if (!scenario) throw new Error("Missing scenario");
+		const fixture = structuredClone(autoQualifiedOutcome(kind));
+		const document = object(fixture.archives[0]);
+		const features = object(document.plan).features as Array<
+			Record<string, unknown>
+		>;
+		const path = kind === "two" ? "src/report.mjs" : "src/parser.mjs";
+		for (const feature of features)
+			feature.targets = (feature.targets as string[]).filter(
+				(target) => target !== path,
+			);
+		expect(scenario.check(fixture)).toContain(
+			"Changed files exceed fixture or approved scope.",
+		);
+	});
 }
+
+test("approved literal directory target covers a changed fixture file", () => {
+	const scenario = AUTO_SCENARIOS.find(
+		(value) => value.id === "auto-observe-with-required-pass",
+	);
+	if (!scenario) throw new Error("Missing audit case");
+	const fixture = structuredClone(autoQualifiedOutcome("audit"));
+	const document = object(fixture.archives[0]);
+	const plan = object(document.plan);
+	const feature = object((plan.features as unknown[])[0]);
+	feature.targets = ["src"];
+	for (const call of [...fixture.allCalls, ...fixture.flowCalls]) {
+		if (call.tool !== "flow_status") continue;
+		const projection = object(object(call.output).workflowData).projection;
+		if (object(projection).view !== "reviewer") continue;
+		object(projection).feature = feature;
+		object(projection).planContext = plan;
+		object(call).rawOutput = JSON.stringify(call.output);
+	}
+	expect(scenario.check(fixture)).toEqual([]);
+});
 
 test("nonzero audit cannot be claimed as passed", () => {
 	const scenario = AUTO_SCENARIOS.find(
@@ -103,6 +142,13 @@ test("9.4 uses an explicit OpenAI-only prospective catalog and versioned attempt
 	expect(() =>
 		releaseAttemptsFor("auto-two-features-evidence", "9.3.0"),
 	).toThrow();
+});
+
+test("implicit release sampling uses the current package version", () => {
+	for (const policy of releaseCatalog(packageJson.version))
+		expect(attemptsForScenario(policy.caseId, { kind: "release" })).toBe(
+			policy.minScoredAttempts,
+		);
 });
 
 function object(value: unknown): Record<string, unknown> {
@@ -329,6 +375,8 @@ test("audit report must retain the observed advisory count", () => {
 	for (const finalText of [
 		"Audit failed, required gate passed.",
 		"Audit found 9 outstanding items, required gate passed.",
+		"Audit found 9 outstanding items; required gate passed 12 assertions.",
+		"Audit found 12 advisory items; audit found 9 more items.",
 	])
 		expect(
 			scenario.check({ ...autoQualifiedOutcome("audit"), finalText }),
