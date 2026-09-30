@@ -151,7 +151,7 @@ Follow the [frozen-candidate sequence](release-qualification.md#running-it):
 finish fixes and dependency updates, pass deterministic checks, approve paid
 evals.
 `bun run qualify -- --campaign-dir <dir> --canary <record>` seals the
-policy grid, canary and grader evidence. Versions 9.1.0 through 9.3.0 use
+policy grid, canary and grader evidence. Versions 9.1.0, 9.2.0, 9.3.0 and 9.4.0 use
 GPT-6 Sol only under explicit exceptions. Other versions require two providers. Commit that
 bundle before tagging; never substitute interrupted results for qualification.
 

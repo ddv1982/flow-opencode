@@ -39,7 +39,11 @@ import {
 } from "../evals/release-policy.js";
 import { replayCassette } from "../evals/replay.js";
 import { createReportStore } from "../evals/report-store.js";
-import { campaignPlanFor, releaseScenarios } from "../evals/run.js";
+import {
+	attemptsForScenario,
+	campaignPlanFor,
+	releaseScenarios,
+} from "../evals/run.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
 import { prepareCanary, recordCanary } from "../scripts/eval-canary.js";
@@ -48,6 +52,15 @@ import { assertQualificationBundle } from "../scripts/release-metadata.js";
 import { assuranceProjection } from "../src/application/delivery.js";
 import { SessionSchema } from "../src/application/schema.js";
 import { operationInputDigest } from "../src/domain/operation.js";
+
+import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
+
+test("current release defaults include three autonomous attempts", () => {
+	expect(packageJson.version).toBe("9.4.0");
+	expect(
+		attemptsForScenario("auto-two-features-evidence", { kind: "release" }),
+	).toBe(3);
+});
 
 const CASSETTES = {
 	"happy-path": "happy-path--opencode_claude-sonnet-5--2.json",
@@ -316,7 +329,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		});
 		const evaluator = evaluatorIdentity({
 			sourceCommit: artifact.sourceCommit,
-			caseCatalog: releaseScenarioCatalog(scenarios),
+			caseCatalog: releaseScenarioCatalog(scenarios, artifact.packageVersion),
 			policyCatalog: releaseCatalog(artifact.packageVersion),
 			graderBundle: releaseGraderBundle(repositoryRoot),
 		});
@@ -331,6 +344,31 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 
 		const replayedByScenario = new Map<string, Outcome>();
 		for (const scenario of scenarios) {
+			const autonomousKind = {
+				"auto-two-features-evidence": "two",
+				"auto-prerequisite-repair": "prerequisite",
+				"auto-observe-with-required-pass": "audit",
+			} as const;
+			const kind = autonomousKind[scenario.id as keyof typeof autonomousKind];
+			if (kind) {
+				const observed: Outcome = {
+					...autoQualifiedOutcome(kind),
+					tokens: {
+						input: 1,
+						output: 1,
+						reasoning: 0,
+						cacheRead: 0,
+						cacheWrite: 0,
+					},
+					costUsd: null,
+					assistantMessages: 1,
+					durationMs: 1,
+					providerError: null,
+				};
+				expect(scenario.check(observed), scenario.id).toEqual([]);
+				replayedByScenario.set(scenario.id, observed);
+				continue;
+			}
 			if (scenario.id === "inspection-failed-audit-completes") {
 				const observed = inspectionAuditOutcome();
 				expect(scenario.check(observed)).toEqual([]);
@@ -499,7 +537,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			completion,
 			allocationCommitmentSha256: null,
 		});
-		expect(report.attempts).toHaveLength(49);
+		expect(report.attempts).toHaveLength(58);
 
 		const preparedDirectory = join(temporary, "prepared-canary");
 		await mkdir(preparedDirectory, { recursive: true });
@@ -615,8 +653,8 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		const transcripts = bundle.files.filter(
 			({ ref }) => ref.role === "transcript",
 		);
-		expect(attempts).toHaveLength(49);
-		expect(transcripts).toHaveLength(49);
+		expect(attempts).toHaveLength(58);
+		expect(transcripts).toHaveLength(58);
 		expect(attempts.map(({ ref }) => ref.id).sort()).toEqual(
 			transcripts.map(({ ref }) => ref.id).sort(),
 		);
@@ -702,6 +740,69 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			mediaType: ref.mediaType,
 			bytes,
 		}));
+		const autonomousAttempt = report.attempts.find(
+			(attempt) => attempt.caseId === "auto-two-features-evidence",
+		);
+		if (!autonomousAttempt) throw new Error("Autonomous attempt is missing.");
+		const autonomousTranscript = sealedFiles.find(
+			(file) =>
+				file.role === "transcript" && file.id === autonomousAttempt.attemptId,
+		);
+		if (!autonomousTranscript)
+			throw new Error("Autonomous transcript is missing.");
+		const missingLineage = RetainedScenarioEvidenceSchema.parse(
+			JSON.parse(autonomousTranscript.bytes.toString("utf8")),
+		);
+		expect(missingLineage.gradeInput.hostTrace?.kind).toBe("observed");
+		Reflect.deleteProperty(missingLineage.gradeInput, "hostTrace");
+		const missingLineageBytes = Buffer.from(canonicalJson(missingLineage));
+		const missingLineageSha256 = `sha256:${createHash("sha256").update(missingLineageBytes).digest("hex")}`;
+		const missingLineageFiles = sealedFiles.map((file) => {
+			if (file.role === "transcript" && file.id === autonomousAttempt.attemptId)
+				return { ...file, bytes: missingLineageBytes };
+			if (file.role === "attempt" && file.id === autonomousAttempt.attemptId) {
+				const attempt = JSON.parse(file.bytes.toString("utf8"));
+				attempt.transcript.sha256 = missingLineageSha256;
+				return { ...file, bytes: Buffer.from(canonicalJson(attempt)) };
+			}
+			if (file.role === "report") {
+				const alteredReport = {
+					...report,
+					attempts: report.attempts.map((attempt) => {
+						if (attempt.attemptId !== autonomousAttempt.attemptId)
+							return attempt;
+						if (!attempt.transcript)
+							throw new Error("Autonomous reference is missing.");
+						return {
+							...attempt,
+							transcript: {
+								...attempt.transcript,
+								sha256: missingLineageSha256,
+							},
+						};
+					}),
+				};
+				return { ...file, bytes: Buffer.from(canonicalJson(alteredReport)) };
+			}
+			return file;
+		});
+		const resealedMissingLineage = await writeQualificationBundle({
+			input: {
+				reportId: bundle.manifest.reportId,
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: missingLineageFiles,
+			},
+			outputRoot: bundlesDirectory,
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: resealedMissingLineage.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/grade differs/);
 		const failureAttempt = attempts.find(({ bytes }) => {
 			const value = JSON.parse(bytes.toString("utf8")) as {
 				outcome?: { kind?: unknown };

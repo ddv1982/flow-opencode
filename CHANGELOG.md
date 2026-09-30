@@ -2,20 +2,33 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
-## Unreleased
+## [9.4.0] - 2026-09-30
 
-- Auto retry guards cover Jev off, child manager writes, and stale handbacks.
-- Native automatic compaction preserves continuation when OpenCode updates
-  earlier message metadata. Checkpoints still require fresh user direction.
-- Plans may declare exact supplemental checks as pass-required or observe-only
-  before approval. Complete nonzero observations remain visible to the reviewer
-  without clearing a failed required gate. `/flow-auto` can continue an approved
-  prerequisite repair within its existing amendment limits.
-- Flow captures a feature's original source before implementation and gives its
-  independent reviewer a bounded, paged file diff without shell access. Missing
-  or stale evidence stops review preparation before it consumes a failed-review
-  attempt. Session v5 adds optional baseline and evidence references; finish or
-  close active work before downgrading to an older strict reader.
+`/flow-auto` carries approved tasks through validation, independent review and
+bounded same-goal prerequisite repair with clearer evidence and recovery guards.
+
+- Exact supplemental checks distinguish required passes from observations.
+  Complete nonzero observations remain visible without clearing a failed required
+  gate. Approved prerequisite repair keeps its gate and amendment limits.
+- Independent reviewers receive original-source baselines and bounded context
+  and diff pages. Missing or stale evidence stops review preparation before it
+  consumes a failed-review attempt.
+- Automatic retry guards also cover Jev-off runs, generic child mutations and
+  stale handbacks. Native automatic compaction survives historical message
+  updates. Repeated failed reviews and scope blockers still require direction.
+- Jev configuration, actual assessment and recovery authority remain distinct.
+  A missing key leaves advice off; configured shadow advice grants no mutation.
+  Delegated Jev recovery has no qualified release profile.
+- Session v5 schema adds optional baseline/evidence references and exact feature
+  checks. Existing documents remain readable; finish or close work before
+  downgrading to an older strict reader. No persisted continuation state is added.
+- The 9.4.0 qualification profile adds three autonomous cases with native lineage,
+  complete reviewer access and original packet bytes. It pins OpenAI GPT-6 Sol on
+  OpenCode 1.18.31. This profile requires a live matrix and exact-artifact
+  canary. Local controls do not establish model quality, cross-provider
+  reliability or delegated Jev qualification.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.4.0 --global --force`.
 
 ## [9.3.0] - 2026-09-28
 
