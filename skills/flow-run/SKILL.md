@@ -74,10 +74,15 @@ design instead of layering retries.
 
 ## Implement
 
-Before the feature's first edit, capture the Git base, tracked/untracked content
-changes, file types and modes in the conversation. On resume, recover those observations
-from retained history; never rebaseline existing edits. If unavailable, state the
-gap rather than guessing which work predated the feature. Preserve unrelated work.
+New runs capture host-owned baseline evidence before returning. For explicitly
+accepted existing work, pass `existingWork` with a full local immutable
+`baseCommit` and exact normalized `ownedPaths` to run start or atomic reset.
+These paths identify accepted dirty work and grant no new scope. Retries reuse
+the original feature baseline. A legacy run without one needs a fresh/reset run
+with an explicit existing-work base and inventory, or a preparation blocker.
+Never relabel current edits as the original baseline.
+For legacy work, recover prior Git facts from retained history and identify any
+gap instead of guessing which edits predated the feature. Preserve unrelated work.
 
 Make the smallest change that satisfies the approved outcome. Create no
 lifecycle or handoff sidecars. Do not stage, commit, push, publish, or mutate
@@ -128,11 +133,14 @@ last relevant edit.
 
 After applicable validation is accepted by Flow, call `flow_review_start` with a fresh
 operation id, current revision, feature id, `artifactsChanged`, and a bounded
-packet. Compare current state with the captured baseline for the complete feature
-diff. In its summary, report additions, modifications, deletions, renames, types,
-generated artifacts, modes,
-and unrelated pre-existing work. Name missing/conflicting facts; Flow does not
-attest inventory completeness.
+packet. Use the host-prepared diff for original/current content, types, and modes.
+Explain unrelated pre-existing work and binary limitations. The reviewer still
+judges scope and evidence adequacy.
+
+The host prepares a complete source-bound diff before creating an assignment.
+Missing, tampered, stale, oversized, or unsafe evidence blocks preparation
+without spending a review attempt. Report the exact preparation error.
+The reviewer obtains assigned content through bounded `reviewer-evidence` pages.
 
 For inspect deliverables, rerun focused checks and tool-version commands after
 the final document edit when claiming their results as current-source evidence.

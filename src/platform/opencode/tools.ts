@@ -217,7 +217,8 @@ export function createTools(options: ToolOptions): FlowTools {
 			execute: async ({ id }) => getFlowGuidance(id).content,
 		}),
 		flow_status: defineFlowTool({
-			description: "Read compact, execution, detail, or reviewer Flow state.",
+			description:
+				"Read compact, execution, detail, reviewer state, or bounded reviewer-evidence pages.",
 			schema: StatusInputSchema,
 			execute: (args, context) =>
 				execute(context, async (workspace) => {

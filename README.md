@@ -136,24 +136,20 @@ you granted.
 1. Planning saves a small feature DAG, including the repository's canonical
    validation command. Approval locks both.
 2. One feature starts, chosen only from those whose dependencies are complete.
-3. Before editing, the manager gathers the evidence the feature needs and works
-   through an adversarial risk checklist: failure ordering, repeated and
-   interrupted operations, adjacent state transitions, overlapping invariants,
-   and file-mode or platform risk.
+3. Flow pins the feature's source before edits. The manager gathers evidence
+   and checks failure ordering, retries, interruptions, state transitions,
+   invariants, file modes, and platform risks.
 4. The manager implements the feature, serially or by integrating a bounded
    worker wave.
-5. Flow observes the exact armed validation command against the current
-   workspace, then opens one independent review assignment. Broad evidence runs
-   the plan's declared gate and nothing else. A newer relevant failure or a source
-   change invalidates an older pass, and review cannot be requested while evidence
-   the outcome depends on is knowingly missing.
-6. A passing review advances the plan. A failed feature is never picked up again
-   implicitly — Flow reports the blocker and waits for an explicit retry or an
-   independent-feature choice. The last passing feature allows closure, and every
-   accepted close returns a versioned delivery summary derived from recorded state:
-   each feature's attempts, latest outcome, terminal findings, and tiered assurance
-   with explicit limitations. Delivery grants no PR, merge, publish, or release
-   authority.
+5. Flow records the exact armed command and canonical broad gate on current
+   source, then prepares a bounded file diff before review. The reviewer pages
+   through it without shell access. Newer failures or source changes invalidate
+   older passes; missing or stale packets stop assignment without counting a
+   failed review.
+6. A passing review advances the plan. A failed feature needs an explicit retry
+   or independent-feature choice. Closure returns a versioned delivery report
+   with attempts, findings, and assurance limits. It grants no PR, merge,
+   publish, or release authority.
 
 Failed reviews retain finding ids; dropped live findings fail.
 `flow_plan_amend` records a bounded gate repair before review. The plan stays

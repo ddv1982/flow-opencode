@@ -149,6 +149,14 @@ export function sessionInvariantIssues(session: Session): string[] {
 	let activeCount = 0;
 	let previousRunStartedRevision = 0;
 	for (const run of session.runs) {
+		if (run.baseline) {
+			const original = session.runs.find(
+				(candidate) =>
+					candidate.featureId === run.featureId && candidate.baseline,
+			);
+			if (original?.baseline?.sha256 !== run.baseline.sha256)
+				issues.push(`Run '${run.id}' changed its original feature baseline.`);
+		}
 		if (runIds.has(run.id)) issues.push(`Duplicate run id '${run.id}'.`);
 		runIds.add(run.id);
 		if (!featureIds.has(run.featureId))
@@ -199,6 +207,10 @@ export function sessionInvariantIssues(session: Session): string[] {
 			}
 		}
 		for (const review of run.reviews) {
+			if (review.evidence && !run.baseline)
+				issues.push(
+					`Review '${review.id}' has evidence without a run baseline.`,
+				);
 			if (reviewIds.has(review.id))
 				issues.push(`Duplicate review id '${review.id}'.`);
 			reviewIds.add(review.id);
