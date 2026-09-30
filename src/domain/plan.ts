@@ -45,6 +45,15 @@ export function planIssue(plan: Plan): string | null {
 				!["linux", "darwin", "win32", "other"].includes(check.platform)
 			)
 				return "A typed check must declare validation intent and platform.";
+			const conflictingHost = (plan.evidence ?? []).find(
+				(entry) =>
+					entry.command === check.command &&
+					entry.platform !== undefined &&
+					entry.platform !== "other" &&
+					entry.platform !== check.platform,
+			);
+			if (conflictingHost)
+				return `Typed check '${check.command}' on ${check.platform} conflicts with evidence declared on ${conflictingHost.platform}.`;
 			const signature = JSON.stringify([
 				check.intent,
 				check.platform,
