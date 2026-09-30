@@ -118,6 +118,29 @@ if (!standardParsed.ok)
 	throw new Error("Repository release policy is invalid.");
 const STANDARD_RELEASE_CATALOG = standardParsed.value;
 
+const prospectiveParsed = parseCaseCatalog([
+	...RELEASE_POLICY_INPUT,
+	inspectionCase,
+	...[
+		"auto-two-features-evidence",
+		"auto-prerequisite-repair",
+		"auto-observe-with-required-pass",
+	].map((caseId) => ({
+		caseId,
+		caseVersion: 1,
+		evidenceClass: "conformance",
+		oracle: "durable-state",
+		release: "required",
+		minProviders: 1,
+		minScoredAttempts: 3,
+		minPassRate: 1,
+		reviewerPromotionRecordSha256: null,
+	})),
+]);
+if (!prospectiveParsed.ok)
+	throw new Error("Prospective release policy is invalid.");
+const AUTO_RELEASE_CATALOG = prospectiveParsed.value;
+
 export type ReleaseProfile = {
 	readonly catalog: ValidatedCaseCatalog;
 	readonly requiredModels: readonly ModelIdentity[] | null;
@@ -142,6 +165,8 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "9.4.0")
+		return openAiOnlyRelease(AUTO_RELEASE_CATALOG);
 	if (packageVersion === "9.1.0" || packageVersion === "9.2.0") {
 		return openAiOnlyRelease(HISTORICAL_RELEASE_CATALOG);
 	}
@@ -193,8 +218,11 @@ export function releaseCaseIds(packageVersion = "standard"): readonly string[] {
 	return releaseCatalog(packageVersion).map((policy) => policy.caseId);
 }
 
-export function releaseAttemptsFor(caseId: string): number {
-	const policy = STANDARD_RELEASE_CATALOG.find(
+export function releaseAttemptsFor(
+	caseId: string,
+	packageVersion = "standard",
+): number {
+	const policy = releaseCatalog(packageVersion).find(
 		(item) => item.caseId === caseId,
 	);
 	if (!policy) throw new Error(`No release policy for ${caseId}.`);
