@@ -74,6 +74,12 @@ import {
 	selectLineageValidatedReviewers,
 } from "./host-observation.js";
 import {
+	collectHostTrace,
+	type HostTrace,
+	type NativeToolProvenance,
+	nativeToolProvenance,
+} from "./host-trace.js";
+import {
 	exactPackageVersion,
 	packedPackageManifest,
 	tarballSha256,
@@ -139,6 +145,7 @@ const STALLED_MS = 3 * 60_000;
 
 /** A single tool invocation observed in the transcript. */
 export type ObservedToolCall = {
+	readonly native?: NativeToolProvenance | undefined;
 	readonly tool: string;
 	readonly status: "pending" | "running" | "completed" | "error";
 	/**
@@ -322,6 +329,7 @@ type ProviderErrorObservation = Readonly<{
 }>;
 
 export type Outcome = {
+	readonly hostTrace?: HostTrace | undefined;
 	/** Ordered `flow_*` calls only — the workflow's observable spine. */
 	readonly flowCalls: readonly ObservedToolCall[];
 	/** Every tool call, including host tools like bash/edit/task. */
@@ -1543,6 +1551,9 @@ export async function preparePackageCache(
 type MessageEntry = {
 	info: {
 		id?: string;
+		sessionID?: string;
+		parentID?: string;
+		summary?: unknown;
 		role: string;
 		agent?: string;
 		model?: { providerID?: unknown; modelID?: unknown };
@@ -1559,13 +1570,18 @@ type MessageEntry = {
 		};
 	};
 	parts: {
+		id?: string;
+		sessionID?: string;
 		callID?: string;
 		messageID?: string;
 		type: string;
 		tool?: string;
 		text?: string;
 		synthetic?: boolean;
+		auto?: boolean;
+		metadata?: Record<string, unknown>;
 		state?: {
+			time?: { start?: number; end?: number };
 			status: string;
 			input?: Record<string, unknown>;
 			output?: string;
@@ -2698,7 +2714,9 @@ export class EvalHost {
 	): Promise<{
 		readonly sessions: readonly ObservedSession[];
 		readonly endpointFailed: boolean;
+		readonly metadata: readonly unknown[];
 	}> {
+		const metadata: unknown[] = [];
 		const known = new Set(sessionIds);
 		const found: ObservedSession[] = [];
 		let endpointFailed = false;
@@ -2719,7 +2737,9 @@ export class EvalHost {
 					endpointFailed = true;
 					continue;
 				}
+				if (!Array.isArray(children)) endpointFailed = true;
 				for (const child of Array.isArray(children) ? children : []) {
+					metadata.push(child);
 					if (!isRecord(child)) continue;
 					const id = nonEmptyString(child.id);
 					if (!id || known.has(id)) continue;
@@ -2735,7 +2755,7 @@ export class EvalHost {
 			}
 			frontier = next;
 		}
-		return { sessions: found, endpointFailed };
+		return { sessions: found, endpointFailed, metadata };
 	}
 
 	/**
@@ -2765,9 +2785,28 @@ export class EvalHost {
 				: null;
 		if (!polled) checkCancellation(signal);
 		const descendantResult = polled
-			? { sessions: [], endpointFailed: false }
+			? { sessions: [], endpointFailed: false, metadata: [] }
 			: await this.descendantSessions(sessionIds, signal);
 		if (!polled) checkCancellation(signal);
+		const nativeSessionMetadata: unknown[] = [...descendantResult.metadata];
+		let rootMetadataComplete = !polled;
+		if (!polled) {
+			for (const sessionId of sessionIds) {
+				try {
+					const metadata = await fetchJson(
+						`${this.baseUrl}/session/${encodeURIComponent(sessionId)}`,
+						REQUEST_TIMEOUT_MS,
+						signal,
+					);
+					if (!isRecord(metadata) || metadata.id !== sessionId)
+						rootMetadataComplete = false;
+					nativeSessionMetadata.push(metadata);
+				} catch (error) {
+					if (signal?.aborted && error === signal.reason) throw error;
+					rootMetadataComplete = false;
+				}
+			}
+		}
 		const descendants = descendantResult.sessions;
 		const sessionRecords: readonly ObservedSession[] = [
 			...sessionIds.map((id) => ({ id, agent: null, parentID: null })),
@@ -2883,7 +2922,7 @@ export class EvalHost {
 					);
 				}
 			}
-			for (const part of entry.parts) {
+			for (const [partIndex, part] of entry.parts.entries()) {
 				if (
 					part.type === "text" &&
 					!part.synthetic &&
@@ -2903,7 +2942,14 @@ export class EvalHost {
 				} catch {
 					// Non-JSON output (flow_guidance returns markdown) stays a string.
 				}
+				const native = nativeToolProvenance(
+					ordered[sessionIndex] ?? "",
+					entry.info,
+					part,
+					partIndex,
+				);
 				allCalls.push({
+					...(native ? { native } : {}),
 					tool: part.tool,
 					sessionIndex,
 					agent: entry.info.agent ?? "",
@@ -2979,6 +3025,17 @@ export class EvalHost {
 		}
 		const currentWorkspace = await captureWorkspaceSnapshot(this.project);
 		return {
+			hostTrace: collectHostTrace({
+				runnerRootSessionIds: sessionIds,
+				directory: this.project,
+				sessionMetadata: nativeSessionMetadata,
+				sessionMessages: sessionMessages.map(({ id, messages }) => ({
+					sessionId: id,
+					messages,
+				})),
+				childrenComplete:
+					rootMetadataComplete && !descendantResult.endpointFailed,
+			}),
 			allCalls,
 			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
 			actors,

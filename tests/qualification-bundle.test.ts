@@ -13,6 +13,11 @@ import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 import { canonicalJson } from "../evals/canonical-json.js";
 import {
+	pseudonymizeEvalIds,
+	RetainedScenarioEvidenceSchema,
+} from "../evals/grader-input.js";
+import { collectHostTrace } from "../evals/host-trace.js";
+import {
 	type QualificationBundleInput,
 	readQualificationBundle,
 	readStableQualificationInput,
@@ -483,4 +488,87 @@ describe("qualification bundle", () => {
 			),
 		).rejects.toThrow(/changed while reading/);
 	});
+});
+
+test("sealed transcript retains optional native trace for the retained regrade schema", async () => {
+	const outputRoot = await mkdtemp(join(tmpdir(), "flow-bundle-trace-"));
+	temporary.push(outputRoot);
+	const trace = collectHostTrace({
+		runnerRootSessionIds: ["ses_root"],
+		directory: "/workspace",
+		childrenComplete: true,
+		sessionMetadata: [{ id: "ses_root", directory: "/workspace" }],
+		sessionMessages: [
+			{
+				sessionId: "ses_root",
+				messages: [
+					{
+						info: {
+							id: "msg_user",
+							sessionID: "ses_root",
+							role: "user",
+							time: { created: 1 },
+						},
+						parts: [
+							{
+								id: "prt_user",
+								sessionID: "ses_root",
+								messageID: "msg_user",
+								type: "text",
+								text: "Approved task",
+							},
+						],
+					},
+				],
+			},
+		],
+	});
+	expect(trace.kind).toBe("observed");
+	const evidence = RetainedScenarioEvidenceSchema.parse(
+		pseudonymizeEvalIds({
+			schemaVersion: 1,
+			attempt: {
+				attemptId: "attempt-1",
+				cellId: "cell",
+				caseId: "case",
+				repetition: 0,
+				model: {
+					routeProvider: "fixture",
+					gateway: null,
+					family: "fixture",
+					model: "scripted",
+					revision: null,
+				},
+			},
+			actors: [],
+			guidanceLoads: [],
+			gradeInput: {
+				schemaVersion: 1,
+				hostTrace: trace,
+				flowCalls: [],
+				allCalls: [],
+				session: null,
+				archives: [],
+				finalText: "",
+			},
+			usage: { durationMs: 0, outputTokens: 0, costUsd: null },
+		}),
+	);
+	const fixture = input();
+	const written = await writeQualificationBundle({
+		input: {
+			...fixture,
+			files: fixture.files.map((file) =>
+				file.role === "transcript" ? { ...file, bytes: json(evidence) } : file,
+			),
+		},
+		outputRoot,
+	});
+	const read = await readQualificationBundle(written.path);
+	const transcript = read.files.find(({ ref }) => ref.role === "transcript");
+	if (!transcript) throw new Error("Missing sealed transcript");
+	const retained = RetainedScenarioEvidenceSchema.parse(
+		JSON.parse(transcript.bytes.toString("utf8")),
+	);
+	expect(retained.gradeInput.hostTrace).toEqual(evidence.gradeInput.hostTrace);
 });

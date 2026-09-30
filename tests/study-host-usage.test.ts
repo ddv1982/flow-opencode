@@ -128,6 +128,10 @@ async function collectOutcome(
 			}),
 		);
 	}
+	responses.set("/session/root", {
+		id: "root",
+		directory: "unused-study-host-project",
+	});
 	const requests: string[] = [];
 	const unexpected: string[] = [];
 	const transport = Object.assign(
@@ -267,6 +271,7 @@ describe("EvalHost outcome usage collection", () => {
 		expect([...requests].sort()).toEqual([
 			"/session/reviewer/children",
 			"/session/reviewer/message",
+			"/session/root",
 			"/session/root/children",
 			"/session/root/message",
 			"/session/worker/children",
