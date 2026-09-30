@@ -1,10 +1,19 @@
 import type { PreparedValidation } from "../../application/prepare-validation.js";
 import type { RecoveryController } from "../../application/recovery-policy.js";
-import type {
-	SourceDigest,
-	ValidationObservation,
-} from "../../domain/session.js";
-import { assertionsSatisfied } from "../../domain/test-results.js";
+import type { SourceDigest } from "../../domain/session.js";
+import {
+	type AutoValidationOrigin,
+	type AutoValidationReceipt,
+	type ValidationContinuationOutcome,
+	validationContinuationOutcome,
+	validationReceiptMatches,
+} from "./auto-drive-validation.js";
+
+export type {
+	AutoValidationOrigin,
+	AutoValidationReceipt,
+} from "./auto-drive-validation.js";
+
 import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
 import {
 	decideOnIdle,
@@ -22,6 +31,15 @@ export interface AutoDriveProjection {
 	readonly status: string;
 	readonly revision: number;
 	readonly nextAction: string | null;
+	readonly prerequisiteRepair?:
+		| Readonly<{
+				featureId: string;
+				runId: string;
+				validationId: string;
+				sourceDigest: SourceDigest;
+				boundary: string;
+		  }>
+		| undefined;
 }
 type AutoDriveDisposition =
 	| Readonly<{ state: "active"; reason: "invocation" | "continuation" }>
@@ -55,19 +73,6 @@ export type AutoContinuationSnapshot = AutoDriveDisposition &
 	Readonly<{
 		scope: "current-plugin-process";
 	}>;
-export type AutoValidationOrigin = Readonly<{
-	hostSessionId: string;
-	sessionId: string;
-	authority: string;
-	assistantId: string;
-	assertions: readonly string[];
-}> &
-	Pick<ValidationObservation, "featureId" | "runId" | "sourceDigest">;
-export type AutoValidationReceipt = Readonly<{
-	origin: AutoValidationOrigin;
-	captureId: string;
-	observation: ValidationObservation;
-}>;
 interface AutoDriveMessagePart {
 	readonly type?: string;
 	readonly text?: string;
@@ -145,9 +150,12 @@ type Lease = {
 	manualContinuation: { revision: number } | null;
 	validation: {
 		revision: number;
-		outcome: "passed" | "failed" | "ineligible";
+		outcome: ValidationContinuationOutcome;
 		sourceDigest: SourceDigest;
 		checked: boolean;
+		validationId: string;
+		featureId: string;
+		runId: string;
 	} | null;
 	ownInspectDraft: {
 		sessionId: string;
@@ -208,6 +216,8 @@ export class AutoDriveCoordinator {
 	#dispositionHost: string | null = null;
 	readonly #validationOrigins = new WeakMap<AutoValidationOrigin, Lease>();
 	readonly #options: AutoDriveOptions;
+	#repairSession: string | undefined;
+	readonly #repairHandoffs = new Set<string>();
 	/** Whether this host has ever reported assistant message parentage. */
 	#hostParentage = false;
 	/** Whether any assistant message has arrived without a parent. */
@@ -582,7 +592,15 @@ export class AutoDriveCoordinator {
 		assistantId: string,
 		prepared: Pick<
 			PreparedValidation,
-			"featureId" | "runId" | "sourceDigest" | "assertions"
+			| "featureId"
+			| "runId"
+			| "sourceDigest"
+			| "command"
+			| "scope"
+			| "hostPlatform"
+			| "intent"
+			| "declaredPlatform"
+			| "assertions"
 		>,
 	): AutoValidationOrigin | null {
 		const lease = this.#lease;
@@ -606,6 +624,13 @@ export class AutoDriveCoordinator {
 			featureId: prepared.featureId,
 			runId: prepared.runId,
 			sourceDigest: prepared.sourceDigest,
+			command: prepared.command,
+			scope: prepared.scope,
+			hostPlatform: prepared.hostPlatform,
+			intent: prepared.intent,
+			...(prepared.declaredPlatform !== undefined
+				? { declaredPlatform: prepared.declaredPlatform }
+				: {}),
 			assertions: [...prepared.assertions],
 		};
 		this.#validationOrigins.set(origin, lease);
@@ -623,10 +648,7 @@ export class AutoDriveCoordinator {
 			lease.baseline?.sessionId !== origin.sessionId ||
 			lease.messageId !== origin.authority ||
 			lease.assistantParents.get(origin.assistantId) !== origin.authority ||
-			observation.id !== receipt.captureId ||
-			observation.featureId !== origin.featureId ||
-			observation.runId !== origin.runId ||
-			observation.sourceDigest !== origin.sourceDigest
+			!validationReceiptMatches(receipt)
 		)
 			return;
 		const checkpoint = lease.checkpoint;
@@ -636,20 +658,15 @@ export class AutoDriveCoordinator {
 			observation.recordedRevision <= (lease.validation?.revision ?? -1)
 		)
 			return;
-		const outcome =
-			observation.ineligibleReason !== undefined ||
-			!observation.outputComplete ||
-			observation.exitCode === null ||
-			!assertionsSatisfied(origin.assertions, observation.observedAssertions)
-				? "ineligible"
-				: observation.exitCode === 0
-					? "passed"
-					: "failed";
+		const outcome = validationContinuationOutcome(origin, observation);
 		lease.validation = {
 			revision: observation.recordedRevision,
 			outcome,
 			sourceDigest: observation.sourceDigest,
 			checked: false,
+			validationId: observation.id,
+			featureId: observation.featureId,
+			runId: observation.runId,
 		};
 		if (outcome !== "ineligible")
 			checkpoint.advance = observation.recordedRevision;
@@ -775,6 +792,29 @@ export class AutoDriveCoordinator {
 				if (currentSource !== validation.sourceDigest)
 					validation.outcome = "ineligible";
 			}
+			if (this.#repairSession !== projection.sessionId) {
+				this.#repairSession = projection.sessionId;
+				this.#repairHandoffs.clear();
+			}
+			const repair = projection.prerequisiteRepair;
+			const repairKey = repair
+				? JSON.stringify([
+						projection.sessionId,
+						repair.featureId,
+						repair.boundary,
+					])
+				: null;
+			const repairAvailable =
+				!!repair &&
+				!!validation &&
+				validation.checked &&
+				validation.outcome === "failed" &&
+				repair.validationId === validation.validationId &&
+				repair.runId === validation.runId &&
+				repair.featureId === validation.featureId &&
+				repair.sourceDigest === validation.sourceDigest &&
+				repairKey !== null &&
+				!this.#repairHandoffs.has(repairKey);
 			const decision: IdleDecision = decideOnIdle(
 				{
 					baseline,
@@ -783,6 +823,7 @@ export class AutoDriveCoordinator {
 					lastPromptedRevision: lease.lastPromptedRevision,
 					hasDelivery: lease.delivery !== null,
 					validation: lease.validation,
+					repairHandoffAvailable: repairAvailable,
 				},
 				projection,
 			);
@@ -905,6 +946,8 @@ export class AutoDriveCoordinator {
 					if (decision.clearCheckpoint) lease.checkpoint = null;
 					// Narrowing only: decideOnIdle already required hasDelivery.
 					if (!lease.delivery) return;
+					if (decision.repairHandoff && repairKey)
+						this.#repairHandoffs.add(repairKey);
 					lease.lastPromptedRevision = projection.revision;
 					lease.messageId = null;
 					this.#setTiming("active");
@@ -915,7 +958,9 @@ export class AutoDriveCoordinator {
 							`Continue the same user-authorized /flow-auto lifecycle from compact revision ${projection.revision}.`,
 							"Call flow_status with the compact view first.",
 							CONTINUATION_ROUTE,
-							`Then follow ${projection.nextAction} without expanding the approved goal.`,
+							decision.repairHandoff
+								? "A complete failed required gate permits one bounded same-goal prerequisite handoff. Use flow_plan_amend before repair edits, keep the canonical gate unchanged, test the supported reversible remedy, then rerun it. Do not infer new outcome or external-action authority."
+								: `Then follow ${projection.nextAction} without expanding the approved goal.`,
 						].join(" ");
 						await this.#options.prompt(
 							hostSessionId,

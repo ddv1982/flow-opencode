@@ -4,6 +4,10 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## Unreleased
 
+- Plans may declare exact supplemental checks as pass-required or observe-only
+  before approval. Complete nonzero observations remain visible to the reviewer
+  without clearing a failed required gate. `/flow-auto` can continue an approved
+  prerequisite repair within its existing amendment limits.
 - Flow captures a feature's original source before implementation and gives its
   independent reviewer a bounded, paged file diff without shell access. Missing
   or stale evidence stops review preparation before it consumes a failed-review

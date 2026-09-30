@@ -60,8 +60,13 @@ export function missingRequestAssertions(
 	plan: Plan,
 	required: readonly string[],
 ): string[] {
-	const declared = new Set(
-		(plan.evidence ?? []).flatMap((entry) => entry.assertions ?? []),
-	);
+	const declared = new Set([
+		...(plan.evidence ?? []).flatMap((entry) => entry.assertions ?? []),
+		...plan.features.flatMap((feature) =>
+			(feature.checks ?? [])
+				.filter((check) => check.intent === "pass")
+				.flatMap((check) => check.assertions ?? []),
+		),
+	]);
 	return required.filter((name) => !declared.has(name));
 }

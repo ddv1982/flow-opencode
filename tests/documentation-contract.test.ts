@@ -747,7 +747,7 @@ describe("Flow documentation contract", () => {
 		}
 	});
 
-	test("pins today's plan evidence declarations until a major", async () => {
+	test("retains legacy plan evidence fields beside optional typed checks", async () => {
 		const sessionSource = await readFile("src/domain/session.ts", "utf8");
 		const planBlock = sessionSource.slice(
 			sessionSource.indexOf("export type Plan ="),
@@ -765,7 +765,8 @@ describe("Flow documentation contract", () => {
 		const optionalFeatureFields = [
 			...featureBlock.matchAll(/^\t(\w+)\?:/gm),
 		].map((match) => match[1]);
-		expect(optionalFeatureFields).toEqual(["kind"]);
+		expect(optionalFeatureFields).toEqual(["checks", "kind"]);
+		expect(featureBlock).toContain("validation: string[];");
 
 		const entryBlock = sessionSource.slice(
 			sessionSource.indexOf("export type EvidenceEntry ="),

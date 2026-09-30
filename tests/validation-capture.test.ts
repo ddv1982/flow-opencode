@@ -26,6 +26,7 @@ const prepared: PreparedValidation = {
 	scope: "focused",
 	sourceDigest: SOURCE,
 	hostPlatform: "linux",
+	intent: "pass",
 	assertions: [],
 	resultsPath: undefined,
 };
@@ -40,6 +41,7 @@ function persistedObservation(
 		runId: input.runId,
 		scope: input.scope,
 		command: input.command,
+		intent: input.intent,
 		sourceDigest: input.sourceDigest,
 		exitCode: input.exitCode,
 		outputDigest: input.outputDigest,
@@ -65,6 +67,10 @@ test("emits one source-bound receipt after observation persistence", async () =>
 		authority: "user",
 		assistantId: "manager",
 		assertions: prepared.assertions,
+		command: prepared.command,
+		scope: prepared.scope,
+		hostPlatform: prepared.hostPlatform,
+		intent: prepared.intent,
 		featureId: prepared.featureId,
 		runId: prepared.runId,
 		sourceDigest: SOURCE,
@@ -123,6 +129,10 @@ test("a continuation diagnostic failure cannot erase a durable observation", asy
 		authority: "user",
 		assistantId: "manager",
 		assertions: prepared.assertions,
+		command: prepared.command,
+		scope: prepared.scope,
+		hostPlatform: prepared.hostPlatform,
+		intent: prepared.intent,
 		featureId: prepared.featureId,
 		runId: prepared.runId,
 		sourceDigest: SOURCE,
@@ -285,6 +295,7 @@ async function capture(options: {
 	) => Promise<{ text: string; modifiedMs: number } | null>;
 	armedAt: number;
 	observedAt?: number;
+	onOutput?: (output: string) => void;
 }): Promise<ObservedValidation> {
 	let persisted: ObservedValidation | null = null;
 	let now = options.armedAt;
@@ -311,6 +322,11 @@ async function capture(options: {
 		{ args: { command: options.prepared.command } },
 	);
 	now = options.observedAt ?? options.armedAt + 1_000;
+	const output = {
+		title: "gate",
+		output: "1 pass",
+		metadata: { exit: 0, truncated: false },
+	};
 	await coordinator.observeToolAfter(
 		{
 			tool: "bash",
@@ -318,12 +334,9 @@ async function capture(options: {
 			callID: "bash-1",
 			args: { command: options.prepared.command },
 		},
-		{
-			title: "gate",
-			output: "1 pass",
-			metadata: { exit: 0, truncated: false },
-		},
+		output,
 	);
+	options.onOutput?.(output.output);
 	if (!persisted) throw new Error("Nothing was persisted.");
 	return persisted;
 }
@@ -334,6 +347,26 @@ describe("observing declared assertions from the command's own report", () => {
 		assertions: ["on Windows"],
 		resultsPath: "junit.xml",
 	};
+	test("zero exit cannot label skipped, failed or absent named proof as passed", async () => {
+		for (const report of [
+			REPORT.replace("/>", "><skipped/></testcase>"),
+			REPORT.replace("/>", "><failure/></testcase>"),
+			null,
+		]) {
+			let marker = "";
+			const observed = await capture({
+				prepared: declared,
+				armedAt: 1_000,
+				readReport: async () =>
+					report === null ? null : { text: report, modifiedMs: 2_000 },
+				onOutput: (output) => {
+					marker = output;
+				},
+			});
+			expect(observed.exitCode).toBe(0);
+			expect(marker).toContain('"passed":false,"observed":false');
+		}
+	});
 
 	test("records what the report says when the command wrote it", async () => {
 		const observed = await capture({
@@ -480,7 +513,7 @@ describe("OpenCode validation capture", () => {
 		});
 		expect(calls[0]?.input.outputDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
 		expect(output.output).toContain(
-			'[flow-validation] {"id":"capture-1","scope":"focused","passed":true,"recordedRevision":4}',
+			'[flow-validation] {"id":"capture-1","scope":"focused","intent":"pass","passed":true,"observed":false,"recordedRevision":4}',
 		);
 		expect(output.output).not.toContain("/workspace");
 		expect(coordinator.pendingCount()).toBe(0);
@@ -761,7 +794,7 @@ describe("OpenCode validation capture", () => {
 			output,
 		);
 		expect(output.output).toContain(
-			'"passed":false,"recordedRevision":4,"ineligibleReason":"source-drift"',
+			'"passed":false,"observed":false,"recordedRevision":4,"ineligibleReason":"source-drift"',
 		);
 	});
 });

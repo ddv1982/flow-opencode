@@ -3,11 +3,14 @@ import type {
 	ReviewFinding,
 	Session,
 	SessionClosure,
+	ValidationObservation,
 } from "../domain/session.js";
 import { currentRun, planGate } from "../domain/session.js";
 import { isFeatureComplete } from "../domain/session-queries.js";
 import {
+	isAcceptedObservedGate,
 	isAcceptedValidation,
+	resolveValidationPolicy,
 	unsatisfiedEvidence,
 } from "../domain/validation.js";
 import {
@@ -59,6 +62,7 @@ export type DeliveryProjection = Readonly<{
 	}>;
 	assurance: AssuranceProjection;
 	findingsDigest: FindingsDigest;
+	observations?: readonly ValidationObservation[];
 	report: ReadonlyArray<string>;
 }>;
 
@@ -194,7 +198,7 @@ export function assuranceProjection(session: Session): AssuranceProjection {
 					"host-attested",
 					observedGate
 						? reviewedGate?.verdict === "passed" &&
-								isAcceptedValidation(session, reviewedGate.observation)
+								isAcceptedObservedGate(session, reviewedGate.observation)
 						: acceptedGate !== undefined,
 					observedGate
 						? `${JSON.stringify(gate)} was observed with exit ${reviewedGate?.observation.exitCode ?? "unavailable"}; this does not claim the command passed.`
@@ -260,6 +264,10 @@ function formatReport(delivery: Omit<DeliveryProjection, "report">): string[] {
 		"Features:",
 		...lines,
 		...digestReportLines(delivery.findingsDigest),
+		...(delivery.observations ?? []).map(
+			(observation) =>
+				`Observed ${JSON.stringify(observation.command)}: exit ${observation.exitCode ?? "unavailable"}, host ${observation.hostPlatform ?? "unrecorded"}, source ${observation.sourceDigest}, output ${observation.outputDigest}${observation.resultsPath ? `, report ${JSON.stringify(observation.resultsPath)}` : ""}; this does not claim the command passed.`,
+		),
 		`Assurance: ${delivery.assurance.conclusion.replaceAll("-", " ")}`,
 		"Assurance checks:",
 		...delivery.assurance.checks.map(
@@ -292,6 +300,19 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 		),
 	);
 	const digest = findingsDigest(session);
+	const observations = latest.flatMap((run) => {
+		const assigned = new Set(
+			run.reviews
+				.filter((review) => review.result !== null)
+				.flatMap((review) => review.validationIds),
+		);
+		return run.validations.filter(
+			(observation) =>
+				assigned.has(observation.id) &&
+				resolveValidationPolicy(session, run.featureId, observation.command)
+					.intent === "observe",
+		);
+	});
 	const delivery = {
 		handoff: { formatVersion: 1, externalActionAuthority: "not-granted" },
 		goal: session.goal,
@@ -323,6 +344,7 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 		},
 		assurance: assuranceProjection(session),
 		findingsDigest: digest,
+		...(observations.length > 0 ? { observations } : {}),
 	} satisfies Omit<DeliveryProjection, "report">;
 	return { ...delivery, report: formatReport(delivery) };
 }

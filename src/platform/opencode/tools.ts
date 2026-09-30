@@ -1,4 +1,5 @@
 import { errorResponse } from "../../application/flow-response.js";
+import type { PreparedValidation } from "../../application/prepare-validation.js";
 import type { RecoveryController } from "../../application/recovery-policy.js";
 import {
 	FeatureCompleteInputSchema,
@@ -21,7 +22,6 @@ import {
 	flowReviewerStatus,
 } from "../../config-shared.js";
 import { requestAuthority } from "../../domain/request-evidence.js";
-import type { EvidencePlatform } from "../../domain/session.js";
 import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
@@ -46,16 +46,7 @@ type ToolOptions = Readonly<{
 	prepareValidation: (
 		workspace: string,
 		input: ValidationStartRequest,
-	) => Promise<{
-		featureId: string;
-		runId: string;
-		command: string;
-		scope: "focused" | "broad";
-		sourceDigest: `sha256:${string}`;
-		hostPlatform: EvidencePlatform;
-		assertions: readonly string[];
-		resultsPath: string | undefined;
-	}>;
+	) => Promise<PreparedValidation>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
 	autoContinuationSnapshot?: (
 		hostSessionId: string,
@@ -65,7 +56,15 @@ type ToolOptions = Readonly<{
 		assistantId: string,
 		prepared: Pick<
 			AutoValidationOrigin,
-			"featureId" | "runId" | "sourceDigest" | "assertions"
+			| "featureId"
+			| "runId"
+			| "sourceDigest"
+			| "command"
+			| "scope"
+			| "hostPlatform"
+			| "intent"
+			| "declaredPlatform"
+			| "assertions"
 		>,
 	) => AutoValidationOrigin | null;
 	autoContinuationSupport?:
@@ -319,6 +318,7 @@ export function createTools(options: ToolOptions): FlowTools {
 							),
 							command: prepared.command,
 							scope: prepared.scope,
+							intent: prepared.intent,
 						},
 					});
 				} catch (error) {

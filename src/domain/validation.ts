@@ -9,12 +9,14 @@ import type {
 	Session,
 	SourceDigest,
 	ValidationIneligibleReason,
+	ValidationIntent,
 	ValidationObservation,
 	ValidationScope,
 } from "./session.js";
 import { planEvidence, planGate } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
 import { sessionInvariantIssues } from "./session-invariants.js";
+import { activeRun } from "./session-queries.js";
 import { assertionsSatisfied, unmetAssertions } from "./test-results.js";
 import { FlowTransitionError } from "./transition-error.js";
 
@@ -56,6 +58,73 @@ export function normalizeEvidencePlatform(value: string): EvidencePlatform {
 	);
 }
 
+export function resolveValidationPolicy(
+	session: Session,
+	featureId: string,
+	command: string,
+): Readonly<{
+	intent: ValidationIntent;
+	platform?: EvidencePlatform;
+	assertions: string[];
+	typed: boolean;
+}> {
+	const check = session.plan?.features
+		.find((feature) => feature.id === featureId)
+		?.checks?.find((entry) => entry.command === command);
+	const evidence = planEvidence(session.plan).filter(
+		(entry) => entry.command === command,
+	);
+	const canonicalPlatform = evidence.find(
+		(entry) => entry.scope !== "extra",
+	)?.platform;
+	const platform =
+		check?.platform ??
+		(canonicalPlatform === "other" ? undefined : canonicalPlatform);
+	return {
+		intent:
+			check?.intent ??
+			(evidence.some((entry) => entry.scope === "gate-observe")
+				? "observe"
+				: "pass"),
+		...(platform === undefined ? {} : { platform }),
+		assertions: [
+			...new Set([
+				...evidence.flatMap((entry) => entry.assertions ?? []),
+				...(check?.assertions ?? []),
+			]),
+		],
+		typed: check !== undefined,
+	};
+}
+
+export function validationPolicyIssue(
+	session: Session,
+	observation: Pick<
+		ValidationObservation,
+		"featureId" | "command" | "intent" | "hostPlatform" | "observedAssertions"
+	>,
+): string | null {
+	const policy = resolveValidationPolicy(
+		session,
+		observation.featureId,
+		observation.command,
+	);
+	if (
+		(policy.typed || observation.intent !== undefined) &&
+		observation.intent !== policy.intent
+	)
+		return "Validation intent must match the frozen approved command policy.";
+	if (policy.typed && observation.hostPlatform === undefined)
+		return "A typed check must record its actual host platform.";
+	if (
+		policy.typed &&
+		policy.intent === "observe" &&
+		(observation.observedAssertions?.length ?? 0) > 0
+	)
+		return "An observational check cannot claim named passing assertions.";
+	return null;
+}
+
 export function isValidationEligible(
 	observation: ValidationObservation,
 	sourceDigest?: SourceDigest,
@@ -73,18 +142,89 @@ export function isAcceptedValidation(
 	observation: ValidationObservation,
 	sourceDigest?: SourceDigest,
 ): boolean {
-	const gate = planEvidence(session.plan).find(
-		(entry) => entry.scope === "gate-observe",
+	const policy = resolveValidationPolicy(
+		session,
+		observation.featureId,
+		observation.command,
 	);
-	if (!gate || observation.command !== gate.command)
-		return isValidationEligible(observation, sourceDigest);
+	if (validationPolicyIssue(session, observation) !== null) return false;
+	if (policy.typed && observation.hostPlatform !== policy.platform)
+		return false;
+	if (policy.intent === "pass")
+		return (
+			isValidationEligible(observation, sourceDigest) &&
+			(!policy.typed ||
+				(assertionsSatisfied(
+					policy.assertions,
+					observation.observedAssertions,
+				) &&
+					(policy.assertions.length === 0 ||
+						!commandUsesManagedJUnitPath(observation.command) ||
+						observation.resultsPath === MANAGED_JUNIT_PATH)))
+		);
+	const gate = planEvidence(session.plan).find(
+		(entry) =>
+			entry.scope === "gate-observe" && entry.command === observation.command,
+	);
+	if (gate && isAcceptedExtraProof(session, observation, sourceDigest))
+		return true;
 	return (
+		observation.exitCode !== null &&
+		observation.outputComplete &&
+		observation.ineligibleReason === undefined &&
+		(sourceDigest === undefined || observation.sourceDigest === sourceDigest) &&
+		(!gate || isAcceptedObservedGate(session, observation, sourceDigest))
+	);
+}
+
+export function isAcceptedExtraProof(
+	session: Session,
+	observation: ValidationObservation,
+	sourceDigest?: SourceDigest,
+): boolean {
+	const policy = resolveValidationPolicy(
+		session,
+		observation.featureId,
+		observation.command,
+	);
+	return (
+		!policy.typed &&
+		validationPolicyIssue(session, observation) === null &&
+		planEvidence(session.plan).some(
+			(entry) =>
+				entry.scope === "extra" &&
+				entry.command === observation.command &&
+				isPassingEvidenceObservation(entry, observation, sourceDigest),
+		)
+	);
+}
+
+export function isAcceptedObservedGate(
+	session: Session,
+	observation: ValidationObservation,
+	sourceDigest?: SourceDigest,
+): boolean {
+	const gate = planEvidence(session.plan).find(
+		(entry) =>
+			entry.scope === "gate-observe" && entry.command === observation.command,
+	);
+	const policy = resolveValidationPolicy(
+		session,
+		observation.featureId,
+		observation.command,
+	);
+	return (
+		gate !== undefined &&
 		observation.scope === "broad" &&
 		observation.exitCode !== null &&
 		observation.outputComplete &&
 		observation.ineligibleReason === undefined &&
+		(sourceDigest === undefined || observation.sourceDigest === sourceDigest) &&
 		isObservedOnDeclaredPlatform(gate, observation) &&
-		(sourceDigest === undefined || observation.sourceDigest === sourceDigest)
+		validationPolicyIssue(session, observation) === null &&
+		(!policy.typed ||
+			(policy.intent === "observe" &&
+				observation.hostPlatform === policy.platform))
 	);
 }
 
@@ -120,23 +260,19 @@ export function narrowingArguments(command: string): string[] {
 export function declaredAssertions(
 	session: Session,
 	command: string,
+	featureId = session.runs.find((run) => run.state === "active")?.featureId ??
+		"",
 ): string[] {
-	return [
-		...new Set(
-			planEvidence(session.plan)
-				.filter((entry) => entry.command === command)
-				.flatMap((entry) => entry.assertions ?? []),
-		),
-	];
+	return resolveValidationPolicy(session, featureId, command).assertions;
 }
 
 export function declaredResultsPath(
 	session: Session,
 	command: string,
+	featureId = session.runs.find((run) => run.state === "active")?.featureId ??
+		"",
 ): string | undefined {
-	const named = planEvidence(session.plan).some(
-		(entry) => entry.command === command && (entry.assertions?.length ?? 0) > 0,
-	);
+	const named = declaredAssertions(session, command, featureId).length > 0;
 	return named && commandUsesManagedJUnitPath(command)
 		? MANAGED_JUNIT_PATH
 		: undefined;
@@ -161,6 +297,7 @@ export function recordValidation(
 		runId: string;
 		scope: ValidationScope;
 		command: string;
+		intent?: ValidationIntent | undefined;
 		sourceDigest: SourceDigest;
 		exitCode: number | null;
 		outputDigest: SourceDigest;
@@ -188,6 +325,8 @@ export function recordValidation(
 			"An observation without an exit code must record an ineligible reason.",
 		);
 	}
+	const policyIssue = validationPolicyIssue(session, input);
+	if (policyIssue) throw new FlowTransitionError(policyIssue);
 	const prior = session.runs
 		.flatMap((run) => run.validations)
 		.find((validation) => validation.id === input.captureId);
@@ -197,6 +336,7 @@ export function recordValidation(
 			prior.runId !== input.runId ||
 			prior.scope !== input.scope ||
 			prior.command !== input.command ||
+			prior.intent !== input.intent ||
 			prior.sourceDigest !== input.sourceDigest ||
 			prior.exitCode !== input.exitCode ||
 			prior.outputDigest !== input.outputDigest ||
@@ -254,6 +394,7 @@ export function recordValidation(
 		runId: input.runId,
 		scope: input.scope,
 		command: input.command,
+		...(input.intent !== undefined ? { intent: input.intent } : {}),
 		sourceDigest: input.sourceDigest,
 		exitCode: input.exitCode,
 		outputDigest: input.outputDigest,
@@ -314,6 +455,36 @@ function isObservedAtDeclaredPath(
 	);
 }
 
+function isPassingEvidenceObservation(
+	entry: EvidenceEntry,
+	observation: ValidationObservation,
+	sourceDigest?: SourceDigest,
+): boolean {
+	return (
+		isValidationEligible(observation, sourceDigest) &&
+		isObservedOnDeclaredPlatform(entry, observation) &&
+		isObservedAtDeclaredPath(entry, observation) &&
+		assertionsSatisfied(entry.assertions ?? [], observation.observedAssertions)
+	);
+}
+
+function isPassingEvidenceFresh(
+	session: Session,
+	entry: EvidenceEntry,
+	observation: ValidationObservation,
+): boolean {
+	return session.runs
+		.filter((run) => run.featureId === observation.featureId)
+		.flatMap((run) => run.validations)
+		.every(
+			(candidate) =>
+				candidate.command !== entry.command ||
+				!isObservedOnDeclaredPlatform(entry, candidate) ||
+				isPassingEvidenceObservation(entry, candidate) ||
+				candidate.recordedRevision < observation.recordedRevision,
+		);
+}
+
 export type EvidenceStatus =
 	| Readonly<{ kind: "satisfied" }>
 	| Readonly<{ kind: "wrong-host"; hosts: string[] }>
@@ -340,11 +511,25 @@ export function evidenceStatus(
 		);
 	const candidates =
 		entry.scope === "gate-observe" ? matching.slice(-1) : matching;
-	const eligible = candidates.filter((observation) =>
-		entry.scope === "gate-observe"
-			? isAcceptedValidation(session, observation, sourceDigest)
-			: isValidationEligible(observation, sourceDigest),
-	);
+	const eligible = candidates.filter((observation) => {
+		if (entry.scope === "gate-observe")
+			return isAcceptedObservedGate(session, observation, sourceDigest);
+		const policy = resolveValidationPolicy(
+			session,
+			observation.featureId,
+			observation.command,
+		);
+		return policy.typed
+			? policy.intent === "pass" &&
+					isAcceptedValidation(session, observation, sourceDigest)
+			: isValidationEligible(observation, sourceDigest) &&
+					(!session.plan?.evidence?.some(
+						(candidate) =>
+							candidate.scope === "gate-observe" &&
+							candidate.command === entry.command,
+					) ||
+						isPassingEvidenceFresh(session, entry, observation));
+	});
 	const onHost = eligible.filter((observation) =>
 		isObservedOnDeclaredPlatform(entry, observation),
 	);
@@ -436,14 +621,37 @@ export function isValidationFresh(
 	const gate = planEvidence(session.plan).find(
 		(entry) => entry.scope === "gate-observe",
 	);
-	if (gate && observation.command === gate.command)
+	const policy = resolveValidationPolicy(
+		session,
+		run.featureId,
+		observation.command,
+	);
+	if (
+		gate?.command === observation.command &&
+		!policy.typed &&
+		(observation.scope !== "broad" ||
+			!isObservedOnDeclaredPlatform(gate, observation))
+	)
+		return planEvidence(session.plan).some(
+			(entry) =>
+				entry.scope === "extra" &&
+				entry.command === observation.command &&
+				isPassingEvidenceObservation(entry, observation) &&
+				isPassingEvidenceFresh(session, entry, observation),
+		);
+	if (
+		resolveValidationPolicy(session, run.featureId, observation.command)
+			.intent === "observe"
+	)
 		return (
 			session.runs
 				.filter((candidate) => candidate.featureId === run.featureId)
 				.flatMap((candidate) => candidate.validations)
 				.filter(
 					(candidate) =>
-						candidate.command === gate.command && candidate.scope === "broad",
+						candidate.command === observation.command &&
+						(gate?.command !== observation.command ||
+							candidate.scope === "broad"),
 				)
 				.at(-1)?.id === observation.id
 		);
@@ -470,6 +678,9 @@ export function unresolvedVetoedCommands(
 					...(session.plan?.features.find(
 						(candidate) => candidate.id === run.featureId,
 					)?.validation ?? []),
+					...(session.plan?.features
+						.find((candidate) => candidate.id === run.featureId)
+						?.checks?.map((check) => check.command) ?? []),
 					...(gate === undefined ? [] : [gate]),
 				]
 			: [];
@@ -497,4 +708,109 @@ export function unresolvedVetoedCommands(
 					isValidationFresh(session, run, observation),
 			),
 	);
+}
+
+export type PrerequisiteAmendmentEligibility =
+	| Readonly<{
+			eligible: true;
+			run: FeatureRun;
+			observation: ValidationObservation;
+	  }>
+	| Readonly<{ eligible: false; reason: string }>;
+
+export function prerequisiteAmendmentEligibility(
+	session: Session,
+	featureId: string,
+	validationId: string,
+	currentSourceDigest: SourceDigest,
+): PrerequisiteAmendmentEligibility {
+	if (session.closure)
+		return {
+			eligible: false,
+			reason: "This Flow session is closed and archive-only.",
+		};
+	if (session.plan?.evidence?.some((entry) => entry.scope === "gate-observe"))
+		return {
+			eligible: false,
+			reason:
+				"An observed inspection gate cannot authorize a prerequisite repair amendment.",
+		};
+	if (session.approval !== "approved" || !session.plan)
+		return {
+			eligible: false,
+			reason: "A prerequisite amendment requires an approved plan.",
+		};
+	if ((session.amendments?.length ?? 0) >= 3)
+		return {
+			eligible: false,
+			reason:
+				"This session has used all three bounded prerequisite amendments.",
+		};
+	const run = activeRun(session);
+	if (!run || run.featureId !== featureId)
+		return {
+			eligible: false,
+			reason: "An amendment must target the active feature run.",
+		};
+	if (run.reviews.length > 0)
+		return {
+			eligible: false,
+			reason: "An amendment cannot bypass an existing independent review.",
+		};
+	if (
+		session.runs.some(
+			(candidate) =>
+				candidate.featureId === run.featureId &&
+				candidate.reviews.some((review) =>
+					review.result?.findings.some((finding) => finding.scopeBlocker),
+				),
+		)
+	)
+		return {
+			eligible: false,
+			reason: "An independent review scope blocker requires user direction.",
+		};
+	const observation = run.validations.find((item) => item.id === validationId);
+	const latest = run.validations
+		.filter(
+			(item) =>
+				item.scope === "broad" && item.command === planGate(session.plan),
+		)
+		.at(-1);
+	if (!observation)
+		return {
+			eligible: false,
+			reason:
+				"An amendment requires a failed canonical-gate observation on the active run.",
+		};
+	if (
+		latest?.id !== observation.id ||
+		observation.scope !== "broad" ||
+		observation.command !== planGate(session.plan) ||
+		observation.exitCode === null ||
+		observation.exitCode === 0 ||
+		!observation.outputComplete ||
+		observation.ineligibleReason !== undefined ||
+		observation.sourceDigest !== currentSourceDigest
+	)
+		return {
+			eligible: false,
+			reason:
+				"An amendment requires a complete failed canonical-gate observation for the current source.",
+		};
+	const policy = resolveValidationPolicy(
+		session,
+		featureId,
+		observation.command,
+	);
+	if (
+		policy.platform !== undefined &&
+		observation.hostPlatform !== policy.platform
+	)
+		return {
+			eligible: false,
+			reason:
+				"A canonical observation on an unavailable declared host requires user direction.",
+		};
+	return { eligible: true, run, observation };
 }

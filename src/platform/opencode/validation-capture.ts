@@ -12,12 +12,12 @@ import type {
 	ValidationIneligibleReason,
 	ValidationObservation,
 } from "../../domain/session.js";
-import { isValidationEligible } from "../../domain/validation.js";
 import { observeAssertions } from "../../infrastructure/junit-results.js";
 import type {
 	AutoValidationOrigin,
 	AutoValidationReceipt,
 } from "./auto-drive.js";
+import { validationContinuationOutcome } from "./auto-drive-validation.js";
 import type { Hooks } from "./sdk.js";
 
 const MAX_CAPTURES = 128;
@@ -339,6 +339,7 @@ export class ValidationCaptureCoordinator {
 			scope: capture.scope,
 			sourceDigest: capture.sourceDigest,
 			hostPlatform: capture.hostPlatform,
+			intent: capture.intent,
 			assertions: capture.assertions,
 			resultsPath: capture.resultsPath,
 			...(observedAssertions.length > 0 ? { observedAssertions } : {}),
@@ -348,10 +349,13 @@ export class ValidationCaptureCoordinator {
 			outputComplete,
 			...(hostGap ? { ineligibleReason: hostGap } : {}),
 		});
+		const outcome = validationContinuationOutcome(capture, observation);
 		output.output = `${output.output}\n\n[flow-validation] ${JSON.stringify({
 			id: observation.id,
 			scope: observation.scope,
-			passed: isValidationEligible(observation),
+			intent: observation.intent ?? capture.intent,
+			passed: outcome === "passed",
+			observed: outcome === "observed",
 			recordedRevision: observation.recordedRevision,
 			// Reported back because a declared case that came out `skipped` or `absent` is
 			// exactly the state exit zero hides, and the caller has to be told before it

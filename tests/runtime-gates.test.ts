@@ -1589,6 +1589,7 @@ describe("Flow application runtime gates", () => {
 			scope: "broad",
 			sourceDigest: SOURCE_A,
 			hostPlatform: "linux",
+			intent: "pass",
 			assertions: [],
 			resultsPath: undefined,
 		});
