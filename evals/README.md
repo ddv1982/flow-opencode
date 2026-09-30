@@ -58,7 +58,8 @@ Release sampling rejects reviewer overrides.
 Ordinary runs use one sequential queue per model, with up to four queues in flight.
 Release mode is strictly sequential (`--concurrency 1`). Versions 9.1.0 and
 9.2.0 pin `openai/gpt-6-sol` with 38 primary targets and eight reserves. Version
-9.3.0 pins the same model with 48 primary targets and nine reserves. Other versions
+9.3.0 pins the same model with 48 primary targets and nine reserves. Version
+9.4.0 uses 57 primary targets and 12 reserves on the same route. Other versions
 require two providers, 96 primary targets and 18 reserves. Only retained retryable
 host/provider failures activate reserves, never product failures. Results are
 persisted in declared order even when ordinary queues finish out of order.
@@ -425,7 +426,7 @@ about the prompts; a single attempt of a stochastic scenario is not a rate.
 
 ## Multi-model matrix
 
-Versions 9.1.0, 9.2.0, and 9.3.0 require only `openai/gpt-6-sol` and make no
+Versions 9.1.0, 9.2.0, 9.3.0, and 9.4.0 require only `openai/gpt-6-sol` and make no
 cross-provider claim. Other versions require two distinct providers. This is the
 release sampling policy, not evidence that any candidate has qualified.
 `.github/workflows/evals.yml`
@@ -584,6 +585,7 @@ distinction that matters: one pass in six and six in six are different findings.
 
 Versions 9.1.0 and 9.2.0 schedule 38 primary attempts and eight reserves on GPT-6 Sol.
 Version 9.3.0 schedules 48 primary attempts and nine reserves on the same route.
+Version 9.4.0 schedules 57 primary attempts and 12 reserves on that route.
 These are policy targets, not completed qualification claims. Other versions schedule
 96 primary attempts and 18 reserves across two providers. Ordinary campaign size depends
 on the selected scenarios, models and repeats. Use `--scenario` while iterating;
