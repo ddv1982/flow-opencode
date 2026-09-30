@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { scrubSecrets } from "./cassette.js";
+import { assertNoPrivateUserPaths } from "./private-paths.js";
 
 export const MAX_PACKET_BYTES = 4 * 1024 * 1024;
 export const MAX_PACKET_CAPTURE_BASE64_BYTES = 8 * 1024 * 1024;
@@ -91,6 +92,7 @@ export function decodeReviewerPacket(
 	const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 	if (scrubSecrets(text) !== text)
 		throw new Error("Original packet contains secret-shaped evidence.");
+	assertNoPrivateUserPaths(text);
 	const parsed: unknown = JSON.parse(text);
 	const envelope = Envelope.parse(parsed);
 	if (JSON.stringify(parsed) !== text)

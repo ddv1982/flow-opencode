@@ -17,6 +17,7 @@ import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { z } from "zod";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { scrubSecrets } from "./cassette.js";
+import { assertNoPrivateUserPaths } from "./private-paths.js";
 import { ReviewerPacketBytesListSchema } from "./reviewer-packet-bytes.js";
 
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
@@ -167,15 +168,7 @@ function assertSafeText(text: string): void {
 		throw new Error("Qualification bundle contains secret-shaped evidence.");
 	if (/\b(?:ses_[A-Za-z0-9]+|(?:session|review):[A-Za-z0-9-]+)\b/.test(text))
 		throw new Error("Qualification bundle contains a raw session identifier.");
-	// Match Unix homes at path starts, not beneath another root such as /tmp.
-	// Decode escaped slashes for inspection only; retained bytes stay untouched.
-	const paths = text.replace(/\\+\//g, "/");
-	if (
-		/(?:(?:^|[\s"'`=():,;<>[\]{}!?|]|\\[nrtbf]|file:\/\/[^/\s"'<>]*)[*_~]*\/+(?:Users|home)\/[^/\s]+|[A-Za-z]:\\+Users\\+[^\\\s]+)/.test(
-			paths,
-		)
-	)
-		throw new Error("Qualification bundle contains an absolute user path.");
+	assertNoPrivateUserPaths(text);
 }
 
 function assertSafeSource(text: string): void {

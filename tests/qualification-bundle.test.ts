@@ -23,7 +23,10 @@ import {
 	readStableQualificationInput,
 	writeQualificationBundle,
 } from "../evals/qualification-bundle.js";
-import { ReviewerPacketSchema } from "../evals/reviewer-packet-bytes.js";
+import {
+	decodeReviewerPacket,
+	ReviewerPacketSchema,
+} from "../evals/reviewer-packet-bytes.js";
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -613,6 +616,46 @@ function originalPacketObservation(diff: string) {
 	};
 }
 
+test.each([
+	"/home/alice/private.txt",
+	"C:\\Users\\alice\\private.txt",
+	"file:///Users/alice/private.txt",
+])("original packet decode rejects private path %s", (path) => {
+	const observation = originalPacketObservation(`See ${path}`);
+	expect(() => decodeReviewerPacket(observation.envelopeBase64)).toThrow(
+		/absolute user path/,
+	);
+});
+
+test("original packet decode keeps nested temporary paths usable", () => {
+	const observation = originalPacketObservation(
+		"See /tmp/fixture/home/alice/private.txt",
+	);
+	expect(() => decodeReviewerPacket(observation.envelopeBase64)).not.toThrow();
+});
+
+test("sealing rejects a private path hidden in original packet base64", async () => {
+	const outputRoot = await mkdtemp(join(tmpdir(), "flow-bundle-packet-path-"));
+	temporary.push(outputRoot);
+	const fixture = input();
+	const transcript = json({
+		gradeInput: {
+			packetBytes: [originalPacketObservation("See /home/alice/private.txt")],
+		},
+	});
+	await expect(
+		writeQualificationBundle({
+			input: {
+				...fixture,
+				files: fixture.files.map((file) =>
+					file.role === "transcript" ? { ...file, bytes: transcript } : file,
+				),
+			},
+			outputRoot,
+		}),
+	).rejects.toThrow(/Unsafe or invalid original packet/);
+});
+
 test("sealing rejects schema-valid secret-shaped original diff hidden in base64", async () => {
 	const outputRoot = await mkdtemp(
 		join(tmpdir(), "flow-bundle-packet-secret-"),
@@ -637,56 +680,72 @@ test("sealing rejects schema-valid secret-shaped original diff hidden in base64"
 	).rejects.toThrow(/Unsafe or invalid original packet/);
 });
 
-test("recomputed sealed hashes do not hide a malformed original packet observation", async () => {
-	const outputRoot = await mkdtemp(
-		join(tmpdir(), "flow-bundle-packet-mutant-"),
-	);
-	temporary.push(outputRoot);
-	const fixture = input(),
-		observation = originalPacketObservation("safe diff");
-	const written = await writeQualificationBundle({
-		input: {
-			...fixture,
-			files: fixture.files.map((file) =>
-				file.role === "transcript"
-					? {
-							...file,
-							bytes: json({ gradeInput: { packetBytes: [observation] } }),
-						}
+test.each(["malformed-base64", "encoded-private-path"])(
+	"recomputed sealed hashes do not hide a %s packet observation",
+	async (mutant) => {
+		const outputRoot = await mkdtemp(
+			join(tmpdir(), "flow-bundle-packet-mutant-"),
+		);
+		temporary.push(outputRoot);
+		const fixture = input(),
+			observation = originalPacketObservation("safe diff");
+		const written = await writeQualificationBundle({
+			input: {
+				...fixture,
+				files: fixture.files.map((file) =>
+					file.role === "transcript"
+						? {
+								...file,
+								bytes: json({ gradeInput: { packetBytes: [observation] } }),
+							}
+						: file,
+				),
+			},
+			outputRoot,
+		});
+		const oldRef = written.manifest.files.find(
+			(file) => file.role === "transcript",
+		);
+		if (!oldRef) throw new Error("Missing transcript object");
+		const changed = json({
+			gradeInput: {
+				packetBytes: [
+					mutant === "malformed-base64"
+						? { ...observation, envelopeBase64: "!" }
+						: originalPacketObservation("See /home/alice/private.txt"),
+				],
+			},
+		});
+		const sha256 = `sha256:${new Bun.CryptoHasher("sha256").update(changed).digest("hex")}`;
+		const objectPath = `objects/sha256-${sha256.slice("sha256:".length)}`;
+		await writeFile(join(written.path, objectPath), changed);
+		await rm(join(written.path, oldRef.object));
+		const {
+			bundleId: _oldId,
+			bundleSha256: _oldSha,
+			...base
+		} = written.manifest;
+		const altered = {
+			...base,
+			files: base.files.map((file) =>
+				file === oldRef
+					? { ...file, object: objectPath, sha256, bytes: changed.byteLength }
 					: file,
 			),
-		},
-		outputRoot,
-	});
-	const oldRef = written.manifest.files.find(
-		(file) => file.role === "transcript",
-	);
-	if (!oldRef) throw new Error("Missing transcript object");
-	const changed = json({
-		gradeInput: { packetBytes: [{ ...observation, envelopeBase64: "!" }] },
-	});
-	const sha256 = `sha256:${new Bun.CryptoHasher("sha256").update(changed).digest("hex")}`;
-	const objectPath = `objects/sha256-${sha256.slice("sha256:".length)}`;
-	await writeFile(join(written.path, objectPath), changed);
-	await rm(join(written.path, oldRef.object));
-	const { bundleId: _oldId, bundleSha256: _oldSha, ...base } = written.manifest;
-	const altered = {
-		...base,
-		files: base.files.map((file) =>
-			file === oldRef
-				? { ...file, object: objectPath, sha256, bytes: changed.byteLength }
-				: file,
-		),
-	};
-	const bundleSha256 = canonicalSha256("flow-qualification-bundle-v1", altered);
-	const bundleId = `qb1-${bundleSha256.slice("sha256:".length)}`;
-	await writeFile(
-		join(written.path, "bundle.json"),
-		json({ ...altered, bundleId, bundleSha256 }),
-	);
-	const moved = join(outputRoot, bundleId);
-	await rename(written.path, moved);
-	await expect(readQualificationBundle(moved)).rejects.toThrow(
-		/Unsafe or invalid original packet/,
-	);
-});
+		};
+		const bundleSha256 = canonicalSha256(
+			"flow-qualification-bundle-v1",
+			altered,
+		);
+		const bundleId = `qb1-${bundleSha256.slice("sha256:".length)}`;
+		await writeFile(
+			join(written.path, "bundle.json"),
+			json({ ...altered, bundleId, bundleSha256 }),
+		);
+		const moved = join(outputRoot, bundleId);
+		await rename(written.path, moved);
+		await expect(readQualificationBundle(moved)).rejects.toThrow(
+			/Unsafe or invalid original packet/,
+		);
+	},
+);
