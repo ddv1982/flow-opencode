@@ -1,5 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
-import { z } from "zod";
+import type {
+	RecoveryMutation,
+	RecoveryProfile,
+	RecoveryProposal,
+	RecoverySettings,
+} from "./recovery-contracts.js";
+
+export {
+	type RecoveryMutation,
+	type RecoveryProfile,
+	RecoveryProposalSchema,
+	type RecoverySettings,
+} from "./recovery-contracts.js";
+
 import { operationInputDigest } from "../domain/operation.js";
 import { livePriorFindings } from "../domain/review-findings.js";
 import {
@@ -7,7 +20,10 @@ import {
 	type Session,
 	type SourceDigest,
 } from "../domain/session.js";
-import { sessionStatus } from "../domain/session-queries.js";
+import {
+	nextRunnableFeature,
+	sessionStatus,
+} from "../domain/session-queries.js";
 import { dependentClosure } from "../domain/transitions.js";
 import type {
 	DecisionAdvice,
@@ -16,63 +32,17 @@ import type {
 	RecoveryCandidate,
 } from "./ports/decision-provider.js";
 import { JEV_ATTEMPT_RESERVATION_USD } from "./ports/decision-provider.js";
+import {
+	type RecoveryActivation,
+	recoveryActivationView,
+} from "./recovery-status.js";
 import type { SessionCloseRequest } from "./schema.js";
 import { compactProjection } from "./session-projection.js";
 
-const Text = z.string().trim().min(1).max(2000);
-export const RecoveryProposalSchema = z
-	.object({
-		id: z.string().min(1).max(128),
-		sessionId: z.string().min(1).max(256),
-		expectedRevision: z.number().int().safe().nonnegative(),
-		candidates: z
-			.array(
-				z
-					.object({
-						id: z
-							.string()
-							.regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,63}$/)
-							.refine((id) => id !== "abstain"),
-						action: z.enum(["retry", "independent-feature"]),
-						featureId: z.string().min(1).max(128),
-						remedy: Text.max(1000),
-						changedFromPreviousAttempt: Text,
-						findingIds: z.array(z.string().min(1).max(128)).min(1).max(30),
-					})
-					.strict(),
-			)
-			.min(1)
-			.max(3),
-	})
-	.strict();
-type RecoveryProposal = z.infer<typeof RecoveryProposalSchema>;
-export type RecoverySettings = Readonly<{
-	mode: "shadow" | "delegated";
-	maxCalls: number;
-	maxUsd: number;
-}>;
 type RecoveryContext = Readonly<{
 	hostSessionId: string;
 	messageId: string;
 	agent: string;
-}>;
-export type RecoveryMutation = Readonly<{
-	kind: "feature-reset" | "run-start";
-	request: {
-		operationId: string;
-		expectedRevision: number;
-		featureId?: string | undefined;
-		nextFeatureId?: string | undefined;
-	};
-}>;
-export type RecoveryProfile = Readonly<{
-	id: string;
-	model: "jev-1.13.0";
-	rubric: "recovery-v1";
-	policy: "bounded-recovery-v1";
-	choice: number;
-	goal: number;
-	suitability: number;
 }>;
 const QUALIFIED_RECOVERY_PROFILES: readonly RecoveryProfile[] = Object.freeze(
 	[],
@@ -87,14 +57,18 @@ type Grant = {
 	binding: string;
 	candidate: RecoveryCandidate;
 };
-type Lease = {
+type AutomaticAuthority = {
 	host: string;
-	settings: RecoverySettings;
-	controller: AbortController;
 	parent: string | null;
 	direction: string | null;
 	session: string | null;
 	binding: string | null;
+	automaticStarts: Map<string, number>;
+};
+type Lease = {
+	authority: AutomaticAuthority;
+	settings: RecoverySettings;
+	controller: AbortController;
 	deadline: number;
 	calls: number;
 	reservedUsd: number;
@@ -102,7 +76,6 @@ type Lease = {
 	remedies: Set<string>;
 	checkpointCalls: Map<string, number>;
 	retries: Set<string>;
-	automaticStarts: Map<string, number>;
 	selections: Set<string>;
 	pending: Grant | null;
 	inFlight: boolean;
@@ -139,6 +112,8 @@ export type RecoveryGuard = Readonly<{
 }>;
 export class RecoveryController {
 	#lease: Lease | null = null;
+	#authority: AutomaticAuthority | null = null;
+	#activation: RecoveryActivation | null = null;
 	#hosts = new Map<string, Host>();
 	#protectedSessions = new Map<string, string>();
 	readonly #provider: DecisionProvider;
@@ -161,7 +136,7 @@ export class RecoveryController {
 		if (!host) {
 			if (this.#hosts.size >= 128) {
 				for (const candidate of this.#hosts.keys()) {
-					if (candidate === this.#lease?.host) continue;
+					if (candidate === this.#authority?.host) continue;
 					this.#hosts.delete(candidate);
 					break;
 				}
@@ -182,7 +157,7 @@ export class RecoveryController {
 	}
 	#unfenceIfUnprotected(hostId: string): void {
 		if (
-			this.#lease?.host === hostId ||
+			this.#authority?.host === hostId ||
 			[...this.#protectedSessions.values()].includes(hostId)
 		)
 			return;
@@ -194,32 +169,50 @@ export class RecoveryController {
 			host.parents.clear();
 		}
 	}
-	activate(host: string, settings: RecoverySettings): void {
+	activate(
+		host: string,
+		settings: RecoverySettings | null = null,
+		source: RecoveryActivation["source"] = "api",
+	): void {
 		if (
-			!Number.isSafeInteger(settings.maxCalls) ||
-			settings.maxCalls < 1 ||
-			settings.maxCalls > 100 ||
-			!Number.isFinite(settings.maxUsd) ||
-			settings.maxUsd <= 0 ||
-			settings.maxUsd > 10
+			settings &&
+			(!Number.isSafeInteger(settings.maxCalls) ||
+				settings.maxCalls < 1 ||
+				settings.maxCalls > 100 ||
+				!Number.isFinite(settings.maxUsd) ||
+				settings.maxUsd <= 0 ||
+				settings.maxUsd > 10)
 		)
 			throw new Error(
 				"Recovery requires 1-100 calls and a positive budget at most $10.",
 			);
-		if (settings.mode === "delegated" && !this.#profile())
+		if (settings?.mode === "delegated" && !this.#profile())
 			throw new Error(
 				"Delegated recovery is unavailable. No release-owned live qualification matches this model and policy. Use shadow.",
 			);
 		this.revoke();
 		this.#host(host).fenced = true;
-		this.#lease = {
+		this.#authority = {
 			host,
-			settings,
-			controller: new AbortController(),
 			parent: null,
 			direction: null,
 			session: null,
 			binding: null,
+			automaticStarts: new Map(),
+		};
+		this.#activation = {
+			host,
+			source,
+			mode: settings?.mode ?? "off",
+			attempts: 0,
+			outcome: "not-attempted",
+			inactiveReason: settings ? null : "not-configured",
+		};
+		if (!settings) return;
+		this.#lease = {
+			authority: this.#authority,
+			settings,
+			controller: new AbortController(),
 			deadline: this.#now() + 60 * 60 * 1000,
 			calls: 0,
 			reservedUsd: 0,
@@ -227,7 +220,6 @@ export class RecoveryController {
 			remedies: new Set(),
 			checkpointCalls: new Map(),
 			retries: new Set(),
-			automaticStarts: new Map(),
 			selections: new Set(),
 			pending: null,
 			inFlight: false,
@@ -243,20 +235,37 @@ export class RecoveryController {
 				p.policy === "bounded-recovery-v1",
 		);
 	}
-	revoke(host?: string): void {
-		if (this.#lease && (!host || this.#lease.host === host)) {
-			const leaseHost = this.#lease.host;
-			this.#lease.controller.abort();
-			const hostState = this.#hosts.get(leaseHost);
-			if (hostState) {
-				hostState.manual = null;
-				hostState.ordinaryAutoMessage = null;
+	disableAdvice(host?: string, reason = "disabled"): void {
+		if (this.#lease && (!host || this.#lease.authority.host === host)) {
+			if (this.#activation) {
+				this.#activation.attempts = this.#lease.calls;
+				this.#activation.outcome =
+					typeof this.#lease.last?.kind === "string"
+						? this.#lease.last.kind
+						: this.#lease.calls > 0
+							? "cancelled"
+							: "not-attempted";
+				this.#activation.inactiveReason = reason;
 			}
+			this.#lease.controller.abort();
 			this.#lease = null;
 		}
 	}
+	revoke(host?: string, reason = "cancelled"): void {
+		if (this.#authority && (!host || this.#authority.host === host)) {
+			const state = this.#hosts.get(this.#authority.host);
+			if (state) {
+				state.manual = null;
+				state.ordinaryAutoMessage = null;
+			}
+			this.#authority = null;
+			if (this.#activation) this.#activation.inactiveReason = reason;
+		}
+		this.disableAdvice(host, reason);
+	}
 	#expireLease(): void {
-		if (this.#lease && this.#now() >= this.#lease.deadline) this.revoke();
+		if (this.#lease && this.#now() >= this.#lease.deadline)
+			this.disableAdvice(undefined, "expired");
 	}
 	observeMessage(
 		hostId: string,
@@ -272,15 +281,32 @@ export class RecoveryController {
 				: undefined);
 		if (!host) return;
 		if (!synthetic && host.fenced) this.#unfenceIfUnprotected(hostId);
-		const lease = this.#lease?.host === hostId ? this.#lease : null;
+		const authority = this.#authority?.host === hostId ? this.#authority : null;
 		if (!synthetic) {
 			host.manual = id;
 			host.ordinaryAutoMessage = null;
-		} else if (trustedAutoContinuation && host.fenced && !lease && host.manual)
+		} else if (
+			trustedAutoContinuation &&
+			host.fenced &&
+			!authority &&
+			host.manual
+		)
 			host.ordinaryAutoMessage = id;
-		if (lease) {
-			if (!synthetic && lease.parent !== null) lease.direction = id;
-			lease.parent = id;
+		if (authority && (!synthetic || trustedAutoContinuation)) {
+			if (authority.parent !== null && authority.parent !== id) {
+				const lease = this.#lease;
+				if (
+					lease?.authority === authority &&
+					(lease.inFlight || lease.pending)
+				) {
+					lease.controller.abort();
+					lease.controller = new AbortController();
+					lease.pending = null;
+					lease.last = { kind: "cancelled" };
+				}
+				if (!synthetic) authority.direction = id;
+			}
+			authority.parent = id;
 		}
 	}
 	observeAssistant(hostId: string, id: string, parent: string): void {
@@ -292,7 +318,7 @@ export class RecoveryController {
 			if (oldest) host.parents.delete(oldest);
 		}
 	}
-	#origin(context: RecoveryContext): Lease | null {
+	#origin(context: RecoveryContext): AutomaticAuthority | null {
 		this.#expireLease();
 		const host = this.#hosts.get(context.hostSessionId);
 		if (!host?.fenced) return null;
@@ -301,17 +327,12 @@ export class RecoveryController {
 		)
 			throw new Error("Only the observed manager may perform recovery.");
 		const parent = host.parents.get(context.messageId);
-		const lease =
-			this.#lease?.host === context.hostSessionId ? this.#lease : null;
-		if (lease) {
-			if (
-				!parent ||
-				parent !== lease.parent ||
-				lease.controller.signal.aborted ||
-				this.#now() >= lease.deadline
-			)
+		const authority =
+			this.#authority?.host === context.hostSessionId ? this.#authority : null;
+		if (authority) {
+			if (!parent || parent !== authority.parent)
 				throw new Error("Recovery lineage expired or cancelled.");
-			return lease;
+			return authority;
 		}
 		if (
 			!parent ||
@@ -330,27 +351,37 @@ export class RecoveryController {
 			approval: session.approval,
 		});
 	}
-	#bind(lease: Lease, session: Session) {
+	#bind(authority: AutomaticAuthority, session: Session) {
 		const binding = this.#binding(session);
-		if (lease.session === null) {
+		if (authority.session === null) {
 			if (
 				this.#protectedSessions.size >= 128 &&
 				!this.#protectedSessions.has(session.id)
 			)
 				throw new Error("Recovery session capacity reached.");
-			this.#protectedSessions.set(session.id, lease.host);
-			lease.session = session.id;
-			lease.binding = binding;
+			this.#protectedSessions.set(session.id, authority.host);
+			authority.session = session.id;
+			authority.binding = binding;
 		}
-		if (lease.session !== session.id || lease.binding !== binding) {
-			this.revoke(lease.host);
+		if (authority.session !== session.id || authority.binding !== binding) {
+			this.revoke(authority.host);
 			throw new Error("Recovery session or approved plan changed.");
 		}
 	}
 	snapshot(host?: string) {
 		this.#expireLease();
 		const lease = this.#lease;
-		return lease && (host === undefined || lease.host === host)
+		const activation = this.#activation;
+		const status =
+			activation && (host === undefined || activation.host === host)
+				? recoveryActivationView(
+						activation,
+						this.#authority !== null,
+						this.#authority?.session !== null && this.#authority !== null,
+						lease,
+					)
+				: {};
+		return lease && (host === undefined || lease.authority.host === host)
 			? {
 					mode: lease.settings.mode,
 					remainingCalls: lease.settings.maxCalls - lease.calls,
@@ -361,8 +392,9 @@ export class RecoveryController {
 							? this.#qualification
 							: "shadow-only",
 					last: lease.last,
+					...status,
 				}
-			: { mode: "off" };
+			: { mode: "off", ...status };
 	}
 	proposalPrompt(
 		host: string,
@@ -374,7 +406,7 @@ export class RecoveryController {
 		const lease = this.#lease;
 		if (
 			!lease ||
-			lease.host !== host ||
+			lease.authority.host !== host ||
 			!session ||
 			nextAction !== "await-user-direction"
 		)
@@ -391,12 +423,14 @@ export class RecoveryController {
 	}
 	guard(context: RecoveryContext): RecoveryGuard {
 		const identity = this.#lease;
+		const controller = identity?.controller;
 		return {
 			checkClose: (session, request) =>
 				this.#checkClose(context, session, request),
 			retireClosedSession: (sessionId) => {
 				const owner = this.#protectedSessions.get(sessionId);
-				if (this.#lease?.session === sessionId) this.revoke();
+				if (this.#authority?.session === sessionId)
+					this.revoke(undefined, "closed");
 				this.#protectedSessions.delete(sessionId);
 				if (owner) {
 					const host = this.#hosts.get(owner);
@@ -409,11 +443,15 @@ export class RecoveryController {
 			check: (s, source, m) => this.#check(context, s, source, m),
 			accepted: (s, m, replayed) => this.#accepted(context, s, m, replayed),
 			propose: (s, source, p) => this.#propose(context, s, source, p),
-			requiresSource: () => this.#lease?.host === context.hostSessionId,
+			requiresSource: () => this.#authority?.host === context.hostSessionId,
 			snapshot: () => this.snapshot(context.hostSessionId),
 			invalidate: () => {
 				const lease = this.#lease;
-				if (lease === identity && lease?.host === context.hostSessionId) {
+				if (
+					lease === identity &&
+					lease?.controller === controller &&
+					lease?.authority.host === context.hostSessionId
+				) {
 					lease.pending = null;
 					lease.last = { kind: "stale" };
 				}
@@ -441,14 +479,14 @@ export class RecoveryController {
 	): void {
 		this.#expireLease();
 		this.#checkProtectedSession(context, session);
-		const lease = this.#origin(context);
-		if (!lease) return;
-		this.#bind(lease, session);
+		const authority = this.#origin(context);
+		if (!authority) return;
+		this.#bind(authority, session);
 		if (request.kind === "completed") return;
 		const parent = this.#hosts
 			.get(context.hostSessionId)
 			?.parents.get(context.messageId);
-		if (lease.direction === null || parent !== lease.direction)
+		if (authority.direction === null || parent !== authority.direction)
 			throw new Error("Session closure requires fresh real user direction.");
 	}
 	#check(
@@ -462,7 +500,7 @@ export class RecoveryController {
 		if (
 			reserved &&
 			(!this.#lease ||
-				this.#lease.host !== context.hostSessionId ||
+				this.#lease.authority.host !== context.hostSessionId ||
 				!this.#lease.pending ||
 				hash(this.#lease.pending.mutation) !== hash(mutation))
 		)
@@ -470,24 +508,31 @@ export class RecoveryController {
 				"Recovery operation requires its original live host grant.",
 			);
 		this.#checkProtectedSession(context, session);
-		const lease = this.#origin(context);
-		if (!lease) return;
-		this.#bind(lease, session);
-		this.#discardStale(lease, session, source);
+		const authority = this.#origin(context);
+		if (!authority) return;
+		this.#bind(authority, session);
+		const lease = this.#lease?.authority === authority ? this.#lease : null;
+		if (lease) this.#discardStale(lease, session, source);
 		const projection = compactProjection(session);
 		const parent = this.#hosts
 			.get(context.hostSessionId)
 			?.parents.get(context.messageId);
-		if (lease.direction !== null && parent === lease.direction) return;
-		const target = mutation.request.nextFeatureId ?? mutation.request.featureId;
+		if (authority.direction !== null && parent === authority.direction) return;
+		const target =
+			mutation.request.nextFeatureId ??
+			mutation.request.featureId ??
+			(mutation.kind === "run-start"
+				? nextRunnableFeature(session)
+				: undefined);
 		const active = session.runs.find((run) => run.state === "active");
 		const pending = active?.reviews.find((review) => review.result === null);
 		const automaticStart =
 			mutation.kind === "run-start" &&
-			target !== undefined &&
-			lease.automaticStarts.get(target) === session.revision;
+			target != null &&
+			authority.automaticStarts.get(target) === session.revision;
 		const freshStart =
 			mutation.kind === "run-start" &&
+			target != null &&
 			sessionStatus(session) === "ready" &&
 			!session.runs.some(
 				(run) =>
@@ -514,9 +559,9 @@ export class RecoveryController {
 			(freshStart || firstRetry || staleReview || automaticStart)
 		)
 			return;
-		const grant = lease.pending;
+		const grant = lease?.pending;
 		if (
-			lease.settings.mode !== "delegated" ||
+			lease?.settings.mode !== "delegated" ||
 			!grant ||
 			grant.source !== source ||
 			grant.binding !== this.#binding(session) ||
@@ -551,14 +596,14 @@ export class RecoveryController {
 		mutation: RecoveryMutation,
 		replayed: boolean,
 	): void {
-		const lease = this.#lease;
-		if (!lease || lease.host !== context.hostSessionId) return;
+		const authority = this.#authority;
+		if (!authority || authority.host !== context.hostSessionId) return;
 		if (
 			!replayed &&
 			mutation.kind === "run-start" &&
 			mutation.request.featureId
 		)
-			lease.automaticStarts.delete(mutation.request.featureId);
+			authority.automaticStarts.delete(mutation.request.featureId);
 		if (
 			!replayed &&
 			mutation.kind === "feature-reset" &&
@@ -568,20 +613,31 @@ export class RecoveryController {
 			const history = session.runs.filter(
 				(run) => run.featureId === mutation.request.featureId,
 			);
+			const directed =
+				authority.direction !== null &&
+				this.#hosts
+					.get(context.hostSessionId)
+					?.parents.get(context.messageId) === authority.direction;
 			if (
-				history.filter((run) =>
+				directed ||
+				(history.filter((run) =>
 					run.reviews.some((review) => review.result?.verdict === "failed"),
 				).length === 1 &&
-				!history.some((run) =>
-					run.reviews.some((review) =>
-						review.result?.findings.some((f) => f.scopeBlocker),
-					),
-				)
+					!history.some((run) =>
+						run.reviews.some((review) =>
+							review.result?.findings.some((f) => f.scopeBlocker),
+						),
+					))
 			)
-				lease.automaticStarts.set(mutation.request.featureId, session.revision);
+				authority.automaticStarts.set(
+					mutation.request.featureId,
+					session.revision,
+				);
 		}
-		const grant = lease.pending;
-		if (!grant || hash(grant.mutation) !== hash(mutation)) return;
+		if (!replayed) authority.direction = null;
+		const lease = this.#lease?.authority === authority ? this.#lease : null;
+		const grant = lease?.pending;
+		if (!lease || !grant || hash(grant.mutation) !== hash(mutation)) return;
 		if (grant.candidate.action === "retry")
 			lease.retries.add(grant.candidate.featureId);
 		else
@@ -601,12 +657,13 @@ export class RecoveryController {
 		source: SourceDigest,
 		proposal: RecoveryProposal,
 	): Promise<unknown> {
-		const lease = this.#origin(context);
-		if (!lease)
+		const authority = this.#origin(context);
+		const lease = this.#lease;
+		if (!authority || !lease || lease.authority !== authority)
 			throw new Error(
 				"Recovery advice requires an explicit active recovery command.",
 			);
-		this.#bind(lease, session);
+		this.#bind(authority, session);
 		this.#discardStale(lease, session, source);
 		if (
 			proposal.sessionId !== session.id ||
@@ -759,15 +816,17 @@ export class RecoveryController {
 		)
 			throw new Error("Recovery decision budget exhausted.");
 		lease.inFlight = true;
+		const controller = lease.controller;
 		let attemptReserved = false;
 		let advice: DecisionAdvice;
 		try {
 			advice = await this.#provider.assess(packet, {
-				signal: lease.controller.signal,
+				signal: controller.signal,
 				reserveAttempt: () => {
 					if (
 						this.#lease !== lease ||
-						lease.controller.signal.aborted ||
+						lease.controller !== controller ||
+						controller.signal.aborted ||
 						this.#now() >= lease.deadline ||
 						lease.calls >= lease.settings.maxCalls ||
 						lease.reservedUsd + JEV_ATTEMPT_RESERVATION_USD >
@@ -793,7 +852,12 @@ export class RecoveryController {
 		} finally {
 			lease.inFlight = false;
 		}
-		if (this.#lease !== lease || lease.controller.signal.aborted)
+		this.#expireLease();
+		if (
+			this.#lease !== lease ||
+			lease.controller !== controller ||
+			controller.signal.aborted
+		)
 			throw new Error("Recovery advice was cancelled.");
 		this.#origin(context);
 		if (!attemptReserved) {

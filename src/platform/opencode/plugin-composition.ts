@@ -165,7 +165,14 @@ export function createFlowPlugin(dependencies: {
 					reviewerConfiguration = configuration;
 				},
 			}),
-			tool: guardTools(tools, runtimeGuard, autoDrive),
+			tool: guardTools(tools, runtimeGuard, autoDrive, async (sessionID) => {
+				const response = await ctx.client.session.get({
+					path: { id: sessionID },
+					query: { directory: ctx.directory },
+					throwOnError: true,
+				});
+				return response.data;
+			}),
 			"command.execute.before": createCommandHook({
 				assertOperational: (action) => runtimeGuard.assertOperational(action),
 				autoDrive,

@@ -1,6 +1,22 @@
 import type { PreparedValidation } from "../../application/prepare-validation.js";
 import type { RecoveryController } from "../../application/recovery-policy.js";
 import type { SourceDigest } from "../../domain/session.js";
+import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
+import {
+	authenticatedCompactionSuccessor,
+	type Compaction,
+	type HostMessage,
+	type HostPart,
+	observeCompactionMessage,
+	observeCompactionPart,
+} from "./auto-compaction.js";
+import {
+	decideOnIdle,
+	type IdleDecision,
+	isHandback,
+	isPendingReviewer,
+} from "./auto-drive-decision.js";
+import { autoHandbackMessage } from "./auto-drive-messages.js";
 import {
 	type AutoValidationOrigin,
 	type AutoValidationReceipt,
@@ -13,14 +29,6 @@ export type {
 	AutoValidationOrigin,
 	AutoValidationReceipt,
 } from "./auto-drive-validation.js";
-
-import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
-import {
-	decideOnIdle,
-	type IdleDecision,
-	isHandback,
-	isPendingReviewer,
-} from "./auto-drive-decision.js";
 export const FLOW_AUTO_METADATA_KEY = "opencode-plugin-flow/auto";
 export type AutoGoalIntent =
 	| "inspection-deliverable"
@@ -107,13 +115,6 @@ export function autoDriveDelivery(
 		...(variant === undefined ? {} : { variant }),
 	};
 }
-type HostMessage = Record<"id" | "role", string> & {
-	parentID?: string;
-	summary?: unknown;
-};
-type HostPart = { type: string; messageID: string; auto?: boolean };
-type Compaction = Record<"authority" | "user", string> &
-	Partial<Record<"summary" | "successor", string>>;
 type Checkpoint = { revision: number; answered: boolean; advance?: number };
 export type ProcessLocalAutoContinuationSupport =
 	| "supported"
@@ -188,10 +189,6 @@ const CONTINUATION_ROUTE = [
 	"Load flow-run guidance before any feature or closure route;",
 	"for a fresh close use compact session id/revision plus a fresh operation id,",
 	"and replay archiveRetry exactly from its projected request.",
-].join(" ");
-const HANDBACK_ROUTE = [
-	"Call flow_status with the compact view first.",
-	"Print findingsDigest as the user-facing list. Do not invent ids.",
 ].join(" ");
 
 function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
@@ -286,24 +283,20 @@ export class AutoDriveCoordinator {
 		if (!isHandback(projection)) return;
 		if (lease.handbackPromptedRevision === projection.revision) return;
 		if (!lease.delivery) return;
+		const token = lease.token;
 		lease.handbackPromptedRevision = projection.revision;
 		lease.messageId = null;
 		this.#setTiming("active");
 		lease.inFlight = "prompt";
 		try {
-			const handback = [
-				`Flow is handing control back at compact revision ${projection.revision}.`,
-				HANDBACK_ROUTE,
-				`Then follow ${projection.nextAction} or stop at await-user-direction.`,
-				"Do not expand the approved goal.",
-			].join(" ");
 			await this.#options.prompt(
 				lease.hostSessionId,
-				`${handback}\n\n${FLOW_MANAGER_KERNEL}`,
+				autoHandbackMessage(projection),
 				lease.delivery,
-				{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+				{ [FLOW_AUTO_METADATA_KEY]: token },
 			);
 		} catch (error) {
+			if (lease.token !== token) return;
 			this.#stop(
 				lease,
 				`Flow auto prompt failed: ${String(error)}`,
@@ -384,7 +377,11 @@ export class AutoDriveCoordinator {
 	}
 	async resumeForCommand(hostSessionId: string): Promise<string | null> {
 		const lease = this.#lease;
-		if (lease?.hostSessionId !== hostSessionId) return null;
+		if (
+			lease?.hostSessionId !== hostSessionId ||
+			this.continuationSupport() === "unsupported"
+		)
+			return null;
 		const projection = await this.#read(lease);
 		if (this.#lease !== lease || !projection) return null;
 		if (
@@ -468,6 +465,7 @@ export class AutoDriveCoordinator {
 		if (!lease.checkpoint && lease.inFlight !== "status")
 			this.deactivate(hostSessionId);
 		else {
+			lease.token = crypto.randomUUID();
 			lease.messageId = messageId;
 			lease.delivery = delivery;
 			lease.pendingReply = true;
@@ -486,8 +484,6 @@ export class AutoDriveCoordinator {
 		return `${context}\n\n${FLOW_MANAGER_KERNEL}`;
 	}
 	observeHostMessage(host: string, message: HostMessage): void {
-		// Recorded before the lease guard: parentage is a property of the host, not
-		// of the session that happens to hold the lease.
 		if (message.role === "assistant") {
 			if (message.parentID === undefined) this.#hostMissingParentage = true;
 			else this.#hostParentage = true;
@@ -496,49 +492,36 @@ export class AutoDriveCoordinator {
 		if (lease?.hostSessionId !== host) return;
 		if (message.role === "assistant" && message.parentID !== undefined) {
 			lease.assistantParents.set(message.id, message.parentID);
-			if (message.summary !== true) {
+			if (message.summary !== true)
 				lease.lastAssistantParent = message.parentID;
-				if (lease.compaction) lease.compaction = null;
-			} else if (lease.compaction) {
-				if (
-					message.parentID === lease.compaction.user &&
-					lease.messageId === lease.compaction.authority
-				)
-					lease.compaction.summary = message.id;
-				else lease.compaction = null;
-			}
-		} else if (message.role === "user" && lease.compaction) {
-			const compaction = lease.compaction;
-			if (
-				compaction.summary &&
-				(!compaction.successor || compaction.successor === message.id)
-			)
-				compaction.successor = message.id;
-			else lease.compaction = null;
 		}
+		lease.compaction = observeCompactionMessage(
+			lease.compaction,
+			lease.messageId,
+			message,
+		);
 	}
 	observeHostPart(host: string, part: HostPart): void {
 		const lease = this.#lease;
-		if (
-			lease?.hostSessionId !== host ||
-			part.type !== "compaction" ||
-			part.auto !== true
-		)
-			return;
-		lease.compaction =
-			lease.lastAssistantParent && lease.lastAssistantParent === lease.messageId
-				? { authority: lease.lastAssistantParent, user: part.messageID }
-				: null;
+		if (lease?.hostSessionId !== host) return;
+		lease.compaction = observeCompactionPart(
+			lease.compaction,
+			lease.messageId,
+			lease.lastAssistantParent,
+			part,
+		);
 	}
 	observeCompaction(host: string): void {
 		const lease = this.#lease;
 		if (lease?.hostSessionId !== host || lease.messageId === null) return;
-		const compaction = lease.compaction;
+		const successor = authenticatedCompactionSuccessor(
+			lease.compaction,
+			lease.messageId,
+		);
 		lease.compaction = null;
-		if (!compaction?.successor || lease.messageId !== compaction.authority)
-			return void this.#rejectOrigin(lease, "compaction");
-		lease.messageId = compaction.successor;
-		this.#options.recovery?.observeMessage(host, compaction.successor, true);
+		if (!successor) return void this.#rejectOrigin(lease, "compaction");
+		lease.messageId = successor;
+		this.#options.recovery?.observeMessage(host, successor, true, true);
 	}
 	observeMutation(
 		host: string,
@@ -677,11 +660,8 @@ export class AutoDriveCoordinator {
 			: null;
 	}
 	/**
-	 * What this process has observed about the host's continuation support.
-	 *
-	 * Reported rather than enforced: an `unsupported` host still gets the whole
-	 * lifecycle, one `/flow-run` at a time. The point is that the user hears it from
-	 * Flow instead of inferring it from a workflow that stops after every feature.
+	 * Automatic mutations and continuation require attributable parentage.
+	 * Unsupported hosts need a fresh manual command, which retires auto authority.
 	 */
 	continuationSupport(): ProcessLocalAutoContinuationSupport {
 		if (this.#hostParentage) return "supported";
@@ -840,20 +820,23 @@ export class AutoDriveCoordinator {
 						)
 					: null;
 			if (proposal && lease.delivery) {
+				const token = lease.token;
 				this.#waitAt(lease, projection.revision);
 				lease.handbackPromptedRevision = projection.revision;
 				this.#setTiming("active");
 				lease.inFlight = "prompt";
 				await this.#options
 					.prompt(hostSessionId, proposal, lease.delivery, {
-						[FLOW_AUTO_METADATA_KEY]: lease.token,
+						[FLOW_AUTO_METADATA_KEY]: token,
 					})
-					.catch((error) =>
-						this.#stop(
-							lease,
-							`Flow recovery prompt failed: ${String(error)}`,
-							"prompt-error",
-						),
+					.catch(
+						(error) =>
+							lease.token === token &&
+							this.#stop(
+								lease,
+								`Flow recovery prompt failed: ${String(error)}`,
+								"prompt-error",
+							),
 					);
 				return;
 			}
@@ -879,6 +862,7 @@ export class AutoDriveCoordinator {
 								: "no-progress",
 					);
 				case "prompt-initial": {
+					const token = lease.token;
 					lease.lastPromptedRevision = 0;
 					lease.inFlight = "prompt";
 					// Narrowing only: decideOnIdle already required hasDelivery.
@@ -888,20 +872,23 @@ export class AutoDriveCoordinator {
 							hostSessionId,
 							`${INITIAL_ROUTE}\n\n${FLOW_MANAGER_KERNEL}`,
 							lease.delivery,
-							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+							{ [FLOW_AUTO_METADATA_KEY]: token },
 						)
-						.catch((error) =>
-							this.#stop(
-								lease,
-								`Flow auto prompt failed: ${String(error)}`,
-								"prompt-error",
-							),
+						.catch(
+							(error) =>
+								lease.token === token &&
+								this.#stop(
+									lease,
+									`Flow auto prompt failed: ${String(error)}`,
+									"prompt-error",
+								),
 						);
 					return;
 				}
-				case "handback-and-wait":
+				case "handback-and-wait": {
+					const token = lease.token;
 					await this.#promptHandback(lease, projection);
-					if (this.#lease !== lease) return;
+					if (this.#lease !== lease || lease.token !== token) return;
 					this.#disposition = {
 						state: "waiting",
 						reason:
@@ -910,15 +897,17 @@ export class AutoDriveCoordinator {
 								: "user-direction",
 					};
 					return void this.#waitAt(lease, projection.revision);
+				}
 				case "answered":
 					if (lease.checkpoint) lease.checkpoint.answered = true;
 					this.#setTiming("active");
 					return;
 				case "handback-or-deactivate": {
+					const token = lease.token;
 					const already =
 						lease.handbackPromptedRevision === projection.revision;
 					await this.#promptHandback(lease, projection);
-					if (this.#lease !== lease) return;
+					if (this.#lease !== lease || lease.token !== token) return;
 					if (
 						!already &&
 						lease.handbackPromptedRevision === projection.revision

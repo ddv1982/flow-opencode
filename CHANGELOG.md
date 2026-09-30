@@ -4,6 +4,9 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## Unreleased
 
+- Auto retry guards cover Jev off, child manager writes, and stale handbacks.
+- Native automatic compaction preserves continuation when OpenCode updates
+  earlier message metadata. Checkpoints still require fresh user direction.
 - Plans may declare exact supplemental checks as pass-required or observe-only
   before approval. Complete nonzero observations remain visible to the reviewer
   without clearing a failed required gate. `/flow-auto` can continue an approved

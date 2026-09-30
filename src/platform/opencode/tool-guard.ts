@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { dataNote } from "../../application/flow-response.js";
 import { PlanSaveInputSchema } from "../../application/schema.js";
 import type { AutoDriveCoordinator } from "./auto-drive.js";
@@ -37,6 +38,11 @@ function acceptedMutation(tool: string, output: string) {
 	}
 }
 type FlowTools = NonNullable<Hooks["tool"]>;
+const NativeSessionIdentity = z.object({
+	id: z.string().min(1),
+	directory: z.string().min(1),
+	parentID: z.string().min(1).optional(),
+});
 
 /**
  * Tools whose successful output is markdown prose rather than a Flow response
@@ -79,6 +85,7 @@ export function guardTools(
 	tools: FlowTools,
 	runtimeGuard: FlowLeadershipHandle,
 	autoDrive: AutoDriveCoordinator,
+	readSession: (sessionId: string) => Promise<unknown>,
 ): FlowTools {
 	return Object.fromEntries(
 		Object.entries(tools).map(([name, definition]) => [
@@ -97,6 +104,37 @@ export function guardTools(
 					if (!status.operational) {
 						autoDrive.clear();
 						return guardRejection(name, status);
+					}
+					const managerMutation =
+						(MUTATION.test(name) && name !== "flow_feature_complete") ||
+						name === "flow_validation_start" ||
+						(name === "flow_status" && args[0].recoveryProposal !== undefined);
+					const completion = name === "flow_feature_complete";
+					if (managerMutation || completion) {
+						let permitted = false;
+						try {
+							const identity = NativeSessionIdentity.safeParse(
+								await readSession(args[1].sessionID),
+							);
+							permitted =
+								identity.success &&
+								identity.data.id === args[1].sessionID &&
+								identity.data.directory === args[1].directory &&
+								(completion
+									? identity.data.parentID === undefined
+										? args[1].agent !== "flow-reviewer"
+										: args[1].agent === "flow-reviewer"
+									: identity.data.parentID === undefined);
+						} catch {}
+						if (!permitted) {
+							const summary =
+								"Flow mutations require a verified primary manager or verified reviewer child session.";
+							return JSON.stringify({
+								status: "error",
+								summary,
+								workflowData: { dataNote: dataNote(), failure: { summary } },
+							});
+						}
 					}
 					const output = await definition.execute(...args);
 					const mutation = acceptedMutation(name, String(output));

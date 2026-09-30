@@ -67,6 +67,9 @@ function pluginContext(
 				},
 			},
 			session: {
+				get(input: { path: { id: string } }) {
+					return Promise.resolve({ data: { id: input.path.id, directory } });
+				},
 				promptAsync(input: unknown) {
 					promptCalls?.push(input);
 					return Promise.resolve({ data: undefined });
@@ -200,6 +203,22 @@ async function emitAutoCompaction(
 		summary: true,
 	});
 	await emitMessage(hooks, { id: successor, sessionID, role: "user" });
+	await hooks.event?.({
+		event: {
+			type: "message.part.updated",
+			properties: {
+				part: {
+					id: `${successor}-continuation`,
+					messageID: successor,
+					sessionID,
+					type: "text",
+					text: "Continue the same task.",
+					synthetic: true,
+					metadata: { compaction_continue: true },
+				},
+			},
+		},
+	});
 	await hooks.event?.({
 		event: { type: "session.compacted", properties: { sessionID } },
 	} as Parameters<NonNullable<typeof hooks.event>>[0]);
@@ -1632,13 +1651,21 @@ describe("flow-auto host continuation", () => {
 						synthetic: true,
 						text: expect.stringContaining("flow_run_start"),
 						metadata: {
-							[FLOW_AUTO_METADATA_KEY]: activationToken,
+							[FLOW_AUTO_METADATA_KEY]: expect.any(String),
 						},
 					},
 				],
 			},
 			throwOnError: true,
 		});
+		const continuationParts = (
+			promptCalls[0] as {
+				body: { parts: Array<{ metadata: Record<string, unknown> }> };
+			}
+		).body.parts;
+		expect(continuationParts[0]?.metadata[FLOW_AUTO_METADATA_KEY]).not.toBe(
+			activationToken,
+		);
 		expect((promptCalls[0] as { body: { model: object } }).body.model).toEqual({
 			providerID: "provider",
 			modelID: "approved-model",

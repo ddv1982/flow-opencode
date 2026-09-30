@@ -235,7 +235,12 @@ function pluginContext(workspace: string) {
 		experimental_workspace: { register() {} },
 		client: {
 			app: { log() {} },
-			session: { message: async () => ({ data: undefined }) },
+			session: {
+				message: async () => ({ data: undefined }),
+				get: async (input: { path: { id: string } }) => ({
+					data: { id: input.path.id, directory: workspace },
+				}),
+			},
 		},
 	} as unknown as Parameters<typeof FlowPlugin>[0];
 }
