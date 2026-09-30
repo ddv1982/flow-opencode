@@ -61,10 +61,12 @@ export function validationContinuationOutcome(
 		!observation.outputComplete ||
 		observation.exitCode === null ||
 		(origin.declaredPlatform !== undefined &&
-			observation.hostPlatform !== origin.declaredPlatform) ||
-		!assertionsSatisfied(origin.assertions, observation.observedAssertions)
+			observation.hostPlatform !== origin.declaredPlatform)
 	)
 		return "ineligible";
+	if (origin.intent === "pass" && observation.exitCode !== 0) return "failed";
+	if (!assertionsSatisfied(origin.assertions, observation.observedAssertions))
+		return "ineligible";
 	if (origin.intent === "observe") return "observed";
-	return observation.exitCode === 0 ? "passed" : "failed";
+	return "passed";
 }
