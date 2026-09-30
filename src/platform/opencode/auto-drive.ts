@@ -1,4 +1,10 @@
+import type { PreparedValidation } from "../../application/prepare-validation.js";
 import type { RecoveryController } from "../../application/recovery-policy.js";
+import type {
+	SourceDigest,
+	ValidationObservation,
+} from "../../domain/session.js";
+import { assertionsSatisfied } from "../../domain/test-results.js";
 import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
 import {
 	decideOnIdle,
@@ -17,6 +23,51 @@ export interface AutoDriveProjection {
 	readonly revision: number;
 	readonly nextAction: string | null;
 }
+type AutoDriveDisposition =
+	| Readonly<{ state: "active"; reason: "invocation" | "continuation" }>
+	| Readonly<{ state: "waiting"; reason: "plan-approval" | "user-direction" }>
+	| Readonly<{
+			state: "paused";
+			reason:
+				| "stalled"
+				| "validation-failed"
+				| "validation-ineligible"
+				| "manual-command"
+				| "handback";
+	  }>
+	| Readonly<{
+			state: "inactive";
+			reason:
+				| "interrupted"
+				| "cancelled"
+				| "restarted"
+				| "unsupported"
+				| "missing-lineage"
+				| "unowned"
+				| "no-progress"
+				| "no-delivery"
+				| "completed"
+				| "unsupported-action"
+				| "status-error"
+				| "prompt-error";
+	  }>;
+export type AutoContinuationSnapshot = AutoDriveDisposition &
+	Readonly<{
+		scope: "current-plugin-process";
+	}>;
+export type AutoValidationOrigin = Readonly<{
+	hostSessionId: string;
+	sessionId: string;
+	authority: string;
+	assistantId: string;
+	assertions: readonly string[];
+}> &
+	Pick<ValidationObservation, "featureId" | "runId" | "sourceDigest">;
+export type AutoValidationReceipt = Readonly<{
+	origin: AutoValidationOrigin;
+	captureId: string;
+	observation: ValidationObservation;
+}>;
 interface AutoDriveMessagePart {
 	readonly type?: string;
 	readonly text?: string;
@@ -92,6 +143,12 @@ type Lease = {
 	lastAssistantParent: string | null;
 	compaction: Compaction | null;
 	manualContinuation: { revision: number } | null;
+	validation: {
+		revision: number;
+		outcome: "passed" | "failed" | "ineligible";
+		sourceDigest: SourceDigest;
+		checked: boolean;
+	} | null;
 	ownInspectDraft: {
 		sessionId: string;
 		revision: number;
@@ -105,6 +162,7 @@ type Timing = {
 type AutoDriveOptions = Readonly<{
 	recovery?: RecoveryController;
 	readProjection: () => Promise<AutoDriveProjection>;
+	readSourceDigest?: () => Promise<SourceDigest>;
 	prompt: (
 		sessionID: string,
 		prompt: string,
@@ -146,6 +204,9 @@ function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
 export class AutoDriveCoordinator {
 	#lease: Lease | null = null;
 	#timing: Timing | null = null;
+	#disposition: AutoDriveDisposition | null = null;
+	#dispositionHost: string | null = null;
+	readonly #validationOrigins = new WeakMap<AutoValidationOrigin, Lease>();
 	readonly #options: AutoDriveOptions;
 	/** Whether this host has ever reported assistant message parentage. */
 	#hostParentage = false;
@@ -166,6 +227,10 @@ export class AutoDriveCoordinator {
 		if (timing.state === "waiting-for-user") timing.waitingForUserMs += elapsed;
 		timing.state = state;
 		timing.since = now;
+		if (state === "active" && this.#disposition?.state !== "active")
+			this.#disposition = { state: "active", reason: "continuation" };
+		if (state === "waiting-for-user" && this.#disposition?.state !== "waiting")
+			this.#disposition = { state: "waiting", reason: "user-direction" };
 	}
 	#warn(message: string): void {
 		try {
@@ -174,9 +239,16 @@ export class AutoDriveCoordinator {
 			// Warning delivery is best-effort; a failed host sink must not stop the lease.
 		}
 	}
-	#stop(lease: Lease, warning?: string): void {
+	#stop(
+		lease: Lease,
+		warning?: string,
+		reason: Extract<
+			AutoDriveDisposition,
+			{ state: "inactive" }
+		>["reason"] = "no-progress",
+	): void {
 		if (this.#lease !== lease) return;
-		this.deactivate(lease.hostSessionId);
+		this.deactivate(lease.hostSessionId, reason);
 		if (warning) this.#warn(warning);
 	}
 	#rejectOrigin(lease: Lease, kind: "compaction" | "mutation"): void {
@@ -185,6 +257,7 @@ export class AutoDriveCoordinator {
 			this.#hostParentage
 				? `Flow: ${kind} origin was unavailable.`
 				: "Flow: this host reports no assistant message parentage, so /flow-auto cannot continue automatically. Drive each feature with /flow-run.",
+			this.#hostParentage ? "missing-lineage" : "unsupported",
 		);
 	}
 	#waitAt(lease: Lease, revision: number): void {
@@ -221,14 +294,22 @@ export class AutoDriveCoordinator {
 				{ [FLOW_AUTO_METADATA_KEY]: lease.token },
 			);
 		} catch (error) {
-			this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
+			this.#stop(
+				lease,
+				`Flow auto prompt failed: ${String(error)}`,
+				"prompt-error",
+			);
 		}
 	}
 	async #read(lease: Lease): Promise<AutoDriveProjection | null> {
 		try {
 			return await this.#options.readProjection();
 		} catch (error) {
-			this.#stop(lease, `Flow auto status failed: ${String(error)}`);
+			this.#stop(
+				lease,
+				`Flow auto status failed: ${String(error)}`,
+				"status-error",
+			);
 			return null;
 		}
 	}
@@ -241,6 +322,8 @@ export class AutoDriveCoordinator {
 		}> = {},
 	): Promise<Record<string, unknown>> {
 		const token = this.#options.createToken?.() ?? crypto.randomUUID();
+		this.#disposition = { state: "active", reason: "invocation" };
+		this.#dispositionHost = hostSessionId;
 		this.#timing = {
 			state: "active",
 			since: this.#now(),
@@ -266,6 +349,7 @@ export class AutoDriveCoordinator {
 			lastAssistantParent: null,
 			compaction: null,
 			manualContinuation: null,
+			validation: null,
 			ownInspectDraft: null,
 		};
 		const lease = this.#lease;
@@ -277,9 +361,15 @@ export class AutoDriveCoordinator {
 			lease.checkpoint = { revision: baseline.revision, answered: false };
 		return { [FLOW_AUTO_METADATA_KEY]: token };
 	}
-	deactivate(hostSessionId: string): boolean {
+	deactivate(
+		hostSessionId: string,
+		reason: Extract<
+			AutoDriveDisposition,
+			{ state: "inactive" }
+		>["reason"] = "interrupted",
+	): boolean {
 		if (this.#lease?.hostSessionId !== hostSessionId) return false;
-		this.clear();
+		this.clear(reason);
 		return true;
 	}
 	async resumeForCommand(hostSessionId: string): Promise<string | null> {
@@ -307,9 +397,17 @@ export class AutoDriveCoordinator {
 		}
 		return lease.token;
 	}
-	clear(): void {
+	clear(
+		reason: Extract<
+			AutoDriveDisposition,
+			{ state: "inactive" }
+		>["reason"] = "restarted",
+	): void {
 		this.#options.recovery?.revoke();
-		if (this.#lease) this.#setTiming("inactive");
+		if (this.#lease) {
+			this.#setTiming("inactive");
+			this.#disposition = { state: "inactive", reason };
+		}
 		this.#lease = null;
 	}
 	async observeMessage(
@@ -321,7 +419,7 @@ export class AutoDriveCoordinator {
 		const lease = this.#lease;
 		const message = inspectMessage(parts);
 		if (lease?.hostSessionId === hostSessionId && STOP.test(message.text)) {
-			this.deactivate(hostSessionId);
+			this.deactivate(hostSessionId, "cancelled");
 			return "accepted";
 		}
 		if (message.token !== null) {
@@ -449,6 +547,7 @@ export class AutoDriveCoordinator {
 		const origin = lease.assistantParents.get(assistantId);
 		if (origin === undefined) return void this.#rejectOrigin(lease, "mutation");
 		if (origin !== lease.messageId) return;
+		lease.validation = null;
 		const baseline = lease.baseline;
 		const freshIdle =
 			baseline?.status === "idle" && baseline.sessionId === undefined;
@@ -477,6 +576,88 @@ export class AutoDriveCoordinator {
 		if (!point) return;
 		if (revision > point.revision)
 			point.advance = revision + Number(reviewerPending);
+	}
+	validationOrigin(
+		hostSessionId: string,
+		assistantId: string,
+		prepared: Pick<
+			PreparedValidation,
+			"featureId" | "runId" | "sourceDigest" | "assertions"
+		>,
+	): AutoValidationOrigin | null {
+		const lease = this.#lease;
+		if (
+			lease?.hostSessionId !== hostSessionId ||
+			!lease.messageId ||
+			!lease.baseline?.sessionId
+		)
+			return null;
+		const parent = lease.assistantParents.get(assistantId);
+		if (parent === undefined) {
+			this.#rejectOrigin(lease, "mutation");
+			return null;
+		}
+		if (parent !== lease.messageId) return null;
+		const origin: AutoValidationOrigin = {
+			hostSessionId,
+			sessionId: lease.baseline.sessionId,
+			authority: lease.messageId,
+			assistantId,
+			featureId: prepared.featureId,
+			runId: prepared.runId,
+			sourceDigest: prepared.sourceDigest,
+			assertions: [...prepared.assertions],
+		};
+		this.#validationOrigins.set(origin, lease);
+		return origin;
+	}
+	observeValidation(receipt: AutoValidationReceipt): void {
+		const { origin, observation } = receipt;
+		const lease = this.#lease;
+		const owner = this.#validationOrigins.get(origin);
+		this.#validationOrigins.delete(origin);
+		if (
+			!lease ||
+			owner !== lease ||
+			lease.hostSessionId !== origin.hostSessionId ||
+			lease.baseline?.sessionId !== origin.sessionId ||
+			lease.messageId !== origin.authority ||
+			lease.assistantParents.get(origin.assistantId) !== origin.authority ||
+			observation.id !== receipt.captureId ||
+			observation.featureId !== origin.featureId ||
+			observation.runId !== origin.runId ||
+			observation.sourceDigest !== origin.sourceDigest
+		)
+			return;
+		const checkpoint = lease.checkpoint;
+		if (
+			!checkpoint ||
+			observation.recordedRevision <= checkpoint.revision ||
+			observation.recordedRevision <= (lease.validation?.revision ?? -1)
+		)
+			return;
+		const outcome =
+			observation.ineligibleReason !== undefined ||
+			!observation.outputComplete ||
+			observation.exitCode === null ||
+			!assertionsSatisfied(origin.assertions, observation.observedAssertions)
+				? "ineligible"
+				: observation.exitCode === 0
+					? "passed"
+					: "failed";
+		lease.validation = {
+			revision: observation.recordedRevision,
+			outcome,
+			sourceDigest: observation.sourceDigest,
+			checked: false,
+		};
+		if (outcome !== "ineligible")
+			checkpoint.advance = observation.recordedRevision;
+	}
+	continuationSnapshot(hostSessionId: string): AutoContinuationSnapshot | null {
+		return this.#disposition && this.#dispositionHost === hostSessionId
+			? { scope: "current-plugin-process", ...this.#disposition }
+			: null;
 	}
 	/**
 	 * What this process has observed about the host's continuation support.
@@ -529,13 +710,14 @@ export class AutoDriveCoordinator {
 					projection.sessionId !== baseline.sessionId ||
 					projection.revision < lease.manualContinuation.revision
 				)
-					return this.#stop(lease);
+					return this.#stop(lease, undefined, "unowned");
 				if (
 					(projection.status === "ready" || projection.status === "running") &&
 					projection.nextAction !== "await-user-direction"
 				) {
 					lease.manualContinuation.revision = projection.revision;
 					this.#setTiming("paused");
+					this.#disposition = { state: "paused", reason: "manual-command" };
 					return;
 				}
 				lease.manualContinuation = null;
@@ -565,9 +747,33 @@ export class AutoDriveCoordinator {
 					this.#stop(
 						lease,
 						`Flow inspection approval prompt failed: ${String(error)}`,
+						"prompt-error",
 					);
 				}
 				return;
+			}
+			const validation = lease.validation;
+			if (
+				validation &&
+				!validation.checked &&
+				validation.revision === projection.revision
+			) {
+				const authority = lease.messageId;
+				let currentSource: SourceDigest | undefined;
+				try {
+					currentSource = await this.#options.readSourceDigest?.();
+				} catch {
+					currentSource = undefined;
+				}
+				if (
+					this.#lease !== lease ||
+					lease.messageId !== authority ||
+					lease.validation !== validation
+				)
+					return;
+				validation.checked = true;
+				if (currentSource !== validation.sourceDigest)
+					validation.outcome = "ineligible";
 			}
 			const decision: IdleDecision = decideOnIdle(
 				{
@@ -576,6 +782,7 @@ export class AutoDriveCoordinator {
 					pendingReply: lease.pendingReply,
 					lastPromptedRevision: lease.lastPromptedRevision,
 					hasDelivery: lease.delivery !== null,
+					validation: lease.validation,
 				},
 				projection,
 			);
@@ -601,15 +808,35 @@ export class AutoDriveCoordinator {
 						[FLOW_AUTO_METADATA_KEY]: lease.token,
 					})
 					.catch((error) =>
-						this.#stop(lease, `Flow recovery prompt failed: ${String(error)}`),
+						this.#stop(
+							lease,
+							`Flow recovery prompt failed: ${String(error)}`,
+							"prompt-error",
+						),
 					);
 				return;
 			}
 			switch (decision.kind) {
 				case "deactivate":
-					return void this.deactivate(hostSessionId);
+					return void this.deactivate(
+						hostSessionId,
+						(projection.status === "idle" &&
+							baseline.sessionId !== undefined) ||
+							(projection.nextAction === null &&
+								["completed", "closed"].includes(projection.status))
+							? "completed"
+							: "no-progress",
+					);
 				case "stop":
-					return this.#stop(lease, decision.warning);
+					return this.#stop(
+						lease,
+						decision.warning,
+						projection.sessionId !== baseline.sessionId
+							? "unowned"
+							: !lease.delivery
+								? "no-delivery"
+								: "no-progress",
+					);
 				case "prompt-initial": {
 					lease.lastPromptedRevision = 0;
 					lease.inFlight = "prompt";
@@ -623,13 +850,24 @@ export class AutoDriveCoordinator {
 							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
 						)
 						.catch((error) =>
-							this.#stop(lease, `Flow auto prompt failed: ${String(error)}`),
+							this.#stop(
+								lease,
+								`Flow auto prompt failed: ${String(error)}`,
+								"prompt-error",
+							),
 						);
 					return;
 				}
 				case "handback-and-wait":
 					await this.#promptHandback(lease, projection);
 					if (this.#lease !== lease) return;
+					this.#disposition = {
+						state: "waiting",
+						reason:
+							projection.nextAction === "flow_plan_approve"
+								? "plan-approval"
+								: "user-direction",
+					};
 					return void this.#waitAt(lease, projection.revision);
 				case "answered":
 					if (lease.checkpoint) lease.checkpoint.answered = true;
@@ -645,13 +883,23 @@ export class AutoDriveCoordinator {
 						lease.handbackPromptedRevision === projection.revision
 					) {
 						this.#setTiming("paused");
+						this.#disposition = { state: "paused", reason: "handback" };
 						return;
 					}
-					return void this.deactivate(hostSessionId);
+					return void this.deactivate(hostSessionId, "unsupported-action");
 				}
 				case "pause":
 					if (decision.clearCheckpoint) lease.checkpoint = null;
 					this.#setTiming("paused");
+					this.#disposition = {
+						state: "paused",
+						reason:
+							lease.validation?.outcome === "failed"
+								? "validation-failed"
+								: lease.validation?.outcome === "ineligible"
+									? "validation-ineligible"
+									: "stalled",
+					};
 					return this.#warn(decision.warning);
 				case "continue": {
 					if (decision.clearCheckpoint) lease.checkpoint = null;
@@ -660,6 +908,7 @@ export class AutoDriveCoordinator {
 					lease.lastPromptedRevision = projection.revision;
 					lease.messageId = null;
 					this.#setTiming("active");
+					this.#disposition = { state: "active", reason: "continuation" };
 					lease.inFlight = "prompt";
 					try {
 						const continuation = [
@@ -675,7 +924,11 @@ export class AutoDriveCoordinator {
 							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
 						);
 					} catch (error) {
-						this.#stop(lease, `Flow auto prompt failed: ${String(error)}`);
+						this.#stop(
+							lease,
+							`Flow auto prompt failed: ${String(error)}`,
+							"prompt-error",
+						);
 					}
 					return;
 				}

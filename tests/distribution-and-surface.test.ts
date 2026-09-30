@@ -1646,20 +1646,38 @@ describe("flow-auto host continuation", () => {
 		const status = hooks.tool?.flow_status;
 		if (!status) throw new Error("Missing status tool.");
 		const statusResponse = JSON.parse(
-			String(await status.execute({ request: { view: "compact" } }, context)),
+			String(
+				await status.execute(
+					{ request: { view: "compact" } },
+					{ ...context, sessionID: "auto-host" },
+				),
+			),
 		);
 		expect(statusResponse.workflowData).not.toHaveProperty("autoTiming");
+		expect(statusResponse.workflowData.autoDrive).toEqual({
+			scope: "current-plugin-process",
+			state: "active",
+			reason: "continuation",
+		});
 		expect(statusResponse.workflowData.projection).not.toHaveProperty(
 			"autoTiming",
 		);
 		const detailResponse = JSON.parse(
-			String(await status.execute({ request: { view: "detail" } }, context)),
+			String(
+				await status.execute(
+					{ request: { view: "detail" } },
+					{ ...context, sessionID: "auto-host" },
+				),
+			),
 		);
 		expect(detailResponse.workflowData.autoTiming).toMatchObject({
 			scope: "latest-flow-auto-in-current-plugin-process",
 			authoritative: false,
 			state: "active",
 		});
+		expect(detailResponse.workflowData.autoDrive).toEqual(
+			statusResponse.workflowData.autoDrive,
+		);
 		await hooks.event({
 			event: {
 				type: "session.idle",

@@ -10,6 +10,7 @@ import {
 	type FlowCodingModel,
 	resolveFlowReviewerConfiguration,
 } from "../../config-shared.js";
+import { createFileSourceIdentityProvider } from "../../infrastructure/fs/source-identity.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
 import {
@@ -80,6 +81,8 @@ export function createFlowPlugin(dependencies: {
 		const flow = createWorkspaceFlowService(workspace);
 		const autoDrive = new AutoDriveCoordinator({
 			recovery,
+			readSourceDigest: () =>
+				createFileSourceIdentityProvider(workspace).computeSourceDigest(),
 			readProjection: async () => {
 				const response = await flow.status({ request: { view: "compact" } });
 				if (response.status !== "ok") throw new Error(response.summary);
@@ -114,6 +117,11 @@ export function createFlowPlugin(dependencies: {
 		const validation = new ValidationCaptureCoordinator({
 			persistObservation: persistWorkspaceValidation,
 			readReport: readWorkspaceTestReport,
+			onRecorded: (receipt) => autoDrive.observeValidation(receipt),
+			onReceiptError: (error) =>
+				log("warn", "Flow continuation receipt was not accepted.", {
+					message: String(error),
+				}),
 		});
 		const tools = createTools({
 			recovery,
@@ -133,6 +141,9 @@ export function createFlowPlugin(dependencies: {
 			validation,
 			prepareValidation: prepareWorkspaceValidation,
 			autoTimingSnapshot: () => autoDrive.timingSnapshot(),
+			autoContinuationSnapshot: (host) => autoDrive.continuationSnapshot(host),
+			validationOrigin: (host, assistant, prepared) =>
+				autoDrive.validationOrigin(host, assistant, prepared),
 			autoContinuationSupport: () => autoDrive.continuationSupport(),
 			readReviewerConfiguration: () => reviewerConfiguration,
 			readPlanningModel: () => planningModel,

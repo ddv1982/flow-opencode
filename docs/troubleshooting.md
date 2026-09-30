@@ -30,7 +30,11 @@ status keeps availability `unverified`; it does not persist reviewer health.
 Continuation is anchored to the assistant message that owns the lease, so a host
 that reports no assistant message parentage cannot carry it. Flow says so at
 `/flow-auto` startup when it has observed that, and `flow_status` reports
-`autoContinuation.support`. Nothing is broken: drive each feature with `/flow-run`.
+`autoContinuation.support`. On that host, drive each feature with `/flow-run`.
+
+Read `flow_status.autoDrive` for the [activity and pause reason](automatic-continuation.md).
+A supported host does not imply an active lease. `/flow-run` continues manually.
+A new `/flow-auto` invocation reacquires automatic drive within the approved scope.
 
 ## Flow reports a duplicate runtime
 

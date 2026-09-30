@@ -26,7 +26,9 @@ import { FLOW_GUIDANCE_IDS, getFlowGuidance } from "../../guidance/catalog.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
 import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
 import type {
+	AutoContinuationSnapshot,
 	AutoTimingSnapshot,
+	AutoValidationOrigin,
 	ProcessLocalAutoContinuationSupport,
 } from "./auto-drive.js";
 import { defineFlowTool } from "./schema-adapter.js";
@@ -55,6 +57,17 @@ type ToolOptions = Readonly<{
 		resultsPath: string | undefined;
 	}>;
 	autoTimingSnapshot?: (() => AutoTimingSnapshot | null) | undefined;
+	autoContinuationSnapshot?: (
+		hostSessionId: string,
+	) => AutoContinuationSnapshot | null;
+	validationOrigin?: (
+		hostSessionId: string,
+		assistantId: string,
+		prepared: Pick<
+			AutoValidationOrigin,
+			"featureId" | "runId" | "sourceDigest" | "assertions"
+		>,
+	) => AutoValidationOrigin | null;
 	autoContinuationSupport?:
 		| (() => ProcessLocalAutoContinuationSupport)
 		| undefined;
@@ -126,6 +139,10 @@ function withAutoContext(
 			? bestEffort(() => options.autoTimingSnapshot?.())
 			: undefined;
 	if (timing) workflowData = { ...workflowData, autoTiming: timing };
+	const continuation = sessionID
+		? bestEffort(() => options.autoContinuationSnapshot?.(sessionID))
+		: undefined;
+	if (continuation) workflowData = { ...workflowData, autoDrive: continuation };
 	const support = bestEffort(() => options.autoContinuationSupport?.());
 	// `unknown` is withheld deliberately: before any assistant message exists it
 	// is the absence of a signal, and reporting it invites a caller to relay it as
@@ -293,6 +310,11 @@ export function createTools(options: ToolOptions): FlowTools {
 								context.sessionID,
 								workspace,
 								prepared,
+								options.validationOrigin?.(
+									context.sessionID,
+									context.messageID,
+									prepared,
+								) ?? null,
 							),
 							command: prepared.command,
 							scope: prepared.scope,

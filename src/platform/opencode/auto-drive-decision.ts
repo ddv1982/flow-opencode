@@ -1,6 +1,13 @@
 import type { AutoDriveProjection } from "./auto-drive.js";
 
-function isMechanical(projection: AutoDriveProjection): boolean {
+function isContinuationStep(projection: AutoDriveProjection): boolean {
+	if (
+		projection.status === "running" &&
+		["flow_validation_start", "flow_review_start"].includes(
+			projection.nextAction ?? "",
+		)
+	)
+		return true;
 	return projection.nextAction === "flow_run_start"
 		? projection.status === "ready"
 		: projection.nextAction === "flow_session_close" &&
@@ -35,6 +42,10 @@ export type LeaseView = Readonly<{
 	pendingReply: boolean;
 	lastPromptedRevision: number | null;
 	hasDelivery: boolean;
+	validation?: Readonly<{
+		revision: number;
+		outcome: "passed" | "failed" | "ineligible";
+	}> | null;
 }>;
 
 export type IdleDecision =
@@ -47,22 +58,6 @@ export type IdleDecision =
 	| Readonly<{ kind: "pause"; warning: string; clearCheckpoint: boolean }>
 	| Readonly<{ kind: "continue"; clearCheckpoint: boolean }>;
 
-/**
- * Pure routing for one idle event. Mirrors the branch order of the previous
- * inline `onIdle` exactly; the executor applies side effects.
- *
- * Evaluation order (first match wins):
- *  1. idle workspace            → deactivate | prompt-initial
- *  2. no next action            → deactivate
- *  3. unowned session           → stop
- *  4. pending reply             → handback-and-wait | deactivate | answered
- *  5. checkpoint boundary       → deactivate | handback-and-wait
- *  6. non-mechanical action     → handback-or-deactivate
- *  7. stale/unadvanced checkpoint → deactivate (else clear it)
- *  8. same revision re-prompted → pause
- *  9. no progress / no delivery → stop
- * 10. otherwise                 → continue
- */
 export function decideOnIdle(
 	lease: LeaseView,
 	projection: AutoDriveProjection,
@@ -90,7 +85,7 @@ export function decideOnIdle(
 	const mutationAdvanced =
 		advance !== undefined &&
 		projection.revision === advance &&
-		isMechanical(projection);
+		isContinuationStep(projection);
 	if (lease.pendingReply) {
 		if (boundary && (!checkpoint || projection.revision > checkpoint.revision))
 			return { kind: "handback-and-wait" };
@@ -103,7 +98,20 @@ export function decideOnIdle(
 			return { kind: "deactivate" };
 		return { kind: "handback-and-wait" };
 	}
-	if (!isMechanical(projection)) return { kind: "handback-or-deactivate" };
+	if (
+		lease.validation?.revision === projection.revision &&
+		(lease.validation.outcome === "ineligible" ||
+			(lease.validation.outcome === "failed" &&
+				projection.nextAction !== "flow_review_start"))
+	) {
+		return {
+			kind: "pause",
+			warning: `Flow auto-drive paused after ${lease.validation.outcome === "failed" ? "failed" : "ineligible"} validation at revision ${projection.revision}.`,
+			clearCheckpoint: false,
+		};
+	}
+	if (!isContinuationStep(projection))
+		return { kind: "handback-or-deactivate" };
 	let clearCheckpoint = false;
 	if (checkpoint) {
 		if (projection.revision <= checkpoint.revision || !mutationAdvanced)

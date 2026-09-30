@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import type { ObservedValidation } from "../src/application/prepare-validation.js";
 import { FLOW_MANAGER_KERNEL } from "../src/guidance/catalog.js";
 import {
 	AutoDriveCoordinator,
@@ -8,11 +9,16 @@ import {
 	autoDriveDelivery,
 	FLOW_AUTO_METADATA_KEY,
 } from "../src/platform/opencode/auto-drive.js";
+import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
 
 const DELIVERY: AutoDriveDelivery = {
 	agent: "build",
 	model: { providerID: "provider", modelID: "model" },
 };
+const VALIDATION_SOURCE = `sha256:${"a".repeat(64)}` as const;
+function observation(input: ObservedValidation, revision: number) {
+	return { ...input, id: input.captureId, recordedRevision: revision };
+}
 let assistantSequence = 0;
 function mutate(
 	driver: AutoDriveCoordinator,
@@ -66,6 +72,7 @@ function harness(initial: AutoDriveProjection) {
 	let projection = initial;
 	let now = 0;
 	let token = 0;
+	let source: `sha256:${string}` = VALIDATION_SOURCE;
 	const prompts: Array<{
 		text: string;
 		delivery: AutoDriveDelivery;
@@ -74,6 +81,7 @@ function harness(initial: AutoDriveProjection) {
 	const warnings: string[] = [];
 	const driver = new AutoDriveCoordinator({
 		readProjection: () => Promise.resolve(projection),
+		readSourceDigest: () => Promise.resolve(source),
 		prompt: (_sessionID, text, delivery, metadata) => {
 			prompts.push({ text, delivery, metadata });
 			return Promise.resolve();
@@ -110,6 +118,9 @@ function harness(initial: AutoDriveProjection) {
 		},
 		setNow(next: number) {
 			now = next;
+		},
+		setSource(next: `sha256:${string}`) {
+			source = next;
 		},
 	};
 }
@@ -1179,6 +1190,10 @@ describe("Flow auto-drive coordinator", () => {
 		await state.driver.onIdle("host-1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+			state: "inactive",
+			reason: "no-progress",
+		});
 	});
 
 	test("requires initiating progress and rejects a replacement Flow session", async () => {
@@ -2227,6 +2242,416 @@ describe("Flow auto-drive coordinator", () => {
 			"unrelated-after-drop",
 		);
 		expect(dropped.driver.compactionContext("host-1")).toBeNull();
+	});
+});
+
+describe("authenticated validation continuation", () => {
+	const running: AutoDriveProjection = {
+		sessionId: "flow-1",
+		status: "running",
+		revision: 3,
+		nextAction: "flow_validation_start",
+	};
+	function origin(driver: AutoDriveCoordinator, parent = "command-message") {
+		driver.observeHostMessage("host-1", {
+			id: "validation-manager",
+			role: "assistant",
+			parentID: parent,
+		});
+		const value = driver.validationOrigin("host-1", "validation-manager", {
+			featureId: "feature",
+			runId: "run-1",
+			sourceDigest: VALIDATION_SOURCE,
+			assertions: [],
+		});
+		if (!value) throw new Error("Expected an authenticated validation origin.");
+		return value;
+	}
+	test("completes run, focused, broad, review and closure across separate manager turns", async () => {
+		const state = harness({
+			...running,
+			status: "ready",
+			revision: 2,
+			nextAction: "flow_run_start",
+		});
+		await state.activate();
+		state.setProjection(running);
+		mutate(state.driver, "host-1", 3);
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		for (const [index, command, scope, nextAction] of [
+			[0, "bun test focused", "focused", "flow_validation_start"],
+			[1, "bun test", "broad", "flow_review_start"],
+		] as const) {
+			const messageId = `validation-turn-${index}`;
+			await state.driver.observeMessage(
+				"host-1",
+				DELIVERY,
+				[{ synthetic: true, metadata: state.prompts[index]?.metadata ?? {} }],
+				messageId,
+			);
+			const capture = new ValidationCaptureCoordinator({
+				persistObservation: async (_workspace, input) => {
+					state.setProjection({ ...running, revision: 4 + index, nextAction });
+					return observation(input, 4 + index);
+				},
+				onRecorded: (receipt) => state.driver.observeValidation(receipt),
+			});
+			capture.arm(
+				"host-1",
+				"/workspace",
+				{
+					featureId: "feature",
+					runId: "run-1",
+					command,
+					scope,
+					sourceDigest: VALIDATION_SOURCE,
+					hostPlatform: "linux",
+					assertions: [],
+					resultsPath: undefined,
+				},
+				origin(state.driver, messageId),
+			);
+			await capture.observeToolBefore(
+				{ tool: "bash", sessionID: "host-1", callID: command },
+				{ args: { command } },
+			);
+			await capture.observeToolAfter(
+				{
+					tool: "bash",
+					sessionID: "host-1",
+					callID: command,
+					args: { command },
+				},
+				{
+					title: "validation",
+					output: "passed",
+					metadata: { exit: 0, truncated: false },
+				},
+			);
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(index + 2);
+		}
+		await state.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ synthetic: true, metadata: state.prompts[2]?.metadata ?? {} }],
+			"review-turn",
+		);
+		mutate(state.driver, "host-1", 6, undefined, "review-turn", true);
+		state.setProjection({
+			...running,
+			revision: 7,
+			status: "completed",
+			nextAction: "flow_session_close",
+		});
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(4);
+		await state.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ synthetic: true, metadata: state.prompts[3]?.metadata ?? {} }],
+			"close-turn",
+		);
+		mutate(state.driver, "host-1", 8, undefined, "close-turn");
+		state.setProjection({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(4);
+		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+			state: "inactive",
+			reason: "completed",
+		});
+	});
+	test("a required failed validation pauses while an observed failed gate can reach review", async () => {
+		for (const nextAction of [
+			"flow_validation_start",
+			"flow_review_start",
+		] as const) {
+			const state = harness(running);
+			await state.activate();
+			state.driver.observeValidation({
+				origin: origin(state.driver),
+				captureId: "failed",
+				observation: {
+					id: "failed",
+					featureId: "feature",
+					runId: "run-1",
+					scope: "broad",
+					command: "bun test",
+					sourceDigest: VALIDATION_SOURCE,
+					outputDigest: VALIDATION_SOURCE,
+					outputComplete: true,
+					exitCode: 1,
+					recordedRevision: 4,
+				},
+			});
+			state.setProjection({ ...running, revision: 4, nextAction });
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(
+				nextAction === "flow_review_start" ? 1 : 0,
+			);
+			if (nextAction === "flow_validation_start") {
+				expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+					state: "paused",
+					reason: "validation-failed",
+				});
+				await state.driver.onIdle("host-1");
+				expect(state.prompts).toHaveLength(0);
+			}
+		}
+	});
+	test("late validation cannot revive interrupted, compacted or replaced authority", async () => {
+		for (const change of [
+			"stop",
+			"compaction",
+			"new-invocation",
+			"user-interruption",
+			"replacement-session",
+		] as const) {
+			const state = harness(running);
+			await state.activate();
+			const binding = origin(state.driver);
+			if (change === "stop") state.driver.deactivate("host-1");
+			if (change === "compaction")
+				compact(state.driver, "host-1", "command-message", "compacted-user");
+			if (change === "new-invocation") await state.activate();
+			if (change === "user-interruption") {
+				await state.driver.observeMessage(
+					"host-1",
+					DELIVERY,
+					[{ text: "Pause and answer this question" }],
+					"new-user-message",
+				);
+			}
+			state.driver.observeValidation({
+				origin: binding,
+				captureId: "late",
+				observation: {
+					id: "late",
+					featureId: "feature",
+					runId: "run-1",
+					scope: "focused",
+					command: "bun test",
+					sourceDigest: VALIDATION_SOURCE,
+					outputDigest: VALIDATION_SOURCE,
+					outputComplete: true,
+					exitCode: 0,
+					recordedRevision: 4,
+				},
+			});
+			state.setProjection({
+				...running,
+				revision: 4,
+				...(change === "replacement-session"
+					? { sessionId: "replacement" }
+					: {}),
+			});
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(0);
+		}
+	});
+	test("rejects wrong-parent origins and duplicate or source-stale receipts", async () => {
+		const state = harness(running);
+		await state.activate();
+		state.driver.observeHostMessage("host-1", {
+			id: "old-assistant",
+			role: "assistant",
+			parentID: "old-user",
+		});
+		expect(
+			state.driver.validationOrigin("host-1", "old-assistant", {
+				featureId: "feature",
+				runId: "run-1",
+				sourceDigest: VALIDATION_SOURCE,
+				assertions: [],
+			}),
+		).toBeNull();
+		const first = origin(state.driver);
+		const receipt = {
+			origin: first,
+			captureId: "fresh",
+			observation: {
+				id: "fresh",
+				featureId: "feature",
+				runId: "run-1",
+				scope: "focused" as const,
+				command: "bun test",
+				sourceDigest: VALIDATION_SOURCE,
+				outputDigest: VALIDATION_SOURCE,
+				outputComplete: true,
+				exitCode: 0,
+				recordedRevision: 4,
+			},
+		};
+		state.driver.observeValidation(receipt);
+		state.setProjection({ ...running, revision: 4 });
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		state.driver.observeValidation(receipt);
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		const stale = harness(running);
+		await stale.activate();
+		stale.driver.observeValidation({
+			...receipt,
+			origin: origin(stale.driver),
+			observation: { ...receipt.observation, ineligibleReason: "source-drift" },
+		});
+		stale.setProjection({
+			...running,
+			revision: 4,
+			nextAction: "flow_review_start",
+		});
+		await stale.driver.onIdle("host-1");
+		expect(stale.prompts).toHaveLength(0);
+		expect(stale.driver.continuationSnapshot("host-1")).toMatchObject({
+			state: "paused",
+			reason: "validation-ineligible",
+		});
+		expect(stale.driver.continuationSnapshot("other-host")).toBeNull();
+	});
+	test("checks live source after persistence before crediting a successful validation", async () => {
+		const state = harness(running);
+		await state.activate();
+		state.driver.observeValidation({
+			origin: origin(state.driver),
+			captureId: "persisted",
+			observation: {
+				id: "persisted",
+				featureId: "feature",
+				runId: "run-1",
+				scope: "broad",
+				command: "bun test",
+				sourceDigest: VALIDATION_SOURCE,
+				outputDigest: VALIDATION_SOURCE,
+				outputComplete: true,
+				exitCode: 0,
+				recordedRevision: 4,
+			},
+		});
+		state.setProjection({
+			...running,
+			revision: 4,
+			nextAction: "flow_review_start",
+		});
+		state.setSource(`sha256:${"b".repeat(64)}`);
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(0);
+		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+			state: "paused",
+			reason: "validation-ineligible",
+		});
+	});
+	test("zero-exit validations require every armed named assertion to pass", async () => {
+		for (const status of [
+			"passed",
+			"failed",
+			"skipped",
+			"absent",
+			"missing",
+		] as const) {
+			const state = harness(running);
+			await state.activate();
+			state.driver.observeHostMessage("host-1", {
+				id: "assertion-manager",
+				role: "assistant",
+				parentID: "command-message",
+			});
+			const binding = state.driver.validationOrigin(
+				"host-1",
+				"assertion-manager",
+				{
+					featureId: "feature",
+					runId: "run-1",
+					sourceDigest: VALIDATION_SOURCE,
+					assertions: ["required case"],
+				},
+			);
+			if (!binding) throw new Error("Missing assertion origin.");
+			state.driver.observeValidation({
+				origin: binding,
+				captureId: "assertion-capture",
+				observation: {
+					id: "assertion-capture",
+					featureId: "feature",
+					runId: "run-1",
+					scope: "focused",
+					command: "bun test",
+					sourceDigest: VALIDATION_SOURCE,
+					outputDigest: VALIDATION_SOURCE,
+					outputComplete: true,
+					exitCode: 0,
+					recordedRevision: 4,
+					...(status === "missing"
+						? {}
+						: { observedAssertions: [{ name: "required case", status }] }),
+				},
+			});
+			state.setProjection({ ...running, revision: 4 });
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(status === "passed" ? 1 : 0);
+			if (status !== "passed")
+				expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+					state: "paused",
+					reason: "validation-ineligible",
+				});
+		}
+	});
+	test("cancellation while validation persists preserves evidence without continuing the old lease", async () => {
+		const state = harness(running);
+		await state.activate();
+		let persist!: () => void;
+		const capture = new ValidationCaptureCoordinator({
+			persistObservation: (_workspace, input) =>
+				new Promise((resolve) => {
+					persist = () => resolve(observation(input, 4));
+				}),
+			onRecorded: (receipt) => state.driver.observeValidation(receipt),
+		});
+		const command = "bun test";
+		capture.arm(
+			"host-1",
+			"/workspace",
+			{
+				featureId: "feature",
+				runId: "run-1",
+				command,
+				scope: "focused",
+				sourceDigest: VALIDATION_SOURCE,
+				hostPlatform: "linux",
+				assertions: [],
+				resultsPath: undefined,
+			},
+			origin(state.driver),
+		);
+		await capture.observeToolBefore(
+			{ tool: "bash", sessionID: "host-1", callID: "check" },
+			{ args: { command } },
+		);
+		const output = {
+			title: "check",
+			output: "passed",
+			metadata: { exit: 0, truncated: false },
+		};
+		const completing = capture.observeToolAfter(
+			{ tool: "bash", sessionID: "host-1", callID: "check", args: { command } },
+			output,
+		);
+		await Promise.resolve();
+		state.driver.deactivate("host-1", "cancelled");
+		persist();
+		expect((await completing)?.recordedRevision).toBe(4);
+		state.setProjection({ ...running, revision: 4 });
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(0);
+		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+			state: "inactive",
+			reason: "cancelled",
+		});
 	});
 });
 
