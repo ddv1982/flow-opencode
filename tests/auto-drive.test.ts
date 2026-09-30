@@ -2775,6 +2775,85 @@ describe("authenticated validation continuation", () => {
 				});
 		}
 	});
+	test("failed named gate gets one repair handoff only with eligible host and current source", async () => {
+		for (const [status, gap] of [
+			["failed", null],
+			["absent", null],
+			["missing", null],
+			["failed", "incomplete"],
+			["failed", "wrong-host"],
+			["failed", "source-drift"],
+			["failed", "live-source"],
+		] as const) {
+			const state = harness(running);
+			await state.activate();
+			state.driver.observeHostMessage("host-1", {
+				id: "named-gate-manager",
+				role: "assistant",
+				parentID: "command-message",
+			});
+			const binding = state.driver.validationOrigin(
+				"host-1",
+				"named-gate-manager",
+				{
+					featureId: "feature",
+					runId: "run-1",
+					sourceDigest: VALIDATION_SOURCE,
+					command:
+						"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+					scope: "broad",
+					hostPlatform: "linux",
+					intent: "pass",
+					declaredPlatform: "linux",
+					assertions: ["required case"],
+				},
+			);
+			if (!binding) throw new Error("Gate origin is missing.");
+			state.driver.observeValidation({
+				origin: binding,
+				captureId: "failed-named-gate",
+				observation: {
+					id: "failed-named-gate",
+					featureId: "feature",
+					runId: "run-1",
+					sourceDigest: VALIDATION_SOURCE,
+					command:
+						"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+					scope: "broad",
+					hostPlatform: gap === "wrong-host" ? "darwin" : "linux",
+					intent: "pass",
+					outputDigest: VALIDATION_SOURCE,
+					outputComplete: gap !== "incomplete",
+					exitCode: 1,
+					recordedRevision: 4,
+					...(gap === "source-drift"
+						? { ineligibleReason: "source-drift" as const }
+						: {}),
+					...(status === "missing"
+						? {}
+						: { observedAssertions: [{ name: "required case", status }] }),
+				},
+			});
+			state.setProjection({
+				...running,
+				revision: 4,
+				prerequisiteRepair: {
+					featureId: "feature",
+					runId: "run-1",
+					validationId: "failed-named-gate",
+					sourceDigest: VALIDATION_SOURCE,
+					boundary: "initial",
+				},
+			});
+			if (gap === "live-source") state.setSource(`sha256:${"b".repeat(64)}`);
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(gap === null ? 1 : 0);
+			if (gap === null)
+				expect(state.prompts[0]?.text).toContain("flow_plan_amend");
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(gap === null ? 1 : 0);
+		}
+	});
 	test("cancellation while validation persists preserves evidence without continuing the old lease", async () => {
 		const state = harness(running);
 		await state.activate();
