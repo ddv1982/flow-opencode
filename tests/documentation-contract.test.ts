@@ -582,15 +582,17 @@ describe("Flow documentation contract", () => {
 		const currentRelease = releaseHeadings[0];
 		expect(currentRelease?.[1]).toBe(packageVersion);
 
-		const releaseDate = currentRelease?.[2] ?? "";
-		expect(releaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-		expect(
-			new Date(`${releaseDate}T00:00:00.000Z`).toISOString().slice(0, 10),
-		).toBe(releaseDate);
+		const releaseDate = currentRelease?.[2];
+		if (releaseDate) {
+			expect(releaseDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+			expect(
+				new Date(`${releaseDate}T00:00:00.000Z`).toISOString().slice(0, 10),
+			).toBe(releaseDate);
+		}
 
 		const currentReleaseNotes = section(
 			changelog,
-			`[${packageVersion}] - ${releaseDate}`,
+			`[${packageVersion}]${releaseDate ? ` - ${releaseDate}` : ""}`,
 		);
 		expect(currentReleaseNotes).toContain(
 			`opencode plugin opencode-plugin-flow@${packageVersion} --global --force`,

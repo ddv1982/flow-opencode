@@ -19,6 +19,7 @@ import {
 	reserveJobsFor,
 } from "../evals/run.js";
 import { SCENARIOS } from "../evals/scenarios.js";
+import packageJson from "../package.json" with { type: "json" };
 
 describe("release eval sampling", () => {
 	test("pins the 9.1.0 OpenAI-only grid without weakening later releases", () => {
@@ -151,7 +152,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					"Release 9.3.0 requires exactly openai/gpt-6-sol",
+					`Release ${packageJson.version} requires exactly openai/gpt-6-sol`,
 				);
 		}
 	});
@@ -219,7 +220,7 @@ describe("release eval sampling", () => {
 	});
 
 	test("schedules exactly the required 96-cell two-provider release", () => {
-		const scenarios = releaseScenarios();
+		const scenarios = releaseScenarios("8.1.2");
 		expect(scenarios.map((scenario) => scenario.id).sort()).toEqual(
 			[...releaseCaseIds()].sort(),
 		);
@@ -251,6 +252,7 @@ describe("release eval sampling", () => {
 		).toHaveLength(8);
 		const jobs = jobsFor(["xai/grok-4.6", "openai/gpt-5.6-sol"], scenarios, {
 			kind: "release",
+			packageVersion: "8.1.2",
 		}).flat();
 		expect(
 			jobs.map((job) => [job.slot, job.scenario.id, job.attempt - 1]),
@@ -270,6 +272,23 @@ describe("release eval sampling", () => {
 				attempt: reserve.repetition + 1,
 			}),
 		]);
+	});
+
+	test("current 9.4 candidate schedules all twelve cases on its OpenAI-only grid", () => {
+		const scenarios = releaseScenarios();
+		expect(scenarios).toHaveLength(12);
+		const plan = campaignPlanFor({
+			models: ["openai/gpt-6-sol"],
+			scenarios,
+			sampling: { kind: "release", packageVersion: packageJson.version },
+			opencodeVersion: "1.18.31",
+		});
+		expect(plan.stoppingRule.count).toBe(57);
+		expect(plan.budget.maxAttempts).toBe(69);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(12);
+		expect(
+			plan.cells.filter((cell) => cell.schedule === "primary"),
+		).toHaveLength(57);
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -334,7 +353,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects release grids outside the 9.3.0 canonical OpenAI route", async () => {
+	test("rejects release grids outside the current canonical OpenAI route", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -357,7 +376,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				"Release 9.3.0 requires exactly openai/gpt-6-sol",
+				`Release ${packageJson.version} requires exactly openai/gpt-6-sol`,
 			);
 		}
 	});
