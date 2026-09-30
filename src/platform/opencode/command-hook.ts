@@ -173,9 +173,14 @@ export function createCommandHook(
 				command === "flow-auto" && !parsed.explicit
 					? (options.defaultRecovery?.() ?? null)
 					: parsed.settings;
-			if (settings) {
-				if (!recovery) throw new Error("Recovery is unavailable in this host.");
-				recovery.activate(input.sessionID, settings);
+			if (command === "flow-auto") {
+				if (settings && !recovery)
+					throw new Error("Recovery is unavailable in this host.");
+				recovery?.activate(
+					input.sessionID,
+					settings,
+					parsed.explicit ? "explicit" : "default",
+				);
 			} else if (!continuing) recovery?.revoke(input.sessionID);
 			if (command === "flow-auto" || command === "flow-plan") {
 				const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
@@ -216,7 +221,7 @@ export function createCommandHook(
 				output.parts.unshift(
 					asHostTextPart(
 						textPart(
-							"Note: this OpenCode host does not report assistant message parentage, so Flow cannot continue automatically between features here. Each feature still runs normally; drive the next one with /flow-run.",
+							"Note: this host reports no assistant parentage, so automatic mutations cannot be attributed. Use a fresh manual /flow-plan or /flow-run command.",
 						),
 					),
 				);

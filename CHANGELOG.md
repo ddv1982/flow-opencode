@@ -4,6 +4,7 @@ One short entry per release, written for users deciding whether to upgrade.
 
 ## Unreleased
 
+- Auto retry limits apply with Jev advice off.
 - Plans may declare exact supplemental checks as pass-required or observe-only
   before approval. Complete nonzero observations remain visible to the reviewer
   without clearing a failed required gate. `/flow-auto` can continue an approved

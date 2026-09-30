@@ -384,7 +384,11 @@ export class AutoDriveCoordinator {
 	}
 	async resumeForCommand(hostSessionId: string): Promise<string | null> {
 		const lease = this.#lease;
-		if (lease?.hostSessionId !== hostSessionId) return null;
+		if (
+			lease?.hostSessionId !== hostSessionId ||
+			this.continuationSupport() === "unsupported"
+		)
+			return null;
 		const projection = await this.#read(lease);
 		if (this.#lease !== lease || !projection) return null;
 		if (
@@ -538,7 +542,7 @@ export class AutoDriveCoordinator {
 		if (!compaction?.successor || lease.messageId !== compaction.authority)
 			return void this.#rejectOrigin(lease, "compaction");
 		lease.messageId = compaction.successor;
-		this.#options.recovery?.observeMessage(host, compaction.successor, true);
+		this.#options.recovery?.observeMessage(host, lease.messageId, true, true);
 	}
 	observeMutation(
 		host: string,
@@ -677,11 +681,8 @@ export class AutoDriveCoordinator {
 			: null;
 	}
 	/**
-	 * What this process has observed about the host's continuation support.
-	 *
-	 * Reported rather than enforced: an `unsupported` host still gets the whole
-	 * lifecycle, one `/flow-run` at a time. The point is that the user hears it from
-	 * Flow instead of inferring it from a workflow that stops after every feature.
+	 * Automatic mutations and continuation require attributable parentage.
+	 * Unsupported hosts need a fresh manual command, which retires auto authority.
 	 */
 	continuationSupport(): ProcessLocalAutoContinuationSupport {
 		if (this.#hostParentage) return "supported";

@@ -1156,7 +1156,7 @@ test("provider retries reserve each paid attempt but count as one checkpoint dec
 	expect(unreserved.controller.snapshot()).toMatchObject({ remainingCalls: 6 });
 });
 
-test("expired recovery lease stops prompting and clears authority", async () => {
+test("expired advice stops prompting while automatic retry safeguards remain", async () => {
 	let now = 0;
 	const s = await setup();
 	const controller = new RecoveryController(provider, {
@@ -1173,7 +1173,11 @@ test("expired recovery lease stops prompting and clears authority", async () => 
 	expect(
 		controller.proposalPrompt("host", "flow", 11, "await-user-direction"),
 	).toBeNull();
-	expect(controller.snapshot()).toEqual({ mode: "off" });
+	expect(controller.snapshot()).toMatchObject({
+		mode: "off",
+		automation: { active: true },
+		advice: { inactiveReason: "expired" },
+	});
 	const mutation: RecoveryMutation = {
 		kind: "feature-reset",
 		request: {
@@ -1188,7 +1192,7 @@ test("expired recovery lease stops prompting and clears authority", async () => 
 		controller
 			.guard({ ...context, messageId: "old-assistant" })
 			.check(session, null, mutation),
-	).toThrow("fresh real user direction");
+	).toThrow("explicit user direction");
 	controller.observeMessage("host", "new-user", false);
 	controller.observeAssistant("host", "new-assistant", "new-user");
 	const flow = createFlowService(
@@ -1362,7 +1366,7 @@ test("registered tools share the controller across file-backed service instances
 					role: "assistant",
 					parentID: user,
 				});
-				s.controller.observeMessage(host, user, true);
+				s.controller.observeMessage(host, user, true, true);
 				s.controller.observeAssistant(host, ctx.messageID, user);
 			},
 		});
@@ -1834,7 +1838,11 @@ test("plain auto in another host rejects the previous host's pending grant", asy
 		},
 		{ parts: [] } as Parameters<typeof hook>[1],
 	);
-	expect(s.controller.snapshot()).toEqual({ mode: "off" });
+	expect(s.controller.snapshot()).toMatchObject({
+		mode: "off",
+		automation: { active: true },
+		advice: { configured: false, attempted: false },
+	});
 	expect((await apply(s, mutation)).status).toBe("error");
 	await replacement;
 });

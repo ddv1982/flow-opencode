@@ -240,6 +240,9 @@ export function createTools(options: ToolOptions): FlowTools {
 									...(options.recovery
 										? {
 												recovery: options.recovery.snapshot(context.sessionID),
+												recoveryStatus: options.recovery.snapshot(
+													context.sessionID,
+												),
 												...("recovery" in response.workflowData
 													? { recovery: response.workflowData.recovery }
 													: {}),

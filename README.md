@@ -217,7 +217,7 @@ bounded-wave rationale.
 ## Recovery advice development preview
 
 With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow
-advice, capped at six attempts and $0.02. Without it, recovery is off. Use
+advice, capped at six attempts and $0.02. Without it, advice is off. Use
 `--recovery=off` to opt out or the options below to change limits.
 
 ```text
@@ -226,13 +226,12 @@ advice, capped at six attempts and $0.02. Without it, recovery is off. Use
 
 Shadow sends bounded goal, finding and candidate-remedy packets to TypeSafe.
 It reports advice without authorizing mutations. Bare `flow_status` never calls
-Jev. Calls count transport attempts, including retries. `/flow-auto stop`
-cancels advice and revokes pending authority. The lease expires after one hour
-and never survives restart.
+Jev. Attempts count retries. `/flow-auto stop` cancels auto and advice. Advice expires
+after one hour; automatic retry limits remain until invocation ends. Neither
+survives restart. `recoveryStatus` reports configuration, attempts and outcome.
 
-`--recovery=delegated` is unavailable until a reviewed release qualification is
-installed. No configuration flag can bypass that gate. Deterministic tests prove
-recovery mechanics, not live decision quality. See [ADR 0016](docs/adr/0016-delegated-recovery.md).
+Delegated mode requires release qualification; flags cannot bypass it. Tests prove
+mechanics, not decision quality. See [ADR 0016](docs/adr/0016-delegated-recovery.md).
 
 ## License
 

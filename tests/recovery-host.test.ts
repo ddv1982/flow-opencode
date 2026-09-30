@@ -94,7 +94,7 @@ test("recovery never overrides unowned-session stop and prompt failure revokes",
 			projection = { ...projection, sessionId: "other" };
 		await auto.onIdle("host");
 		expect(prompts).toBe(fault === "replacement" ? 0 : 1);
-		expect(recovery.snapshot()).toEqual({ mode: "off" });
+		expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	}
 });
 
@@ -154,7 +154,7 @@ test("real command hook captures explicit shadow limits and stop revokes", async
 	await hook({ command: "flow-auto", sessionID: "host", arguments: "stop" }, {
 		parts: [],
 	} as Parameters<typeof hook>[1]);
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	await expect(
 		hook(
 			{
@@ -168,7 +168,7 @@ test("real command hook captures explicit shadow limits and stop revokes", async
 	).rejects.toThrow("No release-owned live qualification");
 	expect(visibleRefusals).toHaveLength(1);
 	expect(visibleRefusals[0]).toContain("Use shadow.");
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 });
 
 test("configured auto defaults to bounded shadow and explicit off wins", async () => {
@@ -220,14 +220,14 @@ test("configured auto defaults to bounded shadow and explicit off wins", async (
 	expect(JSON.stringify(automatic)).toContain("Fix parser");
 	expect(JSON.stringify(automatic)).not.toContain("--recovery");
 	await run("--recovery=off Fix parser");
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	const trailingOptOut = await run("Fix parser --recovery=off");
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	expect(JSON.stringify(trailingOptOut)).toContain("Fix parser");
 	expect(JSON.stringify(trailingOptOut)).not.toContain("--recovery");
 	configured = false;
 	await run("Fix parser");
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	await run(
 		"--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Fix parser",
 	);
@@ -283,7 +283,7 @@ test("cross-host plain auto synchronously revokes the prior recovery invocation"
 		{ command: "flow-auto", sessionID: "B", arguments: "Goal" },
 		output(),
 	);
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	await replacement;
 });
 
@@ -447,7 +447,7 @@ test("same-host stop invalidates a pending request-anchor setup", async () => {
 	);
 	release();
 	expect(await old).toBeInstanceOf(Error);
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 	expect(auto.compactionContext("A")).toBeNull();
 });
 
@@ -497,7 +497,7 @@ test("failed auto setup revokes its recovery lease", async () => {
 			{ parts: [] } as Parameters<typeof hook>[1],
 		),
 	).rejects.toThrow("anchor failed");
-	expect(recovery.snapshot()).toEqual({ mode: "off" });
+	expect(recovery.snapshot()).toMatchObject({ mode: "off" });
 });
 
 test("shadow recovery prompt does not add a second handback at one checkpoint", async () => {
@@ -726,5 +726,9 @@ test("ordinary handback and flow-run keep one shadow lease for the next checkpoi
 	expect(
 		recovery.proposalPrompt("host", "flow", 12, "await-user-direction"),
 	).toBeNull();
-	expect(recovery.snapshot("host")).toEqual({ mode: "off" });
+	expect(recovery.snapshot("host")).toMatchObject({
+		mode: "off",
+		automation: { active: true },
+		advice: { inactiveReason: "expired" },
+	});
 });
