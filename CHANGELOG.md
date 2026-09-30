@@ -2,7 +2,7 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
-## [9.4.0] - 2026-09-30
+## [9.4.0]
 
 `/flow-auto` carries approved tasks through validation, independent review and
 bounded same-goal prerequisite repair with clearer evidence and recovery guards.

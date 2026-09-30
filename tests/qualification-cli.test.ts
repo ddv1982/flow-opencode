@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import { canonicalJson } from "../evals/canonical-json.js";
+import { mapStrings } from "../evals/cassette.js";
 import {
 	deriveConformanceOutcome,
 	retainedInstructions,
@@ -76,6 +77,13 @@ const CASSETTES = {
 	"skipped-case-named-binding":
 		"skipped-case-named-binding--xai_grok-4.6--1.json",
 } as const;
+
+function distinctNativeOutcome(outcome: Outcome, cellId: string): Outcome {
+	const suffix = createHash("sha256").update(cellId).digest("hex").slice(0, 12);
+	return mapStrings(outcome, (text) =>
+		text.replace(/\bses_(?:root|reviewer\d+)\b/g, (id) => `${id}${suffix}`),
+	) as Outcome;
+}
 
 const FIXED_ROLES = [
 	"report",
@@ -409,6 +417,19 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			if (!scenario || !replayed || !model) {
 				throw new Error(`Incomplete fixture for ${cell.cellId}.`);
 			}
+			const outcome =
+				replayed.hostTrace?.kind === "observed"
+					? distinctNativeOutcome(replayed, cell.cellId)
+					: replayed;
+			const nativeActors =
+				outcome.hostTrace?.kind === "observed"
+					? {
+							manager: outcome.hostTrace.runnerRootSessionIds,
+							reviewer: outcome.hostTrace.sessions
+								.filter((session) => session.agent === "flow-reviewer")
+								.map((session) => session.id),
+						}
+					: null;
 			const attemptId = `attempt-${cell.cellId}`;
 			const failure = cell.cellId === failedPrimary.cellId;
 			const evidence = failure
@@ -441,24 +462,26 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 							repetition: cell.repetition,
 							model,
 						},
-						actors: ["manager", "reviewer"].map((role, actorIndex) => ({
-							role,
-							sessionIds: [
-								pseudonymousEvalId(`session:${cell.cellId}-${role}`),
-							],
-							actualModel: {
-								kind: "observed",
-								value: {
-									providerID: model.routeProvider,
-									modelID: `${model.model}-${actorIndex}`,
+						actors: (["manager", "reviewer"] as const).map(
+							(role, actorIndex) => ({
+								role,
+								sessionIds: nativeActors
+									? nativeActors[role].map(pseudonymousEvalId)
+									: [pseudonymousEvalId(`session:${cell.cellId}-${role}`)],
+								actualModel: {
+									kind: "observed",
+									value: {
+										providerID: model.routeProvider,
+										modelID: `${model.model}-${actorIndex}`,
+									},
 								},
-							},
-							requestedModelId: `${model.routeProvider}/${model.model}`,
-							requestedModel: model,
-						})),
+								requestedModelId: `${model.routeProvider}/${model.model}`,
+								requestedModel: model,
+							}),
+						),
 						guidanceLoads: [],
 						gradeInput: pseudonymizeEvalIds(
-							scenarioGradeInput(retainedReplayOutcome(replayed)),
+							scenarioGradeInput(retainedReplayOutcome(outcome)),
 						),
 						usage: { durationMs: 1, outputTokens: 1, costUsd: 0 },
 						failure: null,
@@ -658,6 +681,26 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		expect(attempts.map(({ ref }) => ref.id).sort()).toEqual(
 			transcripts.map(({ ref }) => ref.id).sort(),
 		);
+		const autonomousRoots: string[] = [];
+		for (const attempt of report.attempts.filter((entry) =>
+			entry.caseId.startsWith("auto-"),
+		)) {
+			const transcript = transcripts.find(
+				({ ref }) => ref.id === attempt.attemptId,
+			);
+			if (!transcript) throw new Error("Autonomous transcript is missing.");
+			const evidence = RetainedScenarioEvidenceSchema.parse(
+				JSON.parse(transcript.bytes.toString("utf8")),
+			);
+			const trace = evidence.gradeInput.hostTrace;
+			if (trace?.kind !== "observed")
+				throw new Error("Autonomous native trace is missing.");
+			const manager = evidence.actors.find((actor) => actor.role === "manager");
+			expect(manager?.sessionIds).toEqual(trace.runnerRootSessionIds);
+			autonomousRoots.push(...trace.runnerRootSessionIds);
+		}
+		expect(autonomousRoots).toHaveLength(9);
+		expect(new Set(autonomousRoots).size).toBe(autonomousRoots.length);
 		const authority = bundle.files
 			.filter(({ ref }) => ref.role === "authority-source")
 			.map(({ ref }) => ref.id)
@@ -803,6 +846,88 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 				now: verificationNow,
 			}),
 		).rejects.toThrow(/grade differs/);
+		const originalAutonomous = RetainedScenarioEvidenceSchema.parse(
+			JSON.parse(autonomousTranscript.bytes.toString("utf8")),
+		);
+		const aliasedAutonomous = {
+			...originalAutonomous,
+			actors: originalAutonomous.actors.map((actor) =>
+				actor.role === "manager"
+					? {
+							...actor,
+							sessionIds: [
+								pseudonymousEvalId(`session:${autonomousAttempt.cellId}-alias`),
+							],
+						}
+					: actor,
+			),
+		};
+		const aliasBytes = Buffer.from(canonicalJson(aliasedAutonomous));
+		const aliasSha256 = `sha256:${createHash("sha256").update(aliasBytes).digest("hex")}`;
+		const aliasedReport = {
+			...report,
+			attempts: report.attempts.map((attempt) => {
+				if (attempt.attemptId !== autonomousAttempt.attemptId) return attempt;
+				if (!attempt.transcript)
+					throw new Error("Autonomous reference is missing.");
+				return {
+					...attempt,
+					actors: retainedReportActors(aliasedAutonomous),
+					transcript: { ...attempt.transcript, sha256: aliasSha256 },
+				};
+			}),
+		};
+		const aliasedQualified = qualifyV2({
+			reportInput: aliasedReport,
+			catalogInput: releaseCatalog(artifact.packageVersion),
+			artifact,
+			canary: canary.record,
+		});
+		expect(aliasedQualified.decision.verdict).toBe("VERIFIED");
+		const aliasedDecision = decisionRecordFor({
+			...aliasedQualified,
+			canarySha256: canary.record.recordSha256,
+		});
+		const aliasedAttempt = aliasedQualified.report.attempts.find(
+			(attempt) => attempt.attemptId === autonomousAttempt.attemptId,
+		);
+		if (!aliasedAttempt) throw new Error("Autonomous attempt is missing.");
+		const aliasedFiles = sealedFiles.map((file) => {
+			if (file.role === "transcript" && file.id === autonomousAttempt.attemptId)
+				return { ...file, bytes: aliasBytes };
+			if (file.role === "attempt" && file.id === autonomousAttempt.attemptId)
+				return { ...file, bytes: Buffer.from(canonicalJson(aliasedAttempt)) };
+			if (file.role === "report")
+				return {
+					...file,
+					bytes: Buffer.from(canonicalJson(aliasedQualified.report)),
+				};
+			if (file.role === "expected-provenance")
+				return {
+					...file,
+					bytes: Buffer.from(canonicalJson(aliasedQualified.expected)),
+				};
+			if (file.role === "decision")
+				return { ...file, bytes: Buffer.from(canonicalJson(aliasedDecision)) };
+			return file;
+		});
+		const resealedAlias = await writeQualificationBundle({
+			input: {
+				reportId: bundle.manifest.reportId,
+				packageVersion: bundle.manifest.packageVersion,
+				verdict: bundle.manifest.verdict,
+				files: aliasedFiles,
+			},
+			outputRoot: bundlesDirectory,
+		});
+		await expect(
+			regradeQualificationBundle({
+				path: resealedAlias.path,
+				repositoryRoot,
+				authority: regradeAuthority,
+				now: verificationNow,
+			}),
+		).rejects.toThrow(/native actor binding differs/);
 		const failureAttempt = attempts.find(({ bytes }) => {
 			const value = JSON.parse(bytes.toString("utf8")) as {
 				outcome?: { kind?: unknown };

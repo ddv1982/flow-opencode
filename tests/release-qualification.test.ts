@@ -40,7 +40,7 @@ const ARTIFACT = {
 };
 
 function releaseReport(stopped = false) {
-	const scenarios = releaseScenarios();
+	const scenarios = releaseScenarios(ARTIFACT.packageVersion);
 	const plan = campaignPlanFor({
 		models: MODELS,
 		scenarios,
@@ -49,8 +49,8 @@ function releaseReport(stopped = false) {
 	});
 	const evaluator = evaluatorIdentity({
 		sourceCommit: ARTIFACT.sourceCommit,
-		caseCatalog: releaseScenarioCatalog(scenarios),
-		policyCatalog: releaseCatalog(),
+		caseCatalog: releaseScenarioCatalog(scenarios, ARTIFACT.packageVersion),
+		policyCatalog: releaseCatalog(ARTIFACT.packageVersion),
 		graderBundle: releaseGraderBundle(join(import.meta.dir, "..")),
 	});
 	const attempts = plan.cells
@@ -195,7 +195,7 @@ describe("repository-owned v2 qualification", () => {
 	test("derives all verdicts from the canonical 96-cell policy", () => {
 		const verified = qualifyV2({
 			reportInput: releaseReport(),
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: ARTIFACT,
 		});
 		expect(verified.decision.verdict).toBe("VERIFIED");
@@ -204,14 +204,14 @@ describe("repository-owned v2 qualification", () => {
 
 		const notVerified = qualifyV2({
 			reportInput: releaseReport(),
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: { ...ARTIFACT, tarballSha256: digest("9") },
 		});
 		expect(notVerified.decision.verdict).toBe("NOT VERIFIED");
 
 		const inconclusive = qualifyV2({
 			reportInput: releaseReport(true),
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: ARTIFACT,
 		});
 		expect(inconclusive.decision.verdict).toBe("INCONCLUSIVE");
@@ -221,7 +221,7 @@ describe("repository-owned v2 qualification", () => {
 		const report = releaseReport();
 		const verified = qualifyV2({
 			reportInput: report,
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: ARTIFACT,
 		});
 		expect(verified.decision.verdict).toBe("VERIFIED");
@@ -242,7 +242,7 @@ describe("repository-owned v2 qualification", () => {
 					cause: "operator",
 				},
 			},
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: ARTIFACT,
 		});
 		expect(stopped.decision).toEqual({
@@ -267,7 +267,7 @@ describe("repository-owned v2 qualification", () => {
 		expect(
 			qualifyV2({
 				reportInput: report,
-				catalogInput: releaseCatalog(),
+				catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 				artifact: ARTIFACT,
 			}).decision.verdict,
 		).toBe("VERIFIED");
@@ -287,7 +287,7 @@ describe("repository-owned v2 qualification", () => {
 					cause: "budget",
 				},
 			},
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: ARTIFACT,
 		});
 		expect(stopped.decision.verdict).not.toBe("VERIFIED");
@@ -341,7 +341,7 @@ describe("repository-owned v2 qualification", () => {
 		report.completion.activatedReserveCellIds = [reserve.cellId];
 		const result = qualifyV2({
 			reportInput: report,
-			catalogInput: releaseCatalog(),
+			catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 			artifact: ARTIFACT,
 		});
 		expect(result.decision.verdict).toBe("VERIFIED");
@@ -349,7 +349,7 @@ describe("repository-owned v2 qualification", () => {
 	});
 
 	test("rejects every caller attempt to weaken or reorder policy", () => {
-		const canonical = releaseCatalog();
+		const canonical = releaseCatalog(ARTIFACT.packageVersion);
 		const mutations: unknown[] = [
 			canonical.slice(1),
 			[...canonical].reverse(),
@@ -387,7 +387,7 @@ describe("repository-owned v2 qualification", () => {
 			expect(() =>
 				qualifyV2({
 					reportInput: report,
-					catalogInput: releaseCatalog(),
+					catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 					artifact: ARTIFACT,
 				}),
 			).toThrow("does not match repository release authority");
@@ -402,7 +402,7 @@ describe("repository-owned v2 qualification", () => {
 		expect(() =>
 			qualifyV2({
 				reportInput: report,
-				catalogInput: releaseCatalog(),
+				catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 				artifact: ARTIFACT,
 			}),
 		).toThrow("host configuration does not match repository release policy");
@@ -534,7 +534,7 @@ describe("repository-owned v2 qualification", () => {
 		expect(() =>
 			qualifyV2({
 				reportInput: report,
-				catalogInput: releaseCatalog(),
+				catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 				artifact: ARTIFACT,
 			}),
 		).toThrow("Invalid v2 report");
@@ -576,7 +576,7 @@ describe("repository-owned v2 qualification", () => {
 			expect(() =>
 				qualifyV2({
 					reportInput: report,
-					catalogInput: releaseCatalog(),
+					catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 					artifact: ARTIFACT,
 				}),
 			).toThrow(/Release plan/);
@@ -587,7 +587,7 @@ describe("repository-owned v2 qualification", () => {
 		expect(() =>
 			qualifyV2({
 				reportInput: { summary: { passRates: {} } },
-				catalogInput: releaseCatalog(),
+				catalogInput: releaseCatalog(ARTIFACT.packageVersion),
 				artifact: ARTIFACT,
 			}),
 		).toThrow("Invalid v2 report");
