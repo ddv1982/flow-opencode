@@ -2,6 +2,14 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## Unreleased
+
+- Flow captures a feature's original source before implementation and gives its
+  independent reviewer a bounded, paged file diff without shell access. Missing
+  or stale evidence stops review preparation before it consumes a failed-review
+  attempt. Session v5 adds optional baseline and evidence references; finish or
+  close active work before downgrading to an older strict reader.
+
 ## [9.3.0] - 2026-09-28
 
 `/flow-auto` can complete an inspection review when the declared audit fails,

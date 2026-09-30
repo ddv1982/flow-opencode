@@ -110,8 +110,10 @@ or delivery document.
 - If implementation would require material scope outside an approved plan, stop
   editing. Finish the approved plan or explicitly close it before creating a
   different plan; never replan the active approved session in place.
-- A feature run is the canonical attempt aggregate. It contains validation,
-  review, result, and artifacts; status and progress are derived.
+- A feature run aggregates validation, review, result, and artifacts. Optional
+  baseline and packet references point to managed hashed sidecars. New builds
+  read older Session v5 state; strict older builds may quarantine new active
+  state. Finish or close before downgrading.
 - Runs remain in strictly increasing durable start-revision order, so derived
   latest-attempt delivery cannot disagree with canonical progress.
 - At most one run is active. Dependencies must be complete before a run starts.
@@ -170,8 +172,10 @@ projection. The report owns human lifecycle and recovery text and is not stored.
 
 ## Validation and review
 
-[Validation and review](validation-and-review.md) defines the evidence, review,
-finding-identity, and closure invariants.
+[Validation and review](validation-and-review.md) defines the evidence and
+closure rules. Flow stores a bounded source-bound packet before assignment.
+Reviewers page through it in `flow_status` without shell access. Missing or
+stale packets consume no failed review.
 
 ## Bounded worker waves
 
@@ -273,7 +277,7 @@ user starting point.
 | Tool | Contract |
 | --- | --- |
 | `flow_guidance` | Load one package-owned guide. |
-| `flow_status` | Read compact, execution, detail, or reviewer state. |
+| `flow_status` | Read compact, execution, detail, reviewer, or paged reviewer-evidence state. |
 | `flow_plan_save` | Create or replace the active draft plan. |
 | `flow_plan_amend` | Record a bounded prerequisite repair after a failed canonical gate. |
 | `flow_plan_approve` | Approve and lock the draft plan. |
