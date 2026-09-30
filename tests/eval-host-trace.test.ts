@@ -72,6 +72,101 @@ const fixture = () => ({
 	],
 });
 
+test("retained native call references bind to their observed tool parts", () => {
+	const trace = collectHostTrace(fixture());
+	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	const call = {
+		native: {
+			sessionId: "ses_root",
+			messageId: "msg_assistant",
+			partId: "prt_tool",
+			partIndex: 0,
+			callId: "call_one",
+			startedAt: 2,
+			completedAt: 3,
+		},
+		tool: "flow_status",
+		status: "completed",
+		sessionIndex: 0,
+		agent: "build",
+		input: {},
+		output: {},
+		rawOutput: "",
+		metadata: {},
+	};
+	const gradeInput = {
+		schemaVersion: 1,
+		hostTrace: trace,
+		flowCalls: [call],
+		allCalls: [call],
+		session: null,
+		archives: [],
+		finalText: "",
+	};
+	expect(ScenarioGradeInputSchema.safeParse(gradeInput).success).toBe(true);
+	expect(
+		ScenarioGradeInputSchema.safeParse(pseudonymizeEvalIds(gradeInput)).success,
+	).toBe(true);
+	for (const field of ["allCalls", "flowCalls"] as const) {
+		for (const [label, mutate] of [
+			[
+				"unknown part",
+				(value: Record<string, unknown>) => {
+					record(value.native).partId = "prt_unknown";
+				},
+			],
+			[
+				"wrong message",
+				(value: Record<string, unknown>) => {
+					record(value.native).messageId = "msg_unknown";
+				},
+			],
+			[
+				"wrong session",
+				(value: Record<string, unknown>) => {
+					record(value.native).sessionId = "ses_unknown";
+				},
+			],
+			[
+				"wrong tool",
+				(value: Record<string, unknown>) => {
+					value.tool = "flow_plan_save";
+				},
+			],
+			[
+				"wrong status",
+				(value: Record<string, unknown>) => {
+					value.status = "error";
+				},
+			],
+			[
+				"wrong agent",
+				(value: Record<string, unknown>) => {
+					value.agent = "flow-reviewer";
+				},
+			],
+			[
+				"wrong timing",
+				(value: Record<string, unknown>) => {
+					record(value.native).completedAt = 9;
+				},
+			],
+		] as const) {
+			const changed = structuredClone(gradeInput);
+			mutate(record(changed[field][0]));
+			expect(
+				ScenarioGradeInputSchema.safeParse(changed).success,
+				`${field}: ${label}`,
+			).toBe(false);
+		}
+	}
+	const duplicate = structuredClone(gradeInput);
+	duplicate.allCalls.push(structuredClone(call));
+	expect(ScenarioGradeInputSchema.safeParse(duplicate).success).toBe(false);
+	const oldInput = { ...gradeInput, hostTrace: undefined };
+	expect(ScenarioGradeInputSchema.safeParse(oldInput).success).toBe(true);
+});
+
 test("collects mixed initial user parts without retaining text or raw token", () => {
 	const trace = collectHostTrace(fixture());
 	expect(trace.kind).toBe("observed");

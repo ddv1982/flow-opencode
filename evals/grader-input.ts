@@ -94,7 +94,66 @@ export const ScenarioGradeInputSchema = z
 		finalText: z.string().max(4 * 1024 * 1024),
 		providerErrors: z.array(ProviderErrorEnvelopeSchema).max(64).default([]),
 	})
-	.strict();
+	.strict()
+	.superRefine((value, context) => {
+		if (value.hostTrace?.kind !== "observed") return;
+		const tools = new Map<
+			string,
+			{
+				sessionId: string;
+				messageId: string;
+				agent: string;
+				tool: string;
+				status: ObservedToolCall["status"];
+				partIndex: number;
+				callId: string | null;
+				startedAt: number | null;
+				completedAt: number | null;
+			}
+		>();
+		for (const message of value.hostTrace.messages) {
+			if (message.role !== "assistant") continue;
+			for (const tool of message.tools)
+				tools.set(tool.partId, {
+					sessionId: message.sessionId,
+					messageId: message.id,
+					agent: message.agent,
+					tool: tool.tool,
+					status: tool.status,
+					partIndex: tool.partIndex,
+					callId: tool.callId,
+					startedAt: tool.startedAt,
+					completedAt: tool.completedAt,
+				});
+		}
+		for (const field of ["allCalls", "flowCalls"] as const) {
+			const seen = new Set<string>();
+			for (const [index, call] of value[field].entries()) {
+				if (!call.native) continue;
+				const native = call.native;
+				const observed = tools.get(native.partId);
+				if (
+					seen.has(native.partId) ||
+					!observed ||
+					observed.sessionId !== native.sessionId ||
+					observed.messageId !== native.messageId ||
+					observed.agent !== call.agent ||
+					observed.tool !== call.tool ||
+					observed.status !== call.status ||
+					observed.partIndex !== native.partIndex ||
+					observed.callId !== native.callId ||
+					observed.startedAt !== native.startedAt ||
+					observed.completedAt !== native.completedAt
+				)
+					context.addIssue({
+						code: "custom",
+						path: [field, index, "native"],
+						message: "Native call provenance does not match the host trace.",
+					});
+				seen.add(native.partId);
+			}
+		}
+	});
 
 const ObservedModelSchema = z.discriminatedUnion("kind", [
 	z

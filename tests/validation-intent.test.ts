@@ -721,3 +721,193 @@ test("canonical passing host is frozen and wrong-host failure cannot authorize a
 		resolveValidationPolicy(extra, run.featureId, "remote checks").platform,
 	).toBeUndefined();
 });
+
+test.each([
+	[
+		"linux",
+		"darwin",
+		"Typed check 'bun test' on linux conflicts with evidence declared on darwin.",
+	],
+	[
+		"other",
+		"linux",
+		"Typed check 'bun test' on other conflicts with evidence declared on linux.",
+	],
+] as const)(
+	"typed %s command host conflicting with %s evidence rejects approval",
+	(host, evidenceHost, issue) => {
+		const check: ValidationCheck = {
+			command: "bun test",
+			intent: "pass",
+			platform: host,
+		};
+		const conflicting = {
+			...declared([check], [check.command]),
+			evidence: plan.evidence?.map((entry) => ({
+				...entry,
+				platform: evidenceHost,
+			})),
+		};
+		expect(planIssue(conflicting)).toBe(issue);
+		expect(() =>
+			savePlan(
+				null,
+				{
+					operationId: "conflicting-host",
+					expectedRevision: 0,
+					goal: "Complete the requested change",
+					plan: conflicting,
+				},
+				{ newId: () => "session" },
+			),
+		).toThrow(issue);
+	},
+);
+
+test.each(["linux", "other"] as const)(
+	"matching or legacy wildcard evidence host %s admits a typed check and passing review",
+	(platform) => {
+		const check: ValidationCheck = {
+			command: "bun test",
+			intent: "pass",
+			platform: "linux",
+		};
+		const proposed: Plan = {
+			...declared([check], [check.command]),
+			evidence: plan.evidence?.map((entry) => ({ ...entry, platform })),
+		};
+		expect(planIssue(proposed)).toBeNull();
+		const environment = { newId: (kind: string) => `${kind}-host` };
+		const draft = savePlan(
+			null,
+			{
+				operationId: "save-host",
+				expectedRevision: 0,
+				goal: "Complete the requested change",
+				plan: proposed,
+			},
+			environment,
+		).session;
+		const approved = approvePlan(draft, {
+			operationId: "approve-host",
+			expectedRevision: draft.revision,
+		}).session;
+		const started = startRun(
+			approved,
+			{ operationId: "start-host", expectedRevision: approved.revision },
+			environment,
+		).session;
+		const validated = observe(started, {
+			command: check.command,
+			intent: "pass",
+		});
+		const run = activeRun(validated);
+		if (!run) throw new Error("Active run is missing.");
+		expect(reviewReadiness(validated, run, SOURCE_A)).toMatchObject({
+			kind: "ready",
+		});
+	},
+);
+
+test("legacy unspecified evidence host remains compatible with an already stored typed policy", () => {
+	const check: ValidationCheck = {
+		command: "bun test",
+		intent: "pass",
+		platform: "linux",
+	};
+	const existing = running([check]);
+	if (!existing.plan) throw new Error("Approved plan is missing.");
+	const legacy: Session = {
+		...existing,
+		plan: {
+			...existing.plan,
+			evidence: existing.plan.evidence?.map((entry) => ({
+				...entry,
+				platform: undefined,
+			})),
+		},
+	};
+	if (!legacy.plan) throw new Error("Legacy plan is missing.");
+	expect(planIssue(legacy.plan)).toBeNull();
+	const validated = observe(legacy, { intent: "pass" });
+	const run = activeRun(validated);
+	if (!run) throw new Error("Active run is missing.");
+	expect(reviewReadiness(validated, run, SOURCE_A)).toMatchObject({
+		kind: "ready",
+	});
+});
+
+test("an approved named canonical gate failure remains eligible for current-source prerequisite repair", () => {
+	const command =
+		"bun test --reporter=junit --reporter-outfile=.flow/results.xml";
+	const check: ValidationCheck = {
+		command,
+		intent: "pass",
+		platform: "linux",
+		assertions: ["required case"],
+	};
+	const proposed: Plan = {
+		...declared([check], [command]),
+		evidence: plan.evidence?.map((entry) => ({
+			...entry,
+			command,
+			platform: "linux",
+			assertions: check.assertions,
+		})),
+	};
+	const environment = { newId: (kind: string) => `${kind}-named` };
+	const draft = savePlan(
+		null,
+		{
+			operationId: "save-named",
+			expectedRevision: 0,
+			goal: "Complete the requested change",
+			plan: proposed,
+		},
+		environment,
+	).session;
+	const approved = approvePlan(draft, {
+		operationId: "approve-named",
+		expectedRevision: draft.revision,
+	}).session;
+	const started = startRun(
+		approved,
+		{ operationId: "start-named", expectedRevision: approved.revision },
+		environment,
+	).session;
+	const failed = observe(started, {
+		command,
+		intent: "pass",
+		exitCode: 1,
+		resultsPath: ".flow/results.xml",
+		observedAssertions: [{ name: "required case", status: "failed" }],
+	});
+	const run = activeRun(failed),
+		validation = run?.validations[0];
+	if (!run || !validation) throw new Error("Canonical validation is missing.");
+	expect(reviewReadiness(failed, run, SOURCE_A).kind).not.toBe("ready");
+	expect(
+		prerequisiteAmendmentEligibility(
+			failed,
+			run.featureId,
+			validation.id,
+			SOURCE_A,
+		).eligible,
+	).toBe(true);
+	expect(
+		prerequisiteAmendmentEligibility(
+			failed,
+			run.featureId,
+			validation.id,
+			SOURCE_B,
+		).eligible,
+	).toBe(false);
+});
+
+test("different exact commands may declare different validation hosts", () => {
+	const proposed: Plan = {
+		...declared([{ command: "cargo test", intent: "pass", platform: "linux" }]),
+		evidence: plan.evidence?.map((entry) => ({ ...entry, platform: "darwin" })),
+	};
+	expect(planIssue(proposed)).toBeNull();
+});
