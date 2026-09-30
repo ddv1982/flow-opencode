@@ -6,7 +6,11 @@ import { missingRequestAssertions } from "./request-evidence.js";
 import type { Session } from "./session.js";
 import { featureKind, reviewResultSemanticIssues } from "./session.js";
 import { isFeatureComplete } from "./session-queries.js";
-import { isAcceptedValidation } from "./validation.js";
+import {
+	isAcceptedValidation,
+	isValidationFresh,
+	validationPolicyIssue,
+} from "./validation.js";
 
 function featureSettledBefore(
 	session: Session,
@@ -184,6 +188,9 @@ export function sessionInvariantIssues(session: Session): string[] {
 		if (run.state === "active") activeCount += 1;
 		const runValidationIds = new Set<string>();
 		for (const validation of run.validations) {
+			const policyIssue = validationPolicyIssue(session, validation);
+			if (policyIssue)
+				issues.push(`Validation '${validation.id}': ${policyIssue}`);
 			if (validationIds.has(validation.id)) {
 				issues.push(`Duplicate validation id '${validation.id}'.`);
 			}
@@ -232,6 +239,37 @@ export function sessionInvariantIssues(session: Session): string[] {
 			const referenced = run.validations.filter((validation) =>
 				uniqueReferences.has(validation.id),
 			);
+			const checks =
+				session.plan.features.find((feature) => feature.id === run.featureId)
+					?.checks ?? [];
+			const beforeReview: Session =
+				checks.length > 0
+					? {
+							...session,
+							runs: session.runs.map((candidate) => ({
+								...candidate,
+								validations: candidate.validations.filter(
+									(observation) =>
+										observation.recordedRevision < review.createdRevision,
+								),
+							})),
+						}
+					: session;
+			for (const check of checks) {
+				if (
+					!referenced.some(
+						(observation) =>
+							observation.command === check.command &&
+							observation.recordedRevision < review.createdRevision &&
+							isAcceptedValidation(session, observation, review.sourceDigest) &&
+							isValidationFresh(beforeReview, run, observation),
+					)
+				) {
+					issues.push(
+						`Review '${review.id}' lacks referenced typed check '${check.command}'.`,
+					);
+				}
+			}
 			if (
 				referenced.some(
 					(validation) =>

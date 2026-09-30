@@ -37,7 +37,6 @@ import {
 	featureKind,
 	firstBlockedRun,
 	planEvidence,
-	planGate,
 	reviewResultSemanticIssues,
 } from "./session.js";
 import { assertTerminalHeadroom } from "./session-capacity.js";
@@ -49,10 +48,17 @@ import {
 	sessionStatus,
 } from "./session-queries.js";
 import { FlowTransitionError } from "./transition-error.js";
-import { evidenceRefusal, unsatisfiedEvidence } from "./validation.js";
+import {
+	evidenceRefusal,
+	prerequisiteAmendmentEligibility,
+	unsatisfiedEvidence,
+} from "./validation.js";
 
 export { FlowTransitionError } from "./transition-error.js";
-export { recordValidation } from "./validation.js";
+export {
+	prerequisiteAmendmentEligibility,
+	recordValidation,
+} from "./validation.js";
 export type TransitionEnvironment = Readonly<{
 	newId: (kind: "session" | "run" | "validation" | "review") => string;
 }>;
@@ -399,50 +405,14 @@ export function amendPlan(
 		fail("The amendment must attest same-goal, reversible prerequisite work.");
 	if (input.targets.length < 1 || input.targets.length > 8)
 		fail("An amendment needs 1-8 concrete targets.");
-	if ((session.amendments?.length ?? 0) >= 3)
-		fail("This session has used all three bounded prerequisite amendments.");
-	const run = activeRun(session);
-	if (!run || run.featureId !== input.featureId)
-		fail("An amendment must target the active feature run.");
-	if (run.reviews.length > 0)
-		fail("An amendment cannot bypass an existing independent review.");
-	if (
-		session.runs.some(
-			(candidate) =>
-				candidate.featureId === run.featureId &&
-				candidate.reviews.some((review) =>
-					review.result?.findings.some((finding) => finding.scopeBlocker),
-				),
-		)
-	)
-		fail("An independent review scope blocker requires user direction.");
-	const observation = run.validations.find(
-		(item) => item.id === input.validationId,
+	const eligibility = prerequisiteAmendmentEligibility(
+		session,
+		input.featureId,
+		input.validationId,
+		currentSourceDigest,
 	);
-	const latestCanonical = run.validations
-		.filter(
-			(item) =>
-				item.scope === "broad" && item.command === planGate(session.plan),
-		)
-		.at(-1);
-	if (!observation)
-		fail(
-			"An amendment requires a failed canonical-gate observation on the active run.",
-		);
-	if (
-		latestCanonical?.id !== observation.id ||
-		observation.scope !== "broad" ||
-		observation.command !== planGate(session.plan) ||
-		observation.exitCode === null ||
-		observation.exitCode === 0 ||
-		!observation.outputComplete ||
-		observation.ineligibleReason !== undefined ||
-		observation.sourceDigest !== currentSourceDigest
-	) {
-		fail(
-			"An amendment requires a complete failed canonical-gate observation for the current source.",
-		);
-	}
+	if (!eligibility.eligible) fail(eligibility.reason);
+	const { run } = eligibility;
 	let created: PlanAmendment | null = null;
 	const next = commit(
 		session,
@@ -639,6 +609,10 @@ export function startReview(
 				: "Review requires passing validation for the current workspace content.",
 		);
 	}
+	if (readiness.kind === "checks-unsatisfied")
+		fail(
+			`Review requires complete current-source observations of all declared typed checks: ${readiness.checks.map((check) => JSON.stringify(check.command)).join(", ")}.`,
+		);
 	if (readiness.kind === "evidence-unsatisfied") {
 		const observedGate = readiness.entries.some(
 			(entry) => entry.scope === "gate-observe",

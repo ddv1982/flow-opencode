@@ -6,6 +6,7 @@ import type {
 	Session,
 	SourceDigest,
 	ValidationIneligibleReason,
+	ValidationIntent,
 	ValidationObservation,
 	ValidationScope,
 } from "../domain/session.js";
@@ -16,6 +17,7 @@ import {
 	declaredResultsPath,
 	LONGEST_EVIDENCE_PLATFORM,
 	LONGEST_VALIDATION_INELIGIBLE_REASON,
+	resolveValidationPolicy,
 } from "../domain/validation.js";
 import type { SessionRepository } from "./ports/session-repository.js";
 import { SessionSchema, type ValidationStartRequest } from "./schema.js";
@@ -27,6 +29,8 @@ export type PreparedValidation = Readonly<{
 	scope: ValidationScope;
 	sourceDigest: SourceDigest;
 	hostPlatform: EvidencePlatform;
+	intent: ValidationIntent;
+	declaredPlatform?: EvidencePlatform | undefined;
 	assertions: readonly string[];
 	resultsPath: string | undefined;
 }>;
@@ -115,8 +119,21 @@ export async function prepareValidation(
 		if (run.reviews.length > 0) {
 			throw new Error("Validation cannot start after review has begun.");
 		}
-		const assertions = declaredAssertions(session, input.command);
-		const plannedResultsPath = declaredResultsPath(session, input.command);
+		const policy = resolveValidationPolicy(
+			session,
+			run.featureId,
+			input.command,
+		);
+		const assertions = declaredAssertions(
+			session,
+			input.command,
+			run.featureId,
+		);
+		const plannedResultsPath = declaredResultsPath(
+			session,
+			input.command,
+			run.featureId,
+		);
 		if (
 			plannedResultsPath !== undefined &&
 			input.resultsPath !== undefined &&
@@ -142,6 +159,11 @@ export async function prepareValidation(
 			scope: input.scope,
 			sourceDigest: await transaction.computeSourceDigest(),
 			hostPlatform,
+			intent: policy.intent,
+			...(policy.platform !== undefined &&
+			(policy.typed || input.scope === "broad")
+				? { declaredPlatform: policy.platform }
+				: {}),
 			assertions,
 			resultsPath,
 		};

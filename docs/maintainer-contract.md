@@ -100,10 +100,10 @@ or delivery document.
   beyond its historical bounds. In particular, a run may retain 64 exact
   planned gates plus one separate broad observation. Users must finish or close
   active work before downgrade; Flow adds no rollback capability layer.
-- A plan is a bounded DAG and is immutable after approval. A newly saved plan
-  declares `evidence` with exactly one `scope: "gate"` entry. The persisted
-  field stays optional so an older document still hydrates. This build does not
-  read `gate` or `externalEvidence`.
+- Approval locks a bounded DAG and optional per-feature pass or observe checks.
+  New plans declare one `evidence` gate, or `gate-observe` for all-inspect work.
+  Older documents hydrate without `evidence` or `checks`; retired `gate` and
+  `externalEvidence` fields stay unread.
 - Stable finding, issue, and requirement IDs supplied by the source request
   remain verbatim in saved feature summary or validation prose so each ID is
   traceable to an immutable outcome and its evidence.
@@ -172,10 +172,11 @@ projection. The report owns human lifecycle and recovery text and is not stored.
 
 ## Validation and review
 
-[Validation and review](validation-and-review.md) defines the evidence and
-closure rules. Flow stores a bounded source-bound packet before assignment.
-Reviewers page through it in `flow_status` without shell access. Missing or
-stale packets consume no failed review.
+[Validation and review](validation-and-review.md) defines check and closure
+rules. Optional feature checks freeze pass or observe intent at approval.
+Flow stores a bounded source-bound packet before assignment. Reviewers page
+through it in `flow_status` without shell access. Missing or stale packets
+consume no failed review.
 
 ## Bounded worker waves
 

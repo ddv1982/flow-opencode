@@ -3,12 +3,17 @@ import type {
 	FeatureRun,
 	Session,
 	SourceDigest,
+	ValidationCheck,
 	ValidationObservation,
 } from "./session.js";
 import { isFinalFeatureRun } from "./session-queries.js";
 import {
+	isAcceptedExtraProof,
+	isAcceptedObservedGate,
 	isAcceptedValidation,
+	isValidationEligible,
 	isValidationFresh,
+	resolveValidationPolicy,
 	unresolvedVetoedCommands,
 	unsatisfiedEvidence,
 } from "./validation.js";
@@ -32,7 +37,8 @@ export type ReviewReadiness =
 	  }>
 	| Readonly<{ kind: "vetoed"; commands: string[] }>
 	| Readonly<{ kind: "needs-validation"; reviewKind: ReviewKind }>
-	| Readonly<{ kind: "evidence-unsatisfied"; entries: EvidenceEntry[] }>;
+	| Readonly<{ kind: "evidence-unsatisfied"; entries: EvidenceEntry[] }>
+	| Readonly<{ kind: "checks-unsatisfied"; checks: ValidationCheck[] }>;
 
 export function reviewReadiness(
 	session: Session,
@@ -49,11 +55,41 @@ export function reviewReadiness(
 			isAcceptedValidation(session, validation, sourceDigest) &&
 			isValidationFresh(session, run, validation),
 	);
+	const required = applicable.filter((observation) => {
+		const policy = resolveValidationPolicy(
+			session,
+			run.featureId,
+			observation.command,
+		);
+		return policy.intent === "pass"
+			? isValidationEligible(observation, sourceDigest)
+			: isAcceptedObservedGate(session, observation, sourceDigest) ||
+					(reviewKind === "feature" &&
+						isAcceptedExtraProof(session, observation, sourceDigest));
+	});
 	const hasRequired =
 		reviewKind === "feature"
-			? applicable.length > 0
-			: applicable.some((validation) => validation.scope === "broad");
+			? required.length > 0
+			: required.some((validation) => validation.scope === "broad");
 	if (!hasRequired) return { kind: "needs-validation", reviewKind };
+	const checkDigest =
+		sourceDigest ??
+		(reviewKind === "final"
+			? required.findLast((entry) => entry.scope === "broad")?.sourceDigest
+			: required.at(-1)?.sourceDigest);
+	const checks =
+		session.plan?.features.find((feature) => feature.id === run.featureId)
+			?.checks ?? [];
+	const missingChecks = checks.filter(
+		(check) =>
+			!applicable.some(
+				(observation) =>
+					observation.command === check.command &&
+					observation.sourceDigest === checkDigest,
+			),
+	);
+	if (missingChecks.length > 0)
+		return { kind: "checks-unsatisfied", checks: missingChecks };
 	if (reviewKind === "final") {
 		// The projection has no live workspace digest to pass in, so it falls
 		// back to the digest of the broad validation that satisfied `hasRequired`

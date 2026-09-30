@@ -133,19 +133,19 @@ you granted.
 
 ## How Flow works
 
-1. Planning saves a small feature DAG, including the repository's canonical
-   validation command. Approval locks both.
+1. Approval locks a small feature DAG, the canonical gate, and any declared
+   pass or observe checks.
 2. One feature starts, chosen only from those whose dependencies are complete.
 3. Flow pins the feature's source before edits. The manager gathers evidence
    and checks failure ordering, retries, interruptions, state transitions,
    invariants, file modes, and platform risks.
 4. The manager implements the feature, serially or by integrating a bounded
    worker wave.
-5. Flow records the exact armed command and canonical broad gate on current
-   source, then prepares a bounded file diff before review. The reviewer pages
-   through it without shell access. Newer failures or source changes invalidate
-   older passes; missing or stale packets stop assignment without counting a
-   failed review.
+5. Flow binds each armed command to current source and its approved intent.
+   Required checks must pass; declared observations may fail but stay visible.
+   Before review, Flow prepares a bounded diff. Reviewers page through it
+   without shell access. New failures, source drift, or missing packets stop
+   assignment without counting a failed review.
 6. A passing review advances the plan. A failed feature needs an explicit retry
    or independent-feature choice. Closure returns a versioned delivery report
    with attempts, findings, and assurance limits. It grants no PR, merge,

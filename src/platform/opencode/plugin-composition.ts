@@ -95,6 +95,10 @@ export function createFlowPlugin(dependencies: {
 					status: projection.status,
 					revision: projection.revision,
 					nextAction: projection.nextAction,
+					...("prerequisiteRepair" in projection &&
+					projection.prerequisiteRepair
+						? { prerequisiteRepair: projection.prerequisiteRepair }
+						: {}),
 				};
 			},
 			prompt: async (sessionID, prompt, delivery, metadata) => {

@@ -2252,7 +2252,16 @@ describe("authenticated validation continuation", () => {
 		revision: 3,
 		nextAction: "flow_validation_start",
 	};
-	function origin(driver: AutoDriveCoordinator, parent = "command-message") {
+	function origin(
+		driver: AutoDriveCoordinator,
+		parent = "command-message",
+		declaration: Readonly<{
+			command?: string;
+			scope?: "focused" | "broad";
+			intent?: "pass" | "observe";
+			runId?: string;
+		}> = {},
+	) {
 		driver.observeHostMessage("host-1", {
 			id: "validation-manager",
 			role: "assistant",
@@ -2260,9 +2269,13 @@ describe("authenticated validation continuation", () => {
 		});
 		const value = driver.validationOrigin("host-1", "validation-manager", {
 			featureId: "feature",
-			runId: "run-1",
+			runId: declaration.runId ?? "run-1",
 			sourceDigest: VALIDATION_SOURCE,
 			assertions: [],
+			command: declaration.command ?? "bun test",
+			scope: declaration.scope ?? "focused",
+			intent: declaration.intent ?? "pass",
+			hostPlatform: "linux",
 		});
 		if (!value) throw new Error("Expected an authenticated validation origin.");
 		return value;
@@ -2307,10 +2320,11 @@ describe("authenticated validation continuation", () => {
 					scope,
 					sourceDigest: VALIDATION_SOURCE,
 					hostPlatform: "linux",
+					intent: "pass",
 					assertions: [],
 					resultsPath: undefined,
 				},
-				origin(state.driver, messageId),
+				origin(state.driver, messageId, { command, scope }),
 			);
 			await capture.observeToolBefore(
 				{ tool: "bash", sessionID: "host-1", callID: command },
@@ -2374,7 +2388,10 @@ describe("authenticated validation continuation", () => {
 			const state = harness(running);
 			await state.activate();
 			state.driver.observeValidation({
-				origin: origin(state.driver),
+				origin: origin(state.driver, "command-message", {
+					scope: "broad",
+					intent: nextAction === "flow_review_start" ? "observe" : "pass",
+				}),
 				captureId: "failed",
 				observation: {
 					id: "failed",
@@ -2383,6 +2400,8 @@ describe("authenticated validation continuation", () => {
 					scope: "broad",
 					command: "bun test",
 					sourceDigest: VALIDATION_SOURCE,
+					intent: nextAction === "flow_review_start" ? "observe" : "pass",
+					hostPlatform: "linux" as const,
 					outputDigest: VALIDATION_SOURCE,
 					outputComplete: true,
 					exitCode: 1,
@@ -2404,6 +2423,145 @@ describe("authenticated validation continuation", () => {
 			}
 		}
 	});
+	test("complete nonzero supplemental observation continues to the next required check without a passing claim", async () => {
+		const state = harness(running);
+		await state.activate();
+		state.driver.observeValidation({
+			origin: origin(state.driver, "command-message", {
+				command: "lint",
+				scope: "focused",
+				intent: "observe",
+			}),
+			captureId: "observe-lint",
+			observation: {
+				id: "observe-lint",
+				featureId: "feature",
+				runId: "run-1",
+				command: "lint",
+				scope: "focused",
+				intent: "observe",
+				hostPlatform: "linux",
+				sourceDigest: VALIDATION_SOURCE,
+				outputDigest: VALIDATION_SOURCE,
+				outputComplete: true,
+				exitCode: 12,
+				recordedRevision: 4,
+			},
+		});
+		state.setProjection({ ...running, revision: 4 });
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+	});
+
+	test("a caller-mutated receipt cannot downgrade required intent or change command, scope or host", async () => {
+		for (const tamper of [
+			{ intent: "observe" },
+			{ command: "another" },
+			{ scope: "broad" },
+			{ hostPlatform: "win32" },
+		] as const) {
+			const state = harness(running);
+			await state.activate();
+			const observation = {
+				id: "forged",
+				featureId: "feature",
+				runId: "run-1",
+				command: "bun test",
+				scope: "focused" as const,
+				intent: "pass" as const,
+				hostPlatform: "linux" as const,
+				sourceDigest: VALIDATION_SOURCE,
+				outputDigest: VALIDATION_SOURCE,
+				outputComplete: true,
+				exitCode: 1,
+				recordedRevision: 4,
+			};
+			state.driver.observeValidation({
+				origin: origin(state.driver),
+				captureId: "forged",
+				observation: { ...observation, ...tamper },
+			});
+			state.setProjection({ ...running, revision: 4 });
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(0);
+		}
+	});
+
+	test("failed canonical repair gets one handoff per accepted amendment boundary, not per capture", async () => {
+		const state = harness(running);
+		await state.activate();
+		const failed = (
+			id: string,
+			revision: number,
+			parent: string,
+			runId = "run-1",
+		) =>
+			state.driver.observeValidation({
+				origin: origin(state.driver, parent, { scope: "broad", runId }),
+				captureId: id,
+				observation: {
+					id,
+					featureId: "feature",
+					runId,
+					command: "bun test",
+					scope: "broad",
+					intent: "pass",
+					hostPlatform: "linux",
+					sourceDigest: VALIDATION_SOURCE,
+					outputDigest: VALIDATION_SOURCE,
+					outputComplete: true,
+					exitCode: 1,
+					recordedRevision: revision,
+				},
+			});
+		const projection = (
+			id: string,
+			revision: number,
+			boundary = "initial",
+			runId = "run-1",
+		) => ({
+			...running,
+			revision,
+			prerequisiteRepair: {
+				featureId: "feature",
+				runId,
+				validationId: id,
+				sourceDigest: VALIDATION_SOURCE,
+				boundary,
+			},
+		});
+		failed("gate-1", 4, "command-message");
+		state.setProjection(projection("gate-1", 4));
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		expect(state.prompts[0]?.text).toContain("flow_plan_amend");
+		await state.driver.observeMessage(
+			"host-1",
+			DELIVERY,
+			[{ synthetic: true, metadata: state.prompts[0]?.metadata ?? {} }],
+			"repair-turn",
+		);
+		failed("gate-2", 5, "repair-turn");
+		state.setProjection(projection("gate-2", 5));
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		await state.activate();
+		mutate(state.driver, "host-1", 6);
+		failed("reset-gate", 7, "command-message", "run-2");
+		state.setProjection(projection("reset-gate", 7, "initial", "run-2"));
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(1);
+		mutate(state.driver, "host-1", 8);
+		failed("gate-3", 9, "command-message", "run-2");
+		state.setProjection(
+			projection("gate-3", 9, "accepted-amendment-1", "run-2"),
+		);
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(2);
+	});
+
 	test("late validation cannot revive interrupted, compacted or replaced authority", async () => {
 		for (const change of [
 			"stop",
@@ -2437,6 +2595,8 @@ describe("authenticated validation continuation", () => {
 					scope: "focused",
 					command: "bun test",
 					sourceDigest: VALIDATION_SOURCE,
+					intent: "pass" as const,
+					hostPlatform: "linux" as const,
 					outputDigest: VALIDATION_SOURCE,
 					outputComplete: true,
 					exitCode: 0,
@@ -2467,6 +2627,10 @@ describe("authenticated validation continuation", () => {
 				featureId: "feature",
 				runId: "run-1",
 				sourceDigest: VALIDATION_SOURCE,
+				command: "bun test",
+				scope: "focused",
+				hostPlatform: "linux",
+				intent: "pass",
 				assertions: [],
 			}),
 		).toBeNull();
@@ -2481,6 +2645,8 @@ describe("authenticated validation continuation", () => {
 				scope: "focused" as const,
 				command: "bun test",
 				sourceDigest: VALIDATION_SOURCE,
+				intent: "pass" as const,
+				hostPlatform: "linux" as const,
 				outputDigest: VALIDATION_SOURCE,
 				outputComplete: true,
 				exitCode: 0,
@@ -2518,7 +2684,7 @@ describe("authenticated validation continuation", () => {
 		const state = harness(running);
 		await state.activate();
 		state.driver.observeValidation({
-			origin: origin(state.driver),
+			origin: origin(state.driver, "command-message", { scope: "broad" }),
 			captureId: "persisted",
 			observation: {
 				id: "persisted",
@@ -2527,6 +2693,8 @@ describe("authenticated validation continuation", () => {
 				scope: "broad",
 				command: "bun test",
 				sourceDigest: VALIDATION_SOURCE,
+				intent: "pass" as const,
+				hostPlatform: "linux" as const,
 				outputDigest: VALIDATION_SOURCE,
 				outputComplete: true,
 				exitCode: 0,
@@ -2568,6 +2736,10 @@ describe("authenticated validation continuation", () => {
 					featureId: "feature",
 					runId: "run-1",
 					sourceDigest: VALIDATION_SOURCE,
+					command: "bun test",
+					scope: "focused",
+					hostPlatform: "linux",
+					intent: "pass",
 					assertions: ["required case"],
 				},
 			);
@@ -2582,6 +2754,8 @@ describe("authenticated validation continuation", () => {
 					scope: "focused",
 					command: "bun test",
 					sourceDigest: VALIDATION_SOURCE,
+					intent: "pass" as const,
+					hostPlatform: "linux" as const,
 					outputDigest: VALIDATION_SOURCE,
 					outputComplete: true,
 					exitCode: 0,
@@ -2599,6 +2773,85 @@ describe("authenticated validation continuation", () => {
 					state: "paused",
 					reason: "validation-ineligible",
 				});
+		}
+	});
+	test("failed named gate gets one repair handoff only with eligible host and current source", async () => {
+		for (const [status, gap] of [
+			["failed", null],
+			["absent", null],
+			["missing", null],
+			["failed", "incomplete"],
+			["failed", "wrong-host"],
+			["failed", "source-drift"],
+			["failed", "live-source"],
+		] as const) {
+			const state = harness(running);
+			await state.activate();
+			state.driver.observeHostMessage("host-1", {
+				id: "named-gate-manager",
+				role: "assistant",
+				parentID: "command-message",
+			});
+			const binding = state.driver.validationOrigin(
+				"host-1",
+				"named-gate-manager",
+				{
+					featureId: "feature",
+					runId: "run-1",
+					sourceDigest: VALIDATION_SOURCE,
+					command:
+						"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+					scope: "broad",
+					hostPlatform: "linux",
+					intent: "pass",
+					declaredPlatform: "linux",
+					assertions: ["required case"],
+				},
+			);
+			if (!binding) throw new Error("Gate origin is missing.");
+			state.driver.observeValidation({
+				origin: binding,
+				captureId: "failed-named-gate",
+				observation: {
+					id: "failed-named-gate",
+					featureId: "feature",
+					runId: "run-1",
+					sourceDigest: VALIDATION_SOURCE,
+					command:
+						"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
+					scope: "broad",
+					hostPlatform: gap === "wrong-host" ? "darwin" : "linux",
+					intent: "pass",
+					outputDigest: VALIDATION_SOURCE,
+					outputComplete: gap !== "incomplete",
+					exitCode: 1,
+					recordedRevision: 4,
+					...(gap === "source-drift"
+						? { ineligibleReason: "source-drift" as const }
+						: {}),
+					...(status === "missing"
+						? {}
+						: { observedAssertions: [{ name: "required case", status }] }),
+				},
+			});
+			state.setProjection({
+				...running,
+				revision: 4,
+				prerequisiteRepair: {
+					featureId: "feature",
+					runId: "run-1",
+					validationId: "failed-named-gate",
+					sourceDigest: VALIDATION_SOURCE,
+					boundary: "initial",
+				},
+			});
+			if (gap === "live-source") state.setSource(`sha256:${"b".repeat(64)}`);
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(gap === null ? 1 : 0);
+			if (gap === null)
+				expect(state.prompts[0]?.text).toContain("flow_plan_amend");
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(gap === null ? 1 : 0);
 		}
 	});
 	test("cancellation while validation persists preserves evidence without continuing the old lease", async () => {
@@ -2623,6 +2876,7 @@ describe("authenticated validation continuation", () => {
 				scope: "focused",
 				sourceDigest: VALIDATION_SOURCE,
 				hostPlatform: "linux",
+				intent: "pass",
 				assertions: [],
 				resultsPath: undefined,
 			},

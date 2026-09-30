@@ -18,15 +18,17 @@ import type {
 	Session,
 	SessionClosure,
 	SessionStatus,
+	SourceDigest,
 	ValidationObservation,
 } from "../domain/session.js";
-import { firstBlockedRun } from "../domain/session.js";
+import { firstBlockedRun, planGate } from "../domain/session.js";
 import {
 	activeRun,
 	isFeatureComplete,
 	nextRunnableFeature,
 	sessionStatus,
 } from "../domain/session-queries.js";
+import { prerequisiteAmendmentEligibility } from "../domain/transitions.js";
 import {
 	digestReportLines,
 	type FindingsDigest,
@@ -82,6 +84,15 @@ export type CompactProjection = Readonly<{
 	archiveRetry: ArchiveRetryProjection | null;
 	findingsDigest: FindingsDigest;
 	amendments: PlanAmendment[];
+	prerequisiteRepair?:
+		| Readonly<{
+				featureId: string;
+				runId: string;
+				validationId: string;
+				sourceDigest: SourceDigest;
+				boundary: string;
+		  }>
+		| undefined;
 }>;
 
 export type ArchivedProjection = Readonly<
@@ -409,11 +420,37 @@ function nextAction(
 		case "needs-validation":
 		case "vetoed":
 			return "flow_validation_start";
+		case "checks-unsatisfied":
+			return "flow_validation_start";
 		case "evidence-unsatisfied":
 			return "await-user-direction";
 		case "ready":
 			return "flow_review_start";
 	}
+}
+
+function prerequisiteRepair(session: Session) {
+	const run = activeRun(session);
+	const observation = run?.validations.findLast(
+		(item) => item.scope === "broad" && item.command === planGate(session.plan),
+	);
+	if (!run || !observation) return undefined;
+	const eligibility = prerequisiteAmendmentEligibility(
+		session,
+		run.featureId,
+		observation.id,
+		observation.sourceDigest,
+	);
+	if (!eligibility.eligible) return undefined;
+	return {
+		featureId: run.featureId,
+		runId: run.id,
+		validationId: observation.id,
+		sourceDigest: observation.sourceDigest,
+		boundary:
+			session.amendments?.findLast((entry) => entry.featureId === run.featureId)
+				?.operationId ?? "initial",
+	};
 }
 
 export function compactProjection(
@@ -426,6 +463,7 @@ export function compactProjection(
 	if (session.closure && !retryRequest) {
 		throw new Error("Session closure is not bound to a valid close operation.");
 	}
+	const repair = prerequisiteRepair(session);
 	return {
 		view: "compact",
 		sessionId: session.id,
@@ -441,6 +479,7 @@ export function compactProjection(
 		archiveRetry: retryRequest ? { request: retryRequest } : null,
 		findingsDigest: findingsDigest(session),
 		amendments: [...(session.amendments ?? [])],
+		...(repair ? { prerequisiteRepair: repair } : {}),
 	};
 }
 
@@ -519,6 +558,16 @@ export function reviewerProjection(
 						summary: candidate.summary,
 						targets: [...candidate.targets],
 						validation: [...candidate.validation],
+						...(candidate.checks
+							? {
+									checks: candidate.checks.map((check) => ({
+										...check,
+										...(check.assertions
+											? { assertions: [...check.assertions] }
+											: {}),
+									})),
+								}
+							: {}),
 						dependsOn: [...candidate.dependsOn],
 					})),
 					...(plan.evidence === undefined

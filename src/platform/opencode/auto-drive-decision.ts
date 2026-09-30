@@ -42,9 +42,10 @@ export type LeaseView = Readonly<{
 	pendingReply: boolean;
 	lastPromptedRevision: number | null;
 	hasDelivery: boolean;
+	repairHandoffAvailable?: boolean;
 	validation?: Readonly<{
 		revision: number;
-		outcome: "passed" | "failed" | "ineligible";
+		outcome: "passed" | "observed" | "failed" | "ineligible";
 	}> | null;
 }>;
 
@@ -56,7 +57,11 @@ export type IdleDecision =
 	| Readonly<{ kind: "answered" }>
 	| Readonly<{ kind: "handback-or-deactivate" }>
 	| Readonly<{ kind: "pause"; warning: string; clearCheckpoint: boolean }>
-	| Readonly<{ kind: "continue"; clearCheckpoint: boolean }>;
+	| Readonly<{
+			kind: "continue";
+			clearCheckpoint: boolean;
+			repairHandoff?: true;
+	  }>;
 
 export function decideOnIdle(
 	lease: LeaseView,
@@ -98,11 +103,16 @@ export function decideOnIdle(
 			return { kind: "deactivate" };
 		return { kind: "handback-and-wait" };
 	}
+	const repair =
+		lease.repairHandoffAvailable === true &&
+		lease.validation?.outcome === "failed" &&
+		projection.nextAction === "flow_validation_start";
 	if (
 		lease.validation?.revision === projection.revision &&
 		(lease.validation.outcome === "ineligible" ||
 			(lease.validation.outcome === "failed" &&
-				projection.nextAction !== "flow_review_start"))
+				projection.nextAction !== "flow_review_start" &&
+				!repair))
 	) {
 		return {
 			kind: "pause",
@@ -133,5 +143,9 @@ export function decideOnIdle(
 		return { kind: "stop", warning: "Flow auto-drive stopped: no progress." };
 	if (!lease.hasDelivery)
 		return { kind: "stop", warning: "Flow auto-drive stopped: no delivery." };
-	return { kind: "continue", clearCheckpoint };
+	return {
+		kind: "continue",
+		clearCheckpoint,
+		...(repair ? { repairHandoff: true as const } : {}),
+	};
 }

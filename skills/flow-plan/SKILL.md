@@ -97,18 +97,15 @@ Save one plan with:
   remains a finding that the reviewer must see.
 - `features`: ordered outcome slices, each with a stable `id`, `title`,
   `summary`, bounded `targets`, concrete `validation`, `dependsOn` ids, and
-  optional `kind`.
+  optional `kind` and `checks` (exact `command`, `intent: pass|observe`, `platform`, `assertions`).
 
-Each feature needs one observable outcome. Split only independent failures or
-true dependencies, not file overlap. Keep one indivisible invariant together;
-avoid step-shaped features and vague checks.
+Each feature has one observable outcome. Split independent failures or dependencies; keep indivisible invariants together.
 
 Preserve stable finding, issue, or requirement IDs exactly in the saved feature
 `summary` or `validation`; each stays traceable from the immutable plan to one
 outcome and its evidence.
 
-A `validation` entry naming a command is recorded byte-for-byte; prose there stays
-reviewer judgment, never a fabricated result.
+`validation` preserves exact commands and prose. Declare supplemental `checks` as `observe` before approval; they never replace a required pass. Intent is immutable; legacy failed commands still veto review.
 
 If the request is inspect-only (review, audit, survey, no promised edit), invent
 no repair features. Save at most a small set of inspect features with

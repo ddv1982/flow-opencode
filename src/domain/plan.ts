@@ -1,3 +1,4 @@
+import { commandUsesManagedJUnitPath } from "./artifact.js";
 import { isFeatureId } from "./feature-id.js";
 import { MAX_PLAN_BYTES, MAX_PLAN_FEATURES } from "./limits.js";
 import type { Plan } from "./session.js";
@@ -35,6 +36,57 @@ export function planIssue(plan: Plan): string | null {
 		if (!isFeatureId(feature.id)) return `Invalid feature id '${feature.id}'.`;
 		if (ids.has(feature.id)) return `Duplicate feature id '${feature.id}'.`;
 		ids.add(feature.id);
+		const checks = new Map<string, string>();
+		for (const check of feature.checks ?? []) {
+			if (!check.command.trim())
+				return "A typed check requires an exact nonblank command.";
+			if (
+				!["pass", "observe"].includes(check.intent) ||
+				!["linux", "darwin", "win32", "other"].includes(check.platform)
+			)
+				return "A typed check must declare validation intent and platform.";
+			const conflictingHost = (plan.evidence ?? []).find(
+				(entry) =>
+					entry.command === check.command &&
+					entry.platform !== undefined &&
+					entry.platform !== "other" &&
+					entry.platform !== check.platform,
+			);
+			if (conflictingHost)
+				return `Typed check '${check.command}' on ${check.platform} conflicts with evidence declared on ${conflictingHost.platform}.`;
+			const signature = JSON.stringify([
+				check.intent,
+				check.platform,
+				[...new Set(check.assertions ?? [])].sort(),
+			]);
+			const prior = checks.get(check.command);
+			if (prior !== undefined && prior !== signature)
+				return `Conflicting declarations for typed check '${check.command}'.`;
+			checks.set(check.command, signature);
+			const observedCanonical = (plan.evidence ?? []).some(
+				(entry) =>
+					entry.scope === "gate-observe" && entry.command === check.command,
+			);
+			if (check.intent === "pass" && observedCanonical)
+				return "A typed passing check cannot replace the canonical observed inspection gate.";
+			if (check.intent === "observe") {
+				if ((check.assertions?.length ?? 0) > 0)
+					return "An observational check cannot require named passing assertions.";
+				if (
+					(feature.validation.includes(check.command) && !observedCanonical) ||
+					(plan.evidence ?? []).some(
+						(entry) =>
+							entry.command === check.command && entry.scope !== "gate-observe",
+					)
+				)
+					return `Observational check '${check.command}' conflicts with a required passing obligation.`;
+			}
+			if (
+				(check.assertions?.length ?? 0) > 0 &&
+				!commandUsesManagedJUnitPath(check.command)
+			)
+				return "Typed named checks must write the managed JUnit results path.";
+		}
 	}
 	for (const feature of plan.features) {
 		for (const dependency of feature.dependsOn) {

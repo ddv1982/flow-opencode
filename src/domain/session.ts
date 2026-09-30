@@ -13,6 +13,13 @@ export type SourceDigest = `sha256:${string}`;
 export type Artifact = Readonly<{ path: string }>;
 
 export type FeatureKind = "change" | "inspect";
+export type ValidationIntent = "pass" | "observe";
+export type ValidationCheck = Readonly<{
+	command: string;
+	intent: ValidationIntent;
+	platform: EvidencePlatform;
+	assertions?: string[] | undefined;
+}>;
 
 export type PlanFeature = Readonly<{
 	id: FeatureId;
@@ -20,6 +27,7 @@ export type PlanFeature = Readonly<{
 	summary: string;
 	targets: string[];
 	validation: string[];
+	checks?: ValidationCheck[] | undefined;
 	dependsOn: FeatureId[];
 	/**
 	 * Outcome slice kind. Absent hydrates to `change`.
@@ -105,6 +113,7 @@ export type ValidationObservation = Readonly<{
 	 * status can never produce a passing validation.
 	 */
 	exitCode: number | null;
+	intent?: ValidationIntent | undefined;
 	outputDigest: SourceDigest;
 	outputComplete: boolean;
 	recordedRevision: number;

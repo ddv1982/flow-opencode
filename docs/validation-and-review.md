@@ -56,21 +56,19 @@ plans may supply `resultsPath` ([ADR 0012](adr/0012-named-results-over-exit-code
 Final review and `completed` closure refuse any unsatisfied entry. Feature
 reviews do not require every entry, so a goal can split by what this host can
 prove.
-[ADR 0014](adr/0014-one-evidence-record.md) records the collapse of `gate` and
-`externalEvidence` into this one field.
+Optional feature `checks` freeze exact commands, `pass` or `observe` intent,
+platform and passing assertions at approval. Every check must be satisfied before
+review. Complete nonzero `observe` results remain visible without claiming a pass
+or granting repair scope. Legacy `validation` strings keep their meaning.
 
-A failed, incomplete, or source-drifted observation creates a freshness boundary
-for its command across attempts. Review requires a newer accepted observation
-of that exact command for current source. Acceptance requires complete exit-zero
-output except for the `gate-observe` command, whose latest broad observation may
-have a nonzero exit. Returning to an older source digest does not revive an
-earlier result, and no other command discharges it. Three command
-sets are vetoed this way: any command whose stored bytes equal an entry in the
-active feature's validation list, since Flow does not parse validation prose
-into commands; the plan's gate command; and any command an observation recorded
-at `broad` scope.
-Accepted same-schema Session v5 reviews remain valid for submission and feature
-completion. Completed closure still rechecks immutable plan evidence.
+A failed, incomplete, or source-drifted result requires a newer accepted result
+of that exact command for current source across attempts. Acceptance requires
+exit zero for `pass`; `observe` needs a known exit and complete output. Returning
+to an old digest never revives evidence. This veto binds exact active-feature
+`validation` strings, typed checks, the canonical gate and any broad observation;
+Flow does not parse legacy prose into commands. Another command cannot discharge
+it. Legacy Session v5 reviews remain valid. Typed assignments must reference every
+check as of their creation; completed closure also rechecks immutable plan evidence.
 [ADR 0009](adr/0009-scope-keyed-validation-veto.md) records why the label binds.
 
 An armed capture waits at most 15 minutes for its exact Bash command to begin.

@@ -117,6 +117,21 @@ describe("evidenceStatus", () => {
 		);
 		expect(evidenceStatus(inspect, extra, SOURCE_A).kind).toBe("missing");
 		expect(unsatisfiedEvidence(inspect, SOURCE_A)).toEqual([extra]);
+		const rerun: Session = {
+			...inspect,
+			runs: inspect.runs.map((run) => ({
+				...run,
+				validations: [
+					failed,
+					observation({ id: "rerun", recordedRevision: 4 }),
+				],
+			})),
+		};
+		expect(evidenceStatus(rerun, observedGate, SOURCE_A).kind).toBe(
+			"satisfied",
+		);
+		expect(evidenceStatus(rerun, extra, SOURCE_A).kind).toBe("satisfied");
+		expect(unsatisfiedEvidence(rerun, SOURCE_A)).toEqual([]);
 	});
 	test("is satisfied by a passing observation on the declared host with the declared cases", () => {
 		const s = session([observation({})]);

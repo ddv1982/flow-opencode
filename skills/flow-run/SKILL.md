@@ -108,9 +108,7 @@ Flow records the host observation; copy no host-observed fields.
 
 For a complete failed broad gate that requires `pass` before review, use `flow_plan_amend` for a
 reversible same-goal prerequisite. Supply the validation id, reason, repair,
-targets, and truthful attestations. Keep the plan and gate fixed, rerun the
-gate, and review the diff. New outcomes, reviewer scope blockers, and missing
-environment evidence still stop.
+targets, and truthful attestations. Keep the goal and gate fixed. Choose and test a supported reversible compatibility remedy within that repair scope; keep or revert it from evidence without another approval question. New outcomes, scope blockers, and unavailable declared hosts need direction.
 
 A gate that cannot pass must first name the failing case or output that blocks
 it for `scope: "gate"`. If the bounded amendment rule above does not apply, leave this exact
@@ -118,13 +116,11 @@ handoff before returning:
 `Environment: <declared environment>`, `Command: <exact planned command>`, and
 `Next step: Run this command there and resume Flow, or choose defer/abandon.`
 
-Every host-observed validation advances revision. The `[flow-validation]`
-marker reports `passed`, `recordedRevision`, and declared `assertions`. Use
-`recordedRevision` for the next `flow_validation_start`. An all-inspect plan
-whose gate declares `scope: "gate-observe"` may continue after `passed: false`
-only when `flow_status` projects `flow_review_start`; put the exit code and
-failure in the review packet. Otherwise require `passed: true`. If the marker
-is absent, refresh compact status before mutating.
+Every capture advances revision. Use `[flow-validation].recordedRevision` next.
+`pass` needs passing evidence. A complete declared `observe` may exit nonzero;
+record its finding and continue the required checks. Never reclassify a required
+failure after approval. Inspect-only `gate-observe` follows projected review.
+If the marker is absent, refresh status. Observation never grants repair scope.
 
 For the final feature, run the plan's gate command at broad scope after the
 last relevant edit.

@@ -82,6 +82,22 @@ const PlanFeatureSchema = z
 			.default([]),
 		dependsOn: z.array(FeatureIdSchema).max(MAX_PLAN_FEATURES).default([]),
 		kind: z.enum(["change", "inspect"]).optional(),
+		checks: z
+			.array(
+				z
+					.object({
+						command: boundedText("Feature check command"),
+						intent: z.enum(["pass", "observe"]),
+						platform: z.enum(EVIDENCE_PLATFORMS),
+						assertions: z
+							.array(boundedText("Feature check assertion"))
+							.max(MAX_DECLARED_ASSERTIONS)
+							.optional(),
+					})
+					.strict(),
+			)
+			.max(MAX_PLAN_FEATURES)
+			.optional(),
 	})
 	.strict();
 
@@ -174,6 +190,7 @@ const ValidationObservationSchema = z
 		runId: RunIdSchema,
 		scope: z.enum(["focused", "broad"]),
 		command: boundedText("Validation command"),
+		intent: z.enum(["pass", "observe"]).optional(),
 		sourceDigest: SourceDigestSchema,
 		exitCode: z.number().int().safe().nullable(),
 		outputDigest: SourceDigestSchema,
