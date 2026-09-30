@@ -5,6 +5,7 @@ import { canonicalSha256 } from "./canonical-json.js";
 import { mapStrings } from "./cassette.js";
 import type { ObservedToolCall, Outcome } from "./harness.js";
 import { HostTraceSchema, NativeToolProvenanceSchema } from "./host-trace.js";
+import { ReviewerPacketBytesListSchema } from "./reviewer-packet-bytes.js";
 
 const TextSchema = z
 	.string()
@@ -37,6 +38,7 @@ export const ScenarioGradeInputSchema = z
 	.object({
 		schemaVersion: z.literal(1),
 		hostTrace: HostTraceSchema.optional(),
+		packetBytes: ReviewerPacketBytesListSchema.optional(),
 		flowCalls: z.array(ToolCallSchema).max(4096),
 		allCalls: z.array(ToolCallSchema).max(4096),
 		session: JsonRecordSchema.nullable(),
@@ -275,6 +277,7 @@ export const RetainedScenarioEvidenceSchema = z
 export type ScenarioGradeInput = Pick<
 	Outcome,
 	| "hostTrace"
+	| "packetBytes"
 	| "flowCalls"
 	| "allCalls"
 	| "session"
@@ -500,6 +503,9 @@ export function scenarioGradeInput(
 		...(outcome.hostTrace === undefined
 			? {}
 			: { hostTrace: outcome.hostTrace }),
+		...(outcome.packetBytes === undefined
+			? {}
+			: { packetBytes: outcome.packetBytes }),
 		flowCalls: outcome.flowCalls,
 		allCalls: outcome.allCalls,
 		session: outcome.session,
