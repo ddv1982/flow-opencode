@@ -18,6 +18,7 @@ import {
 	deriveRetainedFailure,
 	RetainedScenarioEvidenceSchema,
 } from "./grader-input.js";
+import { nativeActorBindingIssues } from "./native-actors.js";
 import {
 	inspectArtifact,
 	instructionDelivery,
@@ -232,6 +233,11 @@ function regradeAttempts(
 				evidence.failureObservation !== undefined)
 		)
 			throw new Error("Bundled product attempt carries a failure claim.");
+		const nativeActorIssues = nativeActorBindingIssues(evidence);
+		if (nativeActorIssues.length > 0)
+			throw new Error(
+				`Bundled attempt ${attempt.attemptId} native actor binding differs: ${nativeActorIssues.join(" ")}`,
+			);
 		for (const id of retainedManager.sessionIds) {
 			if (sessions.has(id))
 				throw new Error("Bundled attempts reuse manager evidence.");

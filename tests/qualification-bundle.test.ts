@@ -11,7 +11,9 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
+import { AUTO_SCENARIOS } from "../evals/auto-scenarios.js";
 import { canonicalJson, canonicalSha256 } from "../evals/canonical-json.js";
+import { deriveConformanceOutcome } from "../evals/conformance-evidence.js";
 import {
 	pseudonymizeEvalIds,
 	RetainedScenarioEvidenceSchema,
@@ -27,6 +29,8 @@ import {
 	decodeReviewerPacket,
 	ReviewerPacketSchema,
 } from "../evals/reviewer-packet-bytes.js";
+
+import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -749,3 +753,100 @@ test.each(["malformed-base64", "encoded-private-path"])(
 		);
 	},
 );
+
+test("prospective autonomous case regrades sealed evidence and rejects a correctly resealed missing-lineage mutant", async () => {
+	const outputRoot = await mkdtemp(join(tmpdir(), "flow-bundle-auto-case-"));
+	temporary.push(outputRoot);
+	const scenario = AUTO_SCENARIOS.find(
+		(value) => value.id === "auto-two-features-evidence",
+	);
+	if (!scenario) throw new Error("Missing prospective case");
+	const original = autoQualifiedOutcome("two");
+	const evidence = RetainedScenarioEvidenceSchema.parse(
+		pseudonymizeEvalIds({
+			schemaVersion: 1,
+			attempt: {
+				attemptId: "attempt-1",
+				cellId: "cell",
+				caseId: scenario.id,
+				repetition: 0,
+				model: {
+					routeProvider: "openai",
+					gateway: null,
+					family: "gpt-6-sol",
+					model: "gpt-6-sol",
+					revision: null,
+				},
+			},
+			actors: [],
+			guidanceLoads: [],
+			gradeInput: { schemaVersion: 1, ...original },
+			usage: { durationMs: 0, outputTokens: 0, costUsd: null },
+		}),
+	);
+	const fixture = input();
+	const written = await writeQualificationBundle({
+		input: {
+			...fixture,
+			packageVersion: "9.4.0",
+			files: fixture.files.map((file) =>
+				file.role === "transcript" ? { ...file, bytes: json(evidence) } : file,
+			),
+		},
+		outputRoot,
+	});
+	const sealed = await readQualificationBundle(written.path);
+	const transcript = sealed.files.find(({ ref }) => ref.role === "transcript");
+	if (!transcript) throw new Error("Missing sealed evidence");
+	const regraded = RetainedScenarioEvidenceSchema.parse(
+		JSON.parse(transcript.bytes.toString("utf8")),
+	);
+	expect(
+		deriveConformanceOutcome({
+			evidence: regraded,
+			check: scenario.check,
+			scenarioId: scenario.id,
+			model: "openai/gpt-6-sol",
+			attempt: 1,
+		}).passed,
+	).toBe(true);
+	const mutated = structuredClone(regraded);
+	delete mutated.gradeInput.hostTrace;
+	const bytes = json(mutated);
+	const sha256 = `sha256:${new Bun.CryptoHasher("sha256").update(bytes).digest("hex")}`;
+	const objectPath = `objects/sha256-${sha256.slice("sha256:".length)}`;
+	await writeFile(join(written.path, objectPath), bytes);
+	await rm(join(written.path, transcript.ref.object));
+	const { bundleId: _oldId, bundleSha256: _oldSha, ...base } = written.manifest;
+	const altered = {
+		...base,
+		files: base.files.map((file) =>
+			file.role === "transcript"
+				? { ...file, object: objectPath, sha256, bytes: bytes.byteLength }
+				: file,
+		),
+	};
+	const bundleSha256 = canonicalSha256("flow-qualification-bundle-v1", altered);
+	const bundleId = `qb1-${bundleSha256.slice("sha256:".length)}`;
+	await writeFile(
+		join(written.path, "bundle.json"),
+		json({ ...altered, bundleId, bundleSha256 }),
+	);
+	const moved = join(outputRoot, bundleId);
+	await rename(written.path, moved);
+	const reread = await readQualificationBundle(moved);
+	const changed = reread.files.find(({ ref }) => ref.role === "transcript");
+	if (!changed) throw new Error("Missing resealed transcript");
+	const mutantEvidence = RetainedScenarioEvidenceSchema.parse(
+		JSON.parse(changed.bytes.toString("utf8")),
+	);
+	expect(
+		deriveConformanceOutcome({
+			evidence: mutantEvidence,
+			check: scenario.check,
+			scenarioId: scenario.id,
+			model: "openai/gpt-6-sol",
+			attempt: 1,
+		}).passed,
+	).toBe(false);
+});

@@ -5,6 +5,7 @@
 // observed tool-call sequence — never prompt wording — so a prompt can be
 // rewritten freely as long as these still hold.
 
+import { AUTO_SCENARIOS } from "./auto-scenarios.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
 import { askedQuestions, type Scenario } from "./harness.js";
 
@@ -1121,6 +1122,7 @@ const INSPECTION_AUDIT_FIXTURE: Record<string, string> = {
  * ungated until a full matrix gives it a baseline.
  */
 export const SCENARIOS: readonly Scenario[] = [
+	...AUTO_SCENARIOS,
 	{
 		id: "happy-path",
 		description:

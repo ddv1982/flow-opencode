@@ -320,7 +320,10 @@ export function attemptsForScenario(
 	sampling: EvalSampling,
 ): number {
 	if (sampling.kind === "ordinary") return sampling.repeat;
-	return releaseAttemptsFor(scenarioId);
+	return releaseAttemptsFor(
+		scenarioId,
+		sampling.packageVersion ?? packageJson.version,
+	);
 }
 
 export function releaseScenarios(
