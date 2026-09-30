@@ -4,6 +4,7 @@ import { isArtifactPath } from "../src/domain/artifact.js";
 import { canonicalSha256 } from "./canonical-json.js";
 import { mapStrings } from "./cassette.js";
 import type { ObservedToolCall, Outcome } from "./harness.js";
+import { HostTraceSchema, NativeToolProvenanceSchema } from "./host-trace.js";
 
 const TextSchema = z
 	.string()
@@ -20,6 +21,7 @@ const ProviderErrorEnvelopeSchema = z
 	.strict();
 const ToolCallSchema: z.ZodType<ObservedToolCall> = z
 	.object({
+		native: NativeToolProvenanceSchema.optional(),
 		tool: TextSchema,
 		status: z.enum(["pending", "running", "completed", "error"]),
 		sessionIndex: z.number().int().safe().nonnegative(),
@@ -34,6 +36,7 @@ const ToolCallSchema: z.ZodType<ObservedToolCall> = z
 export const ScenarioGradeInputSchema = z
 	.object({
 		schemaVersion: z.literal(1),
+		hostTrace: HostTraceSchema.optional(),
 		flowCalls: z.array(ToolCallSchema).max(4096),
 		allCalls: z.array(ToolCallSchema).max(4096),
 		session: JsonRecordSchema.nullable(),
@@ -205,6 +208,7 @@ export const RetainedScenarioEvidenceSchema = z
 
 export type ScenarioGradeInput = Pick<
 	Outcome,
+	| "hostTrace"
 	| "flowCalls"
 	| "allCalls"
 	| "session"
@@ -427,6 +431,9 @@ export function scenarioGradeInput(
 ): RetainedScenarioGradeInput {
 	return ScenarioGradeInputSchema.parse({
 		schemaVersion: 1,
+		...(outcome.hostTrace === undefined
+			? {}
+			: { hostTrace: outcome.hostTrace }),
 		flowCalls: outcome.flowCalls,
 		allCalls: outcome.allCalls,
 		session: outcome.session,
