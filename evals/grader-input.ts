@@ -129,7 +129,14 @@ export const ScenarioGradeInputSchema = z
 		for (const field of ["allCalls", "flowCalls"] as const) {
 			const seen = new Set<string>();
 			for (const [index, call] of value[field].entries()) {
-				if (!call.native) continue;
+				if (!call.native) {
+					context.addIssue({
+						code: "custom",
+						path: [field, index, "native"],
+						message: "Observed host trace requires native call provenance.",
+					});
+					continue;
+				}
 				const native = call.native;
 				const observed = tools.get(native.partId);
 				if (

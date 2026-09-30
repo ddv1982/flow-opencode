@@ -110,6 +110,12 @@ test("retained native call references bind to their observed tool parts", () => 
 	for (const field of ["allCalls", "flowCalls"] as const) {
 		for (const [label, mutate] of [
 			[
+				"missing native",
+				(value: Record<string, unknown>) => {
+					Reflect.deleteProperty(value, "native");
+				},
+			],
+			[
 				"unknown part",
 				(value: Record<string, unknown>) => {
 					record(value.native).partId = "prt_unknown";
