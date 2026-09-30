@@ -342,7 +342,10 @@ function successful(call: ObservedToolCall): Record<string, unknown> | null {
 		? record(output.workflowData)
 		: null;
 }
-function witness(call: ObservedToolCall, trace: Trace): Witness | null {
+export function nativeToolWitness(
+	call: ObservedToolCall,
+	trace: Trace,
+): Witness | null {
 	if (!call.native) return null;
 	const message = trace.messages.find(
 		(candidate) =>
@@ -363,7 +366,7 @@ function witness(call: ObservedToolCall, trace: Trace): Witness | null {
 		: null;
 }
 function reviewer(call: ObservedToolCall, trace: Trace): Witness | null {
-	const observed = witness(call, trace);
+	const observed = nativeToolWitness(call, trace);
 	if (!observed || call.agent !== "flow-reviewer") return null;
 	const session = trace.sessions.find(
 		(candidate) => candidate.id === observed.message.sessionId,
