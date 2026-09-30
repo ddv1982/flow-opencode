@@ -11,7 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
-import { canonicalJson } from "../evals/canonical-json.js";
+import { canonicalJson, canonicalSha256 } from "../evals/canonical-json.js";
 import {
 	pseudonymizeEvalIds,
 	RetainedScenarioEvidenceSchema,
@@ -23,6 +23,7 @@ import {
 	readStableQualificationInput,
 	writeQualificationBundle,
 } from "../evals/qualification-bundle.js";
+import { ReviewerPacketSchema } from "../evals/reviewer-packet-bytes.js";
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -571,4 +572,121 @@ test("sealed transcript retains optional native trace for the retained regrade s
 		JSON.parse(transcript.bytes.toString("utf8")),
 	);
 	expect(retained.gradeInput.hostTrace).toEqual(evidence.gradeInput.hostTrace);
+});
+
+function originalPacketObservation(diff: string) {
+	const digest = `sha256:${"a".repeat(64)}`;
+	const packet = {
+		version: 1,
+		sessionId: "session:original",
+		featureId: "feature",
+		runId: "run",
+		baseline: { version: 1, sha256: digest },
+		sourceDigest: digest,
+		provenance: "captured-before-run",
+		complete: true,
+		preservedPreexisting: { count: 0, digest, entries: [] },
+		changes: [
+			{
+				path: "fixture.txt",
+				before: { kind: "file", mode: 420, digest },
+				after: { kind: "file", mode: 420, digest },
+				binary: false,
+				preexistingDirty: false,
+				diff,
+			},
+		],
+	};
+	expect(ReviewerPacketSchema.safeParse(packet).success).toBe(true);
+	return {
+		kind: "observed",
+		assignmentId: "id_assignment",
+		sourceDigest: digest,
+		envelopeBase64: Buffer.from(
+			JSON.stringify({
+				owner: "flow-review-evidence",
+				version: 1,
+				kind: "packet",
+				packet,
+			}),
+		).toString("base64"),
+	};
+}
+
+test("sealing rejects schema-valid secret-shaped original diff hidden in base64", async () => {
+	const outputRoot = await mkdtemp(
+		join(tmpdir(), "flow-bundle-packet-secret-"),
+	);
+	temporary.push(outputRoot);
+	const fixture = input();
+	const transcript = json({
+		gradeInput: {
+			packetBytes: [originalPacketObservation(`api_key: sk-${"a".repeat(32)}`)],
+		},
+	});
+	await expect(
+		writeQualificationBundle({
+			input: {
+				...fixture,
+				files: fixture.files.map((file) =>
+					file.role === "transcript" ? { ...file, bytes: transcript } : file,
+				),
+			},
+			outputRoot,
+		}),
+	).rejects.toThrow(/Unsafe or invalid original packet/);
+});
+
+test("recomputed sealed hashes do not hide a malformed original packet observation", async () => {
+	const outputRoot = await mkdtemp(
+		join(tmpdir(), "flow-bundle-packet-mutant-"),
+	);
+	temporary.push(outputRoot);
+	const fixture = input(),
+		observation = originalPacketObservation("safe diff");
+	const written = await writeQualificationBundle({
+		input: {
+			...fixture,
+			files: fixture.files.map((file) =>
+				file.role === "transcript"
+					? {
+							...file,
+							bytes: json({ gradeInput: { packetBytes: [observation] } }),
+						}
+					: file,
+			),
+		},
+		outputRoot,
+	});
+	const oldRef = written.manifest.files.find(
+		(file) => file.role === "transcript",
+	);
+	if (!oldRef) throw new Error("Missing transcript object");
+	const changed = json({
+		gradeInput: { packetBytes: [{ ...observation, envelopeBase64: "!" }] },
+	});
+	const sha256 = `sha256:${new Bun.CryptoHasher("sha256").update(changed).digest("hex")}`;
+	const objectPath = `objects/sha256-${sha256.slice("sha256:".length)}`;
+	await writeFile(join(written.path, objectPath), changed);
+	await rm(join(written.path, oldRef.object));
+	const { bundleId: _oldId, bundleSha256: _oldSha, ...base } = written.manifest;
+	const altered = {
+		...base,
+		files: base.files.map((file) =>
+			file === oldRef
+				? { ...file, object: objectPath, sha256, bytes: changed.byteLength }
+				: file,
+		),
+	};
+	const bundleSha256 = canonicalSha256("flow-qualification-bundle-v1", altered);
+	const bundleId = `qb1-${bundleSha256.slice("sha256:".length)}`;
+	await writeFile(
+		join(written.path, "bundle.json"),
+		json({ ...altered, bundleId, bundleSha256 }),
+	);
+	const moved = join(outputRoot, bundleId);
+	await rename(written.path, moved);
+	await expect(readQualificationBundle(moved)).rejects.toThrow(
+		/Unsafe or invalid original packet/,
+	);
 });

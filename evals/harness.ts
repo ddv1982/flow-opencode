@@ -96,6 +96,10 @@ import {
 	RecoveryTreatmentSchema,
 	validateTreatmentBudget,
 } from "./recovery-decisions/treatment.js";
+import {
+	collectReviewerPacketBytes,
+	type ReviewerPacketBytes,
+} from "./reviewer-packet-bytes.js";
 import { normalizeStudyUsage, type StudyUsage } from "./study-usage.js";
 
 const STARTUP_TIMEOUT_MS = 180_000;
@@ -329,6 +333,7 @@ type ProviderErrorObservation = Readonly<{
 }>;
 
 export type Outcome = {
+	readonly packetBytes?: readonly ReviewerPacketBytes[] | undefined;
 	readonly hostTrace?: HostTrace | undefined;
 	/** Ordered `flow_*` calls only — the workflow's observable spine. */
 	readonly flowCalls: readonly ObservedToolCall[];
@@ -3025,6 +3030,10 @@ export class EvalHost {
 		}
 		const currentWorkspace = await captureWorkspaceSnapshot(this.project);
 		return {
+			packetBytes: collectReviewerPacketBytes(allCalls, [
+				...(session ? [session] : []),
+				...archives,
+			]),
 			hostTrace: collectHostTrace({
 				runnerRootSessionIds: sessionIds,
 				directory: this.project,

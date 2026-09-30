@@ -17,6 +17,7 @@ import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { z } from "zod";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { scrubSecrets } from "./cassette.js";
+import { ReviewerPacketBytesListSchema } from "./reviewer-packet-bytes.js";
 
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
 const MAX_BUNDLE_BYTES = 128 * 1024 * 1024;
@@ -274,6 +275,24 @@ function normalizedBytes(file: QualificationBundleFile): Buffer {
 			);
 		} catch {
 			throw new Error("Qualification bundle JSON is malformed.");
+		}
+		if (
+			file.role === "transcript" &&
+			typeof parsed === "object" &&
+			parsed !== null &&
+			"gradeInput" in parsed
+		) {
+			const gradeInput = parsed.gradeInput;
+			if (
+				typeof gradeInput === "object" &&
+				gradeInput !== null &&
+				"packetBytes" in gradeInput
+			) {
+				const packets = gradeInput.packetBytes;
+				if (!Array.isArray(packets) || packets.length > 128)
+					throw new Error("Invalid bounded packet observations.");
+				ReviewerPacketBytesListSchema.parse(packets);
+			}
 		}
 		const canonical = canonicalJson(parsed);
 		assertSafeText(canonical);
