@@ -820,3 +820,207 @@ test("simulated missing parentage fails closed for auto but fresh manual flow-ru
 		automation: { active: false },
 	});
 });
+
+test.each(["success", "failure"] as const)(
+	"late handback %s cannot replace fresh retry direction or its exact start",
+	async (outcome) => {
+		const s = await failedTwice();
+		const a = automatic(s, "off");
+		const id = s.repository.session!.id,
+			current = revision(s.repository);
+		let projection = {
+			sessionId: id,
+			status: "blocked",
+			revision: current - 1,
+			nextAction: "await-user-direction",
+		};
+		let count = 0,
+			release: () => void = () => {},
+			started: () => void = () => {};
+		const pending = new Promise<void>((resolve) => {
+			started = resolve;
+		});
+		let lateMetadata: Readonly<Record<string, unknown>> = {};
+		const driver = new AutoDriveCoordinator({
+			recovery: a.controller,
+			createToken: () => "fixed-old-token",
+			readProjection: async () => projection,
+			prompt: async (host, _text, delivery, metadata) => {
+				count++;
+				if (count === 1) {
+					await driver.observeMessage(
+						host,
+						delivery,
+						[{ type: "text", synthetic: true, metadata }],
+						"first-handback",
+					);
+					a.controller.observeMessage(host, "first-handback", true, true);
+					return;
+				}
+				lateMetadata = metadata;
+				started();
+				await new Promise<void>((resolve, reject) => {
+					release = () =>
+						outcome === "failure"
+							? reject(new Error("Obsolete prompt failed"))
+							: resolve();
+				});
+			},
+		});
+		const delivery = {
+			agent: "build",
+			model: { providerID: "fixture", modelID: "scripted" },
+		};
+		const initial = await driver.activate("host");
+		await driver.observeMessage(
+			"host",
+			delivery,
+			[{ type: "text", synthetic: true, metadata: initial }],
+			"original",
+		);
+		await driver.onIdle("host");
+		projection = {
+			sessionId: id,
+			status: "blocked",
+			revision: current,
+			nextAction: "await-user-direction",
+		};
+		const idle = driver.onIdle("host");
+		await pending;
+		await driver.observeMessage(
+			"host",
+			delivery,
+			[{ type: "text", text: "Retry the approved task once" }],
+			"fresh-user",
+		);
+		a.controller.observeMessage("host", "fresh-user", false);
+		const observed = await driver.observeMessage(
+			"host",
+			delivery,
+			[{ type: "text", synthetic: true, metadata: lateMetadata }],
+			"late-handback",
+		);
+		if (observed === "accepted-continuation")
+			a.controller.observeMessage("host", "late-handback", true, true);
+		release();
+		await idle;
+		expect(observed).toBe("stale-continuation");
+		expect(driver.compactionContext("host")).not.toBeNull();
+		const fresh = a.service("fresh-manager", "fresh-user");
+		const reset = {
+			operationId: "fresh-race-reset",
+			expectedRevision: current,
+			featureId: FEATURE,
+		};
+		expect((await fresh.featureReset({ request: reset })).status).toBe("ok");
+		expect((await fresh.featureReset({ request: reset })).status).toBe("ok");
+		expect(
+			(
+				await fresh.runStart({
+					request: {
+						operationId: "fresh-race-start",
+						expectedRevision: revision(s.repository),
+						featureId: FEATURE,
+					},
+				})
+			).status,
+		).toBe("ok");
+		expect(s.repository.session!.runs).toHaveLength(3);
+		await recordObservedValidation(s.repository, {
+			captureId: "race-third-pass",
+		});
+		await s.manual.reviewStart({
+			request: {
+				operationId: "race-third-review",
+				expectedRevision: revision(s.repository),
+				featureId: FEATURE,
+				artifactsChanged: [],
+				packet: { summary: "Independent retry review", riskLenses: [] },
+			},
+		});
+		const findingId =
+			s.repository.session!.runs[0]!.reviews[0]!.result!.findings[0]!.findingId;
+		await submitReview(s.manual, s.repository, {
+			suffix: "race-third-failed",
+			summary: "Guard still missing",
+			verdict: "failed",
+			findings: [
+				{
+					findingId,
+					severity: "blocking",
+					summary: "Input guard missing",
+					evidence: "fixture.ts:1",
+				},
+			],
+		});
+		expect(
+			(
+				await fresh.featureReset({
+					request: {
+						operationId: "race-no-new-credit",
+						expectedRevision: revision(s.repository),
+						featureId: FEATURE,
+					},
+				})
+			).status,
+		).toBe("error");
+	},
+);
+
+test("obsolete initial prompt failure preserves a renewed checkpoint reply", async () => {
+	let release: () => void = () => {},
+		started: () => void = () => {};
+	const pending = new Promise<void>((resolve) => {
+		started = resolve;
+	});
+	let initialMetadata: Readonly<Record<string, unknown>> = {};
+	const driver = new AutoDriveCoordinator({
+		readProjection: async () => ({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		}),
+		prompt: async (host, _text, delivery, metadata) => {
+			initialMetadata = metadata;
+			await driver.observeMessage(
+				host,
+				delivery,
+				[{ type: "text", synthetic: true, metadata }],
+				"initial-route",
+			);
+			started();
+			await new Promise<void>((_resolve, reject) => {
+				release = () => reject(new Error("Obsolete initial prompt failed"));
+			});
+		},
+	});
+	const delivery = {
+		agent: "build",
+		model: { providerID: "fixture", modelID: "scripted" },
+	};
+	const metadata = await driver.activate("host");
+	await driver.observeMessage(
+		"host",
+		delivery,
+		[{ type: "text", synthetic: true, metadata }],
+		"original",
+	);
+	const idle = driver.onIdle("host");
+	await pending;
+	await driver.observeMessage(
+		"host",
+		delivery,
+		[{ type: "text", text: "Use the clarified approved goal" }],
+		"fresh-user",
+	);
+	const observed = await driver.observeMessage(
+		"host",
+		delivery,
+		[{ type: "text", synthetic: true, metadata: initialMetadata }],
+		"late-initial",
+	);
+	release();
+	await idle;
+	expect(observed).toBe("stale-continuation");
+	expect(driver.compactionContext("host")).not.toBeNull();
+});

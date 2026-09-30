@@ -1,6 +1,14 @@
 import type { PreparedValidation } from "../../application/prepare-validation.js";
 import type { RecoveryController } from "../../application/recovery-policy.js";
 import type { SourceDigest } from "../../domain/session.js";
+import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
+import {
+	decideOnIdle,
+	type IdleDecision,
+	isHandback,
+	isPendingReviewer,
+} from "./auto-drive-decision.js";
+import { autoHandbackMessage } from "./auto-drive-messages.js";
 import {
 	type AutoValidationOrigin,
 	type AutoValidationReceipt,
@@ -13,14 +21,6 @@ export type {
 	AutoValidationOrigin,
 	AutoValidationReceipt,
 } from "./auto-drive-validation.js";
-
-import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
-import {
-	decideOnIdle,
-	type IdleDecision,
-	isHandback,
-	isPendingReviewer,
-} from "./auto-drive-decision.js";
 export const FLOW_AUTO_METADATA_KEY = "opencode-plugin-flow/auto";
 export type AutoGoalIntent =
 	| "inspection-deliverable"
@@ -189,10 +189,6 @@ const CONTINUATION_ROUTE = [
 	"for a fresh close use compact session id/revision plus a fresh operation id,",
 	"and replay archiveRetry exactly from its projected request.",
 ].join(" ");
-const HANDBACK_ROUTE = [
-	"Call flow_status with the compact view first.",
-	"Print findingsDigest as the user-facing list. Do not invent ids.",
-].join(" ");
 
 function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
 	let token: string | null = null;
@@ -286,24 +282,20 @@ export class AutoDriveCoordinator {
 		if (!isHandback(projection)) return;
 		if (lease.handbackPromptedRevision === projection.revision) return;
 		if (!lease.delivery) return;
+		const token = lease.token;
 		lease.handbackPromptedRevision = projection.revision;
 		lease.messageId = null;
 		this.#setTiming("active");
 		lease.inFlight = "prompt";
 		try {
-			const handback = [
-				`Flow is handing control back at compact revision ${projection.revision}.`,
-				HANDBACK_ROUTE,
-				`Then follow ${projection.nextAction} or stop at await-user-direction.`,
-				"Do not expand the approved goal.",
-			].join(" ");
 			await this.#options.prompt(
 				lease.hostSessionId,
-				`${handback}\n\n${FLOW_MANAGER_KERNEL}`,
+				autoHandbackMessage(projection),
 				lease.delivery,
-				{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+				{ [FLOW_AUTO_METADATA_KEY]: token },
 			);
 		} catch (error) {
+			if (lease.token !== token) return;
 			this.#stop(
 				lease,
 				`Flow auto prompt failed: ${String(error)}`,
@@ -472,6 +464,7 @@ export class AutoDriveCoordinator {
 		if (!lease.checkpoint && lease.inFlight !== "status")
 			this.deactivate(hostSessionId);
 		else {
+			lease.token = crypto.randomUUID();
 			lease.messageId = messageId;
 			lease.delivery = delivery;
 			lease.pendingReply = true;
@@ -841,20 +834,23 @@ export class AutoDriveCoordinator {
 						)
 					: null;
 			if (proposal && lease.delivery) {
+				const token = lease.token;
 				this.#waitAt(lease, projection.revision);
 				lease.handbackPromptedRevision = projection.revision;
 				this.#setTiming("active");
 				lease.inFlight = "prompt";
 				await this.#options
 					.prompt(hostSessionId, proposal, lease.delivery, {
-						[FLOW_AUTO_METADATA_KEY]: lease.token,
+						[FLOW_AUTO_METADATA_KEY]: token,
 					})
-					.catch((error) =>
-						this.#stop(
-							lease,
-							`Flow recovery prompt failed: ${String(error)}`,
-							"prompt-error",
-						),
+					.catch(
+						(error) =>
+							lease.token === token &&
+							this.#stop(
+								lease,
+								`Flow recovery prompt failed: ${String(error)}`,
+								"prompt-error",
+							),
 					);
 				return;
 			}
@@ -880,6 +876,7 @@ export class AutoDriveCoordinator {
 								: "no-progress",
 					);
 				case "prompt-initial": {
+					const token = lease.token;
 					lease.lastPromptedRevision = 0;
 					lease.inFlight = "prompt";
 					// Narrowing only: decideOnIdle already required hasDelivery.
@@ -889,20 +886,23 @@ export class AutoDriveCoordinator {
 							hostSessionId,
 							`${INITIAL_ROUTE}\n\n${FLOW_MANAGER_KERNEL}`,
 							lease.delivery,
-							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
+							{ [FLOW_AUTO_METADATA_KEY]: token },
 						)
-						.catch((error) =>
-							this.#stop(
-								lease,
-								`Flow auto prompt failed: ${String(error)}`,
-								"prompt-error",
-							),
+						.catch(
+							(error) =>
+								lease.token === token &&
+								this.#stop(
+									lease,
+									`Flow auto prompt failed: ${String(error)}`,
+									"prompt-error",
+								),
 						);
 					return;
 				}
-				case "handback-and-wait":
+				case "handback-and-wait": {
+					const token = lease.token;
 					await this.#promptHandback(lease, projection);
-					if (this.#lease !== lease) return;
+					if (this.#lease !== lease || lease.token !== token) return;
 					this.#disposition = {
 						state: "waiting",
 						reason:
@@ -911,15 +911,17 @@ export class AutoDriveCoordinator {
 								: "user-direction",
 					};
 					return void this.#waitAt(lease, projection.revision);
+				}
 				case "answered":
 					if (lease.checkpoint) lease.checkpoint.answered = true;
 					this.#setTiming("active");
 					return;
 				case "handback-or-deactivate": {
+					const token = lease.token;
 					const already =
 						lease.handbackPromptedRevision === projection.revision;
 					await this.#promptHandback(lease, projection);
-					if (this.#lease !== lease) return;
+					if (this.#lease !== lease || lease.token !== token) return;
 					if (
 						!already &&
 						lease.handbackPromptedRevision === projection.revision

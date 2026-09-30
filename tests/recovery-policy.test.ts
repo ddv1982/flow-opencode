@@ -1391,6 +1391,11 @@ test("registered tools share the controller across file-backed service instances
 			}),
 			leadership,
 			auto,
+			async (id) => ({
+				id,
+				directory,
+				...(id === "reviewer-child" ? { parentID: "host" } : {}),
+			}),
 		);
 		const ctx = {
 			sessionID: "host",
@@ -1542,6 +1547,7 @@ test("registered tools share the controller across file-backed service instances
 		).toBe("error");
 		const reviewer = {
 			...ctx,
+			sessionID: "reviewer-child",
 			agent: "flow-reviewer",
 			messageID: "reviewer-result",
 		};
