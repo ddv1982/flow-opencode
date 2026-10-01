@@ -436,6 +436,33 @@ describe("Flow prompt economy", () => {
 		);
 	});
 
+	test("reviewer tool restrictions keep workspace readers available", () => {
+		const reviewer = compileFlowPromptSurface("flow-reviewer").replace(
+			/\s+/g,
+			" ",
+		);
+		expect(reviewer).toContain(
+			"The only Flow tools you may call are `flow_status`",
+		);
+		expect(reviewer).not.toContain("Call only `flow_status`");
+	});
+
+	test("inspection reviewers read unchanged current source beyond the deliverable diff", () => {
+		const reviewer = compileFlowPromptSurface("flow-reviewer").replace(
+			/\s+/g,
+			" ",
+		);
+		expect(reviewer).toContain(
+			"For an inspect feature, read the current workspace source needed to verify its approved claims.",
+		);
+		expect(reviewer).toContain(
+			"Unchanged source absent from the diff remains available through read, glob, and grep.",
+		);
+		expect(reviewer).toContain(
+			"Attempt those workspace reads before treating source as unavailable.",
+		);
+	});
+
 	test("invokes each status view once per surface", () => {
 		const status = compileFlowPromptSurface("flow-status");
 		expectOnce(status, 'flow_status { request: { view: "compact" } }');
