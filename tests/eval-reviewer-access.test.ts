@@ -474,7 +474,12 @@ test("redacted retained native evidence distinguishes matching, mismatched and m
 		expect(checkAutonomousLineage(evidence.gradeInput)).toEqual(
 			continuation === "matching"
 				? []
-				: ["Unknown or mismatched synthetic Flow continuation."],
+				: continuation === "mismatched"
+					? ["Unknown or mismatched synthetic Flow continuation."]
+					: [
+							"Unknown or mismatched synthetic Flow continuation.",
+							"Unclassified native root user message.",
+						],
 		);
 	}
 });
