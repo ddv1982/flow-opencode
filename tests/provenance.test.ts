@@ -620,4 +620,48 @@ describe("eval provenance", () => {
 			token: "[redacted]",
 		});
 	});
+
+	test("preserves only valid nullable Flow token digests", () => {
+		const sha256 = `sha256:${"a".repeat(64)}`;
+		const transcript = redactTranscript({
+			projectPath: "/tmp/project",
+			value: {
+				digest: { flowTokenSha256: sha256 },
+				absent: { flowTokenSha256: null },
+				otherFields: {
+					token: sha256,
+					accessToken: sha256,
+					api_key: sha256,
+					FlowTokenSha256: sha256,
+					flowTokenSha256Extra: sha256,
+					flow_token_sha256: sha256,
+				},
+				invalid: [
+					"raw-token",
+					`sha256:${"a".repeat(63)}`,
+					`sha256:${"a".repeat(65)}`,
+					`sha256:${"A".repeat(64)}`,
+					`${sha256}\n`,
+					`${sha256}raw-secret`,
+					42,
+					{ sha256 },
+				].map((flowTokenSha256) => ({ flowTokenSha256 })),
+			},
+		});
+		expect(JSON.parse(transcript.text)).toEqual({
+			digest: { flowTokenSha256: sha256 },
+			absent: { flowTokenSha256: null },
+			otherFields: {
+				token: "[redacted]",
+				accessToken: "[redacted]",
+				api_key: "[redacted]",
+				FlowTokenSha256: "[redacted]",
+				flowTokenSha256Extra: "[redacted]",
+				flow_token_sha256: "[redacted]",
+			},
+			invalid: Array.from({ length: 8 }, () => ({
+				flowTokenSha256: "[redacted]",
+			})),
+		});
+	});
 });

@@ -1,10 +1,16 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
+import { deriveConformanceOutcome } from "../evals/conformance-evidence.js";
 import {
 	pseudonymizeEvalIds,
+	RetainedScenarioEvidenceSchema,
 	ScenarioGradeInputSchema,
 } from "../evals/grader-input.js";
 import { collectHostTrace } from "../evals/host-trace.js";
+import {
+	normalizeRequestedModel,
+	redactTranscript,
+} from "../evals/provenance.js";
 import {
 	checkAutonomousLineage,
 	checkReviewerEvidenceAccess,
@@ -376,6 +382,106 @@ test("complete inline context and bound diff read before child submission pass",
 	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
 		[],
 	);
+});
+
+function retainedAccessEvidence(
+	input: Awaited<ReturnType<typeof accessFixture>>["input"],
+) {
+	const value = {
+		schemaVersion: 1,
+		attempt: {
+			attemptId: "attempt-cell-native-access",
+			cellId: "cell-native-access",
+			caseId: "native-access",
+			repetition: 0,
+			model: normalizeRequestedModel({
+				modelId: "openai/gpt-6-sol",
+				gateway: null,
+				family: "gpt-6-sol",
+				revision: null,
+			}),
+		},
+		actors: [],
+		guidanceLoads: [],
+		gradeInput: { schemaVersion: 1, ...input },
+		usage: { durationMs: 100, outputTokens: 200, costUsd: null },
+		failure: null,
+	};
+	const transcript = redactTranscript({ value, projectPath: "/workspace" });
+	return RetainedScenarioEvidenceSchema.parse(JSON.parse(transcript.text));
+}
+
+test("redacted retained native evidence preserves nulls, token digests and reviewer grading", async () => {
+	const { input } = await accessFixture();
+	const firstCall = input.allCalls[0];
+	if (!firstCall) throw new Error("Missing reviewer call");
+	firstCall.metadata = { accessToken: "raw-access", api_key: "raw-key" };
+	const evidence = retainedAccessEvidence(input);
+	const trace = evidence.gradeInput.hostTrace;
+	const root = trace?.kind === "observed" ? trace.messages[0] : null;
+	if (root?.role !== "user") throw new Error("Missing retained root request");
+	expect(root.parts.map((part) => part.flowTokenSha256)).toEqual([
+		null,
+		"sha256:cf5adbc869d30049269d2bec7d9633d0896c3316c48ccb953d7aa319cb854ec4",
+	]);
+	expect(evidence.gradeInput.allCalls[0]?.metadata).toEqual({
+		accessToken: "[redacted]",
+		api_key: "[redacted]",
+	});
+	const outcome = deriveConformanceOutcome({
+		evidence,
+		check: (gradeInput) => [
+			...checkAutonomousLineage(gradeInput),
+			...checkReviewerEvidenceAccess(gradeInput, gradeInput.session),
+		],
+		scenarioId: "native-access",
+		model: "openai/gpt-6-sol",
+		attempt: 0,
+	});
+	expect(outcome.passed).toBe(true);
+	expect(outcome.issues).toEqual([]);
+});
+
+test("redacted retained native evidence distinguishes matching, mismatched and missing continuations", async () => {
+	for (const continuation of ["matching", "mismatched", "missing"] as const) {
+		const { input } = await accessFixture();
+		if (input.hostTrace.kind !== "observed")
+			throw new Error("Missing observed trace");
+		const root = input.hostTrace.messages[0];
+		if (root?.role !== "user" || !root.parts[1])
+			throw new Error("Missing root request marker");
+		input.hostTrace.messages.push({
+			id: "msg_continuation",
+			sessionId: root.sessionId,
+			order: 1,
+			created: 20,
+			role: "user",
+			parts: [
+				{
+					...root.parts[1],
+					id: "prt_continuation",
+					partIndex: 0,
+					flowTokenSha256:
+						continuation === "matching"
+							? root.parts[1].flowTokenSha256
+							: continuation === "missing"
+								? null
+								: `sha256:${"b".repeat(64)}`,
+				},
+			],
+		});
+		const evidence = retainedAccessEvidence(input);
+		expect(checkAutonomousLineage(evidence.gradeInput)).toEqual(
+			continuation === "matching"
+				? []
+				: continuation === "mismatched"
+					? ["Unknown or mismatched synthetic Flow continuation."]
+					: [
+							"Unknown or mismatched synthetic Flow continuation.",
+							"Unclassified native root user message.",
+						],
+		);
+	}
 });
 
 test("source-file read without diff pages cannot pass reviewer access", async () => {

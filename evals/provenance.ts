@@ -374,8 +374,22 @@ function isTokenCountField(key: string, value: unknown): boolean {
 	);
 }
 
+function isFlowTokenDigestField(key: string, value: unknown): boolean {
+	return (
+		key === "flowTokenSha256" &&
+		(value === null ||
+			(typeof value === "string" &&
+				value.length === 71 &&
+				/^sha256:[a-f0-9]{64}$/.test(value)))
+	);
+}
+
 function isSensitiveField(key: string, value: unknown): boolean {
-	return SENSITIVE_FIELD.test(key) && !isTokenCountField(key, value);
+	return (
+		SENSITIVE_FIELD.test(key) &&
+		!isTokenCountField(key, value) &&
+		!isFlowTokenDigestField(key, value)
+	);
 }
 
 function redactSensitiveFields(value: unknown): unknown {
