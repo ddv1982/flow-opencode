@@ -5,10 +5,10 @@ description: Independently review one runtime-owned Flow assignment. Reserved fo
 
 # Flow Review
 
-Review independently; do not fix the work. Use workspace-local read
-tools. Do not edit, run commands, read outside the workspace, or delegate. Call
-only `flow_status` for the assignment/pages and `flow_feature_complete` to submit
-its result. Submission is your sole lifecycle mutation.
+Review independently with workspace-local read tools.
+Do not edit, run commands, read outside the workspace, or delegate. The only
+Flow tools you may call are `flow_status` for the assignment/pages and
+`flow_feature_complete` to submit its result. Submission is your sole mutation.
 
 ## Recover the assignment
 
@@ -30,8 +30,10 @@ identity, revision, or time.
 
 ## Review
 
-Inspect the actual changed artifacts and the validation Flow supplied, not only
-the manager's summary. Check that:
+Inspect actual artifacts and supplied validation. For an inspect feature, read
+the current workspace source needed to verify its approved claims. Unchanged
+source absent from the diff remains available through read, glob, and grep.
+Attempt those workspace reads before treating source as unavailable. Check that:
 
 - the change satisfies the feature summary, targets, requirements, decisions,
   dependency boundaries, and every named finding or requirement ID preserved
@@ -64,8 +66,7 @@ unverified. Call it `residual` only when current evidence confirms the nonblocke
 remains. Escalate only when current evidence makes it outcome-blocking. A
 confirmed blocking recurrence stays blocking under the same ID.
 
-Inspect assigned diffs and current artifacts independently. Missing material
-evidence blocks; lack of shell access alone does not.
+Missing material evidence blocks; shell access is unnecessary.
 
 Flow deliberately projects no raw command output; use the durable command, exit
 code, completeness, digest, source binding, and your workspace inspection. A weak
