@@ -733,6 +733,16 @@ describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
 					modelID: "model",
 				});
 				expect(reviewer.variant).toBe("high");
+				for (const reader of ["read", "glob", "grep"]) {
+					expect(toolIds).toContain(reader);
+					expect(
+						permissionFor(
+							reviewer.permission ?? [],
+							reader,
+							"src/unchanged.ts",
+						),
+					).toBe("allow");
+				}
 				for (const permission of [
 					"edit",
 					"bash",
