@@ -21,7 +21,11 @@ type Mode =
 	| "cyclic-children"
 	| "malformed-children"
 	| "foreign-message"
-	| "malformed-endpoint";
+	| "malformed-endpoint"
+	| "async-deadline"
+	| "child-suspend"
+	| "root-suspend"
+	| "credit-cap";
 
 async function observeWait(mode: Mode) {
 	const project = await mkdtemp(join(tmpdir(), "flow-progress-wait-"));
@@ -35,15 +39,28 @@ async function observeWait(mode: Mode) {
 	Object.assign(host, { baseUrl: "http://progress-fixture" });
 	let now = 0;
 	let aborts = 0;
+	let childReads = 0;
+	let slept = false;
+	const timing = [
+		"async-deadline",
+		"child-suspend",
+		"root-suspend",
+		"credit-cap",
+	].includes(mode);
+	const finishesAt = timing ? 70_000 : 210_000;
 	const finishes = [
 		"owned-progress",
 		"duplicate-children",
 		"cyclic-children",
+		"child-suspend",
+		"root-suspend",
 	].includes(mode);
 	const visits: string[] = [];
 	const clock = spyOn(Date, "now").mockImplementation(() => now);
 	const sleep = spyOn(Bun, "sleep").mockImplementation(async () => {
 		now += 2_000;
+		if (mode === "root-suspend" && !slept) now += 40_000;
+		slept = true;
 	});
 	const childMetadata = {
 		id: "ses_child",
@@ -60,7 +77,7 @@ async function observeWait(mode: Mode) {
 				agent: "build",
 				time: {
 					created: 1,
-					...(finishes && now >= 210_000 ? { completed: 210_000 } : {}),
+					...(finishes && now >= finishesAt ? { completed: finishesAt } : {}),
 				},
 			},
 			parts: [
@@ -72,7 +89,7 @@ async function observeWait(mode: Mode) {
 					tool: "task",
 					callID: "call_task",
 					state: {
-						status: finishes && now >= 210_000 ? "completed" : "running",
+						status: finishes && now >= finishesAt ? "completed" : "running",
 						input: { subagent_type: "flow-reviewer" },
 						time: { start: 1 },
 					},
@@ -86,7 +103,8 @@ async function observeWait(mode: Mode) {
 				length:
 					mode === "wedged"
 						? 1
-						: Math.floor(Math.min(now, finishes ? 210_000 : now) / 16_000) + 1,
+						: Math.floor(Math.min(now, finishes ? finishesAt : now) / 16_000) +
+							1,
 			},
 			(_, index) => ({
 				info: {
@@ -115,7 +133,7 @@ async function observeWait(mode: Mode) {
 		);
 	const transport = spyOn(globalThis, "fetch").mockImplementation(
 		Object.assign(
-			async (input: Parameters<typeof fetch>[0]) => {
+			async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
 				const path = new URL(String(input)).pathname;
 				visits.push(path);
 				if (path.endsWith("/abort")) {
@@ -127,6 +145,21 @@ async function observeWait(mode: Mode) {
 					return Response.json(rootMessages());
 				if (path === "/session/ses_root")
 					return Response.json({ id: "ses_root", directory: project });
+				if (
+					path === "/session/ses_root/children" &&
+					mode === "async-deadline" &&
+					now >= 60_000
+				) {
+					const signal = init?.signal;
+					if (!signal) throw new Error("Missing observer cancellation signal");
+					return new Promise<Response>((_, reject) => {
+						if (signal.aborted) reject(signal.reason);
+						else
+							signal.addEventListener("abort", () => reject(signal.reason), {
+								once: true,
+							});
+					});
+				}
 				if (
 					path === "/session/ses_root/children" &&
 					mode === "malformed-endpoint"
@@ -159,6 +192,9 @@ async function observeWait(mode: Mode) {
 				)
 					return Response.json([]);
 				if (path === "/session/ses_child/message") {
+					childReads++;
+					if (mode === "child-suspend" && childReads === 1) now += 40_000;
+					if (mode === "credit-cap" && childReads <= 3) now += 40_000;
 					if (mode === "cancel-child") controller.abort(cancelled);
 					if (mode === "foreign-message")
 						return Response.json([
@@ -189,7 +225,7 @@ async function observeWait(mode: Mode) {
 			wait: (request) =>
 				Reflect.apply(Reflect.get(host, "waitForQuiet"), host, [
 					"ses_root",
-					{ request },
+					{ request, ...(timing ? { timeoutMs: 60_000 } : {}) },
 				]),
 		}).catch((error: unknown) => error);
 		return { result, now, aborts, visits, cancelled };
@@ -286,5 +322,34 @@ test("owned-child traversal refuses more than 128 sessions including the root", 
 	expect(
 		observed.visits.filter((path) => path.includes("/ses_child_")),
 	).toHaveLength(0);
+	expect(observed.aborts).toBe(1);
+});
+
+test("asynchronous child reads retain the canonical hard-deadline diagnostic", async () => {
+	const observed = await observeWait("async-deadline");
+	expect(String(observed.result)).toContain(
+		"Scenario exceeded 60000ms without going quiet",
+	);
+	expect(String(observed.result)).not.toContain("TimeoutError");
+	expect(observed.aborts).toBe(1);
+});
+
+for (const mode of ["child-suspend", "root-suspend"] as const) {
+	test(`${mode} preserves a progressing review across a suspended poll`, async () => {
+		const observed = await observeWait(mode);
+		expect(observed.result).toBe("quiet");
+		expect(observed.now).toBeGreaterThan(60_000);
+		expect(observed.now).toBeLessThanOrEqual(104_000);
+		expect(observed.aborts).toBe(0);
+	});
+}
+
+test("descendant suspension credit remains capped at one full timeout", async () => {
+	const observed = await observeWait("credit-cap");
+	expect(String(observed.result)).toContain(
+		"Scenario exceeded 60000ms without going quiet",
+	);
+	expect(String(observed.result)).toContain("Excluded 60s");
+	expect(observed.now).toBeGreaterThanOrEqual(120_000);
 	expect(observed.aborts).toBe(1);
 });
