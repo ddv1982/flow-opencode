@@ -27,12 +27,19 @@ type Mode =
 	| "root-suspend"
 	| "deadline-suspend"
 	| "cancel-suspend"
+	| "request-timeout"
+	| "combined-credit"
+	| "clock-boundary"
 	| "credit-cap";
 
 async function observeWait(mode: Mode) {
 	const project = await mkdtemp(join(tmpdir(), "flow-progress-wait-"));
 	const controller = new AbortController();
 	const cancelled = new CampaignCancelled(143);
+	const requestTimeout = new DOMException(
+		"Child HTTP request timed out",
+		"TimeoutError",
+	);
 	const host = Reflect.construct(EvalHost, [
 		project,
 		project,
@@ -49,6 +56,8 @@ async function observeWait(mode: Mode) {
 		"root-suspend",
 		"deadline-suspend",
 		"cancel-suspend",
+		"combined-credit",
+		"clock-boundary",
 		"credit-cap",
 	].includes(mode);
 	const finishesAt = timing ? 70_000 : 210_000;
@@ -61,7 +70,10 @@ async function observeWait(mode: Mode) {
 		"deadline-suspend",
 	].includes(mode);
 	const visits: string[] = [];
-	const clock = spyOn(Date, "now").mockImplementation(() => now);
+	let clockBoundary = false;
+	const clock = spyOn(Date, "now").mockImplementation(() =>
+		clockBoundary ? now++ : now,
+	);
 	let observerDeadline: AbortController | undefined;
 	const realTimeout = AbortSignal.timeout.bind(AbortSignal);
 	const timeouts = spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
@@ -76,7 +88,8 @@ async function observeWait(mode: Mode) {
 	});
 	const sleep = spyOn(Bun, "sleep").mockImplementation(async () => {
 		now += 2_000;
-		if (mode === "root-suspend" && !slept) now += 40_000;
+		if ((mode === "root-suspend" || mode === "combined-credit") && !slept)
+			now += 40_000;
 		slept = true;
 	});
 	const childMetadata = {
@@ -158,8 +171,13 @@ async function observeWait(mode: Mode) {
 					return Response.json(true);
 				}
 				if (path === "/session/ses_root/command") return Response.json({});
-				if (path === "/session/ses_root/message")
+				if (path === "/session/ses_root/message") {
+					if (mode === "clock-boundary" && now >= 60_000 && !clockBoundary) {
+						now = 59_999;
+						clockBoundary = true;
+					}
 					return Response.json(rootMessages());
+				}
 				if (path === "/session/ses_root")
 					return Response.json({ id: "ses_root", directory: project });
 				if (
@@ -210,6 +228,7 @@ async function observeWait(mode: Mode) {
 					return Response.json([]);
 				if (path === "/session/ses_child/message") {
 					childReads++;
+					if (mode === "request-timeout") throw requestTimeout;
 					if (
 						(mode === "deadline-suspend" || mode === "cancel-suspend") &&
 						childReads === 1
@@ -227,7 +246,11 @@ async function observeWait(mode: Mode) {
 							throw new Error("Fixture observer signal did not abort");
 						throw init.signal.reason;
 					}
-					if (mode === "child-suspend" && childReads === 1) now += 40_000;
+					if (
+						(mode === "child-suspend" || mode === "combined-credit") &&
+						childReads === 1
+					)
+						now += 40_000;
 					if (mode === "credit-cap" && childReads <= 3) now += 40_000;
 					if (mode === "cancel-child") controller.abort(cancelled);
 					if (mode === "foreign-message")
@@ -259,10 +282,23 @@ async function observeWait(mode: Mode) {
 			wait: (request) =>
 				Reflect.apply(Reflect.get(host, "waitForQuiet"), host, [
 					"ses_root",
-					{ request, ...(timing ? { timeoutMs: 60_000 } : {}) },
+					{
+						request,
+						...(timing
+							? { timeoutMs: mode === "combined-credit" ? 120_000 : 60_000 }
+							: {}),
+					},
 				]),
 		}).catch((error: unknown) => error);
-		return { result, now, aborts, visits, cancelled, childReads };
+		return {
+			result,
+			now,
+			aborts,
+			visits,
+			cancelled,
+			childReads,
+			requestTimeout,
+		};
 	} finally {
 		timeouts.mockRestore();
 		transport.mockRestore();
@@ -401,5 +437,31 @@ test("cancellation during suspended observation preserves the original reason", 
 	const observed = await observeWait("cancel-suspend");
 	expect(observed.result).toBe(observed.cancelled);
 	expect(observed.childReads).toBe(1);
+	expect(observed.aborts).toBe(1);
+});
+
+test("an independent child HTTP timeout retains its original failure", async () => {
+	const observed = await observeWait("request-timeout");
+	expect(observed.result).toBe(observed.requestTimeout);
+	expect(observed.aborts).toBe(1);
+	expect(observed.now).toBe(2_000);
+});
+
+test("root and child suspension credit accounts each poll interval once", async () => {
+	const observed = await observeWait("combined-credit");
+	expect(String(observed.result)).toContain(
+		"Scenario exceeded 120000ms without going quiet",
+	);
+	expect(String(observed.result)).toContain("Excluded 82s");
+	expect(observed.now).toBe(204_000);
+	expect(observed.aborts).toBe(1);
+});
+
+test("a clock crossing at observer setup retains deadline diagnosis and abort", async () => {
+	const observed = await observeWait("clock-boundary");
+	expect(String(observed.result)).toContain(
+		"Scenario exceeded 60000ms without going quiet",
+	);
+	expect(String(observed.result)).not.toContain("RangeError");
 	expect(observed.aborts).toBe(1);
 });

@@ -2534,14 +2534,46 @@ export class EvalHost {
 		// diagnosable after the fact.
 		let changedAt = Date.now();
 		let pending: string[] = [];
+		let ownedPending: string[] = [];
 		let suspendedMs = 0;
 		const abortWait = async () => {
 			const aborting = this.abortSession(sessionId);
 			options.request.cancel();
 			await aborting;
 		};
+		const suspensionNote = () =>
+			suspendedMs > 0
+				? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
+				: "";
+		const wedgeNote = (elapsedMs: number) =>
+			`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}.`;
+		const failDeadline = async (): Promise<never> => {
+			const stalled = Date.now() - changedAt;
+			const [count = "0", parts = "0"] = signature.split(":");
+			await abortWait();
+			throw new Error(
+				(stalled >= quietMs
+					? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. ${wedgeNote(stalled)}`
+					: `Scenario exceeded ${timeoutMs}ms without going quiet: still working. The session was producing output up to the deadline (${count} messages, ${parts} parts), so it was working or looping rather than stuck.`) +
+					suspensionNote(),
+			);
+		};
 		for (;;) {
 			const before = Date.now();
+			let accountedInPoll = 0;
+			const accountPollElapsed = () => {
+				const elapsed = Date.now() - before;
+				if (elapsed < suspendFloor) return;
+				const credit = Math.min(
+					Math.max(0, elapsed - accountedInPoll),
+					timeoutMs - suspendedMs,
+				);
+				accountedInPoll = elapsed;
+				suspendedMs += credit;
+				deadline += credit;
+				settledAt += credit;
+				changedAt += credit;
+			};
 			await abortable(this.signal, () => Bun.sleep(poll));
 			const delivery = options.request.state();
 			if (delivery?.kind === "rejected") {
@@ -2575,17 +2607,11 @@ export class EvalHost {
 				await abortWait();
 				throw new EvaluationPhaseError(failure, failed.info.error);
 			}
-			const unobserved = Date.now() - before;
-			if (unobserved >= suspendFloor) {
-				// Capped at one full timeout, because unbounded credit turns the ceiling
-				// into a suggestion: one recorded attempt ran 3h05m under a 20m cap after
-				// a long suspend. A suspend may double the budget, not decuple it.
-				const credit = Math.min(unobserved, timeoutMs - suspendedMs);
-				suspendedMs += credit;
-				deadline += credit;
-				settledAt += credit;
-				changedAt += credit;
-			}
+			accountPollElapsed();
+			const remaining = deadline - Date.now();
+			if (remaining < 0) await failDeadline();
+			if (remaining === 0) continue;
+			const observerDeadline = AbortSignal.timeout(remaining);
 			let sessions: readonly {
 				id: string;
 				messages: readonly MessageEntry[];
@@ -2596,14 +2622,20 @@ export class EvalHost {
 					messages,
 					AbortSignal.any([
 						...(this.signal ? [this.signal] : []),
-						AbortSignal.timeout(Math.max(0, deadline - Date.now())),
+						observerDeadline,
 					]),
 				);
 			} catch (error) {
+				accountPollElapsed();
 				if (this.signal?.aborted && error === this.signal.reason) throw error;
+				if (observerDeadline.aborted && error === observerDeadline.reason) {
+					if (Date.now() < deadline) continue;
+					await failDeadline();
+				}
 				await abortWait();
 				throw error;
 			}
+			accountPollElapsed();
 			const ownedMessages = sessions.flatMap((session) => session.messages);
 			pending = messages.flatMap((entry) =>
 				entry.parts
@@ -2616,7 +2648,7 @@ export class EvalHost {
 					)
 					.map((part) => pendingCallLabel(part)),
 			);
-			const ownedPending = ownedMessages.flatMap((entry) =>
+			ownedPending = ownedMessages.flatMap((entry) =>
 				entry.parts
 					.filter(
 						(part) =>
@@ -2680,12 +2712,6 @@ export class EvalHost {
 				return "escalated";
 			}
 			const stalled = Date.now() - changedAt;
-			const suspended =
-				suspendedMs > 0
-					? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
-					: "";
-			const wedged = (elapsedMs: number) =>
-				`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}.`;
 			// A wedge is diagnosable long before the deadline, and the deadline used to
 			// prove it the slow way: three of the four recorded timeouts spent seventeen
 			// further minutes on the same incomplete tool call, then printed the sentence
@@ -2695,18 +2721,11 @@ export class EvalHost {
 			if (isWedged(ownedPending, stalled, stalledMs)) {
 				await abortWait();
 				throw new Error(
-					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedged(stalled)}${suspended}`,
+					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedgeNote(stalled)}${suspensionNote()}`,
 				);
 			}
 			if (Date.now() > deadline) {
-				await abortWait();
-				const [count = "0", parts = "0"] = signature.split(":");
-				throw new Error(
-					(stalled >= quietMs
-						? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. ${wedged(stalled)}`
-						: `Scenario exceeded ${timeoutMs}ms without going quiet: still working. The session was producing output up to the deadline (${count} messages, ${parts} parts), so it was working or looping rather than stuck.`) +
-						suspended,
-				);
+				await failDeadline();
 			}
 		}
 	}
