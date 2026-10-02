@@ -409,9 +409,16 @@ function validationAccepted(
 							required.command === observation.command &&
 							required.intent === "pass",
 					) &&
-					!(document.plan.evidence ?? []).some(
-						(entry) =>
-							entry.scope === "extra" && entry.command === observation.command,
+					!(
+						assignment.kind === "final" &&
+						(document.plan.evidence ?? []).some(
+							(entry) =>
+								entry.scope === "extra" &&
+								entry.command === observation.command &&
+								(entry.platform === undefined ||
+									entry.platform === "other" ||
+									entry.platform === observation.hostPlatform),
+						)
 					)
 				) &&
 				(observation.scope === "broad" ||

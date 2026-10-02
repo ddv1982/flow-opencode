@@ -667,7 +667,7 @@ for (const { kind, extraPlatform } of [
 		).toEqual([
 			{ scope: "broad", intent: "observe" },
 			...(kind === "final" && extraPlatform
-				? [{ scope: "focused", intent: "observe" }]
+				? [{ scope: "focused" as const, intent: "observe" as const }]
 				: []),
 			{ scope: "focused", intent: "observe" },
 		]);
@@ -707,39 +707,41 @@ for (const { kind, extraPlatform } of [
 			[],
 		);
 		if (kind === "final" && !extraPlatform) {
-			const extra = {
-				scope: "extra" as const,
-				command,
-				environment: "Linux workspace",
-				platform: "linux" as const,
-				assertions: [],
-				requirement: "Passing extra proof.",
-			};
-			const extraInvalid = {
-				...fixture.document,
-				plan: {
-					...approvedPlan,
-					evidence: [...(approvedPlan.evidence ?? []), extra],
-				},
-				runs: fixture.document.runs.map((run) => ({
-					...run,
-					validations: run.validations.map((observation) =>
-						observation.scope === "focused"
-							? { ...observation, exitCode: 1 }
-							: observation,
-					),
-				})),
-			};
-			const extraRun = extraInvalid.runs[0];
-			if (!extraRun) throw new Error("Missing extra failure control");
-			expect(
-				reviewReadiness(extraInvalid, extraRun, assignment.sourceDigest),
-			).toEqual({ kind: "evidence-unsatisfied", entries: [extra] });
-			const extraInput = structuredClone(fixture.input);
-			synchronizeContext(extraInput, extraInvalid);
-			expect(checkReviewerEvidenceAccess(extraInput, extraInvalid)).not.toEqual(
-				[],
-			);
+			for (const platform of ["linux", "other", undefined] as const) {
+				const extra = {
+					scope: "extra" as const,
+					command,
+					environment: "Linux workspace",
+					platform,
+					assertions: [],
+					requirement: "Passing extra proof.",
+				};
+				const extraInvalid = {
+					...fixture.document,
+					plan: {
+						...approvedPlan,
+						evidence: [...(approvedPlan.evidence ?? []), extra],
+					},
+					runs: fixture.document.runs.map((run) => ({
+						...run,
+						validations: run.validations.map((observation) =>
+							observation.scope === "focused"
+								? { ...observation, exitCode: 1 }
+								: observation,
+						),
+					})),
+				};
+				const extraRun = extraInvalid.runs[0];
+				if (!extraRun) throw new Error("Missing extra failure control");
+				expect(
+					reviewReadiness(extraInvalid, extraRun, assignment.sourceDigest),
+				).toEqual({ kind: "evidence-unsatisfied", entries: [extra] });
+				const extraInput = structuredClone(fixture.input);
+				synchronizeContext(extraInput, extraInvalid);
+				expect(
+					checkReviewerEvidenceAccess(extraInput, extraInvalid),
+				).not.toEqual([]);
+			}
 		}
 	});
 }
