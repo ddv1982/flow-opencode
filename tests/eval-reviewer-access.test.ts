@@ -27,8 +27,13 @@ import type { Plan } from "../src/domain/session.js";
 import {
 	approveSession,
 	deterministicEnvironment,
+	expectOk,
+	FEATURE,
 	MemorySessionRepository,
 	plan,
+	recordObservedValidation,
+	revision,
+	startFeatureRun,
 	startReviewedRun,
 	submitReview,
 } from "./runtime-test-support.js";
@@ -128,16 +133,48 @@ async function accessFixture(
 	approvedPlan: Plan = plan,
 	command = "bun test",
 	scope: "focused" | "broad" = "broad",
+	additional: readonly {
+		command: string;
+		scope: "focused" | "broad";
+		exitCode: number;
+	}[] = [],
 ) {
 	const repository = new MemorySessionRepository();
 	const flow = await approveSession(repository, deterministicEnvironment(), {
 		plan: approvedPlan,
 	});
-	await startReviewedRun(flow, repository, {
-		suffix: "reviewer-access",
-		command,
-		scope,
-	});
+	if (additional.length > 0) {
+		await startFeatureRun(flow, repository, FEATURE, "reviewer-access");
+		for (const [index, observation] of additional.entries())
+			await recordObservedValidation(repository, {
+				...observation,
+				captureId: `capture-extra-${index}`,
+			});
+		await recordObservedValidation(repository, {
+			command,
+			scope,
+			captureId: "capture-reviewer-access",
+		});
+		expectOk(
+			await flow.reviewStart({
+				request: {
+					operationId: "review-start-reviewer-access",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [],
+					packet: {
+						summary: "Review source-bound evidence.",
+						riskLenses: ["runtime integrity"],
+					},
+				},
+			}),
+		);
+	} else
+		await startReviewedRun(flow, repository, {
+			suffix: "reviewer-access",
+			command,
+			scope,
+		});
 	const pending = repository.session;
 	if (!pending?.runs[0]?.reviews[0])
 		throw new Error("Missing genuine pending assignment");
@@ -444,16 +481,28 @@ for (const kind of ["final", "feature"] as const) {
 		test(`legacy ${kind} narrative cannot admit ${invalid}`, async () => {
 			const fixture = await narrativeReviewFixture(kind);
 			const input = structuredClone(fixture.input),
-				document = structuredClone(fixture.document);
+				original = structuredClone(fixture.document);
+			const document = {
+				...original,
+				runs: original.runs.map((run) => ({
+					...run,
+					validations:
+						invalid === "no-evidence"
+							? []
+							: run.validations.map((observation) => ({
+									...observation,
+									intent: "observe" as const,
+								})),
+					reviews: run.reviews.map((assignment) => ({
+						...assignment,
+						validationIds:
+							invalid === "no-evidence" ? [] : assignment.validationIds,
+					})),
+				})),
+			};
 			const run = document.runs[0],
 				assignment = run?.reviews[0];
 			if (!run || !assignment) throw new Error("Missing evidence control");
-			if (invalid === "no-evidence") {
-				run.validations = [];
-				assignment.validationIds = [];
-			} else
-				for (const observation of run.validations)
-					observation.intent = "observe";
 			expect(
 				reviewReadiness(document, run, assignment.sourceDigest).kind,
 			).not.toBe("ready");
@@ -462,6 +511,145 @@ for (const kind of ["final", "feature"] as const) {
 		});
 	}
 }
+
+test("nonfinal inspect typed observation remains supported with accepted focused baseline", async () => {
+	const first = plan.features[0];
+	if (!first) throw new Error("Missing runtime feature");
+	const approvedPlan: Plan = {
+		...plan,
+		features: [
+			{
+				...first,
+				kind: "inspect",
+				validation: ["Inspect survey findings and current source."],
+				checks: [
+					{
+						command: "node scripts/survey.mjs",
+						intent: "observe",
+						platform: "linux",
+					},
+				],
+			},
+			{
+				...first,
+				id: "later-inspection",
+				kind: "inspect",
+				dependsOn: [first.id],
+			},
+		],
+	};
+	const fixture = await accessFixture(
+		approvedPlan,
+		"bun --version",
+		"focused",
+		[{ command: "node scripts/survey.mjs", scope: "focused", exitCode: 12 }],
+	);
+	const run = fixture.document.runs[0],
+		assignment = run?.reviews[0];
+	if (!run || !assignment) throw new Error("Missing typed inspection");
+	expect(
+		reviewReadiness(fixture.document, run, assignment.sourceDigest),
+	).toMatchObject({ kind: "ready", reviewKind: "feature" });
+	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
+		[],
+	);
+	const input = structuredClone(fixture.input);
+	const document = {
+		...fixture.document,
+		runs: fixture.document.runs.map((run) => ({
+			...run,
+			validations: run.validations.map((observation) =>
+				observation.command === "node scripts/survey.mjs"
+					? {
+							...observation,
+							observedAssertions: [
+								{ name: "forged passing case", status: "passed" as const },
+							],
+						}
+					: observation,
+			),
+		})),
+	};
+	const invalidRun = document.runs[0];
+	if (!invalidRun) throw new Error("Missing typed assertion control");
+	expect(
+		reviewReadiness(document, invalidRun, assignment.sourceDigest),
+	).toEqual({ kind: "vetoed", commands: ["node scripts/survey.mjs"] });
+	synchronizeContext(input, document);
+	expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
+});
+
+test("legacy exact failed command requires current assigned discharge before review", async () => {
+	const command = "node scripts/legacy-proof.mjs";
+	const approvedPlan: Plan = {
+		...plan,
+		features: plan.features.map((feature) => ({
+			...feature,
+			validation: [command],
+		})),
+	};
+	const fixture = await accessFixture(approvedPlan, "bun test", "broad", [
+		{ command, scope: "focused", exitCode: 1 },
+		{ command, scope: "focused", exitCode: 0 },
+	]);
+	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
+		[],
+	);
+	const input = structuredClone(fixture.input),
+		original = structuredClone(fixture.document);
+	const document = {
+		...original,
+		runs: original.runs.map((run) => ({
+			...run,
+			validations: run.validations.filter(
+				(observation) => observation.id !== "capture-extra-1",
+			),
+			reviews: run.reviews.map((assignment) => ({
+				...assignment,
+				validationIds: assignment.validationIds.filter(
+					(id) => id !== "capture-extra-1",
+				),
+			})),
+		})),
+	};
+	const run = document.runs[0],
+		assignment = run?.reviews[0];
+	if (!run || !assignment) throw new Error("Missing legacy discharge");
+	expect(reviewReadiness(document, run, assignment.sourceDigest)).toEqual({
+		kind: "vetoed",
+		commands: [command],
+	});
+	synchronizeContext(input, document);
+	expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
+});
+
+test("later failed observation cannot poison an accepted earlier review", async () => {
+	const command = "node scripts/legacy-proof.mjs";
+	const approvedPlan: Plan = {
+		...plan,
+		features: plan.features.map((feature) => ({
+			...feature,
+			validation: [command],
+		})),
+	};
+	const fixture = await accessFixture(approvedPlan, "bun test", "broad", [
+		{ command, scope: "focused", exitCode: 0 },
+	]);
+	const run = fixture.document.runs[0],
+		assignment = run?.reviews[0],
+		proof = run?.validations[0];
+	if (!run || !assignment || !proof) throw new Error("Missing as-of review");
+	run.validations.push({
+		...proof,
+		id: "later-failure",
+		exitCode: 1,
+		recordedRevision: assignment.createdRevision + 1,
+	});
+	synchronizeContext(fixture.input, fixture.document);
+	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
+		[],
+	);
+});
 
 function retainedAccessEvidence(
 	input: Awaited<ReturnType<typeof accessFixture>>["input"],

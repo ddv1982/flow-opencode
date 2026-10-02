@@ -166,31 +166,18 @@ function validationAccepted(
 		wildcardPlatform: boolean;
 		assertions: readonly string[];
 	};
-	const specs: Requirement[] = feature.checks
-		? feature.checks.map((check) => ({
-				command: check.command,
-				intent: check.intent,
-				platform: check.platform,
-				broad: false,
-				wildcardPlatform: false,
-				assertions: Array.isArray(check.assertions)
-					? check.assertions.filter(
-							(value): value is string => typeof value === "string",
-						)
-					: [],
-			}))
-		: feature.validation.map((command) => ({
-				command,
-				intent: declaredGates.some(
-					(gate) => gate.command === command && gate.scope === "gate-observe",
+	const specs: Requirement[] = (feature.checks ?? []).map((check) => ({
+		command: check.command,
+		intent: check.intent,
+		platform: check.platform,
+		broad: false,
+		wildcardPlatform: false,
+		assertions: Array.isArray(check.assertions)
+			? check.assertions.filter(
+					(value): value is string => typeof value === "string",
 				)
-					? "observe"
-					: "pass",
-				platform: undefined,
-				broad: false,
-				wildcardPlatform: true,
-				assertions: [],
-			}));
+			: [],
+	}));
 	const requirements: Requirement[] = [
 		...specs,
 		...gates.map((gate) => ({
@@ -209,12 +196,18 @@ function validationAccepted(
 				: [],
 		})),
 	];
-	if (
-		requirements.length === 0 ||
-		(feature.kind !== "inspect" &&
-			!requirements.some((required) => required.intent === "pass"))
-	)
-		return false;
+	const observedGate = (observation: z.infer<typeof Validation>) =>
+		observation.intent === "observe" &&
+		observation.scope === "broad" &&
+		declaredGates.some(
+			(gate) =>
+				gate.scope === "gate-observe" &&
+				gate.command === observation.command &&
+				(gate.platform === undefined ||
+					gate.platform === "other" ||
+					gate.platform === observation.hostPlatform),
+		);
+	if (observations.length === 0) return false;
 	for (const observation of observations) {
 		if (
 			observation.featureId !== run.featureId ||
@@ -232,11 +225,12 @@ function validationAccepted(
 			observation.exitCode !== 0 &&
 			!(
 				observation.intent === "observe" &&
-				requirements.some(
+				(specs.some(
 					(required) =>
 						required.command === observation.command &&
 						required.intent === "observe",
-				)
+				) ||
+					observedGate(observation))
 			)
 		)
 			return false;
@@ -310,6 +304,114 @@ function validationAccepted(
 				observation.resultsPath === ".flow/results.xml")
 		);
 	};
+	const acceptedExtra = (observation: z.infer<typeof Validation>) =>
+		!(feature.checks ?? []).some(
+			(check) => check.command === observation.command,
+		) &&
+		observation.exitCode === 0 &&
+		(document.plan.evidence ?? []).some(
+			(entry) =>
+				entry.scope === "extra" &&
+				entry.command === observation.command &&
+				(entry.platform === undefined ||
+					entry.platform === "other" ||
+					entry.platform === observation.hostPlatform) &&
+				assertionsMatch(
+					Array.isArray(entry.assertions)
+						? entry.assertions.filter(
+								(value): value is string => typeof value === "string",
+							)
+						: [],
+					observation,
+				),
+		);
+	const acceptedPurpose = (observation: z.infer<typeof Validation>) => {
+		if (
+			!observation.outputComplete ||
+			observation.exitCode === null ||
+			observation.ineligibleReason !== undefined
+		)
+			return false;
+		const spec = specs.find(
+			(required) => required.command === observation.command,
+		);
+		const gate = declaredGates.find(
+			(entry) =>
+				entry.scope === "gate-observe" && entry.command === observation.command,
+		);
+		const intent = spec?.intent ?? (gate ? "observe" : "pass");
+		if (
+			((spec || observation.intent !== undefined) &&
+				observation.intent !== intent) ||
+			(spec && observation.hostPlatform !== spec.platform)
+		)
+			return false;
+		if (
+			spec &&
+			intent === "observe" &&
+			Array.isArray(observation.observedAssertions) &&
+			observation.observedAssertions.length > 0
+		)
+			return false;
+		if (intent === "observe")
+			return !gate || observedGate(observation) || acceptedExtra(observation);
+		return (
+			observation.exitCode === 0 &&
+			(!spec ||
+				assertionsMatch(
+					[
+						...spec.assertions,
+						...(document.plan.evidence ?? [])
+							.filter((entry) => entry.command === observation.command)
+							.flatMap((entry) =>
+								Array.isArray(entry.assertions)
+									? entry.assertions.filter(
+											(value): value is string => typeof value === "string",
+										)
+									: [],
+							),
+					],
+					observation,
+				))
+		);
+	};
+	if (
+		!observations.every(acceptedPurpose) ||
+		!observations.some(
+			(observation) =>
+				(observation.exitCode === 0 && observation.intent !== "observe") ||
+				(feature.kind === "inspect" &&
+					(observedGate(observation) ||
+						(assignment.kind === "feature" && acceptedExtra(observation)))),
+		)
+	)
+		return false;
+	const vetoCommands = new Set([
+		...feature.validation,
+		...specs.map((required) => required.command),
+		...declaredGates.map((gate) => gate.command),
+	]);
+	const rejectedBeforeReview = document.runs
+		.filter((candidate) => candidate.featureId === run.featureId)
+		.flatMap((candidate) => candidate.validations)
+		.filter(
+			(observation) =>
+				observation.recordedRevision < assignment.createdRevision &&
+				(observation.scope === "broad" ||
+					vetoCommands.has(observation.command)) &&
+				!acceptedPurpose(observation),
+		);
+	if (
+		rejectedBeforeReview.some(
+			(failed) =>
+				!observations.some(
+					(observation) =>
+						observation.command === failed.command &&
+						observation.recordedRevision > failed.recordedRevision,
+				),
+		)
+	)
+		return false;
 	return requirements.every((required) =>
 		observations.some(
 			(observation) =>
