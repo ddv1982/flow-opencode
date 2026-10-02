@@ -378,6 +378,150 @@ describe("canary record boundary", () => {
 		]);
 	});
 
+	test("native task state metadata is canonical while flat legacy proof remains supported", () => {
+		const value = prepared(),
+			original = canaryTranscript();
+		const task = original.messages[0]?.parts.find(
+			(part) => part.tool === "task",
+		);
+		if (!task || !("metadata" in task.state) || !task.state.metadata)
+			throw new Error("Missing native task metadata fixture");
+		const { metadata: canonical, ...taskState } = task.state;
+		const transport = { openai: { itemId: "item_transport_fixture" } };
+		for (const variant of [
+			{
+				name: "native transport",
+				top: transport,
+				state: canonical,
+				passes: true,
+			},
+			{ name: "flat legacy", top: canonical, state: undefined, passes: true },
+			{
+				name: "matching duplicate proof",
+				top: canonical,
+				state: canonical,
+				passes: true,
+			},
+			{
+				name: "matching flat model identity",
+				top: { providerID: "provider", modelID: "model" },
+				state: canonical,
+				passes: true,
+			},
+			{
+				name: "conflicting parent",
+				top: { parentSessionId: "ses_other" },
+				state: canonical,
+				passes: false,
+			},
+			{
+				name: "conflicting child",
+				top: { sessionId: "ses_other" },
+				state: canonical,
+				passes: false,
+			},
+			{
+				name: "conflicting model",
+				top: { model: { providerID: "provider", modelID: "other-model" } },
+				state: canonical,
+				passes: false,
+			},
+			{
+				name: "conflicting provider",
+				top: { providerID: "other-provider", modelID: "model" },
+				state: canonical,
+				passes: false,
+			},
+			{
+				name: "partial model claim",
+				top: { model: { providerID: "other-provider" } },
+				state: canonical,
+				passes: false,
+			},
+			{
+				name: "missing canonical parent",
+				top: transport,
+				state: { ...canonical, parentSessionId: undefined },
+				passes: false,
+			},
+			{
+				name: "missing canonical child",
+				top: transport,
+				state: { ...canonical, sessionId: undefined },
+				passes: false,
+			},
+			{
+				name: "self-parenting canonical child",
+				top: transport,
+				state: { ...canonical, sessionId: "ses_manager" },
+				passes: false,
+			},
+			{
+				name: "canonical model mismatch",
+				top: transport,
+				state: {
+					...canonical,
+					model: { providerID: "provider", modelID: "other-model" },
+				},
+				passes: false,
+			},
+			{
+				name: "malformed canonical proof",
+				top: canonical,
+				state: "malformed",
+				passes: false,
+			},
+			{
+				name: "empty canonical proof",
+				top: canonical,
+				state: {},
+				passes: false,
+			},
+		]) {
+			const transcript = {
+				...original,
+				messages: original.messages.map((message) => ({
+					...message,
+					parts: message.parts.map((part) => {
+						if (part.tool !== "task") return part;
+						return {
+							...part,
+							metadata: variant.top,
+							state: {
+								...taskState,
+								...(variant.state === undefined
+									? {}
+									: { metadata: variant.state }),
+							},
+						};
+					}),
+				})),
+			};
+			const derived = deriveCanaryResult({
+				packageVersion: value.artifact.packageVersion,
+				artifactSha256: value.artifactSha256,
+				tarballSha256: value.artifact.tarballSha256,
+				preparedSha256: value.sha256,
+				pluginEntrySha256: value.pluginEntrySha256,
+				installation: installation(value),
+				session: canarySession(),
+				transcript,
+			});
+			expect(derived.status, variant.name).toBe(
+				variant.passes ? "passed" : "failed",
+			);
+			expect(derived.checks["dispatches-reviewer"], variant.name).toBe(
+				variant.passes,
+			);
+			if (variant.passes) {
+				expect(Object.values(derived.checks), variant.name).toHaveLength(6);
+				expect(Object.values(derived.checks).every(Boolean), variant.name).toBe(
+					true,
+				);
+			}
+		}
+	});
+
 	test("rejects a canary recorded on a different OpenCode release host", () => {
 		const value = prepared();
 		const transcript = canaryTranscript();
