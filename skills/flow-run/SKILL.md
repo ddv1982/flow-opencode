@@ -179,10 +179,10 @@ and `blockedFeature.scopeBlocker`.
 - For blocked `await-user-direction`, checkpoint unless host recovery status
   recommends a mutation. Use its exact request. Shadow grants nothing.
   Revalidate and review.
-- For blocked `flow_feature_reset`, one automatic reset is allowed under
-  existing implementation authority. Pass the blocked `featureId` as
-  `nextFeatureId` so reset and run start are atomic. Fix only its blocking
-  findings, then run full validation and full independent review.
+- For blocked `flow_feature_reset`, one automatic reset is allowed within approved
+  feature authority. Use the blocked `featureId` as `nextFeatureId` for atomic
+  reset/start. Fix blockers; rerun full validation and independent review.
+  Inspections may repair only approved report/evidence targets, not product defects.
 - When `failedReviewCount >= 2`, retry only when the current aligned request
   explicitly authorizes one additional attempt or host recovery supplies its exact request.
 - If explicit direction selects another planned, dependency-independent

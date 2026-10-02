@@ -22,10 +22,19 @@ import {
 	submitReview,
 } from "./runtime-test-support.js";
 
-async function failedTwice(count = 2, scopeBlocker = false) {
+async function failedTwice(
+	count = 2,
+	scopeBlocker = false,
+	kind: "change" | "inspect" = "change",
+) {
 	const repository = new MemorySessionRepository(),
 		env = deterministicEnvironment();
-	const manual = await approveSession(repository, env);
+	const manual = await approveSession(repository, env, {
+		plan: {
+			...plan,
+			features: plan.features.map((feature) => ({ ...feature, kind })),
+		},
+	});
 	let findingId: string | undefined;
 	for (let i = 0; i < count; i++) {
 		if (i) await resetFeatureRun(manual, repository, FEATURE, "first-retry");
@@ -678,53 +687,62 @@ test.each(["off", "shadow"] as const)(
 	},
 );
 
-test("accepted failed inspection completion is not resettable in legacy, off or shadow", async () => {
+test("a first failed inspection review receives one ordinary retry in legacy, off and shadow", async () => {
 	for (const mode of ["legacy", "off", "shadow"] as const) {
-		const repository = new MemorySessionRepository(),
-			env = deterministicEnvironment();
-		const manual = await approveSession(repository, env, {
-			plan: {
-				...plan,
-				features: plan.features.map((feature) => ({
-					...feature,
-					kind: "inspect",
-				})),
-			},
-		});
-		await startReviewedRun(manual, repository, { suffix: "inspect" });
-		await submitReview(manual, repository, {
-			suffix: "inspect",
-			summary: "Survey findings",
-			verdict: "failed",
-			findings: [
-				{
-					severity: "blocking",
-					summary: "Observed product defect",
-					evidence: "fixture.ts:1",
-				},
-			],
-		});
-		expect(repository.session?.runs[0]?.state).toBe("completed");
+		const s = await failedTwice(1, false, "inspect");
+		expect(s.repository.session?.runs[0]?.state).toBe("blocked");
 		const flow =
 			mode === "legacy"
-				? manual
-				: automatic({ repository, env, manual }, mode).service(
-						"manager",
-						"original",
-					);
-		const before = revision(repository);
+				? s.manual
+				: automatic(s, mode).service("manager", "original");
 		const reset = await flow.featureReset({
 			request: {
 				operationId: "inspect-reset",
-				expectedRevision: before,
+				expectedRevision: revision(s.repository),
 				featureId: FEATURE,
+				nextFeatureId: FEATURE,
 			},
 		});
-		expect(reset.status).toBe("error");
-		expect(revision(repository)).toBe(before);
-		if (mode === "legacy") expect(reset.summary).toContain("active or blocked");
+		expect(reset.status, reset.summary).toBe("ok");
+		expect(s.repository.session?.runs[0]?.state).toBe("superseded");
+		expect(s.repository.session?.runs.at(-1)).toMatchObject({
+			state: "active",
+			attempt: 2,
+		});
 	}
 });
+
+for (const scopeBlocker of [false, true]) {
+	test(`inspection ${scopeBlocker ? "scope blocker" : "second failure"} requires fresh user direction`, async () => {
+		for (const mode of ["off", "shadow"] as const) {
+			const s = await failedTwice(
+				scopeBlocker ? 1 : 2,
+				scopeBlocker,
+				"inspect",
+			);
+			const status = await s.manual.status({ request: { view: "compact" } });
+			expect(status.status).toBe("ok");
+			if (status.status !== "ok") throw new Error(status.summary);
+			expect(status.workflowData.projection).toMatchObject({
+				status: "blocked",
+				nextAction: "await-user-direction",
+			});
+			const before = revision(s.repository);
+			const retry = await automatic(s, mode)
+				.service("manager", "original")
+				.featureReset({
+					request: {
+						operationId: "unauthorized-inspect-reset",
+						expectedRevision: before,
+						featureId: FEATURE,
+						nextFeatureId: FEATURE,
+					},
+				});
+			expect(retry.status).toBe("error");
+			expect(revision(s.repository)).toBe(before);
+		}
+	});
+}
 
 test("simulated missing parentage fails closed for auto but fresh manual flow-run still starts", async () => {
 	const s = await failedTwice(0);

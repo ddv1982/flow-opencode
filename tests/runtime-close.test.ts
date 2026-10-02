@@ -13,8 +13,11 @@ import {
 	FEATURE,
 	MemorySessionRepository,
 	plan,
+	recordObservedValidation,
 	resetFeatureRun,
 	revision,
+	SOURCE_B,
+	startFeatureRun,
 	startReviewedRun,
 	submitReview,
 } from "./runtime-test-support.js";
@@ -33,14 +36,202 @@ function planlessSession(id: string, goal: string): Session {
 	};
 }
 
+test("failed inspection evidence gets repaired and independently reviewed before completed closure", async () => {
+	const repository = new MemorySessionRepository();
+	const inspection: Plan = {
+		...plan,
+		features: plan.features.map((feature) => ({
+			...feature,
+			kind: "inspect",
+			targets: ["docs/review.md"],
+			validation: ["Report current-source observations and their limits."],
+		})),
+		evidence: plan.evidence?.map((entry) => ({
+			...entry,
+			scope: "gate-observe",
+		})),
+	};
+	const flow = await approveSession(repository, deterministicEnvironment(), {
+		plan: inspection,
+	});
+	const frozen = JSON.stringify(repository.session?.plan);
+	await startFeatureRun(flow, repository, FEATURE, "inspection-evidence");
+	await recordObservedValidation(repository, {
+		captureId: "initial-observed-audit",
+		exitCode: 21,
+	});
+	async function review(operationId: string) {
+		expectOk(
+			await flow.reviewStart({
+				request: {
+					operationId,
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [{ path: "docs/review.md" }],
+					packet: {
+						summary:
+							"Review the inspection report and captured validation evidence.",
+						riskLenses: [
+							"Distinguish audit failures from missing report evidence.",
+						],
+					},
+				},
+			}),
+		);
+	}
+	await review("inspection-evidence-review");
+	await submitReview(flow, repository, {
+		suffix: "inspection-evidence",
+		summary: "Report omits durable validation results.",
+		verdict: "failed",
+		findings: [
+			{
+				severity: "blocking",
+				summary: "Report lacks the captured test result and limits.",
+				evidence: "docs/review.md:1, approved inspection evidence.",
+			},
+		],
+	});
+	const blocked = await flow.status({ request: { view: "compact" } });
+	expectOk(blocked);
+	expect(blocked.workflowData.projection).toMatchObject({
+		status: "blocked",
+		nextAction: "flow_feature_reset",
+		blockedFeature: { failedReviewCount: 1, scopeBlocker: false },
+	});
+	const before = revision(repository),
+		id = repository.session?.id;
+	if (!id) throw new Error("Missing inspection session");
+	const earlyClose = await flow.sessionClose({
+		request: {
+			operationId: "premature-inspection-close",
+			expectedRevision: before,
+			sessionId: id,
+			kind: "completed",
+		},
+	});
+	expectError(earlyClose);
+	expect(revision(repository)).toBe(before);
+	expect(repository.archives.size).toBe(0);
+	expectOk(
+		await flow.featureReset({
+			request: {
+				operationId: "inspection-evidence-retry",
+				expectedRevision: before,
+				featureId: FEATURE,
+				nextFeatureId: FEATURE,
+			},
+		}),
+	);
+	repository.sourceDigest = SOURCE_B;
+	const observed = await recordObservedValidation(repository, {
+		captureId: "repaired-observed-audit",
+		exitCode: 21,
+	});
+	await review("repaired-inspection-review");
+	await submitReview(flow, repository, {
+		suffix: "repaired-inspection",
+		summary:
+			"Report now records complete current-source evidence and audit limits.",
+		verdict: "passed",
+		findings: [
+			{
+				severity: "advisory",
+				summary:
+					"The audit still reports 21 advisories; product repair is outside inspection scope.",
+			},
+		],
+	});
+	expect(JSON.stringify(repository.session?.plan)).toBe(frozen);
+	expect(repository.session?.runs.at(-1)?.reviews.at(-1)).toMatchObject({
+		sourceDigest: SOURCE_B,
+		result: { verdict: "passed", terminalDisposition: "submitted" },
+	});
+	const closed = await flow.sessionClose({
+		request: {
+			operationId: "close-repaired-inspection",
+			expectedRevision: revision(repository),
+			sessionId: id,
+			kind: "completed",
+		},
+	});
+	expectOk(closed);
+	expect(closed.workflowData.delivery.assurance.conclusion).toBe(
+		"completion-supported",
+	);
+	expect(closed.workflowData.delivery.observations).toContainEqual(observed);
+	expect(observed.exitCode).toBe(21);
+	expect(closed.workflowData.delivery.report.join("\n")).toContain(
+		"does not claim the command passed",
+	);
+});
+
+test("historical Session v5 completed failed inspections remain readable without relabeling assurance", async () => {
+	const repository = new MemorySessionRepository();
+	const flow = await approveSession(repository, deterministicEnvironment(), {
+		plan: {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
+		},
+	});
+	await startReviewedRun(flow, repository, { suffix: "historical-inspection" });
+	await submitReview(flow, repository, {
+		suffix: "historical-inspection",
+		summary: "Historical survey with findings.",
+		verdict: "failed",
+		findings: [
+			{
+				severity: "blocking",
+				summary: "Historical unresolved survey finding.",
+				evidence: "docs/review.md:1",
+			},
+		],
+	});
+	const recorded = repository.session;
+	if (!recorded) throw new Error("Missing historical inspection");
+	const historical: Session = {
+		...recorded,
+		runs: recorded.runs.map((run) => ({ ...run, state: "completed" })),
+	};
+	expect(SessionSchema.parse(structuredClone(historical))).toEqual(historical);
+	repository.session = historical;
+	const status = await flow.status({ request: { view: "compact" } });
+	expectOk(status);
+	expect(status.workflowData.projection).toMatchObject({
+		status: "completed",
+		nextAction: "flow_session_close",
+	});
+	const closed = await flow.sessionClose({
+		request: {
+			operationId: "archive-historical-inspection",
+			expectedRevision: revision(repository),
+			sessionId: historical.id,
+			kind: "completed",
+		},
+	});
+	expectOk(closed);
+	expect(closed.workflowData.delivery.assurance.conclusion).toBe(
+		"completion-unsupported",
+	);
+	const archive = SessionSchema.parse(
+		structuredClone(repository.archives.get(historical.id)),
+	);
+	expect(archive.runs[0]?.state).toBe("completed");
+	expect(archive.runs[0]?.reviews[0]?.result?.verdict).toBe("failed");
+	expect(deliveryProjection(archive)).toEqual(closed.workflowData.delivery);
+});
+
 describe("Flow reviewed feature outcomes", () => {
 	for (const scenario of [
 		{
-			name: "an inspection with blocking findings",
+			name: "an inspection with inadequate deliverable evidence",
 			kind: "inspect",
 			verdict: "failed",
-			state: "completed",
-			summary: "Inspection completed with blocking findings.",
+			state: "blocked",
+			summary: "Feature blocked by review.",
 		},
 		{
 			name: "a clean inspection",
@@ -176,10 +367,7 @@ describe("Flow reviewed feature outcomes", () => {
 					},
 				],
 				assurance: {
-					conclusion:
-						scenario.verdict === "failed"
-							? "completion-unsupported"
-							: "completion-supported",
+					conclusion: "completion-supported",
 				},
 			});
 			const archived = SessionSchema.parse(

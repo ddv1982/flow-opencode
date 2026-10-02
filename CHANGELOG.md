@@ -16,6 +16,9 @@ bounded same-goal prerequisite repair with clearer evidence and recovery guards.
 - Independent reviewers receive original-source baselines and bounded context
   and diff pages. Missing or stale evidence stops review preparation before it
   consumes a failed-review attempt.
+- Failed inspection reviews now use bounded retry for report/evidence repairs.
+  Failed audit observations remain admissible. Previously completed failed inspections
+  remain readable with unsupported assurance.
 - Automatic retry guards also cover Jev-off runs, generic child mutations and
   stale handbacks. Native automatic compaction survives historical message
   updates. Repeated failed reviews and scope blockers still require direction.

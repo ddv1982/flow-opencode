@@ -13,7 +13,6 @@ import type {
 	EvidenceEntry,
 	EvidencePlatform,
 	FeatureId,
-	FeatureKind,
 	ObservedAssertion,
 	Plan,
 	ReviewAssignment,
@@ -959,12 +958,14 @@ describe("Session v5 domain state machine", () => {
 		);
 	});
 
-	test("an inspect feature completes with blockers so the next feature can start", () => {
-		const kind: FeatureKind = "inspect";
+	test("a failed inspection blocks dependent work until its deliverable passes review", () => {
 		const environment = deterministicEnvironment();
 		const inspectPlan: Plan = {
 			...plan,
-			features: plan.features.map((feature) => ({ ...feature, kind })),
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+			})),
 		};
 		let session = begin(
 			approve(saveDraft(environment, { plan: inspectPlan })),
@@ -976,35 +977,107 @@ describe("Session v5 domain state machine", () => {
 			featureId: FOUNDATION,
 			scope: "focused",
 		});
-		const first = requestReview(session, FOUNDATION, environment);
-		session = rejectReview(first.session, FOUNDATION, first.assignment);
-
-		expect(session.runs[0]?.state).toBe("completed");
+		const review = requestReview(session, FOUNDATION, environment);
+		session = rejectReview(review.session, FOUNDATION, review.assignment);
+		expect(session.runs[0]?.state).toBe("blocked");
+		expect(compactProjection(session)).toMatchObject({
+			status: "blocked",
+			nextAction: "flow_feature_reset",
+			progress: { completed: 0 },
+		});
+		expect(() =>
+			begin(session, DELIVERY, environment, "start-before-inspect-pass"),
+		).toThrow();
+		const retry = resetFeature(
+			session,
+			{
+				operationId: "reset-inspect",
+				expectedRevision: session.revision,
+				featureId: FOUNDATION,
+				nextFeatureId: FOUNDATION,
+			},
+			environment,
+		);
+		session = validate(retry.session, {
+			id: "inspect-repaired-proof",
+			featureId: FOUNDATION,
+			scope: "focused",
+		});
+		const repaired = requestReview(
+			session,
+			FOUNDATION,
+			environment,
+			"review-repaired-inspection",
+		);
+		session = pass(
+			repaired.session,
+			FOUNDATION,
+			repaired.assignment,
+			"complete-repaired-inspection",
+		);
 		expect(sessionStatus(session)).toBe("ready");
 		expect(compactProjection(session).nextAction).toBe("flow_run_start");
-		expect(sessionInvariantIssues(session)).toEqual([]);
-		expect(SessionSchema.safeParse(structuredClone(session)).success).toBe(
-			true,
-		);
-
-		session = begin(session, DELIVERY, environment, "start-after-inspect");
-		expect(session.runs[0]?.state).toBe("completed");
-		expect(session.runs[1]).toMatchObject({
-			featureId: DELIVERY,
-			state: "active",
-		});
-		expect(sessionStatus(session)).toBe("running");
-
+		session = begin(session, DELIVERY, environment, "start-after-inspect-pass");
 		session = validate(session, {
-			id: "inspect-delivery-validation",
+			id: "inspect-delivery-proof",
 			featureId: DELIVERY,
 		});
-		const second = requestReview(session, DELIVERY, environment);
-		session = rejectReview(second.session, DELIVERY, second.assignment);
-		expect(session.runs[1]?.state).toBe("completed");
-		expect(sessionStatus(session)).toBe("completed");
-		expect(compactProjection(session).nextAction).toBe("flow_session_close");
-		expect(sessionInvariantIssues(session)).toEqual([]);
+		const final = requestReview(session, DELIVERY, environment);
+		expect(final.assignment.kind).toBe("final");
+		expect(sessionInvariantIssues(final.session)).toEqual([]);
+		expect(SessionSchema.parse(structuredClone(final.session))).toEqual(
+			final.session,
+		);
+	});
+
+	test("a superseded failed inspection does not make independent work a final review", () => {
+		const environment = deterministicEnvironment();
+		const inspectionPlan: Plan = {
+			...plan,
+			features: plan.features.map((feature) => ({
+				...feature,
+				kind: "inspect",
+				dependsOn: [],
+			})),
+		};
+		let session = begin(
+			approve(saveDraft(environment, { plan: inspectionPlan })),
+			FOUNDATION,
+			environment,
+		);
+		session = validate(session, {
+			id: "failed-inspection-proof",
+			featureId: FOUNDATION,
+			scope: "focused",
+		});
+		const review = requestReview(session, FOUNDATION, environment);
+		session = rejectReview(review.session, FOUNDATION, review.assignment);
+		session = resetFeature(
+			session,
+			{
+				operationId: "start-independent-inspect",
+				expectedRevision: session.revision,
+				featureId: FOUNDATION,
+				nextFeatureId: DELIVERY,
+			},
+			environment,
+		).session;
+		session = validate(session, {
+			id: "independent-inspection-proof",
+			featureId: DELIVERY,
+			scope: "focused",
+		});
+		const independent = requestReview(
+			session,
+			DELIVERY,
+			environment,
+			"independent-inspection-review",
+		);
+		expect(independent.assignment.kind).toBe("feature");
+		expect(sessionInvariantIssues(independent.session)).toEqual([]);
+		expect(SessionSchema.parse(structuredClone(independent.session))).toEqual(
+			independent.session,
+		);
 	});
 
 	test("requires explicit retries while independent untouched work continues", () => {

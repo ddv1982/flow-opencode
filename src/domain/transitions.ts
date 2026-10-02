@@ -34,7 +34,6 @@ import type {
 } from "./session.js";
 import {
 	currentRun,
-	featureKind,
 	firstBlockedRun,
 	planEvidence,
 	reviewResultSemanticIssues,
@@ -727,10 +726,6 @@ export function completeFeature(
 		input.result.findings,
 		findingIdPrefix(run.featureId, assignment.createdRevision),
 	);
-	const inspect =
-		featureKind(
-			session.plan?.features.find((feature) => feature.id === run.featureId),
-		) === "inspect";
 	const next = commit(
 		session,
 		"feature-complete",
@@ -742,10 +737,7 @@ export function completeFeature(
 				if (item.id !== run.id) return item;
 				return {
 					...item,
-					state:
-						input.result.verdict === "passed" || inspect
-							? "completed"
-							: "blocked",
+					state: input.result.verdict === "passed" ? "completed" : "blocked",
 					summary: input.summary,
 					reviews: item.reviews.map((review) =>
 						review.id === assignment.id
