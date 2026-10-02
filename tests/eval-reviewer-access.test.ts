@@ -23,7 +23,7 @@ import {
 } from "../evals/reviewer-packet-bytes.js";
 import { reviewerProjection } from "../src/application/session-projection.js";
 import { reviewReadiness } from "../src/domain/review-readiness.js";
-import type { Plan } from "../src/domain/session.js";
+import type { EvidencePlatform, Plan } from "../src/domain/session.js";
 import {
 	approveSession,
 	deterministicEnvironment,
@@ -137,7 +137,9 @@ async function accessFixture(
 		command: string;
 		scope: "focused" | "broad";
 		exitCode: number;
+		hostPlatform?: EvidencePlatform;
 	}[] = [],
+	exitCode = 0,
 ) {
 	const repository = new MemorySessionRepository();
 	const flow = await approveSession(repository, deterministicEnvironment(), {
@@ -153,6 +155,7 @@ async function accessFixture(
 		await recordObservedValidation(repository, {
 			command,
 			scope,
+			exitCode,
 			captureId: "capture-reviewer-access",
 		});
 		expectOk(
@@ -579,8 +582,16 @@ test("nonfinal inspect typed observation remains supported with accepted focused
 	expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
 });
 
-for (const kind of ["final", "feature"] as const) {
-	test(`observed canonical ${kind} review ignores a later focused same-command retry`, async () => {
+for (const { kind, extraPlatform } of [
+	{ kind: "final" },
+	{ kind: "feature" },
+	{ kind: "feature", extraPlatform: "linux" },
+	{ kind: "final", extraPlatform: "win32" },
+] satisfies readonly {
+	kind: "final" | "feature";
+	extraPlatform?: EvidencePlatform;
+}[]) {
+	test(`observed canonical ${kind} review ignores a later focused same-command retry${extraPlatform ? ` with ${extraPlatform} extra proof` : ""}`, async () => {
 		const command = "node scripts/audit.mjs";
 		const first = plan.features[0];
 		if (!first) throw new Error("Missing observed inspection");
@@ -608,15 +619,43 @@ for (const kind of ["final", "feature"] as const) {
 					scope: "gate-observe",
 					command,
 					environment: "Linux workspace",
-					platform: "linux",
+					platform: kind === "feature" && extraPlatform ? "other" : "linux",
 					assertions: [],
 					requirement: "Record the complete audit observation.",
 				},
+				...(extraPlatform
+					? [
+							{
+								scope: "extra" as const,
+								command,
+								environment: "Extra proof host",
+								platform: extraPlatform,
+								assertions: [],
+								requirement: "Collect extra proof before final review.",
+							},
+						]
+					: []),
 			],
 		};
-		const fixture = await accessFixture(approvedPlan, command, "focused", [
-			{ command, scope: "broad", exitCode: 21 },
-		]);
+		const fixture = await accessFixture(
+			approvedPlan,
+			command,
+			"focused",
+			[
+				{ command, scope: "broad", exitCode: 21 },
+				...(kind === "final" && extraPlatform
+					? [
+							{
+								command,
+								scope: "focused" as const,
+								exitCode: 0,
+								hostPlatform: extraPlatform,
+							},
+						]
+					: []),
+			],
+			kind === "feature" && extraPlatform ? 1 : 0,
+		);
 		const run = fixture.document.runs[0],
 			assignment = run?.reviews[0];
 		if (!run || !assignment) throw new Error("Missing observed review");
@@ -627,9 +666,15 @@ for (const kind of ["final", "feature"] as const) {
 			})),
 		).toEqual([
 			{ scope: "broad", intent: "observe" },
+			...(kind === "final" && extraPlatform
+				? [{ scope: "focused", intent: "observe" }]
+				: []),
 			{ scope: "focused", intent: "observe" },
 		]);
-		expect(assignment.validationIds).toEqual(["capture-extra-0"]);
+		expect(assignment.validationIds).toEqual([
+			"capture-extra-0",
+			...(kind === "final" && extraPlatform ? ["capture-extra-1"] : []),
+		]);
 		expect(
 			reviewReadiness(fixture.document, run, assignment.sourceDigest),
 		).toMatchObject({ kind: "ready", reviewKind: kind });
@@ -661,7 +706,7 @@ for (const kind of ["final", "feature"] as const) {
 		expect(checkReviewerEvidenceAccess(broadInput, broadInvalid)).not.toEqual(
 			[],
 		);
-		if (kind === "final") {
+		if (kind === "final" && !extraPlatform) {
 			const extra = {
 				scope: "extra" as const,
 				command,
