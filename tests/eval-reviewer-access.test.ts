@@ -22,10 +22,18 @@ import {
 	ReviewerPacketSchema,
 } from "../evals/reviewer-packet-bytes.js";
 import { reviewerProjection } from "../src/application/session-projection.js";
+import { reviewReadiness } from "../src/domain/review-readiness.js";
+import type { EvidencePlatform, Plan } from "../src/domain/session.js";
 import {
 	approveSession,
 	deterministicEnvironment,
+	expectOk,
+	FEATURE,
 	MemorySessionRepository,
+	plan,
+	recordObservedValidation,
+	revision,
+	startFeatureRun,
 	startReviewedRun,
 	submitReview,
 } from "./runtime-test-support.js";
@@ -121,10 +129,55 @@ test("missing diff page records explicit unavailable packet", () => {
 	]);
 });
 
-async function accessFixture() {
+async function accessFixture(
+	approvedPlan: Plan = plan,
+	command = "bun test",
+	scope: "focused" | "broad" = "broad",
+	additional: readonly {
+		command: string;
+		scope: "focused" | "broad";
+		exitCode: number;
+		hostPlatform?: EvidencePlatform;
+	}[] = [],
+	exitCode = 0,
+) {
 	const repository = new MemorySessionRepository();
-	const flow = await approveSession(repository, deterministicEnvironment());
-	await startReviewedRun(flow, repository, { suffix: "reviewer-access" });
+	const flow = await approveSession(repository, deterministicEnvironment(), {
+		plan: approvedPlan,
+	});
+	if (additional.length > 0) {
+		await startFeatureRun(flow, repository, FEATURE, "reviewer-access");
+		for (const [index, observation] of additional.entries())
+			await recordObservedValidation(repository, {
+				...observation,
+				captureId: `capture-extra-${index}`,
+			});
+		await recordObservedValidation(repository, {
+			command,
+			scope,
+			exitCode,
+			captureId: "capture-reviewer-access",
+		});
+		expectOk(
+			await flow.reviewStart({
+				request: {
+					operationId: "review-start-reviewer-access",
+					expectedRevision: revision(repository),
+					featureId: FEATURE,
+					artifactsChanged: [],
+					packet: {
+						summary: "Review source-bound evidence.",
+						riskLenses: ["runtime integrity"],
+					},
+				},
+			}),
+		);
+	} else
+		await startReviewedRun(flow, repository, {
+			suffix: "reviewer-access",
+			command,
+			scope,
+		});
 	const pending = repository.session;
 	if (!pending?.runs[0]?.reviews[0])
 		throw new Error("Missing genuine pending assignment");
@@ -379,6 +432,387 @@ async function accessFixture() {
 test("complete inline context and bound diff read before child submission pass", async () => {
 	const fixture = await accessFixture();
 	expect(checkAutonomousLineage(fixture.input)).toEqual([]);
+	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
+		[],
+	);
+});
+
+async function narrativeReviewFixture(kind: "final" | "feature") {
+	const command = "node scripts/verify.mjs";
+	const first = plan.features[0];
+	if (!first) throw new Error("Missing runtime feature");
+	const approvedPlan: Plan = {
+		...plan,
+		features: [
+			{
+				...first,
+				validation: [
+					"node scripts/verify.mjs passes for token and report behavior, including duplicate tokens and null; inspect source and diff before independent review.",
+				],
+			},
+			...(kind === "feature"
+				? [{ ...first, id: "later-feature", dependsOn: [first.id] }]
+				: []),
+		],
+		evidence: plan.evidence?.map((entry) => ({ ...entry, command })),
+	};
+	return accessFixture(
+		approvedPlan,
+		command,
+		kind === "final" ? "broad" : "focused",
+	);
+}
+
+for (const kind of ["final", "feature"] as const) {
+	test(`runtime-accepted ${kind} review treats legacy validation narrative as prose`, async () => {
+		const fixture = await narrativeReviewFixture(kind);
+		const run = fixture.document.runs[0],
+			assignment = run?.reviews[0];
+		if (!run || !assignment) throw new Error("Missing runtime review");
+		expect(
+			reviewReadiness(fixture.document, run, assignment.sourceDigest),
+		).toMatchObject({ kind: "ready", reviewKind: kind });
+		expect(assignment).toMatchObject({
+			kind,
+			result: { verdict: "passed", terminalDisposition: "submitted" },
+		});
+		expect(
+			checkReviewerEvidenceAccess(fixture.input, fixture.document),
+		).toEqual([]);
+	});
+	for (const invalid of ["no-evidence", "observe-only"] as const) {
+		test(`legacy ${kind} narrative cannot admit ${invalid}`, async () => {
+			const fixture = await narrativeReviewFixture(kind);
+			const input = structuredClone(fixture.input),
+				original = structuredClone(fixture.document);
+			const document = {
+				...original,
+				runs: original.runs.map((run) => ({
+					...run,
+					validations:
+						invalid === "no-evidence"
+							? []
+							: run.validations.map((observation) => ({
+									...observation,
+									intent: "observe" as const,
+								})),
+					reviews: run.reviews.map((assignment) => ({
+						...assignment,
+						validationIds:
+							invalid === "no-evidence" ? [] : assignment.validationIds,
+					})),
+				})),
+			};
+			const run = document.runs[0],
+				assignment = run?.reviews[0];
+			if (!run || !assignment) throw new Error("Missing evidence control");
+			expect(
+				reviewReadiness(document, run, assignment.sourceDigest).kind,
+			).not.toBe("ready");
+			synchronizeContext(input, document);
+			expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
+		});
+	}
+}
+
+test("nonfinal inspect typed observation remains supported with accepted focused baseline", async () => {
+	const first = plan.features[0];
+	if (!first) throw new Error("Missing runtime feature");
+	const approvedPlan: Plan = {
+		...plan,
+		features: [
+			{
+				...first,
+				kind: "inspect",
+				validation: ["Inspect survey findings and current source."],
+				checks: [
+					{
+						command: "node scripts/survey.mjs",
+						intent: "observe",
+						platform: "linux",
+					},
+				],
+			},
+			{
+				...first,
+				id: "later-inspection",
+				kind: "inspect",
+				dependsOn: [first.id],
+			},
+		],
+	};
+	const fixture = await accessFixture(
+		approvedPlan,
+		"bun --version",
+		"focused",
+		[{ command: "node scripts/survey.mjs", scope: "focused", exitCode: 12 }],
+	);
+	const run = fixture.document.runs[0],
+		assignment = run?.reviews[0];
+	if (!run || !assignment) throw new Error("Missing typed inspection");
+	expect(
+		reviewReadiness(fixture.document, run, assignment.sourceDigest),
+	).toMatchObject({ kind: "ready", reviewKind: "feature" });
+	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
+		[],
+	);
+	const input = structuredClone(fixture.input);
+	const document = {
+		...fixture.document,
+		runs: fixture.document.runs.map((run) => ({
+			...run,
+			validations: run.validations.map((observation) =>
+				observation.command === "node scripts/survey.mjs"
+					? {
+							...observation,
+							observedAssertions: [
+								{ name: "forged passing case", status: "passed" as const },
+							],
+						}
+					: observation,
+			),
+		})),
+	};
+	const invalidRun = document.runs[0];
+	if (!invalidRun) throw new Error("Missing typed assertion control");
+	expect(
+		reviewReadiness(document, invalidRun, assignment.sourceDigest),
+	).toEqual({ kind: "vetoed", commands: ["node scripts/survey.mjs"] });
+	synchronizeContext(input, document);
+	expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
+});
+
+for (const { kind, extraPlatform } of [
+	{ kind: "final" },
+	{ kind: "feature" },
+	{ kind: "feature", extraPlatform: "linux" },
+	{ kind: "final", extraPlatform: "win32" },
+] satisfies readonly {
+	kind: "final" | "feature";
+	extraPlatform?: EvidencePlatform;
+}[]) {
+	test(`observed canonical ${kind} review ignores a later focused same-command retry${extraPlatform ? ` with ${extraPlatform} extra proof` : ""}`, async () => {
+		const command = "node scripts/audit.mjs";
+		const first = plan.features[0];
+		if (!first) throw new Error("Missing observed inspection");
+		const approvedPlan: Plan = {
+			...plan,
+			features: [
+				{
+					...first,
+					kind: "inspect",
+					validation: ["Inspect current audit findings and repository source."],
+				},
+				...(kind === "feature"
+					? [
+							{
+								...first,
+								id: "later-inspection",
+								kind: "inspect" as const,
+								dependsOn: [first.id],
+							},
+						]
+					: []),
+			],
+			evidence: [
+				{
+					scope: "gate-observe",
+					command,
+					environment: "Linux workspace",
+					platform: kind === "feature" && extraPlatform ? "other" : "linux",
+					assertions: [],
+					requirement: "Record the complete audit observation.",
+				},
+				...(extraPlatform
+					? [
+							{
+								scope: "extra" as const,
+								command,
+								environment: "Extra proof host",
+								platform: extraPlatform,
+								assertions: [],
+								requirement: "Collect extra proof before final review.",
+							},
+						]
+					: []),
+			],
+		};
+		const fixture = await accessFixture(
+			approvedPlan,
+			command,
+			"focused",
+			[
+				{ command, scope: "broad", exitCode: 21 },
+				...(kind === "final" && extraPlatform
+					? [
+							{
+								command,
+								scope: "focused" as const,
+								exitCode: 0,
+								hostPlatform: extraPlatform,
+							},
+						]
+					: []),
+			],
+			kind === "feature" && extraPlatform ? 1 : 0,
+		);
+		const run = fixture.document.runs[0],
+			assignment = run?.reviews[0];
+		if (!run || !assignment) throw new Error("Missing observed review");
+		expect(
+			run.validations.map((observation) => ({
+				scope: observation.scope,
+				intent: observation.intent,
+			})),
+		).toEqual([
+			{ scope: "broad", intent: "observe" },
+			...(kind === "final" && extraPlatform
+				? [{ scope: "focused" as const, intent: "observe" as const }]
+				: []),
+			{ scope: "focused", intent: "observe" },
+		]);
+		expect(assignment.validationIds).toEqual([
+			"capture-extra-0",
+			...(kind === "final" && extraPlatform ? ["capture-extra-1"] : []),
+		]);
+		expect(
+			reviewReadiness(fixture.document, run, assignment.sourceDigest),
+		).toMatchObject({ kind: "ready", reviewKind: kind });
+		expect(assignment.result).toMatchObject({
+			verdict: "passed",
+			terminalDisposition: "submitted",
+		});
+		expect(
+			checkReviewerEvidenceAccess(fixture.input, fixture.document),
+		).toEqual([]);
+		const broadInvalid = {
+			...fixture.document,
+			runs: fixture.document.runs.map((run) => ({
+				...run,
+				validations: run.validations.map((observation) =>
+					observation.scope === "broad"
+						? { ...observation, outputComplete: false }
+						: observation,
+				),
+			})),
+		};
+		const broadRun = broadInvalid.runs[0];
+		if (!broadRun) throw new Error("Missing broad invalidation control");
+		expect(
+			reviewReadiness(broadInvalid, broadRun, assignment.sourceDigest).kind,
+		).not.toBe("ready");
+		const broadInput = structuredClone(fixture.input);
+		synchronizeContext(broadInput, broadInvalid);
+		expect(checkReviewerEvidenceAccess(broadInput, broadInvalid)).not.toEqual(
+			[],
+		);
+		if (kind === "final" && !extraPlatform) {
+			for (const platform of ["linux", "other", undefined] as const) {
+				const extra = {
+					scope: "extra" as const,
+					command,
+					environment: "Linux workspace",
+					platform,
+					assertions: [],
+					requirement: "Passing extra proof.",
+				};
+				const extraInvalid = {
+					...fixture.document,
+					plan: {
+						...approvedPlan,
+						evidence: [...(approvedPlan.evidence ?? []), extra],
+					},
+					runs: fixture.document.runs.map((run) => ({
+						...run,
+						validations: run.validations.map((observation) =>
+							observation.scope === "focused"
+								? { ...observation, exitCode: 1 }
+								: observation,
+						),
+					})),
+				};
+				const extraRun = extraInvalid.runs[0];
+				if (!extraRun) throw new Error("Missing extra failure control");
+				expect(
+					reviewReadiness(extraInvalid, extraRun, assignment.sourceDigest),
+				).toEqual({ kind: "evidence-unsatisfied", entries: [extra] });
+				const extraInput = structuredClone(fixture.input);
+				synchronizeContext(extraInput, extraInvalid);
+				expect(
+					checkReviewerEvidenceAccess(extraInput, extraInvalid),
+				).not.toEqual([]);
+			}
+		}
+	});
+}
+
+test("legacy exact failed command requires current assigned discharge before review", async () => {
+	const command = "node scripts/legacy-proof.mjs";
+	const approvedPlan: Plan = {
+		...plan,
+		features: plan.features.map((feature) => ({
+			...feature,
+			validation: [command],
+		})),
+	};
+	const fixture = await accessFixture(approvedPlan, "bun test", "broad", [
+		{ command, scope: "focused", exitCode: 1 },
+		{ command, scope: "focused", exitCode: 0 },
+	]);
+	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
+		[],
+	);
+	const input = structuredClone(fixture.input),
+		original = structuredClone(fixture.document);
+	const document = {
+		...original,
+		runs: original.runs.map((run) => ({
+			...run,
+			validations: run.validations.filter(
+				(observation) => observation.id !== "capture-extra-1",
+			),
+			reviews: run.reviews.map((assignment) => ({
+				...assignment,
+				validationIds: assignment.validationIds.filter(
+					(id) => id !== "capture-extra-1",
+				),
+			})),
+		})),
+	};
+	const run = document.runs[0],
+		assignment = run?.reviews[0];
+	if (!run || !assignment) throw new Error("Missing legacy discharge");
+	expect(reviewReadiness(document, run, assignment.sourceDigest)).toEqual({
+		kind: "vetoed",
+		commands: [command],
+	});
+	synchronizeContext(input, document);
+	expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
+});
+
+test("later failed observation cannot poison an accepted earlier review", async () => {
+	const command = "node scripts/legacy-proof.mjs";
+	const approvedPlan: Plan = {
+		...plan,
+		features: plan.features.map((feature) => ({
+			...feature,
+			validation: [command],
+		})),
+	};
+	const fixture = await accessFixture(approvedPlan, "bun test", "broad", [
+		{ command, scope: "focused", exitCode: 0 },
+	]);
+	const run = fixture.document.runs[0],
+		assignment = run?.reviews[0],
+		proof = run?.validations[0];
+	if (!run || !assignment || !proof) throw new Error("Missing as-of review");
+	run.validations.push({
+		...proof,
+		id: "later-failure",
+		exitCode: 1,
+		recordedRevision: assignment.createdRevision + 1,
+	});
+	synchronizeContext(fixture.input, fixture.document);
 	expect(checkReviewerEvidenceAccess(fixture.input, fixture.document)).toEqual(
 		[],
 	);
