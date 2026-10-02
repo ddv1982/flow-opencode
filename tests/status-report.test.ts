@@ -2,8 +2,20 @@ import { describe, expect, test } from "bun:test";
 import {
 	type CompactProjection,
 	idleProjection,
+	project,
 	statusReport,
 } from "../src/application/session-projection.js";
+import {
+	approveSession,
+	deterministicEnvironment,
+	expectOk,
+	FEATURE,
+	MemorySessionRepository,
+	recordObservedValidation,
+	revision,
+	startFeatureRun,
+	submitReview,
+} from "./runtime-test-support.js";
 
 function compact(
 	nextAction: CompactProjection["nextAction"],
@@ -36,6 +48,83 @@ function compact(
 }
 
 describe("deterministic Flow status report", () => {
+	for (const status of ["running", "ready", "blocked"] as const) {
+		test(`${status} checkpoint offers closure choices without granting a retry`, () => {
+			const report = statusReport(compact("await-user-direction", status));
+			expect(report).toContain(
+				"Next step: Choose defer or abandon; an exact retry needs aligned user direction or an authorized host recovery request.",
+			);
+		});
+	}
+
+	for (const failedCommand of [
+		"bun test",
+		"bun test src/other.test.ts",
+		null,
+	]) {
+		test(`blocked detail reports only declared failed gate facts: ${failedCommand}`, async () => {
+			const repository = new MemorySessionRepository();
+			const flow = await approveSession(repository, deterministicEnvironment());
+			await startFeatureRun(flow, repository, FEATURE, "checkpoint");
+			if (failedCommand !== null)
+				await recordObservedValidation(repository, {
+					captureId: "failed-before-review",
+					command: failedCommand,
+					scope: failedCommand === "bun test" ? "broad" : "focused",
+					exitCode: 1,
+				});
+			await recordObservedValidation(repository, {
+				captureId: "accepted-before-review",
+			});
+			expectOk(
+				await flow.reviewStart({
+					request: {
+						operationId: "checkpoint-review",
+						expectedRevision: revision(repository),
+						featureId: FEATURE,
+						artifactsChanged: [],
+						packet: {
+							summary: "Review required gate coverage.",
+							riskLenses: [],
+						},
+					},
+				}),
+			);
+			await submitReview(flow, repository, {
+				suffix: "checkpoint",
+				summary: "Required coverage needs new scope authority.",
+				verdict: "failed",
+				findings: [
+					{
+						severity: "blocking",
+						summary: "Gate excluded an existing acceptance case.",
+						evidence:
+							"The review packet lacks proof that all pre-existing acceptance cases remain covered.",
+						scopeBlocker: true,
+					},
+				],
+			});
+			const document = repository.session;
+			if (!document) throw new Error("Missing checkpoint document");
+			const projection = project(document, { view: "detail" });
+			expect(projection).toMatchObject({
+				status: "blocked",
+				nextAction: "await-user-direction",
+			});
+			const facts = statusReport(projection).filter((line) =>
+				/^(?:Environment|Command):/.test(line),
+			);
+			expect(facts).toEqual(
+				failedCommand === "bun test"
+					? ["Environment: this host", "Command: bun test"]
+					: [],
+			);
+			expect(statusReport(projection)).toContain(
+				"Next step: Choose defer or abandon; an exact retry needs aligned user direction or an authorized host recovery request.",
+			);
+		});
+	}
+
 	test("reports the idle action and exact guidance", () => {
 		expect(statusReport(idleProjection("compact"))).toContain(
 			"Action guidance: inspect the repository and save one draft plan with flow_plan_save.",

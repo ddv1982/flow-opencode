@@ -310,6 +310,21 @@ describe("Flow prompt structure", () => {
 		);
 	});
 
+	test("prerequisite repair preserves acceptance beyond command equality", () => {
+		const run = getFlowGuidance("flow-run").content.replace(/\s+/g, " ");
+		expect(run).toContain(
+			"Preserve test discovery, assertions, and acceptance criteria; never exclude or skip existing tests.",
+		);
+	});
+
+	test("manager checkpoint contract consumes the owned status report", () => {
+		const run = getFlowGuidance("flow-run").content.replace(/\s+/g, " ");
+		expect(run).toContain("report `workflowData.statusReport` verbatim");
+		expect(compileFlowPromptSurface("flow-auto")).toContain(
+			"report detail `statusReport` verbatim",
+		);
+	});
+
 	test("binds named assertions to machine-readable test reports", () => {
 		const plan = getFlowGuidance("flow-plan").content;
 		const run = getFlowGuidance("flow-run").content;
