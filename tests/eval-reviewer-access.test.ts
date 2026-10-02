@@ -640,6 +640,62 @@ for (const kind of ["final", "feature"] as const) {
 		expect(
 			checkReviewerEvidenceAccess(fixture.input, fixture.document),
 		).toEqual([]);
+		const broadInvalid = {
+			...fixture.document,
+			runs: fixture.document.runs.map((run) => ({
+				...run,
+				validations: run.validations.map((observation) =>
+					observation.scope === "broad"
+						? { ...observation, outputComplete: false }
+						: observation,
+				),
+			})),
+		};
+		const broadRun = broadInvalid.runs[0];
+		if (!broadRun) throw new Error("Missing broad invalidation control");
+		expect(
+			reviewReadiness(broadInvalid, broadRun, assignment.sourceDigest).kind,
+		).not.toBe("ready");
+		const broadInput = structuredClone(fixture.input);
+		synchronizeContext(broadInput, broadInvalid);
+		expect(checkReviewerEvidenceAccess(broadInput, broadInvalid)).not.toEqual(
+			[],
+		);
+		if (kind === "final") {
+			const extra = {
+				scope: "extra" as const,
+				command,
+				environment: "Linux workspace",
+				platform: "linux" as const,
+				assertions: [],
+				requirement: "Passing extra proof.",
+			};
+			const extraInvalid = {
+				...fixture.document,
+				plan: {
+					...approvedPlan,
+					evidence: [...(approvedPlan.evidence ?? []), extra],
+				},
+				runs: fixture.document.runs.map((run) => ({
+					...run,
+					validations: run.validations.map((observation) =>
+						observation.scope === "focused"
+							? { ...observation, exitCode: 1 }
+							: observation,
+					),
+				})),
+			};
+			const extraRun = extraInvalid.runs[0];
+			if (!extraRun) throw new Error("Missing extra failure control");
+			expect(
+				reviewReadiness(extraInvalid, extraRun, assignment.sourceDigest),
+			).toEqual({ kind: "evidence-unsatisfied", entries: [extra] });
+			const extraInput = structuredClone(fixture.input);
+			synchronizeContext(extraInput, extraInvalid);
+			expect(checkReviewerEvidenceAccess(extraInput, extraInvalid)).not.toEqual(
+				[],
+			);
+		}
 	});
 }
 

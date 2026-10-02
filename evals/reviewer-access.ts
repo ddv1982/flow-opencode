@@ -397,6 +397,23 @@ function validationAccepted(
 		.filter(
 			(observation) =>
 				observation.recordedRevision < assignment.createdRevision &&
+				!(
+					observation.scope === "focused" &&
+					declaredGates.some(
+						(gate) =>
+							gate.scope === "gate-observe" &&
+							gate.command === observation.command,
+					) &&
+					!specs.some(
+						(required) =>
+							required.command === observation.command &&
+							required.intent === "pass",
+					) &&
+					!(document.plan.evidence ?? []).some(
+						(entry) =>
+							entry.scope === "extra" && entry.command === observation.command,
+					)
+				) &&
 				(observation.scope === "broad" ||
 					vetoCommands.has(observation.command)) &&
 				!acceptedPurpose(observation),
