@@ -27,6 +27,7 @@ import {
 import { completionHonesty, type MetricSession } from "../evals/metrics.js";
 import { replayCassette } from "../evals/replay.js";
 import { SCENARIOS } from "../evals/scenarios.js";
+import { SessionSchema } from "../src/application/schema.js";
 
 function scenario(id: string) {
 	const found = SCENARIOS.find((entry) => entry.id === id);
@@ -213,6 +214,134 @@ function honestyOf(outcome: Awaited<ReturnType<typeof replayCassette>>) {
 }
 
 describe("decision-layer replay", () => {
+	test("rebinds captured validation identities without repairing wrong references", async () => {
+		const template = happyPathCassette();
+		const failedBash = {
+			kind: "bash" as const,
+			agent: "build",
+			sessionIndex: 0,
+			command: "bun test",
+			output: "1 pass\n1 fail",
+			metadata: { exit: 1, truncated: false },
+		};
+		const original = await replayCassette({
+			...template,
+			events: [
+				...template.events.slice(0, 4),
+				failedBash,
+				flow("flow_validation_start", {
+					expectedRevision: 4,
+					featureId: FEATURE,
+					command: "bun test",
+					scope: "broad",
+				}),
+				failedBash,
+			],
+		});
+		expect(original.divergences).toEqual([]);
+		const recorded = SessionSchema.parse(original.outcome.session);
+		const validations = recorded.runs[0]?.validations ?? [];
+		expect(validations).toHaveLength(2);
+		const latest = validations[1];
+		const previous = validations[0];
+		if (!latest || !previous) throw new Error("Missing captured validations");
+		const recording = {
+			flowVersion: template.flowVersion,
+			scenario: template.scenario,
+			model: template.model,
+			attempt: 1,
+			hostPlatform: template.hostPlatform,
+			files: template.files,
+			projectPath: "/workspace",
+			calls: original.outcome.allCalls,
+			finalText: "",
+			assistantMessages: 0,
+			verdict: "PASS",
+			issues: [],
+			falseCompletion: false,
+			documents: [recorded],
+			extraFidelity: [],
+		};
+		const cassette = buildCassette(recording);
+		const unbound = buildCassette({ ...recording, documents: [] });
+		for (const event of unbound.events) {
+			if (event.kind === "bash") expect(event).not.toHaveProperty("validation");
+		}
+		for (const [validationId, valid] of [
+			[latest.id, true],
+			[previous.id, false],
+			["not-an-observed-validation-id", false],
+		] as const) {
+			const amendment = flow("flow_plan_amend", {
+				operationId: "repair-recorded-validation",
+				expectedRevision: recorded.revision,
+				featureId: FEATURE,
+				validationId,
+				reason: "The repository gate exposed a compatibility prerequisite.",
+				repair:
+					"Update the package compatibility setting without changing the gate.",
+				targets: ["package.json"],
+				sameGoal: true,
+				reversible: true,
+			});
+			if (amendment.kind !== "flow") throw new Error("Invalid amendment event");
+			if (valid) {
+				const legacy = {
+					...cassette,
+					events: [...unbound.events, amendment],
+					fidelity: [],
+				};
+				expect(isGated(legacy)).toBe(false);
+			}
+			expect(
+				isGated({ ...cassette, events: [...cassette.events, amendment] }),
+			).toBe(true);
+			const replayed = await replayCassette({
+				...cassette,
+				events: [
+					...cassette.events,
+					{ ...amendment, observed: { status: valid ? "ok" : "error" } },
+				],
+			});
+			expect(replayed.divergences).toEqual([]);
+			const result = SessionSchema.parse(replayed.outcome.session);
+			expect(result.amendments ?? []).toHaveLength(valid ? 1 : 0);
+			if (valid) {
+				expect(result.amendments?.[0]?.validationId).toBe(
+					result.runs[0]?.validations[1]?.id,
+				);
+				expect(result.amendments?.[0]?.validationId).not.toBe(latest.id);
+			}
+		}
+	}, 30_000);
+
+	for (const status of ["ok", "error"] as const) {
+		test(`source-bound evidence ${status} has explicit replay capability limits`, () => {
+			const cassette: Cassette = {
+				...happyPathCassette(),
+				events: [
+					{
+						kind: "flow",
+						tool: "flow_status",
+						agent: "flow-reviewer",
+						sessionIndex: 1,
+						input: {
+							request: {
+								view: "reviewer-evidence",
+								assignmentId: RECORDED_ASSIGNMENT,
+								part: "diff",
+								page: 1,
+							},
+						},
+						observed: { status },
+					},
+				],
+				fidelity: [],
+			};
+			expect(isGated(cassette)).toBe(status === "error");
+		});
+	}
+
 	test("does not promote an unreplayed workspace diff to gated evidence", async () => {
 		const cassette: Cassette = {
 			...happyPathCassette(),

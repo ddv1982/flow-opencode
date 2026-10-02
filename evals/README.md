@@ -351,8 +351,9 @@ refusal replays green — the exact class of defect this suite exists to catch. 
 Three things a recording cannot hand over literally:
 
 - **Runtime-issued identifiers.** A replayed `flow_plan_save` mints its own session
-  id, `flow_review_start` its own assignment id, and a submission its own finding
-  ids, so a recorded argument naming one is translated through a map the driver
+  id, validation capture its own observation id, `flow_review_start` its own
+  assignment id, and a submission its own finding ids. A recorded argument naming
+  one is translated through a map the driver
   learns as it goes. An untranslated string passes through unchanged, which is what
   keeps a recorded *wrong* id a recorded wrong id.
 - **The host a command ran on.** Injected from the cassette, never read from the
@@ -367,6 +368,16 @@ A cassette whose run recorded something a decision-layer replay cannot reproduce
 source drift between arming and observing, an abort, an excluded ask — carries a
 `fidelity` note and is **reported, not gated**, on the same principle the
 thresholds use: gate what is measured, report what is not.
+
+Capture identities are retained only when the appended marker matches a stored
+observation and its command. Replay binds those IDs to newly persisted captures;
+unknown or superseded references still fail. Older recordings without capture
+identities report that limitation rather than inventing a binding from command
+text. Successful source-bound reviewer page reads also carry an unsupported
+workspace-diff note. Decision replay does not apply file edits or reproduce
+untracked baseline state. It still prints page divergences; this is not a passing
+review or release qualification. These limits are derived for existing recordings
+without rewriting their measured bytes or expectations.
 
 Nothing credential-shaped is written into a cassette, and the recording host's
 project path is replaced by a token rather than baked in. The recording host copies

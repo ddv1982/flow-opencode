@@ -64,6 +64,7 @@ export type CassetteEvent =
 			output: string;
 			resultsPath?: string | undefined;
 			testReport?: string | undefined;
+			validation?: Readonly<{ id: string; revision: number }> | undefined;
 			/**
 			 * The host metadata the capture hook read: `exit`, and `truncated` or
 			 * `complete`. Recorded verbatim because a host that reports neither is a
@@ -103,6 +104,7 @@ export type FidelityNote =
 	| "host-error"
 	| "provider-error"
 	| "evaluator-error"
+	| "validation-identity-unrecorded"
 	| "workspace-diff-unreplayed";
 
 export type Cassette = Readonly<{
@@ -248,40 +250,79 @@ function xml(value: string): string {
 		.replaceAll(">", "&gt;");
 }
 
-function validationReport(output: string): string | null {
+function validationMarker(output: string): Record<string, unknown> | null {
 	const marker = output.match(/\n\n\[flow-validation\]\s+([^\n]+)$/);
 	if (!marker?.[1]) return null;
 	try {
-		const parsed = JSON.parse(marker[1]) as {
-			assertions?: { name?: unknown; status?: unknown }[];
-		};
-		const cases = (parsed.assertions ?? []).flatMap((assertion) => {
-			if (
-				typeof assertion.name !== "string" ||
-				!(["passed", "failed", "skipped"] as const).some(
-					(status) => status === assertion.status,
-				)
-			)
-				return [];
-			const body =
-				assertion.status === "failed"
-					? "<failure/>"
-					: assertion.status === "skipped"
-						? "<skipped/>"
-						: "";
-			return [`<testcase name="${xml(assertion.name)}">${body}</testcase>`];
-		});
-		return cases.length === 0
-			? null
-			: `<testsuite>${cases.join("")}</testsuite>`;
+		return record(JSON.parse(marker[1]));
 	} catch {
 		return null;
 	}
 }
 
+export function capturedValidationIdentity(
+	output: string,
+): Readonly<{ id: string; revision: number }> | null {
+	const marker = validationMarker(output);
+	if (
+		typeof marker?.id !== "string" ||
+		marker.id.length === 0 ||
+		marker.id.length > 256 ||
+		typeof marker.recordedRevision !== "number" ||
+		!Number.isSafeInteger(marker.recordedRevision) ||
+		marker.recordedRevision < 0
+	)
+		return null;
+	return { id: marker.id, revision: marker.recordedRevision };
+}
+
+function validationReport(output: string): string | null {
+	const assertions = validationMarker(output)?.assertions;
+	if (!Array.isArray(assertions)) return null;
+	const cases = assertions.flatMap((value) => {
+		const assertion = record(value);
+		if (
+			typeof assertion?.name !== "string" ||
+			!(["passed", "failed", "skipped"] as const).some(
+				(status) => status === assertion.status,
+			)
+		)
+			return [];
+		const body =
+			assertion.status === "failed"
+				? "<failure/>"
+				: assertion.status === "skipped"
+					? "<skipped/>"
+					: "";
+		return [`<testcase name="${xml(assertion.name)}">${body}</testcase>`];
+	});
+	return cases.length === 0 ? null : `<testsuite>${cases.join("")}</testsuite>`;
+}
+
 /** A cassette is gated only when nothing about it is known to be unreproducible. */
 export function isGated(cassette: Cassette): boolean {
-	return cassette.fidelity.length === 0;
+	return cassetteFidelity(cassette).length === 0;
+}
+
+export function cassetteFidelity(
+	cassette: Pick<Cassette, "events" | "fidelity">,
+): readonly FidelityNote[] {
+	const fidelity = new Set(cassette.fidelity);
+	let identitiesRecorded = false;
+	for (const event of cassette.events) {
+		if (event.kind === "bash" && event.validation) identitiesRecorded = true;
+		if (event.kind !== "flow" || event.observed.status !== "ok") continue;
+		const request = record(event.input.request);
+		if (event.tool === "flow_status" && request?.view === "reviewer-evidence")
+			fidelity.add("workspace-diff-unreplayed");
+		if (
+			event.tool === "flow_plan_amend" &&
+			typeof request?.validationId === "string" &&
+			!identitiesRecorded
+		)
+			fidelity.add("validation-identity-unrecorded");
+	}
+	return [...fidelity];
 }
 
 /** Every string under a key of this name, at any depth. */
@@ -407,12 +448,33 @@ export function buildCassette(options: {
 				typeof command === "string" && pending?.command === command
 					? validationReport(call.rawOutput)
 					: null;
+			const identity = capturedValidationIdentity(call.rawOutput);
+			const captured =
+				identity &&
+				options.documents.some((document) => {
+					if (!Array.isArray(document.runs)) return false;
+					return document.runs.some((run) => {
+						const validations = record(run)?.validations;
+						return (
+							Array.isArray(validations) &&
+							validations.some((value) => {
+								const observation = record(value);
+								return (
+									observation?.id === identity.id &&
+									observation.recordedRevision === identity.revision &&
+									observation.command === command
+								);
+							})
+						);
+					});
+				});
 			events.push({
 				kind: "bash",
 				...base,
 				command: typeof command === "string" ? command : "",
 				output: boundedOutput(stripValidationMarker(call.rawOutput)),
 				metadata: call.metadata,
+				...(captured && identity ? { validation: identity } : {}),
 				...(testReport && pending
 					? { resultsPath: pending.resultsPath, testReport }
 					: {}),
@@ -460,7 +522,7 @@ export function buildCassette(options: {
 			},
 			finalText: options.finalText,
 			assistantMessages: options.assistantMessages,
-			fidelity: [...new Set(fidelity)],
+			fidelity: cassetteFidelity({ events, fidelity }),
 		} satisfies Cassette,
 		options.projectPath,
 	);
