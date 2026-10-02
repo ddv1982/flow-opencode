@@ -25,6 +25,8 @@ type Mode =
 	| "async-deadline"
 	| "child-suspend"
 	| "root-suspend"
+	| "deadline-suspend"
+	| "cancel-suspend"
 	| "credit-cap";
 
 async function observeWait(mode: Mode) {
@@ -45,6 +47,8 @@ async function observeWait(mode: Mode) {
 		"async-deadline",
 		"child-suspend",
 		"root-suspend",
+		"deadline-suspend",
+		"cancel-suspend",
 		"credit-cap",
 	].includes(mode);
 	const finishesAt = timing ? 70_000 : 210_000;
@@ -54,9 +58,22 @@ async function observeWait(mode: Mode) {
 		"cyclic-children",
 		"child-suspend",
 		"root-suspend",
+		"deadline-suspend",
 	].includes(mode);
 	const visits: string[] = [];
 	const clock = spyOn(Date, "now").mockImplementation(() => now);
+	let observerDeadline: AbortController | undefined;
+	const realTimeout = AbortSignal.timeout.bind(AbortSignal);
+	const timeouts = spyOn(AbortSignal, "timeout").mockImplementation((ms) => {
+		if (
+			(mode === "deadline-suspend" || mode === "cancel-suspend") &&
+			ms < 60_000
+		) {
+			observerDeadline = new AbortController();
+			return observerDeadline.signal;
+		}
+		return realTimeout(ms);
+	});
 	const sleep = spyOn(Bun, "sleep").mockImplementation(async () => {
 		now += 2_000;
 		if (mode === "root-suspend" && !slept) now += 40_000;
@@ -193,6 +210,23 @@ async function observeWait(mode: Mode) {
 					return Response.json([]);
 				if (path === "/session/ses_child/message") {
 					childReads++;
+					if (
+						(mode === "deadline-suspend" || mode === "cancel-suspend") &&
+						childReads === 1
+					) {
+						now += 80_000;
+						if (mode === "cancel-suspend") controller.abort(cancelled);
+						else
+							observerDeadline?.abort(
+								new DOMException(
+									"Observer elapsed during suspension",
+									"TimeoutError",
+								),
+							);
+						if (!init?.signal?.aborted)
+							throw new Error("Fixture observer signal did not abort");
+						throw init.signal.reason;
+					}
 					if (mode === "child-suspend" && childReads === 1) now += 40_000;
 					if (mode === "credit-cap" && childReads <= 3) now += 40_000;
 					if (mode === "cancel-child") controller.abort(cancelled);
@@ -228,8 +262,9 @@ async function observeWait(mode: Mode) {
 					{ request, ...(timing ? { timeoutMs: 60_000 } : {}) },
 				]),
 		}).catch((error: unknown) => error);
-		return { result, now, aborts, visits, cancelled };
+		return { result, now, aborts, visits, cancelled, childReads };
 	} finally {
+		timeouts.mockRestore();
 		transport.mockRestore();
 		sleep.mockRestore();
 		clock.mockRestore();
@@ -351,5 +386,20 @@ test("descendant suspension credit remains capped at one full timeout", async ()
 	);
 	expect(String(observed.result)).toContain("Excluded 60s");
 	expect(observed.now).toBeGreaterThanOrEqual(120_000);
+	expect(observed.aborts).toBe(1);
+});
+
+test("a deadline interrupted by suspension rearms observation within restored budget", async () => {
+	const observed = await observeWait("deadline-suspend");
+	expect(observed.result).toBe("quiet");
+	expect(observed.childReads).toBeGreaterThan(1);
+	expect(observed.now).toBeLessThanOrEqual(120_000);
+	expect(observed.aborts).toBe(0);
+});
+
+test("cancellation during suspended observation preserves the original reason", async () => {
+	const observed = await observeWait("cancel-suspend");
+	expect(observed.result).toBe(observed.cancelled);
+	expect(observed.childReads).toBe(1);
 	expect(observed.aborts).toBe(1);
 });
