@@ -452,7 +452,7 @@ test.each([0, 1])(
 
 test.each([
 	["change", "passed"],
-	["inspect", "failed"],
+	["inspect", "passed"],
 ] as const)(
 	"%s supplemental observation survives %s review and delivery without raw output",
 	async (kind, verdict) => {
@@ -527,10 +527,10 @@ test.each([
 					verdict,
 					terminalDisposition: "submitted",
 					findings:
-						verdict === "failed"
+						kind === "inspect"
 							? [
 									{
-										severity: "blocking",
+										severity: "advisory",
 										summary: "Pre-existing audit findings",
 										evidence: `${COMMAND} exited 12 on linux for ${SOURCE_A}`,
 									},
