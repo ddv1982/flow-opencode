@@ -579,6 +579,70 @@ test("nonfinal inspect typed observation remains supported with accepted focused
 	expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
 });
 
+for (const kind of ["final", "feature"] as const) {
+	test(`observed canonical ${kind} review ignores a later focused same-command retry`, async () => {
+		const command = "node scripts/audit.mjs";
+		const first = plan.features[0];
+		if (!first) throw new Error("Missing observed inspection");
+		const approvedPlan: Plan = {
+			...plan,
+			features: [
+				{
+					...first,
+					kind: "inspect",
+					validation: ["Inspect current audit findings and repository source."],
+				},
+				...(kind === "feature"
+					? [
+							{
+								...first,
+								id: "later-inspection",
+								kind: "inspect" as const,
+								dependsOn: [first.id],
+							},
+						]
+					: []),
+			],
+			evidence: [
+				{
+					scope: "gate-observe",
+					command,
+					environment: "Linux workspace",
+					platform: "linux",
+					assertions: [],
+					requirement: "Record the complete audit observation.",
+				},
+			],
+		};
+		const fixture = await accessFixture(approvedPlan, command, "focused", [
+			{ command, scope: "broad", exitCode: 21 },
+		]);
+		const run = fixture.document.runs[0],
+			assignment = run?.reviews[0];
+		if (!run || !assignment) throw new Error("Missing observed review");
+		expect(
+			run.validations.map((observation) => ({
+				scope: observation.scope,
+				intent: observation.intent,
+			})),
+		).toEqual([
+			{ scope: "broad", intent: "observe" },
+			{ scope: "focused", intent: "observe" },
+		]);
+		expect(assignment.validationIds).toEqual(["capture-extra-0"]);
+		expect(
+			reviewReadiness(fixture.document, run, assignment.sourceDigest),
+		).toMatchObject({ kind: "ready", reviewKind: kind });
+		expect(assignment.result).toMatchObject({
+			verdict: "passed",
+			terminalDisposition: "submitted",
+		});
+		expect(
+			checkReviewerEvidenceAccess(fixture.input, fixture.document),
+		).toEqual([]);
+	});
+}
+
 test("legacy exact failed command requires current assigned discharge before review", async () => {
 	const command = "node scripts/legacy-proof.mjs";
 	const approvedPlan: Plan = {
