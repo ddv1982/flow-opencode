@@ -387,12 +387,14 @@ describe("Flow auto-drive coordinator", () => {
 			});
 			await state.activate();
 			await state.driver.onIdle("host-1");
-			expect(state.prompts[0]?.text).toContain(
-				"Report workflowData.statusReport verbatim before stopping at await-user-direction.",
-			);
-			expect(state.prompts[0]?.text).toContain("detail view once");
+			if (status === "blocked") {
+				expect(state.prompts[0]?.text).toContain(
+					"Report workflowData.statusReport verbatim before stopping at await-user-direction.",
+				);
+				expect(state.prompts[0]?.text).toContain("detail view once");
+			}
 			await state.driver.onIdle("host-1");
-			expect(state.prompts).toHaveLength(1);
+			expect(state.prompts).toHaveLength(status === "blocked" ? 1 : 0);
 			expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
 		});
 	}

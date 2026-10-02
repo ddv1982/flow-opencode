@@ -108,7 +108,11 @@ Flow records the host observation; copy no host-observed fields.
 
 For a complete failed broad gate that requires `pass` before review, use `flow_plan_amend` for a
 reversible same-goal prerequisite. Supply the validation id, reason, repair,
-targets, and truthful attestations. Keep the goal and gate fixed. Choose and test a supported reversible compatibility remedy within that repair scope; keep or revert it from evidence without another approval question. New outcomes, scope blockers, and unavailable declared hosts need direction.
+targets, and truthful attestations. Keep the goal and gate fixed. Preserve test
+discovery, assertions, and acceptance criteria; never exclude or skip existing
+tests. Choose and test a supported reversible compatibility remedy within that
+repair scope; keep or revert it from evidence without another approval question.
+New outcomes, scope blockers, and unavailable declared hosts need direction.
 
 A gate that cannot pass must first name the failing case or output that blocks
 it for `scope: "gate"`. If the bounded amendment rule above does not apply, leave this exact
@@ -161,9 +165,10 @@ feature.
 
 ### Blocked review
 
-Follow `nextAction` with the one detail projection for routing, then print
-compact `findingsDigest` as the user-facing list. The runtime already weighs
-`failedReviewCount` and `blockedFeature.scopeBlocker`.
+Follow `nextAction` with the one detail projection for routing. At
+`await-user-direction`, report `workflowData.statusReport` verbatim. Otherwise
+print compact `findingsDigest`. The runtime already weighs `failedReviewCount`
+and `blockedFeature.scopeBlocker`.
 
 - Running `await-user-direction` means plan evidence is unsatisfied. Offer its
   command byte-for-byte and environment, defer, or abandon. Do not review or reset.

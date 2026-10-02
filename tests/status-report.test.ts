@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+	persistObservedValidation,
+	prepareValidation,
+} from "../src/application/prepare-validation.js";
+import {
 	type CompactProjection,
 	idleProjection,
 	project,
@@ -11,6 +15,8 @@ import {
 	expectOk,
 	FEATURE,
 	MemorySessionRepository,
+	OUTPUT,
+	plan,
 	recordObservedValidation,
 	revision,
 	startFeatureRun,
@@ -57,22 +63,38 @@ describe("deterministic Flow status report", () => {
 		});
 	}
 
-	for (const failedCommand of [
-		"bun test",
-		"bun test src/other.test.ts",
+	for (const observation of [
+		{ command: "bun test", scope: "broad", exitCode: 1 },
+		{ command: "bun test src/other.test.ts", scope: "focused", exitCode: 1 },
+		{ command: "bun test", scope: "broad", exitCode: null },
 		null,
-	]) {
-		test(`blocked detail reports only declared failed gate facts: ${failedCommand}`, async () => {
+	] as const) {
+		test(`blocked detail reports only declared failed gate facts: ${observation?.command} exit ${observation?.exitCode}`, async () => {
 			const repository = new MemorySessionRepository();
 			const flow = await approveSession(repository, deterministicEnvironment());
 			await startFeatureRun(flow, repository, FEATURE, "checkpoint");
-			if (failedCommand !== null)
-				await recordObservedValidation(repository, {
+			if (observation !== null) {
+				const prepared = await prepareValidation(
+					repository,
+					{
+						expectedRevision: revision(repository),
+						featureId: FEATURE,
+						command: observation.command,
+						scope: observation.scope,
+					},
+					"linux",
+				);
+				await persistObservedValidation(repository, {
+					...prepared,
 					captureId: "failed-before-review",
-					command: failedCommand,
-					scope: failedCommand === "bun test" ? "broad" : "focused",
-					exitCode: 1,
+					exitCode: observation.exitCode,
+					outputDigest: OUTPUT,
+					outputComplete: true,
+					...(observation.exitCode === null
+						? { ineligibleReason: "exit-code-unavailable" as const }
+						: {}),
 				});
+			}
 			await recordObservedValidation(repository, {
 				captureId: "accepted-before-review",
 			});
@@ -115,15 +137,71 @@ describe("deterministic Flow status report", () => {
 				/^(?:Environment|Command):/.test(line),
 			);
 			expect(facts).toEqual(
-				failedCommand === "bun test"
+				observation?.command === "bun test" && observation.exitCode === 1
 					? ["Environment: this host", "Command: bun test"]
 					: [],
 			);
+			if (observation?.command === "bun test" && observation.exitCode === 1)
+				expect(
+					statusReport(projection).find((line) =>
+						line.startsWith("Historical failed gate observation:"),
+					),
+				).toEndWith("not a current gate verdict.");
 			expect(statusReport(projection)).toContain(
 				"Next step: Choose defer or abandon; an exact retry needs aligned user direction or an authorized host recovery request.",
 			);
 		});
 	}
+
+	test("observed inspection gate failure is not a required-pass checkpoint fact", async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await approveSession(repository, deterministicEnvironment(), {
+			plan: {
+				...plan,
+				features: plan.features.map((feature) => ({
+					...feature,
+					kind: "inspect",
+				})),
+				evidence: [
+					{
+						scope: "gate-observe",
+						command: "bun test",
+						environment: "Linux",
+						requirement: "Observe suite",
+						platform: "linux",
+						assertions: [],
+					},
+					{
+						scope: "extra",
+						command: "node windows-proof.js",
+						environment: "Windows",
+						requirement: "Native proof",
+						platform: "win32",
+						assertions: [],
+					},
+				],
+			},
+		});
+		await startFeatureRun(flow, repository, FEATURE, "observed-checkpoint");
+		await recordObservedValidation(repository, {
+			captureId: "observed-audit-failure",
+			exitCode: 1,
+		});
+		const document = repository.session;
+		if (!document) throw new Error("Missing observed checkpoint");
+		const projection = project(document, { view: "detail" });
+		expect(projection).toMatchObject({
+			status: "running",
+			nextAction: "await-user-direction",
+		});
+		expect(
+			statusReport(projection).filter((line) =>
+				/^(?:Environment|Command|Historical failed gate observation):/.test(
+					line,
+				),
+			),
+		).toEqual([]);
+	});
 
 	test("reports the idle action and exact guidance", () => {
 		expect(statusReport(idleProjection("compact"))).toContain(

@@ -168,6 +168,10 @@ source-bound progress. They add no Session v5 state or authority.
 
 Every successful status read also derives `statusReport` from its typed
 projection. The report owns human lifecycle and recovery text and is not stored.
+At `await-user-direction`, the manager renders the complete detail report,
+including defer/abandon choices and retry authority. A matching failed required
+gate may supply its declared command and environment as historical facts; this
+does not establish a current failure or convert an observed gate into a repair.
 
 ## Validation and review
 

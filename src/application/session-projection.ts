@@ -210,10 +210,10 @@ function actionGuidance(projection: RoutedStatusProjection): string {
 				: "Action guidance: reset the source-stale active feature; do not redispatch its reviewer.";
 		case "await-user-direction":
 			if (projection.status === "ready")
-				return "Action guidance: choose the exact failed feature to retry with flow_run_start; do not use default selection.";
+				return "Action guidance: with aligned user direction or an authorized host recovery request, retry the exact failed feature with flow_run_start; do not use default selection.";
 			if (projection.status === "blocked")
-				return "Action guidance: choose an exact retry or dependency-independent feature through flow_feature_reset with nextFeatureId.";
-			return "Action guidance: supply the missing declared evidence or explicitly choose deferred or abandoned closure.";
+				return "Action guidance: with aligned user direction or an authorized host recovery request, select an exact retry or dependency-independent feature through flow_feature_reset with nextFeatureId.";
+			return "Action guidance: supply the missing declared evidence without changing approved scope.";
 		case "flow_session_close":
 			return "archiveRetry" in projection && projection.archiveRetry
 				? "Action guidance: replay the projected flow_session_close request byte-for-byte before any other recovery action."
@@ -223,7 +223,7 @@ function actionGuidance(projection: RoutedStatusProjection): string {
 		case "dispatch-flow-reviewer":
 			return "Action guidance: dispatch the existing pending assignment to flow-reviewer.";
 		case "flow_validation_start":
-			return "Action guidance: arm the exact next validation command with flow_validation_start. If a complete failed canonical gate exposes a reversible same-goal prerequisite before review, record its bounded scope with flow_plan_amend.";
+			return "Action guidance: arm the exact next validation command with flow_validation_start. If a complete failed canonical gate exposes a reversible same-goal prerequisite before review, record its bounded scope with flow_plan_amend. Preserve test discovery, assertions, and acceptance criteria; never exclude or skip existing tests.";
 		case "flow_review_start":
 			return "Action guidance: create one independent review assignment with flow_review_start.";
 		default: {
@@ -257,6 +257,11 @@ function compactReport(
 		`Next action: ${projection.nextAction}`,
 		`Archive retry: ${projection.archiveRetry ? "yes" : "no"}`,
 		actionGuidance(projection),
+		...(projection.nextAction === "await-user-direction"
+			? [
+					"Next step: Choose defer or abandon; an exact retry needs aligned user direction or an authorized host recovery request.",
+				]
+			: []),
 		...digestReportLines(projection.findingsDigest),
 	];
 }
@@ -269,6 +274,31 @@ function retryRequiredFeatureIds(projection: DetailProjection): string[] {
 		const reviewed = run?.reviews.findLast((review) => review.result !== null);
 		return reviewed?.result?.verdict === "failed" ? [feature.id] : [];
 	});
+}
+
+function checkpointGateReport(projection: DetailProjection): readonly string[] {
+	if (projection.nextAction !== "await-user-direction") return [];
+	const gate = projection.plan?.evidence?.find(
+		(entry) => entry.scope === "gate",
+	);
+	const featureId =
+		projection.activeFeatureId ?? projection.blockedFeature?.featureId;
+	const run = projection.runs.findLast((run) => run.featureId === featureId);
+	const failed = run?.validations.findLast(
+		(validation) =>
+			validation.command === gate?.command &&
+			validation.scope === "broad" &&
+			validation.intent !== "observe" &&
+			validation.outputComplete &&
+			validation.exitCode !== null &&
+			validation.exitCode !== 0,
+	);
+	if (!gate || !failed) return [];
+	return [
+		`Historical failed gate observation: ${failed.id} at revision ${failed.recordedRevision}; not a current gate verdict.`,
+		`Environment: ${gate.environment}`,
+		`Command: ${gate.command}`,
+	];
 }
 
 export function statusReport(projection: StatusProjection): readonly string[] {
@@ -336,6 +366,7 @@ export function statusReport(projection: StatusProjection): readonly string[] {
 		);
 		return [
 			...common,
+			...checkpointGateReport(projection),
 			`Plan features: ${projection.plan?.features.length ?? 0}`,
 			`Runs: ${projection.runs.length}`,
 			`Retry-required features: ${retryRequired.join(", ") || "none"}`,

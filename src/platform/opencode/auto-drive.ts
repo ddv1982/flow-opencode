@@ -948,7 +948,7 @@ export class AutoDriveCoordinator {
 							"Call flow_status with the compact view first.",
 							CONTINUATION_ROUTE,
 							decision.repairHandoff
-								? "A complete failed required gate permits one bounded same-goal prerequisite handoff. Use flow_plan_amend before repair edits, keep the canonical gate unchanged, test the supported reversible remedy, then rerun it. Do not infer new outcome or external-action authority."
+								? "A complete failed required gate permits one bounded same-goal prerequisite handoff. Use flow_plan_amend before repair edits. Preserve test discovery, assertions, and acceptance criteria; never exclude or skip existing tests. Test the supported reversible remedy, then rerun the unchanged command. Do not infer new outcome or external-action authority."
 								: `Then follow ${projection.nextAction} without expanding the approved goal.`,
 						].join(" ");
 						await this.#options.prompt(
