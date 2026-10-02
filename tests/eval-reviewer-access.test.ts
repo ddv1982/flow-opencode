@@ -22,10 +22,13 @@ import {
 	ReviewerPacketSchema,
 } from "../evals/reviewer-packet-bytes.js";
 import { reviewerProjection } from "../src/application/session-projection.js";
+import { reviewReadiness } from "../src/domain/review-readiness.js";
+import type { Plan } from "../src/domain/session.js";
 import {
 	approveSession,
 	deterministicEnvironment,
 	MemorySessionRepository,
+	plan,
 	startReviewedRun,
 	submitReview,
 } from "./runtime-test-support.js";
@@ -121,10 +124,20 @@ test("missing diff page records explicit unavailable packet", () => {
 	]);
 });
 
-async function accessFixture() {
+async function accessFixture(
+	approvedPlan: Plan = plan,
+	command = "bun test",
+	scope: "focused" | "broad" = "broad",
+) {
 	const repository = new MemorySessionRepository();
-	const flow = await approveSession(repository, deterministicEnvironment());
-	await startReviewedRun(flow, repository, { suffix: "reviewer-access" });
+	const flow = await approveSession(repository, deterministicEnvironment(), {
+		plan: approvedPlan,
+	});
+	await startReviewedRun(flow, repository, {
+		suffix: "reviewer-access",
+		command,
+		scope,
+	});
 	const pending = repository.session;
 	if (!pending?.runs[0]?.reviews[0])
 		throw new Error("Missing genuine pending assignment");
@@ -383,6 +396,72 @@ test("complete inline context and bound diff read before child submission pass",
 		[],
 	);
 });
+
+async function narrativeReviewFixture(kind: "final" | "feature") {
+	const command = "node scripts/verify.mjs";
+	const first = plan.features[0];
+	if (!first) throw new Error("Missing runtime feature");
+	const approvedPlan: Plan = {
+		...plan,
+		features: [
+			{
+				...first,
+				validation: [
+					"node scripts/verify.mjs passes for token and report behavior, including duplicate tokens and null; inspect source and diff before independent review.",
+				],
+			},
+			...(kind === "feature"
+				? [{ ...first, id: "later-feature", dependsOn: [first.id] }]
+				: []),
+		],
+		evidence: plan.evidence?.map((entry) => ({ ...entry, command })),
+	};
+	return accessFixture(
+		approvedPlan,
+		command,
+		kind === "final" ? "broad" : "focused",
+	);
+}
+
+for (const kind of ["final", "feature"] as const) {
+	test(`runtime-accepted ${kind} review treats legacy validation narrative as prose`, async () => {
+		const fixture = await narrativeReviewFixture(kind);
+		const run = fixture.document.runs[0],
+			assignment = run?.reviews[0];
+		if (!run || !assignment) throw new Error("Missing runtime review");
+		expect(
+			reviewReadiness(fixture.document, run, assignment.sourceDigest),
+		).toMatchObject({ kind: "ready", reviewKind: kind });
+		expect(assignment).toMatchObject({
+			kind,
+			result: { verdict: "passed", terminalDisposition: "submitted" },
+		});
+		expect(
+			checkReviewerEvidenceAccess(fixture.input, fixture.document),
+		).toEqual([]);
+	});
+	for (const invalid of ["no-evidence", "observe-only"] as const) {
+		test(`legacy ${kind} narrative cannot admit ${invalid}`, async () => {
+			const fixture = await narrativeReviewFixture(kind);
+			const input = structuredClone(fixture.input),
+				document = structuredClone(fixture.document);
+			const run = document.runs[0],
+				assignment = run?.reviews[0];
+			if (!run || !assignment) throw new Error("Missing evidence control");
+			if (invalid === "no-evidence") {
+				run.validations = [];
+				assignment.validationIds = [];
+			} else
+				for (const observation of run.validations)
+					observation.intent = "observe";
+			expect(
+				reviewReadiness(document, run, assignment.sourceDigest).kind,
+			).not.toBe("ready");
+			synchronizeContext(input, document);
+			expect(checkReviewerEvidenceAccess(input, document)).not.toEqual([]);
+		});
+	}
+}
 
 function retainedAccessEvidence(
 	input: Awaited<ReturnType<typeof accessFixture>>["input"],
