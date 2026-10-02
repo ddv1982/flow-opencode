@@ -29,6 +29,7 @@ import {
 	sessionStatus,
 } from "../domain/session-queries.js";
 import { prerequisiteAmendmentEligibility } from "../domain/transitions.js";
+import { isObservedOnDeclaredPlatform } from "../domain/validation.js";
 import {
 	digestReportLines,
 	type FindingsDigest,
@@ -281,19 +282,22 @@ function checkpointGateReport(projection: DetailProjection): readonly string[] {
 	const gate = projection.plan?.evidence?.find(
 		(entry) => entry.scope === "gate",
 	);
+	if (!gate) return [];
 	const featureId =
 		projection.activeFeatureId ?? projection.blockedFeature?.featureId;
 	const run = projection.runs.findLast((run) => run.featureId === featureId);
 	const failed = run?.validations.findLast(
 		(validation) =>
-			validation.command === gate?.command &&
+			validation.command === gate.command &&
 			validation.scope === "broad" &&
 			validation.intent !== "observe" &&
+			validation.ineligibleReason === undefined &&
+			isObservedOnDeclaredPlatform(gate, validation) &&
 			validation.outputComplete &&
 			validation.exitCode !== null &&
 			validation.exitCode !== 0,
 	);
-	if (!gate || !failed) return [];
+	if (!failed) return [];
 	return [
 		`Historical failed gate observation: ${failed.id} at revision ${failed.recordedRevision}; not a current gate verdict.`,
 		`Environment: ${gate.environment}`,
