@@ -24,8 +24,8 @@ export const FLOW_MANAGER_KERNEL = [
 	[
 		"- Use exact host recovery requests, or retry once in full when",
 		"`nextAction` is `flow_feature_reset`; else checkpoint.",
-		"On `await-user-direction` or a lease stop, print compact `findingsDigest`",
-		"without inventing ids.",
+		"At `await-user-direction`, report detail `statusReport` verbatim;",
+		"lease stops show `findingsDigest`.",
 	].join(" "),
 	[
 		"- Before review, require current-source evidence appropriate to the changed outcome,",

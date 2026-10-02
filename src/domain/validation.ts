@@ -436,7 +436,7 @@ export function recordValidation(
 }
 
 /** `other` and legacy entries retain the command-only rule. */
-function isObservedOnDeclaredPlatform(
+export function isObservedOnDeclaredPlatform(
 	entry: EvidenceEntry,
 	observation: ValidationObservation,
 ): boolean {

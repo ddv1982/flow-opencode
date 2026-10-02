@@ -377,6 +377,28 @@ describe("Flow auto-drive coordinator", () => {
 		});
 	});
 
+	for (const status of ["running", "ready", "blocked"]) {
+		test(`${status} checkpoint handback consumes the complete owned status report`, async () => {
+			const state = harness({
+				sessionId: "flow-1",
+				status,
+				revision: 20,
+				nextAction: "await-user-direction",
+			});
+			await state.activate();
+			await state.driver.onIdle("host-1");
+			if (status === "blocked") {
+				expect(state.prompts[0]?.text).toContain(
+					"Report workflowData.statusReport verbatim before stopping at await-user-direction.",
+				);
+				expect(state.prompts[0]?.text).toContain("detail view once");
+			}
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(status === "blocked" ? 1 : 0);
+			expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
+		});
+	}
+
 	test("keeps a checkpoint active through clarifications and resumes once after progress", async () => {
 		const state = harness({
 			sessionId: "flow-1",
@@ -2555,6 +2577,9 @@ describe("authenticated validation continuation", () => {
 		await state.driver.onIdle("host-1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]?.text).toContain("flow_plan_amend");
+		expect(state.prompts[0]?.text).toContain(
+			"Preserve test discovery, assertions, and acceptance criteria; never exclude or skip existing tests.",
+		);
 		await state.driver.observeMessage(
 			"host-1",
 			DELIVERY,

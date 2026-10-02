@@ -10,6 +10,9 @@ bounded same-goal prerequisite repair with clearer evidence and recovery guards.
 - Exact supplemental checks distinguish required passes from observations.
   Complete nonzero observations remain visible without clearing a failed required
   gate. Approved prerequisite repair keeps its gate and amendment limits.
+- Prerequisite repair guidance preserves test discovery, assertions and
+  acceptance criteria. Checkpoint reports offer defer or abandon and distinguish
+  historical failed-gate observations from a current gate verdict.
 - Independent reviewers receive original-source baselines and bounded context
   and diff pages. Missing or stale evidence stops review preparation before it
   consumes a failed-review attempt.
