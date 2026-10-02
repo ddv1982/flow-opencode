@@ -181,6 +181,38 @@ function observedCall(
 ): ObservedCall | null {
 	if (typeof entry.tool !== "string") return null;
 	const state = record(entry.state);
+	const flatMetadata = record(entry.metadata);
+	const metadata =
+		state?.metadata === undefined ? flatMetadata : record(state.metadata);
+	const canonicalIdentity = metadata ? modelIdentity(metadata) : null;
+	const modelClaims =
+		flatMetadata &&
+		["providerID", "modelID", "model"].some((key) =>
+			Object.hasOwn(flatMetadata, key),
+		);
+	const conflicting =
+		state?.metadata !== undefined &&
+		flatMetadata &&
+		(["sessionId", "parentSessionId"].some(
+			(key) =>
+				Object.hasOwn(flatMetadata, key) &&
+				flatMetadata[key] !== metadata?.[key],
+		) ||
+			(modelClaims &&
+				[
+					flatMetadata,
+					...(Object.hasOwn(flatMetadata, "model")
+						? [{ model: flatMetadata.model }]
+						: []),
+				].some((claim) => {
+					const identity = modelIdentity(claim);
+					return (
+						!identity ||
+						!canonicalIdentity ||
+						identity.provider !== canonicalIdentity.provider ||
+						identity.model !== canonicalIdentity.model
+					);
+				})));
 	return {
 		tool: entry.tool,
 		sessionId:
@@ -192,7 +224,7 @@ function observedCall(
 		output: parsedJson(
 			entry.output ?? state?.output ?? entry.rawOutput ?? state?.error,
 		),
-		metadata: record(entry.metadata) ?? record(state?.metadata) ?? {},
+		metadata: conflicting ? {} : (metadata ?? {}),
 	};
 }
 

@@ -427,6 +427,16 @@ describe("canary record boundary", () => {
 				passes: false,
 			},
 			{
+				name: "conflicting duplicate model identity",
+				top: {
+					providerID: "provider",
+					modelID: "model",
+					model: { providerID: "provider", modelID: "other-model" },
+				},
+				state: canonical,
+				passes: false,
+			},
+			{
 				name: "conflicting provider",
 				top: { providerID: "other-provider", modelID: "model" },
 				state: canonical,
