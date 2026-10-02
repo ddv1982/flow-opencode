@@ -12,7 +12,7 @@ export type SourceDigest = `sha256:${string}`;
 
 export type Artifact = Readonly<{ path: string }>;
 
-export type FeatureKind = "change" | "inspect";
+type FeatureKind = "change" | "inspect";
 export type ValidationIntent = "pass" | "observe";
 export type ValidationCheck = Readonly<{
 	command: string;
