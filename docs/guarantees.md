@@ -156,8 +156,9 @@ remain intact. Extended archives support exact replay with a compatible reader.
 [Terminal capacity](maintainer-contract.md#terminal-capacity) defines the limits
 and downgrade boundary.
 
-An inspection with blocking findings is complete as an inspection. Its findings
-remain visible in delivery and prevent full completion assurance. A change run
-with a failed review remains blocked. These distinctions are runtime-enforced
+New failed reviews block inspection and change runs alike. Inspection reports and
+approved evidence must pass review; product defects grant no repair authority.
+Historical completed inspections with failed reviews remain readable with unsupported assurance.
+These rules are runtime-enforced
 and covered by `tests/runtime-close.test.ts`, `tests/assurance-projection.test.ts`,
 and `tests/session-capacity.test.ts`.

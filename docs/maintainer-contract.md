@@ -116,9 +116,10 @@ or delivery document.
 - Runs remain in strictly increasing durable start-revision order, so derived
   latest-attempt delivery cannot disagree with canonical progress.
 - At most one run is active. Dependencies must be complete before a run starts.
-- A failed review blocks a change run. An inspection completes with its findings,
-  including blockers, without accepting the inspected code. Reset supersedes the
-  selected feature and its dependent runs. An optional exact `nextFeatureId`
+- New failed reviews block either run kind. Inspection repairs cover approved
+  report/evidence targets, not product defects. Legacy completed inspections with
+  failed reviews retain unsupported assurance. Reset supersedes the selected feature
+  and its dependent runs. An optional exact `nextFeatureId`
   starts the chosen runnable feature in the same transaction, and its new run
   starts empty. A failed
   feature is excluded from implicit selection while its latest relevant reviewed

@@ -82,10 +82,9 @@ is the same issue, and omit it for a new issue so the runtime numbers it. A
 failed result that drops a live prior id is rejected. Preserve source-provided
 IDs in summary or evidence.
 
-Report every problem you find. Severity is a routing decision the runtime acts
-on, not a filter on what to mention: `blocking` when the issue invalidates the
-approved outcome, `advisory` otherwise. If unsure, report it as
-`advisory` rather than omitting it. Inspect kind completes with blockers.
+Report every problem. Severity routes the runtime: `blocking` invalidates the
+approved outcome, `advisory` otherwise; use `advisory` when unsure. For inspections,
+product defects are report content; unmet report requirements or evidence block review.
 
 Set `scopeBlocker: true` on a blocking finding whose repair requires material
 work outside the approved plan, and identify the boundary in `evidence`. The

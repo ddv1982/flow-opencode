@@ -32,8 +32,8 @@ export type PlanFeature = Readonly<{
 	/**
 	 * Outcome slice kind. Absent hydrates to `change`.
 	 *
-	 * `inspect` records findings without a repair loop. A failed review completes
-	 * the survey slice so later features can start without reset.
+	 * `inspect` records findings without authorizing product repairs. Its report
+	 * and evidence must pass review; failed reviews use the ordinary retry guards.
 	 */
 	kind?: FeatureKind | undefined;
 }>;

@@ -59,9 +59,11 @@ chosen retry or untouched dependency-independent feature through optional
 `nextFeatureId`. Once that failed run is superseded and status is ready,
 explicit `flow_run_start(featureId)` starts its authorized retry; this adds no
 hold or retry ledger. `PlanFeature.kind` is optional `change` or `inspect`;
-absent is `change`. An inspect feature completes after review even with
-blockers, so a survey can continue without reset. `completed` then means the
-survey finished, not that the tree is clean. Repair is a later change feature.
+absent is `change`. Originally failed inspect reviews completed surveys so later
+features could start without reset. In 9.4, failed reviews block the report/evidence
+deliverable and use bounded retry. Product defects remain report content; repair
+needs an approved change feature. Stored completed inspections with failed reviews stay readable
+with unsupported assurance.
 Every accepted close returns a deterministic delivery
 derived from canonical Session data instead of asking the conversation to
 reconstruct the result. Exact replay re-confirms existing active bytes and the
