@@ -16,7 +16,12 @@ type Mode =
 	| "wrong-directory"
 	| "deadline"
 	| "cancel-child"
-	| "tree-limit";
+	| "tree-limit"
+	| "duplicate-children"
+	| "cyclic-children"
+	| "malformed-children"
+	| "foreign-message"
+	| "malformed-endpoint";
 
 async function observeWait(mode: Mode) {
 	const project = await mkdtemp(join(tmpdir(), "flow-progress-wait-"));
@@ -30,6 +35,11 @@ async function observeWait(mode: Mode) {
 	Object.assign(host, { baseUrl: "http://progress-fixture" });
 	let now = 0;
 	let aborts = 0;
+	const finishes = [
+		"owned-progress",
+		"duplicate-children",
+		"cyclic-children",
+	].includes(mode);
 	const visits: string[] = [];
 	const clock = spyOn(Date, "now").mockImplementation(() => now);
 	const sleep = spyOn(Bun, "sleep").mockImplementation(async () => {
@@ -50,9 +60,7 @@ async function observeWait(mode: Mode) {
 				agent: "build",
 				time: {
 					created: 1,
-					...(mode === "owned-progress" && now >= 210_000
-						? { completed: 210_000 }
-						: {}),
+					...(finishes && now >= 210_000 ? { completed: 210_000 } : {}),
 				},
 			},
 			parts: [
@@ -64,10 +72,7 @@ async function observeWait(mode: Mode) {
 					tool: "task",
 					callID: "call_task",
 					state: {
-						status:
-							mode === "owned-progress" && now >= 210_000
-								? "completed"
-								: "running",
+						status: finishes && now >= 210_000 ? "completed" : "running",
 						input: { subagent_type: "flow-reviewer" },
 						time: { start: 1 },
 					},
@@ -81,10 +86,7 @@ async function observeWait(mode: Mode) {
 				length:
 					mode === "wedged"
 						? 1
-						: Math.floor(
-								Math.min(now, mode === "owned-progress" ? 210_000 : now) /
-									16_000,
-							) + 1,
+						: Math.floor(Math.min(now, finishes ? 210_000 : now) / 16_000) + 1,
 			},
 			(_, index) => ({
 				info: {
@@ -125,6 +127,11 @@ async function observeWait(mode: Mode) {
 					return Response.json(rootMessages());
 				if (path === "/session/ses_root")
 					return Response.json({ id: "ses_root", directory: project });
+				if (
+					path === "/session/ses_root/children" &&
+					mode === "malformed-endpoint"
+				)
+					return Response.json({ unavailable: true });
 				if (path === "/session/ses_root/children")
 					return Response.json(
 						mode === "tree-limit"
@@ -132,9 +139,20 @@ async function observeWait(mode: Mode) {
 									...childMetadata,
 									id: `ses_child_${index}`,
 								}))
-							: [childMetadata],
+							: mode === "duplicate-children"
+								? [childMetadata, childMetadata]
+								: mode === "malformed-children"
+									? [null, {}, { ...childMetadata, id: 42 }]
+									: [childMetadata],
 					);
 				if (path === "/session/ses_child") return Response.json(childMetadata);
+				if (
+					path === "/session/ses_child/children" &&
+					mode === "cyclic-children"
+				)
+					return Response.json([
+						{ id: "ses_root", parentID: "ses_child", directory: project },
+					]);
 				if (
 					path === "/session/ses_child/children" ||
 					/\/session\/ses_child_\d+\/children/.test(path)
@@ -142,6 +160,13 @@ async function observeWait(mode: Mode) {
 					return Response.json([]);
 				if (path === "/session/ses_child/message") {
 					if (mode === "cancel-child") controller.abort(cancelled);
+					if (mode === "foreign-message")
+						return Response.json([
+							{
+								info: { sessionID: "ses_unrelated", role: "assistant" },
+								parts: [],
+							},
+						]);
 					return Response.json(childMessages());
 				}
 				if (/\/session\/ses_child_\d+\/message/.test(path))
@@ -186,7 +211,12 @@ test("owned reviewer progress prevents a false root-task wedge beyond three minu
 	expect(observed.visits).toContain("/session/ses_child/message");
 });
 
-for (const mode of ["wedged", "wrong-parent", "wrong-directory"] as const) {
+for (const mode of [
+	"wedged",
+	"wrong-parent",
+	"wrong-directory",
+	"malformed-children",
+] as const) {
 	test(`${mode} child activity cannot extend a silent root task`, async () => {
 		const observed = await observeWait(mode);
 		expect(observed.result).toBeInstanceOf(Error);
@@ -207,6 +237,39 @@ test("continuous owned reviewer progress retains the twenty-minute hard deadline
 	);
 	expect(observed.now).toBe(1_202_000);
 	expect(observed.aborts).toBe(1);
+});
+
+for (const mode of ["duplicate-children", "cyclic-children"] as const) {
+	test(`${mode} remain one bounded owned progress path`, async () => {
+		const observed = await observeWait(mode);
+		expect(observed.result).toBe("quiet");
+		expect(observed.aborts).toBe(0);
+		expect(
+			observed.visits.filter((path) => path === "/session/ses_child/message")
+				.length,
+		).toBe(
+			observed.visits.filter((path) => path === "/session/ses_root/message")
+				.length,
+		);
+	});
+}
+
+test("foreign message identities cannot contribute to owned child progress", async () => {
+	const observed = await observeWait("foreign-message");
+	expect(String(observed.result)).toContain(
+		"Owned progress transcript is malformed",
+	);
+	expect(observed.aborts).toBe(1);
+});
+
+test("malformed child endpoint reports observation failure instead of a root wedge", async () => {
+	const observed = await observeWait("malformed-endpoint");
+	expect(String(observed.result)).toContain(
+		"Owned progress children response is malformed",
+	);
+	expect(String(observed.result)).not.toContain("wedged");
+	expect(observed.aborts).toBe(1);
+	expect(observed.now).toBe(2_000);
 });
 
 test("owned-child polling cancellation preserves the reason and aborts the root once", async () => {

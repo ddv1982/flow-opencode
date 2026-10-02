@@ -2586,7 +2586,37 @@ export class EvalHost {
 				settledAt += credit;
 				changedAt += credit;
 			}
+			let sessions: readonly {
+				id: string;
+				messages: readonly MessageEntry[];
+			}[];
+			try {
+				sessions = await this.ownedProgressSessions(
+					sessionId,
+					messages,
+					AbortSignal.any([
+						...(this.signal ? [this.signal] : []),
+						AbortSignal.timeout(Math.max(0, deadline - Date.now())),
+					]),
+				);
+			} catch (error) {
+				if (this.signal?.aborted && error === this.signal.reason) throw error;
+				await abortWait();
+				throw error;
+			}
+			const ownedMessages = sessions.flatMap((session) => session.messages);
 			pending = messages.flatMap((entry) =>
+				entry.parts
+					.filter(
+						(part) =>
+							part.type === "tool" &&
+							part.state?.status &&
+							part.state.status !== "completed" &&
+							part.state.status !== "error",
+					)
+					.map((part) => pendingCallLabel(part)),
+			);
+			const ownedPending = ownedMessages.flatMap((entry) =>
 				entry.parts
 					.filter(
 						(part) =>
@@ -2599,12 +2629,22 @@ export class EvalHost {
 			);
 			const busy =
 				delivery?.kind === "pending" ||
-				pending.length > 0 ||
-				messages.some(
+				ownedPending.length > 0 ||
+				ownedMessages.some(
 					(entry) =>
 						entry.info.role === "assistant" && !entry.info.time?.completed,
 				);
-			const next = `${messages.length}:${messages.reduce((total, entry) => total + entry.parts.length, 0)}`;
+			const counts = sessions
+				.map((session) => ({
+					id: session.id,
+					messages: session.messages.length,
+					parts: session.messages.reduce(
+						(total, entry) => total + entry.parts.length,
+						0,
+					),
+				}))
+				.toSorted((left, right) => left.id.localeCompare(right.id));
+			const next = `${ownedMessages.length}:${ownedMessages.reduce((total, entry) => total + entry.parts.length, 0)}:${JSON.stringify(counts)}`;
 			const changed = next !== signature;
 			signature = next;
 			if (changed) changedAt = Date.now();
@@ -2645,14 +2685,14 @@ export class EvalHost {
 					? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
 					: "";
 			const wedged = (elapsedMs: number) =>
-				`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${pending.join(", ") || "none"}.`;
+				`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}.`;
 			// A wedge is diagnosable long before the deadline, and the deadline used to
 			// prove it the slow way: three of the four recorded timeouts spent seventeen
 			// further minutes on the same incomplete tool call, then printed the sentence
 			// below. Ending it here reaches the same finding with the same evidence and
 			// hands the remaining attempts their wall clock back. Wedges are already out
 			// of every pass-rate denominator, so nothing scored changes.
-			if (isWedged(pending, stalled, stalledMs)) {
+			if (isWedged(ownedPending, stalled, stalledMs)) {
 				await abortWait();
 				throw new Error(
 					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedged(stalled)}${suspended}`,
@@ -2669,6 +2709,68 @@ export class EvalHost {
 				);
 			}
 		}
+	}
+
+	private async ownedProgressSessions(
+		root: string,
+		messages: readonly MessageEntry[],
+		signal: AbortSignal,
+	): Promise<readonly { id: string; messages: readonly MessageEntry[] }[]> {
+		const ids = [root];
+		const known = new Set(ids);
+		for (const parent of ids) {
+			const children = await fetchJson(
+				`${this.baseUrl}/session/${encodeURIComponent(parent)}/children`,
+				REQUEST_TIMEOUT_MS,
+				signal,
+			);
+			if (!Array.isArray(children))
+				throw new Error("Owned progress children response is malformed.");
+			for (const child of children) {
+				if (!isRecord(child)) continue;
+				const id = nonEmptyString(child.id);
+				if (
+					!id ||
+					id.length > 256 ||
+					/\s/.test(id) ||
+					child.parentID !== parent ||
+					child.directory !== this.project ||
+					known.has(id)
+				)
+					continue;
+				if (known.size >= 128)
+					throw new Error("Owned progress tree exceeds 128 sessions.");
+				known.add(id);
+				ids.push(id);
+			}
+		}
+		const sessions = [{ id: root, messages }];
+		for (const id of ids.slice(1)) {
+			const entries = await fetchJson(
+				`${this.baseUrl}/session/${encodeURIComponent(id)}/message`,
+				REQUEST_TIMEOUT_MS,
+				signal,
+			);
+			if (
+				!Array.isArray(entries) ||
+				entries.some(
+					(entry) =>
+						!isRecord(entry) ||
+						!isRecord(entry.info) ||
+						entry.info.sessionID !== id ||
+						!Array.isArray(entry.parts) ||
+						entry.parts.some(
+							(part) =>
+								!isRecord(part) ||
+								part.sessionID !== id ||
+								typeof part.type !== "string",
+						),
+				)
+			)
+				throw new Error("Owned progress transcript is malformed.");
+			sessions.push({ id, messages: entries as MessageEntry[] });
+		}
+		return sessions;
 	}
 
 	/**
