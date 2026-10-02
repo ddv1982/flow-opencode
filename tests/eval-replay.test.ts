@@ -245,7 +245,7 @@ describe("decision-layer replay", () => {
 		const latest = validations[1];
 		const previous = validations[0];
 		if (!latest || !previous) throw new Error("Missing captured validations");
-		const cassette = buildCassette({
+		const recording = {
 			flowVersion: template.flowVersion,
 			scenario: template.scenario,
 			model: template.model,
@@ -261,7 +261,12 @@ describe("decision-layer replay", () => {
 			falseCompletion: false,
 			documents: [recorded],
 			extraFidelity: [],
-		});
+		};
+		const cassette = buildCassette(recording);
+		const unbound = buildCassette({ ...recording, documents: [] });
+		for (const event of unbound.events) {
+			if (event.kind === "bash") expect(event).not.toHaveProperty("validation");
+		}
 		for (const [validationId, valid] of [
 			[latest.id, true],
 			[previous.id, false],
@@ -280,6 +285,17 @@ describe("decision-layer replay", () => {
 				reversible: true,
 			});
 			if (amendment.kind !== "flow") throw new Error("Invalid amendment event");
+			if (valid) {
+				const legacy = {
+					...cassette,
+					events: [...unbound.events, amendment],
+					fidelity: [],
+				};
+				expect(isGated(legacy)).toBe(false);
+			}
+			expect(
+				isGated({ ...cassette, events: [...cassette.events, amendment] }),
+			).toBe(true);
 			const replayed = await replayCassette({
 				...cassette,
 				events: [

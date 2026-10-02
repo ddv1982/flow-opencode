@@ -53,6 +53,7 @@ import {
 	bindWorkspace,
 	type Cassette,
 	type CassetteEvent,
+	capturedValidationIdentity,
 } from "./cassette.js";
 import type { ObservedToolCall, Outcome } from "./harness.js";
 
@@ -171,6 +172,18 @@ class Rebinding {
 	private readonly revisions = new Map<number, number>();
 
 	learn(recorded: Cassette["events"][number], replayedOutput: unknown): void {
+		if (recorded.kind === "bash") {
+			const before = recorded.validation;
+			const after =
+				typeof replayedOutput === "string"
+					? capturedValidationIdentity(replayedOutput)
+					: null;
+			if (before && after) {
+				this.ids.set(before.id, after.id);
+				this.revisions.set(before.revision, after.revision);
+			}
+			return;
+		}
 		if (recorded.kind !== "flow") return;
 		const observed = recorded.observed;
 		const replayed = observedIdentifiers(replayedOutput);
@@ -354,6 +367,7 @@ export async function replayCassette(
 		for (const [index, event] of cassette.events.entries()) {
 			if (event.kind === "bash") {
 				const output = await replayBash(validation, event, workspace);
+				rebinding.learn(event, output);
 				calls.push({
 					tool: "bash",
 					sessionIndex: event.sessionIndex,
