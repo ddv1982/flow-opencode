@@ -3,12 +3,17 @@ import {
 	persistObservedValidation,
 	prepareValidation,
 } from "../src/application/prepare-validation.js";
+import { SessionSchema } from "../src/application/schema.js";
 import {
 	type CompactProjection,
 	idleProjection,
 	project,
 	statusReport,
 } from "../src/application/session-projection.js";
+import type {
+	EvidencePlatform,
+	ValidationIneligibleReason,
+} from "../src/domain/session.js";
 import {
 	approveSession,
 	deterministicEnvironment,
@@ -53,7 +58,151 @@ function compact(
 	};
 }
 
+async function historicalGateReport(input: {
+	gatePlatform: EvidencePlatform | undefined;
+	hostPlatform: EvidencePlatform | undefined;
+	ineligibleReason?: ValidationIneligibleReason;
+}): Promise<readonly string[]> {
+	const repository = new MemorySessionRepository();
+	const flow = await approveSession(repository, deterministicEnvironment(), {
+		plan: {
+			...plan,
+			evidence: [
+				{
+					scope: "gate",
+					command: "bun test",
+					environment: "Declared runner",
+					requirement: "Repository suite",
+					assertions: [],
+					platform: input.gatePlatform ?? "other",
+				},
+			],
+		},
+	});
+	if (input.gatePlatform === undefined) {
+		const legacy = JSON.parse(JSON.stringify(repository.session));
+		delete legacy.plan.evidence[0].platform;
+		repository.session = SessionSchema.parse(legacy);
+	}
+	await startFeatureRun(flow, repository, FEATURE, "platform-checkpoint");
+	const prepared = await prepareValidation(
+		repository,
+		{
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "broad",
+		},
+		input.hostPlatform ?? "linux",
+	);
+	await persistObservedValidation(repository, {
+		...prepared,
+		captureId: "historical-failure",
+		exitCode: 1,
+		outputDigest: OUTPUT,
+		outputComplete: true,
+		...(input.ineligibleReason
+			? { ineligibleReason: input.ineligibleReason }
+			: {}),
+	});
+	if (input.hostPlatform === undefined) {
+		const legacy = JSON.parse(JSON.stringify(repository.session));
+		delete legacy.runs[0].validations[0].hostPlatform;
+		repository.session = SessionSchema.parse(legacy);
+	}
+	await recordObservedValidation(repository, {
+		captureId: "accepted-before-review",
+	});
+	expectOk(
+		await flow.reviewStart({
+			request: {
+				operationId: "platform-checkpoint-review",
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				artifactsChanged: [],
+				packet: { summary: "Review whole-gate coverage.", riskLenses: [] },
+			},
+		}),
+	);
+	await submitReview(flow, repository, {
+		suffix: "platform-checkpoint",
+		summary: "Gate coverage needs new scope direction.",
+		verdict: "failed",
+		findings: [
+			{
+				severity: "blocking",
+				summary: "Existing acceptance coverage is not established.",
+				evidence:
+					"The review packet does not establish preservation of the full repository suite.",
+				scopeBlocker: true,
+			},
+		],
+	});
+	const document = repository.session;
+	if (!document) throw new Error("Missing platform checkpoint");
+	return statusReport(project(document, { view: "detail" }));
+}
+
 describe("deterministic Flow status report", () => {
+	for (const example of [
+		{
+			name: "matching OS",
+			gatePlatform: "linux",
+			hostPlatform: "linux",
+			expected: ["Environment: Declared runner", "Command: bun test"],
+		},
+		{
+			name: "wrong OS",
+			gatePlatform: "linux",
+			hostPlatform: "darwin",
+			expected: [],
+		},
+		{
+			name: "unknown OS",
+			gatePlatform: "linux",
+			hostPlatform: "other",
+			expected: [],
+		},
+		{
+			name: "unrecorded OS",
+			gatePlatform: "linux",
+			hostPlatform: undefined,
+			expected: [],
+		},
+		{
+			name: "ineligible complete failure",
+			gatePlatform: "linux",
+			hostPlatform: "linux",
+			ineligibleReason: "source-drift",
+			expected: [],
+		},
+		{
+			name: "command-only other",
+			gatePlatform: "other",
+			hostPlatform: "darwin",
+			expected: ["Environment: Declared runner", "Command: bun test"],
+		},
+		{
+			name: "legacy command-only",
+			gatePlatform: undefined,
+			hostPlatform: undefined,
+			expected: ["Environment: Declared runner", "Command: bun test"],
+		},
+	] as const) {
+		test(`historical checkpoint facts respect gate eligibility: ${example.name}`, async () => {
+			const report = await historicalGateReport(example);
+			expect(
+				report.filter((line) => /^(?:Environment|Command):/.test(line)),
+			).toEqual([...example.expected]);
+			if (example.expected.length === 0)
+				expect(
+					report.filter((line) =>
+						line.startsWith("Historical failed gate observation:"),
+					),
+				).toEqual([]);
+		});
+	}
+
 	for (const status of ["running", "ready", "blocked"] as const) {
 		test(`${status} checkpoint offers closure choices without granting a retry`, () => {
 			const report = statusReport(compact("await-user-direction", status));
