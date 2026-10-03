@@ -2,7 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parse } from "yaml";
 import { z } from "zod";
 
@@ -153,3 +153,87 @@ test("9.4.0 archive readiness emits strict current-time metadata and canary verd
 	);
 	expect(run).not.toContain("--freshness retained");
 });
+
+async function guardFixture(version = "9.4.0", corruptArchive = false) {
+	const root = await mkdtemp(join(tmpdir(), "flow-qualified-guard-"));
+	temporary.push(root);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ version, packageManager: "bun@1.4.0" }),
+	);
+	await writeFile(join(root, "README.md"), "source baseline");
+	if (corruptArchive) {
+		const archives = join(root, "evals/qualification/archives");
+		await mkdir(archives, { recursive: true });
+		await writeFile(join(archives, "9.4.0.tar.gz"), "corrupt archive bytes");
+		await writeFile(
+			join(archives, "9.4.0.json"),
+			JSON.stringify({
+				schemaVersion: 1,
+				packageVersion: "9.4.0",
+				archive: "9.4.0.tar.gz",
+				archiveSha256: `sha256:${"0".repeat(64)}`,
+				bundleId: `qb1-${"0".repeat(64)}`,
+				bundleSha256: `sha256:${"0".repeat(64)}`,
+			}),
+		);
+	}
+	for (const args of [
+		["init"],
+		["config", "user.name", "Local Fixture"],
+		["config", "user.email", "fixture@example.invalid"],
+		["add", "."],
+		["-c", "commit.gpgsign=false", "commit", "-m", "fixture"],
+	]) {
+		const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
+		expect(result.status, result.stderr).toBe(0);
+	}
+	return { root, outputPath: join(root, "opencode-plugin-flow-9.4.0.tgz") };
+}
+function prepareCLI(repositoryRoot: string, outputPath: string) {
+	return spawnSync(
+		process.execPath,
+		[
+			resolve("scripts/prepare-qualified-release-940.ts"),
+			"--repository-root",
+			repositoryRoot,
+			"--out",
+			outputPath,
+		],
+		{ encoding: "utf8" },
+	);
+}
+for (const [variant, expectedError] of [
+	["version", /requires package version 9\.4\.0/],
+	["dirty-source", /clean Git checkout/],
+	["existing-output", /output already exists/],
+	["archive-digest", /Archive digest mismatch/],
+	["output-name", /Output must be named/],
+] as const) {
+	test(`real preparation CLI rejects ${variant} before build and preserves caller files`, async () => {
+		const f = await guardFixture(
+			variant === "version" ? "9.3.0" : "9.4.0",
+			variant === "archive-digest",
+		);
+		if (variant === "dirty-source")
+			await writeFile(join(f.root, "README.md"), "uncommitted source change");
+		if (variant === "existing-output")
+			await writeFile(f.outputPath, "retained artifact");
+		const output =
+			variant === "output-name" ? join(f.root, "README.md") : f.outputPath;
+		const result = prepareCLI(f.root, output);
+		expect(result.status).not.toBe(0);
+		expect(result.stderr).toMatch(expectedError);
+		if (variant === "existing-output")
+			expect(await readFile(output, "utf8")).toBe("retained artifact");
+		else
+			await expect(readFile(f.outputPath)).rejects.toMatchObject({
+				code: "ENOENT",
+			});
+		expect(await readFile(join(f.root, "README.md"), "utf8")).toBe(
+			variant === "dirty-source"
+				? "uncommitted source change"
+				: "source baseline",
+		);
+	});
+}
