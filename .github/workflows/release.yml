@@ -97,21 +97,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bun pm pack --destination .
-          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
-            case "${FLOW_RELEASE_RECOVERY_TAG}" in
-              v9.2.0)
-                sealed="evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
-                digest="sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
-                ;;
-              v9.3.0)
-                sealed="evals/qualification/bundles/qb1-eec4c369d749432abd26cd5e9197124761463c8d6460908a95fc9dd887d38e75/objects/sha256-5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
-                digest="sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
-                ;;
-              *) exit 1 ;;
-            esac
-            bun run scripts/restore-exact-release-artifact.ts \
-              "opencode-plugin-flow-${FLOW_RELEASE_RECOVERY_TAG#v}.tgz" "$sealed" "$digest"
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$version" == "9.4.0" ]]; then
+            bun run scripts/prepare-qualified-release-940.ts --out "opencode-plugin-flow-${version}.tgz"
+          else
+            bun pm pack --destination .
+            if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+              case "${FLOW_RELEASE_RECOVERY_TAG}" in
+                v9.2.0)
+                  sealed="evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
+                  digest="sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
+                  ;;
+                v9.3.0)
+                  sealed="evals/qualification/bundles/qb1-eec4c369d749432abd26cd5e9197124761463c8d6460908a95fc9dd887d38e75/objects/sha256-5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
+                  digest="sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
+                  ;;
+                *) exit 1 ;;
+              esac
+              bun run scripts/restore-exact-release-artifact.ts \
+                "opencode-plugin-flow-${FLOW_RELEASE_RECOVERY_TAG#v}.tgz" "$sealed" "$digest"
+            fi
           fi
 
       - name: Report release evidence readiness without publishing
@@ -119,9 +124,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
           tarball="$(ls opencode-plugin-flow-*.tgz)"
           bun run release:metadata -- --artifact "$tarball"
-          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+          if [[ "$version" == "9.4.0" && -f "evals/qualification/archives/${version}.json" ]]; then
+            bun run release:metadata -- --tag "v${version}" --artifact "$tarball" --canary "evals/canary/${version}.json"
+            bun run eval:canary -- verify --artifact "$tarball" --mode strict
+          elif [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
             bun run release:metadata -- --tag "$FLOW_RELEASE_RECOVERY_TAG" --artifact "$tarball" --canary "evals/canary/${FLOW_RELEASE_RECOVERY_TAG#v}.json"
             bun run eval:canary -- verify --artifact "$tarball" --mode strict
           else
@@ -187,21 +196,26 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bun pm pack --destination .
-          if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
-            case "${FLOW_RELEASE_RECOVERY_TAG}" in
-              v9.2.0)
-                sealed="evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
-                digest="sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
-                ;;
-              v9.3.0)
-                sealed="evals/qualification/bundles/qb1-eec4c369d749432abd26cd5e9197124761463c8d6460908a95fc9dd887d38e75/objects/sha256-5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
-                digest="sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
-                ;;
-              *) exit 1 ;;
-            esac
-            bun run scripts/restore-exact-release-artifact.ts \
-              "opencode-plugin-flow-${FLOW_RELEASE_RECOVERY_TAG#v}.tgz" "$sealed" "$digest"
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$version" == "9.4.0" ]]; then
+            bun run scripts/prepare-qualified-release-940.ts --out "opencode-plugin-flow-${version}.tgz"
+          else
+            bun pm pack --destination .
+            if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" ]]; then
+              case "${FLOW_RELEASE_RECOVERY_TAG}" in
+                v9.2.0)
+                  sealed="evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
+                  digest="sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
+                  ;;
+                v9.3.0)
+                  sealed="evals/qualification/bundles/qb1-eec4c369d749432abd26cd5e9197124761463c8d6460908a95fc9dd887d38e75/objects/sha256-5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
+                  digest="sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f"
+                  ;;
+                *) exit 1 ;;
+              esac
+              bun run scripts/restore-exact-release-artifact.ts \
+                "opencode-plugin-flow-${FLOW_RELEASE_RECOVERY_TAG#v}.tgz" "$sealed" "$digest"
+            fi
           fi
 
       - name: Restore release record from this workflow run

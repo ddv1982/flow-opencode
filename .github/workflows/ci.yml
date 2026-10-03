@@ -68,6 +68,20 @@ jobs:
       - name: Replay recorded model decisions
         run: bun run replay
 
+      - name: Rebuild qualified 9.4.0 artifact without providers
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [[ "$version" != "9.4.0" || ! -f "evals/qualification/archives/${version}.json" ]]; then
+            echo "No qualified 9.4.0 artifact rebuild declared."
+            exit 0
+          fi
+          archive_ci_root="$(mktemp -d)"
+          trap 'rm -rf "$archive_ci_root"' EXIT
+          bun run scripts/prepare-qualified-release-940.ts --out "$archive_ci_root/opencode-plugin-flow-9.4.0.tgz"
+
       - name: Regrade retained qualification archive without providers
         shell: bash
         run: |
