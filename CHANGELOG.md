@@ -16,7 +16,7 @@ three-amendment limit. The approved gate and independent review still apply.
   General session-capacity limits remain.
 - Full qualification retains all twelve cases, including native autonomous
   continuation, prerequisite repair and supplemental observations, on OpenAI
-  GPT-6 Sol. It requires a fresh live matrix and exact-artifact canary, and makes
+  GPT-6.1 Sol. It requires a fresh live matrix and exact-artifact canary, and makes
   no cross-provider or delegated Jev qualification claim.
 - CI rebuilds historical artifacts and regrades retained evidence with the
   matching release source while checking the current checkout's evidence bytes.

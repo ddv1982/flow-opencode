@@ -328,7 +328,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			tarballPath: artifactPath,
 		});
 		const scenarios = releaseScenarios();
-		const models = ["openai/gpt-6-sol"];
+		const models = ["openai/gpt-6.1-sol"];
 		const plan = campaignPlanFor({
 			models,
 			scenarios,

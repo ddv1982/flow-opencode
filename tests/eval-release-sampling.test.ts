@@ -133,8 +133,9 @@ describe("release eval sampling", () => {
 
 	test("checks configured CI release models before authorization", async () => {
 		for (const [configured, expectedCode] of [
-			["openai/gpt-6-sol", 0],
-			["openai/gpt-6-sol,xai/grok-4.6", 1],
+			["openai/gpt-6.1-sol", 0],
+			["openai/gpt-6-sol", 1],
+			["openai/gpt-6.1-sol,xai/grok-4.6", 1],
 			["xai/grok-4.6", 1],
 		] as const) {
 			const child = Bun.spawn(
@@ -152,7 +153,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					`Release ${packageJson.version} requires exactly openai/gpt-6-sol`,
+					`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol`,
 				);
 		}
 	});
@@ -300,7 +301,7 @@ describe("release eval sampling", () => {
 			),
 		).toBe(true);
 		const plan = campaignPlanFor({
-			models: ["openai/gpt-6-sol"],
+			models: ["openai/gpt-6.1-sol"],
 			scenarios,
 			sampling: { kind: "release", packageVersion: packageJson.version },
 			opencodeVersion: "1.18.31",
@@ -311,6 +312,14 @@ describe("release eval sampling", () => {
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "primary"),
 		).toHaveLength(57);
+		expect(() =>
+			campaignPlanFor({
+				models: ["openai/gpt-6-sol"],
+				scenarios,
+				sampling: { kind: "release", packageVersion: packageJson.version },
+				opencodeVersion: "1.18.31",
+			}),
+		).toThrow("openai/gpt-6.1-sol");
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -398,7 +407,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				`Release ${packageJson.version} requires exactly openai/gpt-6-sol`,
+				`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol`,
 			);
 		}
 	});
@@ -410,7 +419,7 @@ describe("release eval sampling", () => {
 				"run",
 				"evals/run.ts",
 				"--model",
-				"openai/gpt-6-sol",
+				"openai/gpt-6.1-sol",
 				"--release",
 				"--concurrency",
 				"2",
