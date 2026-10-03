@@ -133,8 +133,9 @@ describe("release eval sampling", () => {
 
 	test("checks configured CI release models before authorization", async () => {
 		for (const [configured, expectedCode] of [
-			["openai/gpt-6-sol", 0],
-			["openai/gpt-6-sol,xai/grok-4.6", 1],
+			["openai/gpt-6.1-sol", 0],
+			["openai/gpt-6-sol", 1],
+			["openai/gpt-6.1-sol,xai/grok-4.6", 1],
 			["xai/grok-4.6", 1],
 		] as const) {
 			const child = Bun.spawn(
@@ -152,7 +153,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					`Release ${packageJson.version} requires exactly openai/gpt-6-sol`,
+					`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol`,
 				);
 		}
 	});
@@ -274,11 +275,33 @@ describe("release eval sampling", () => {
 		]);
 	});
 
-	test("current 9.4 candidate schedules all twelve cases on its OpenAI-only grid", () => {
-		const scenarios = releaseScenarios();
+	test("preserves the 9.4 twelve-case OpenAI-only grid", () => {
+		const scenarios = releaseScenarios("9.4.0");
 		expect(scenarios).toHaveLength(12);
 		const plan = campaignPlanFor({
 			models: ["openai/gpt-6-sol"],
+			scenarios,
+			sampling: { kind: "release", packageVersion: "9.4.0" },
+			opencodeVersion: "1.18.31",
+		});
+		expect(plan.stoppingRule.count).toBe(57);
+		expect(plan.budget.maxAttempts).toBe(69);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(12);
+		expect(
+			plan.cells.filter((cell) => cell.schedule === "primary"),
+		).toHaveLength(57);
+	});
+
+	test("current 9.5 candidate retains all twelve cases on its OpenAI-only grid", () => {
+		const scenarios = releaseScenarios();
+		expect(scenarios).toHaveLength(12);
+		expect(
+			releaseCatalog(packageJson.version).every(
+				(row) => row.minProviders === 1,
+			),
+		).toBe(true);
+		const plan = campaignPlanFor({
+			models: ["openai/gpt-6.1-sol"],
 			scenarios,
 			sampling: { kind: "release", packageVersion: packageJson.version },
 			opencodeVersion: "1.18.31",
@@ -289,6 +312,14 @@ describe("release eval sampling", () => {
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "primary"),
 		).toHaveLength(57);
+		expect(() =>
+			campaignPlanFor({
+				models: ["openai/gpt-6-sol"],
+				scenarios,
+				sampling: { kind: "release", packageVersion: packageJson.version },
+				opencodeVersion: "1.18.31",
+			}),
+		).toThrow("openai/gpt-6.1-sol");
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -353,7 +384,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects release grids outside the current canonical OpenAI route", async () => {
+	test("rejects release grids outside the canonical OpenAI route", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -376,7 +407,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				`Release ${packageJson.version} requires exactly openai/gpt-6-sol`,
+				`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol`,
 			);
 		}
 	});
@@ -388,7 +419,7 @@ describe("release eval sampling", () => {
 				"run",
 				"evals/run.ts",
 				"--model",
-				"openai/gpt-6-sol",
+				"openai/gpt-6.1-sol",
 				"--release",
 				"--concurrency",
 				"2",

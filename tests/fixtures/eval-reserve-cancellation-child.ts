@@ -13,7 +13,6 @@ const [root, mode] = process.argv.slice(2);
 if (!root || (mode !== "handoff" && mode !== "reserve"))
 	throw new Error("Expected temporary root and handoff/reserve mode.");
 const repositoryRoot = root;
-const models = ["openai/gpt-6-sol"] as const;
 const event = (name: string) =>
 	process.stdout.write(`\n@@eval-reserve:${name}\n`);
 process.stdin.resume(); // Keep the child alive until the parent releases cleanup.
@@ -28,9 +27,17 @@ const realHarness = { ...(await import("../../evals/harness.js")) };
 const realProvenance = { ...(await import("../../evals/provenance.js")) };
 const realPolicy = { ...(await import("../../evals/release-policy.js")) };
 const realScenarios = { ...(await import("../../evals/scenarios.js")) };
-const primaryCount = realPolicy
-	.releaseCatalog(packageJson.version)
-	.reduce((total, row) => total + row.minScoredAttempts, 0);
+const models = realPolicy
+	.releaseProfile(packageJson.version)
+	.requiredModels?.map((model) => `${model.routeProvider}/${model.model}`) ?? [
+	"openai/gpt-6-sol",
+	"xai/grok-4.6",
+];
+const primaryCount =
+	models.length *
+	realPolicy
+		.releaseCatalog(packageJson.version)
+		.reduce((total, row) => total + row.minScoredAttempts, 0);
 // runCampaign hashes the real grader dependency closure relative to its output
 // root. Copy those exact source bytes; do not substitute a fake grader bundle.
 for (const { path, source } of realPolicy.releaseGraderSourceBundle(

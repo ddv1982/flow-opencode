@@ -146,14 +146,17 @@ export type ReleaseProfile = {
 	readonly requiredModels: readonly ModelIdentity[] | null;
 };
 
-const openAiOnlyRelease = (catalog: ValidatedCaseCatalog): ReleaseProfile => ({
+const openAiOnlyRelease = (
+	catalog: ValidatedCaseCatalog,
+	model = "gpt-6-sol",
+): ReleaseProfile => ({
 	catalog: catalog.map((row) => ({ ...row, minProviders: 1 })),
 	requiredModels: [
 		{
 			routeProvider: "openai",
 			gateway: null,
-			family: "gpt-6-sol",
-			model: "gpt-6-sol",
+			family: model,
+			model,
 			revision: null,
 		},
 	],
@@ -165,6 +168,8 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "9.5.0")
+		return openAiOnlyRelease(AUTO_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (packageVersion === "9.4.0")
 		return openAiOnlyRelease(AUTO_RELEASE_CATALOG);
 	if (packageVersion === "9.1.0" || packageVersion === "9.2.0") {
