@@ -9,7 +9,10 @@ import {
 	deriveRetainedFailure,
 	RetainedScenarioEvidenceSchema,
 } from "../evals/grader-input.js";
-import { releaseCatalog } from "../evals/release-policy.js";
+import {
+	releaseCatalog,
+	releaseMinimumProviders,
+} from "../evals/release-policy.js";
 import { EvalReportV2Schema, parseReport } from "../evals/report.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -106,11 +109,11 @@ const signalTest = ["linux", "darwin"].includes(process.platform)
 	: test.skip;
 describe("graceful-eval-stop.R10-05: real release runner reserve cancellation", () => {
 	const catalog = releaseCatalog(packageJson.version);
-	const primaryCount = catalog.reduce(
-		(total, row) => total + row.minScoredAttempts,
-		0,
-	);
-	const reserveCount = catalog.length;
+	const providerCount = releaseMinimumProviders(packageJson.version);
+	const primaryCount =
+		providerCount *
+		catalog.reduce((total, row) => total + row.minScoredAttempts, 0);
+	const reserveCount = providerCount * catalog.length;
 	for (const signal of ["SIGINT", "SIGTERM"] as const) {
 		for (const mode of ["handoff", "reserve"] as const) {
 			const label =
