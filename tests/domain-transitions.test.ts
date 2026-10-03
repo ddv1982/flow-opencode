@@ -161,18 +161,111 @@ describe("bounded prerequisite amendments", () => {
 		).toThrow(/independent review/);
 	});
 
-	test("caps the session at three recorded amendments", () => {
+	test("requires a new canonical failure before another amendment without blocking exact replay", () => {
+		const initial = failedGateSession();
+		const input = amendment(initial);
+		const first = amendPlan(initial, input, SOURCE_A).session;
+		expect(compactProjection(first).prerequisiteRepair).toBeUndefined();
+		for (let index = 2; index <= 6; index++) {
+			expect(() =>
+				amendPlan(first, amendment(first, `plan-amend-${index}`), SOURCE_A),
+			).toThrow(/recorded after the previous amendment/);
+		}
+		expect(first.amendments).toHaveLength(1);
+		expect(amendPlan(first, input, SOURCE_A).replayed).toBe(true);
+		const focused = validate(first, {
+			id: "focused-failure",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "focused",
+			exitCode: 1,
+		});
+		expect(() =>
+			amendPlan(focused, amendment(focused, "focused-amendment"), SOURCE_A),
+		).toThrow(/recorded after the previous amendment/);
+		const fresh = validate(focused, {
+			id: "fresh-canonical-failure",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 1,
+		});
+		expect(compactProjection(fresh).prerequisiteRepair?.validationId).toBe(
+			"fresh-canonical-failure",
+		);
+		const second = amendPlan(
+			fresh,
+			{
+				...amendment(fresh, "plan-amend-2"),
+				validationId: "fresh-canonical-failure",
+			},
+			SOURCE_A,
+		).session;
+		expect(second.amendments).toHaveLength(2);
+	});
+
+	test("continues prerequisite repair beyond three amendments with durable evidence and unchanged gates", () => {
 		let session = failedGateSession();
-		for (let index = 1; index <= 3; index++) {
+		const originalPlan = session.plan;
+		for (let index = 1; index <= 6; index++) {
+			const validationId = `failed-canonical-gate-${index}`;
+			session = validate(session, {
+				id: validationId,
+				featureId: DELIVERY,
+				command: "bun test",
+				scope: "broad",
+				exitCode: 1,
+			});
+			expect(compactProjection(session).prerequisiteRepair?.validationId).toBe(
+				validationId,
+			);
 			session = amendPlan(
 				session,
-				amendment(session, `plan-amend-${index}`),
+				{ ...amendment(session, `plan-amend-${index}`), validationId },
 				SOURCE_A,
 			).session;
+			session = SessionSchema.parse(JSON.parse(JSON.stringify(session)));
+			expect(sessionInvariantIssues(session)).toEqual([]);
+			expect(session.amendments).toHaveLength(index);
+			expect(session.plan).toEqual(originalPlan);
+			expect(compactProjection(session).prerequisiteRepair).toBeUndefined();
+			expect(compactProjection(session).nextAction).toBe(
+				"flow_validation_start",
+			);
 		}
 		expect(() =>
-			amendPlan(session, amendment(session, "plan-amend-4"), SOURCE_A),
-		).toThrow(/all three/);
+			amendPlan(
+				session,
+				{
+					...amendment(session, "stale-amendment"),
+					validationId: "failed-canonical-gate-6",
+				},
+				SOURCE_B,
+			),
+		).toThrow(/current source/);
+		const passing = validate(session, {
+			id: "repaired-canonical-gate",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 0,
+		});
+		const reviewed = requestReview(
+			passing,
+			DELIVERY,
+			deterministicEnvironment(),
+		);
+		const projection = reviewerProjection(
+			reviewed.session,
+			reviewed.assignment.id,
+		);
+		expect(projection.amendments).toEqual(session.amendments ?? []);
+		expect(projection.amendmentEvidence.map(({ id }) => id)).toEqual(
+			Array.from(
+				{ length: 6 },
+				(_, index) => `failed-canonical-gate-${index + 1}`,
+			),
+		);
 	});
 });
 

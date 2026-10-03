@@ -8,7 +8,9 @@
 
 Owned validation and review preparation continue after authenticated progress.
 Receipts retain manager lineage, capture, source, and named results. Stale evidence
-and required failures pause. Complete failed inspection observations can reach
-review. Unchanged revisions never repeat a prompt. Restart discards the lease.
+and required failures without an eligible prerequisite repair pause. Same-goal
+reversible repairs have no amendment count limit; each accepted amendment permits
+one repair handoff. Complete failed inspection observations can reach review.
+Unchanged revisions never repeat a prompt. Restart discards the lease.
 
 Read [pause recovery](troubleshooting.md#flow-auto-stops-after-every-feature).
