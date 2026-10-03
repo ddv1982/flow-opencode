@@ -337,7 +337,7 @@ export const SessionSchema: z.ZodType<Session> = z
 			.optional(),
 		approval: z.enum(["pending", "approved"]),
 		plan: PlanSchema.nullable(),
-		amendments: z.array(PlanAmendmentSchema).max(3).optional(),
+		amendments: z.array(PlanAmendmentSchema).optional(),
 		runs: z.array(FeatureRunSchema).max(512),
 		operations: z.array(OperationRecordSchema),
 		closure: ClosureSchema.nullable(),

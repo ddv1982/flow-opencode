@@ -152,8 +152,9 @@ you granted.
    publish, or release authority.
 
 Failed reviews retain finding ids; dropped live findings fail.
-`flow_plan_amend` records a bounded gate repair before review. The plan stays
-fixed; passing evidence and review still apply.
+`flow_plan_amend` records a same-goal reversible gate repair before review,
+without an amendment count limit. The plan stays fixed; passing evidence and
+review still apply.
 
 ## Bounded parallelism
 

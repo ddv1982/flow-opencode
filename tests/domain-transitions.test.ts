@@ -161,18 +161,67 @@ describe("bounded prerequisite amendments", () => {
 		).toThrow(/independent review/);
 	});
 
-	test("caps the session at three recorded amendments", () => {
+	test("continues prerequisite repair beyond three amendments with durable evidence and unchanged gates", () => {
 		let session = failedGateSession();
-		for (let index = 1; index <= 3; index++) {
+		const originalPlan = session.plan;
+		for (let index = 1; index <= 6; index++) {
+			const validationId = `failed-canonical-gate-${index}`;
+			session = validate(session, {
+				id: validationId,
+				featureId: DELIVERY,
+				command: "bun test",
+				scope: "broad",
+				exitCode: 1,
+			});
 			session = amendPlan(
 				session,
-				amendment(session, `plan-amend-${index}`),
+				{ ...amendment(session, `plan-amend-${index}`), validationId },
 				SOURCE_A,
 			).session;
+			session = SessionSchema.parse(JSON.parse(JSON.stringify(session)));
+			expect(sessionInvariantIssues(session)).toEqual([]);
+			expect(session.amendments).toHaveLength(index);
+			expect(session.plan).toEqual(originalPlan);
+			expect(compactProjection(session).prerequisiteRepair?.validationId).toBe(
+				validationId,
+			);
+			expect(compactProjection(session).nextAction).toBe(
+				"flow_validation_start",
+			);
 		}
 		expect(() =>
-			amendPlan(session, amendment(session, "plan-amend-4"), SOURCE_A),
-		).toThrow(/all three/);
+			amendPlan(
+				session,
+				{
+					...amendment(session, "stale-amendment"),
+					validationId: "failed-canonical-gate-6",
+				},
+				SOURCE_B,
+			),
+		).toThrow(/current source/);
+		const passing = validate(session, {
+			id: "repaired-canonical-gate",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 0,
+		});
+		const reviewed = requestReview(
+			passing,
+			DELIVERY,
+			deterministicEnvironment(),
+		);
+		const projection = reviewerProjection(
+			reviewed.session,
+			reviewed.assignment.id,
+		);
+		expect(projection.amendments).toEqual(session.amendments ?? []);
+		expect(projection.amendmentEvidence.map(({ id }) => id)).toEqual(
+			Array.from(
+				{ length: 6 },
+				(_, index) => `failed-canonical-gate-${index + 1}`,
+			),
+		);
 	});
 });
 

@@ -112,6 +112,8 @@ targets, and truthful attestations. Keep the goal and gate fixed. Preserve test
 discovery, assertions, and acceptance criteria; never exclude or skip existing
 tests. Choose and test a supported reversible compatibility remedy within that
 repair scope; keep or revert it from evidence without another approval question.
+There is no amendment count limit; continue supported same-goal repairs under
+these checks. Each amendment remains bound to current failed-gate evidence.
 New outcomes, scope blockers, and unavailable declared hosts need direction.
 
 A gate that cannot pass must first name the failing case or output that blocks

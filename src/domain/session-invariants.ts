@@ -80,8 +80,6 @@ export function sessionInvariantIssues(session: Session): string[] {
 		issues.push("Plan amendments require an approved plan.");
 	const planProblem = planIssue(session.plan);
 	if (planProblem) issues.push(planProblem);
-	if ((session.amendments?.length ?? 0) > 3)
-		issues.push("A session cannot have more than three plan amendments.");
 	for (const amendment of session.amendments ?? []) {
 		const operation = session.operations.find(
 			(item) => item.id === amendment.operationId,

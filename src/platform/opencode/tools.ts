@@ -279,7 +279,7 @@ export function createTools(options: ToolOptions): FlowTools {
 		}),
 		flow_plan_amend: defineFlowTool({
 			description:
-				"Record at most three same-goal reversible prerequisite repairs after a failed canonical gate. This does not change the approved plan or bypass review.",
+				"Record a same-goal reversible prerequisite repair after a failed canonical gate, without an amendment count limit. This does not change the approved plan or bypass review.",
 			schema: PlanAmendInputSchema,
 			execute: (args, context) =>
 				executeMutation(context, options.validation, (workspace) =>

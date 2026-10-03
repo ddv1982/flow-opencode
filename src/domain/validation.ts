@@ -740,12 +740,6 @@ export function prerequisiteAmendmentEligibility(
 			eligible: false,
 			reason: "A prerequisite amendment requires an approved plan.",
 		};
-	if ((session.amendments?.length ?? 0) >= 3)
-		return {
-			eligible: false,
-			reason:
-				"This session has used all three bounded prerequisite amendments.",
-		};
 	const run = activeRun(session);
 	if (!run || run.featureId !== featureId)
 		return {

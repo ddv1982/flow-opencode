@@ -29,17 +29,17 @@ silently continue that goal through an ordinary non-Flow workflow. Runtime
 Environment-sensitive transition guards remain authoritative when a mutation is
 attempted.
 
-Before every manager-owned lifecycle mutation, including direct `/flow-plan` or
-`/flow-run` use, the manager compares the compact-projected goal with the current
-request. Exact projected recovery of an already-accepted close runs first and
-grants no authority for new work. The comparison is a semantic judgment made by
-the manager, not a runtime intent classifier. A continuation or compatible
-narrowing may proceed. A materially new or expanded request causes no mutation
-and has not started; the manager offers to continue, defer, or abandon the
-active work. A completed but unclosed session is closed as completed before a
-new request begins. A same-goal approved plan-only request reports the immutable
-plan and current progress, then stops without saving, approving, or starting a
-run.
+Prerequisite repairs have no amendment count limit. Each needs a current,
+complete failed canonical gate and reversible same-goal targets before review.
+The plan, gate, test coverage, and review stay fixed. Automatic repair handoffs
+occur once per accepted amendment boundary, not per failure capture.
+
+Before manager mutations, compare the compact goal with the request. Exact
+recovery of an accepted close runs first and grants no new authority. The manager
+judges alignment: continuation or compatible narrowing proceeds; new or expanded
+work makes no mutation and offers continue, defer, or abandon. Close completed
+work before a new request. Same-goal approved plan-only requests report plan and
+progress without mutation.
 
 Within existing implementation authority, the manager continues after plan
 approval and each passing feature outcome. Under `/flow-auto`, compact `ready`
@@ -94,11 +94,10 @@ or delivery document.
 
 - Session v5 is the only active schema. Older documents never hydrate as active
   state and old archives never authorize work.
-- Within Session v5, compatibility runs from older writer to newer reader. An
-  older Flow build is not a supported reader after a newer build writes values
-  beyond its historical bounds. In particular, a run may retain 64 exact
-  planned gates plus one separate broad observation. Users must finish or close
-  active work before downgrade; Flow adds no rollback capability layer.
+- Session v5 compatibility runs from older writer to newer reader. Older builds
+  cannot read values beyond historical bounds, including more than three
+  amendments or 64 planned gates plus a separate broad observation. Finish or
+  close before downgrade; Flow adds no rollback layer.
 - Approval locks a bounded DAG and optional per-feature pass or observe checks.
   New plans declare one `evidence` gate, or `gate-observe` for all-inspect work.
   Older documents hydrate without `evidence` or `checks`; retired `gate` and
@@ -110,9 +109,7 @@ or delivery document.
   editing. Finish the approved plan or explicitly close it before creating a
   different plan; never replan the active approved session in place.
 - A feature run aggregates validation, review, result, and artifacts. Optional
-  baseline and packet references point to managed hashed sidecars. New builds
-  read older Session v5 state; strict older builds may quarantine new active
-  state. Finish or close before downgrading.
+  baseline and packet references point to managed hashed sidecars.
 - Runs remain in strictly increasing durable start-revision order, so derived
   latest-attempt delivery cannot disagree with canonical progress.
 - At most one run is active. Dependencies must be complete before a run starts.

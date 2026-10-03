@@ -2603,6 +2603,26 @@ describe("authenticated validation continuation", () => {
 		);
 		await state.driver.onIdle("host-1");
 		expect(state.prompts).toHaveLength(2);
+		for (let index = 2; index <= 5; index++) {
+			const parent = `repair-turn-${index}`;
+			await state.driver.observeMessage(
+				"host-1",
+				DELIVERY,
+				[{ synthetic: true, metadata: state.prompts.at(-1)?.metadata ?? {} }],
+				parent,
+			);
+			const revision = 8 + index * 2;
+			mutate(state.driver, "host-1", revision, undefined, parent);
+			const id = `gate-after-amendment-${index}`;
+			failed(id, revision + 1, parent, "run-2");
+			state.setProjection(
+				projection(id, revision + 1, `accepted-amendment-${index}`, "run-2"),
+			);
+			await state.driver.onIdle("host-1");
+			expect(state.prompts).toHaveLength(index + 1);
+		}
+		await state.driver.onIdle("host-1");
+		expect(state.prompts).toHaveLength(6);
 	});
 
 	test("late validation cannot revive interrupted, compacted or replaced authority", async () => {
