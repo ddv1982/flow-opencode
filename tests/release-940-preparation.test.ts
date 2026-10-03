@@ -24,10 +24,12 @@ const Workflow = z.object({
 		}),
 	),
 });
-async function step(job: string, name: string): Promise<string> {
-	const workflow = Workflow.parse(
-		parse(await readFile(".github/workflows/release.yml", "utf8")),
-	);
+async function step(
+	job: string,
+	name: string,
+	file = ".github/workflows/release.yml",
+): Promise<string> {
+	const workflow = Workflow.parse(parse(await readFile(file, "utf8")));
 	const run = workflow.jobs[job]?.steps.find(
 		(entry) => entry.name === name,
 	)?.run;
@@ -63,6 +65,8 @@ case "$1" in
     done
     [[ -n "$output" ]]
     printf qualified-9.4.0 > "$output"
+    printf '%s' "$output" > .prepared-path
+    cat "$output"
     ;;
   scripts/restore-exact-release-artifact.ts)
     case "$4" in
@@ -235,5 +239,35 @@ for (const [variant, expectedError] of [
 				? "uncommitted source change"
 				: "source baseline",
 		);
+	});
+}
+
+for (const [version, archived, expected] of [
+	["9.4.0", true, "qualified-9.4.0"],
+	["9.5.0", true, "No qualified 9.4.0 artifact rebuild declared.\n"],
+	["9.4.0", false, "No qualified 9.4.0 artifact rebuild declared.\n"],
+] as const) {
+	test(`PR CI ${version} archive=${archived} executes its maintained preparation branch`, async () => {
+		const f = await fixture(version);
+		if (archived) {
+			const directory = join(f.root, "evals/qualification/archives");
+			await mkdir(directory, { recursive: true });
+			await writeFile(join(directory, `${version}.json`), "{}");
+		}
+		const run = await step(
+			"check",
+			"Rebuild qualified 9.4.0 artifact without providers",
+			".github/workflows/ci.yml",
+		);
+		const result = execute(run, f, version);
+		expect(result.status, result.stderr).toBe(0);
+		expect(result.stdout).toBe(expected);
+		if (version === "9.4.0" && archived) {
+			const output = await readFile(join(f.root, ".prepared-path"), "utf8");
+			await expect(readFile(output)).rejects.toMatchObject({ code: "ENOENT" });
+		} else
+			await expect(
+				readFile(join(f.root, ".prepared-path")),
+			).rejects.toMatchObject({ code: "ENOENT" });
 	});
 }
