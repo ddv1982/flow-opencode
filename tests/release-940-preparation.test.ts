@@ -56,14 +56,19 @@ case "$1" in
     [[ "$FLOW_TEST_VERSION" == 9.4.0 ]]
     shift
     output=''
+    repository=''
     while [[ "$#" -gt 0 ]]; do
       case "$1" in
         --out) output="$2"; shift 2 ;;
-        --repository-root) shift 2 ;;
+        --repository-root) repository="$2"; shift 2 ;;
         *) exit 80 ;;
       esac
     done
     [[ -n "$output" ]]
+    if [[ -n "$repository" ]]; then
+      [[ "$(cat "$repository/README.md")" == 'qualified source' ]]
+      printf '%s' "$repository" > .prepared-repository
+    fi
     printf qualified-9.4.0 > "$output"
     printf '%s' "$output" > .prepared-path
     cat "$output"
@@ -133,6 +138,55 @@ for (const [job, name] of [
 		});
 	}
 }
+
+async function createReleaseTag(f: { root: string }) {
+	await writeFile(join(f.root, "README.md"), "qualified source");
+	for (const args of [
+		["init"],
+		["config", "user.name", "Local Fixture"],
+		["config", "user.email", "fixture@example.invalid"],
+		["add", "."],
+		["-c", "commit.gpgsign=false", "commit", "-m", "released source"],
+		["tag", "v9.4.0"],
+	]) {
+		const result = spawnSync("git", args, { cwd: f.root, encoding: "utf8" });
+		expect(result.status, result.stderr).toBe(0);
+	}
+}
+
+test("CI rebuilds the released tag while leaving changed PR source untouched", async () => {
+	const f = await fixture("9.4.0");
+	await mkdir(join(f.root, "evals/qualification/archives"), {
+		recursive: true,
+	});
+	await writeFile(
+		join(f.root, "evals/qualification/archives/9.4.0.json"),
+		"{}",
+	);
+	await createReleaseTag(f);
+	await writeFile(join(f.root, "README.md"), "changed PR source");
+	const run = await step(
+		"check",
+		"Rebuild qualified 9.4.0 artifact without providers",
+		".github/workflows/ci.yml",
+	);
+	const result = execute(run, f, "9.4.0");
+	expect(result.status, result.stderr).toBe(0);
+	const repository = await readFile(
+		join(f.root, ".prepared-repository"),
+		"utf8",
+	);
+	expect(repository).not.toBe(f.root);
+	expect(await readFile(join(f.root, "README.md"), "utf8")).toBe(
+		"changed PR source",
+	);
+	const worktrees = spawnSync("git", ["worktree", "list", "--porcelain"], {
+		cwd: f.root,
+		encoding: "utf8",
+	});
+	expect(worktrees.status, worktrees.stderr).toBe(0);
+	expect(worktrees.stdout).not.toContain(repository);
+});
 test("9.4.0 archive readiness emits strict current-time metadata and canary verdicts", async () => {
 	const f = await fixture("9.4.0");
 	await mkdir(join(f.root, "evals/qualification/archives"), {
@@ -254,6 +308,7 @@ for (const [version, archived, expected] of [
 			await mkdir(directory, { recursive: true });
 			await writeFile(join(directory, `${version}.json`), "{}");
 		}
+		if (version === "9.4.0" && archived) await createReleaseTag(f);
 		const run = await step(
 			"check",
 			"Rebuild qualified 9.4.0 artifact without providers",
