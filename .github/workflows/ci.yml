@@ -92,6 +92,13 @@ jobs:
             echo "No retained qualification archive declared."
             exit 0
           fi
+          if git rev-parse --verify --quiet "refs/tags/v${version}^{commit}" >/dev/null; then
+            qualification_ci_root="$(mktemp -d)"
+            trap 'git -C "$GITHUB_WORKSPACE" worktree remove "$qualification_ci_root/source"; rm -rf "$qualification_ci_root"' EXIT
+            git worktree add --quiet --detach "$qualification_ci_root/source" "refs/tags/v${version}"
+            cd "$qualification_ci_root/source"
+            bun install --frozen-lockfile
+          fi
           bun -e '
             import { readFile } from "node:fs/promises";
             import { parseCanaryRecord } from "./scripts/eval-canary.ts";

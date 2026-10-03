@@ -86,6 +86,15 @@ case "$1" in
   eval:canary)
     if [[ " $* " == *' --mode strict '* ]]; then printf 'CANARY VERIFIED\\n'; else printf 'CANARY DRY RUN\\n'; fi
     ;;
+  install)
+    [[ "$2" == --frozen-lockfile ]]
+    ;;
+  -e)
+    source="$(cat README.md)"
+    [[ "$source" == 'qualified source' || "$source" == 'candidate source' ]]
+    printf '%s' "$source" > "$FLOW_TEST_REGRADE_LOG"
+    printf 'RETAINED\\n'
+    ;;
   *) exit 80 ;;
 esac
 `,
@@ -107,6 +116,8 @@ function execute(
 			PATH: `${f.bin}:${process.env.PATH}`,
 			FLOW_TEST_VERSION: version,
 			FLOW_RELEASE_RECOVERY_TAG: recovery,
+			FLOW_TEST_REGRADE_LOG: join(f.root, ".regraded-source"),
+			GITHUB_WORKSPACE: f.root,
 		},
 	});
 }
@@ -187,6 +198,37 @@ test("CI rebuilds the released tag while leaving changed PR source untouched", a
 	expect(worktrees.status, worktrees.stderr).toBe(0);
 	expect(worktrees.stdout).not.toContain(repository);
 });
+
+for (const [version, tagged, expected] of [
+	["9.4.0", true, "qualified source"],
+	["9.5.0", false, "candidate source"],
+] as const) {
+	test(`CI regrades ${tagged ? "released" : "candidate"} ${version} with its matching verifier source`, async () => {
+		const f = await fixture(version);
+		const archives = join(f.root, "evals/qualification/archives");
+		await mkdir(archives, { recursive: true });
+		await writeFile(join(archives, `${version}.json`), "{}");
+		if (tagged) await createReleaseTag(f);
+		await writeFile(
+			join(f.root, "README.md"),
+			tagged ? "changed PR source" : expected,
+		);
+		const run = await step(
+			"check",
+			"Regrade retained qualification archive without providers",
+			".github/workflows/ci.yml",
+		);
+		const result = execute(run, f, version);
+		expect(result.status, result.stderr).toBe(0);
+		expect(await readFile(join(f.root, ".regraded-source"), "utf8")).toBe(
+			expected,
+		);
+		expect(await readFile(join(f.root, "README.md"), "utf8")).toBe(
+			tagged ? "changed PR source" : expected,
+		);
+	});
+}
+
 test("9.4.0 archive readiness emits strict current-time metadata and canary verdicts", async () => {
 	const f = await fixture("9.4.0");
 	await mkdir(join(f.root, "evals/qualification/archives"), {
