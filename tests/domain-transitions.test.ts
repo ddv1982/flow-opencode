@@ -161,6 +161,49 @@ describe("bounded prerequisite amendments", () => {
 		).toThrow(/independent review/);
 	});
 
+	test("requires a new canonical failure before another amendment without blocking exact replay", () => {
+		const initial = failedGateSession();
+		const input = amendment(initial);
+		const first = amendPlan(initial, input, SOURCE_A).session;
+		expect(compactProjection(first).prerequisiteRepair).toBeUndefined();
+		for (let index = 2; index <= 6; index++) {
+			expect(() =>
+				amendPlan(first, amendment(first, `plan-amend-${index}`), SOURCE_A),
+			).toThrow(/recorded after the previous amendment/);
+		}
+		expect(first.amendments).toHaveLength(1);
+		expect(amendPlan(first, input, SOURCE_A).replayed).toBe(true);
+		const focused = validate(first, {
+			id: "focused-failure",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "focused",
+			exitCode: 1,
+		});
+		expect(() =>
+			amendPlan(focused, amendment(focused, "focused-amendment"), SOURCE_A),
+		).toThrow(/recorded after the previous amendment/);
+		const fresh = validate(focused, {
+			id: "fresh-canonical-failure",
+			featureId: DELIVERY,
+			command: "bun test",
+			scope: "broad",
+			exitCode: 1,
+		});
+		expect(compactProjection(fresh).prerequisiteRepair?.validationId).toBe(
+			"fresh-canonical-failure",
+		);
+		const second = amendPlan(
+			fresh,
+			{
+				...amendment(fresh, "plan-amend-2"),
+				validationId: "fresh-canonical-failure",
+			},
+			SOURCE_A,
+		).session;
+		expect(second.amendments).toHaveLength(2);
+	});
+
 	test("continues prerequisite repair beyond three amendments with durable evidence and unchanged gates", () => {
 		let session = failedGateSession();
 		const originalPlan = session.plan;
@@ -173,6 +216,9 @@ describe("bounded prerequisite amendments", () => {
 				scope: "broad",
 				exitCode: 1,
 			});
+			expect(compactProjection(session).prerequisiteRepair?.validationId).toBe(
+				validationId,
+			);
 			session = amendPlan(
 				session,
 				{ ...amendment(session, `plan-amend-${index}`), validationId },
@@ -182,9 +228,7 @@ describe("bounded prerequisite amendments", () => {
 			expect(sessionInvariantIssues(session)).toEqual([]);
 			expect(session.amendments).toHaveLength(index);
 			expect(session.plan).toEqual(originalPlan);
-			expect(compactProjection(session).prerequisiteRepair?.validationId).toBe(
-				validationId,
-			);
+			expect(compactProjection(session).prerequisiteRepair).toBeUndefined();
 			expect(compactProjection(session).nextAction).toBe(
 				"flow_validation_start",
 			);

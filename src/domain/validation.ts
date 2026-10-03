@@ -792,6 +792,18 @@ export function prerequisiteAmendmentEligibility(
 			reason:
 				"An amendment requires a complete failed canonical-gate observation for the current source.",
 		};
+	const previousAmendment = session.amendments?.findLast(
+		(amendment) => amendment.runId === run.id,
+	);
+	if (
+		previousAmendment &&
+		observation.recordedRevision <= previousAmendment.recordedRevision
+	)
+		return {
+			eligible: false,
+			reason:
+				"A later prerequisite amendment requires a failed canonical-gate observation recorded after the previous amendment.",
+		};
 	const policy = resolveValidationPolicy(
 		session,
 		featureId,

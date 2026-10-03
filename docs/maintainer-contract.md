@@ -31,8 +31,9 @@ attempted.
 
 Prerequisite repairs have no amendment count limit. Each needs a current,
 complete failed canonical gate and reversible same-goal targets before review.
-The plan, gate, test coverage, and review stay fixed. Automatic repair handoffs
-occur once per accepted amendment boundary, not per failure capture.
+Later amendments need a canonical failure recorded after the preceding amendment.
+The plan, gate, tests, and review stay fixed. Repair handoffs occur once per
+accepted amendment boundary, not per capture.
 
 Before manager mutations, compare the compact goal with the request. Exact
 recovery of an accepted close runs first and grants no new authority. The manager
