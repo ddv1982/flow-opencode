@@ -2,6 +2,27 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.5.0]
+
+`/flow-auto` can continue supported same-goal prerequisite repairs without a
+three-amendment limit. The approved gate and independent review still apply.
+
+- Each later amendment requires a complete current-source canonical failure
+  recorded after the preceding amendment. Reusing a failure cannot create a new
+  repair handoff; exact replay and unchanged-revision guards remain intact.
+- Session v5 schema removes the amendment-array count bound without adding or
+  renaming fields. Existing documents remain readable. Sessions with more than
+  three amendments require the updated reader; finish or close before downgrade.
+  General session-capacity limits remain.
+- Full qualification retains all twelve cases, including native autonomous
+  continuation, prerequisite repair and supplemental observations, on two
+  distinct providers. It requires a fresh live matrix and exact-artifact canary;
+  local tests alone do not establish model quality or delegated Jev qualification.
+- CI rebuilds historical artifacts and regrades retained evidence with the
+  matching release source while checking the current checkout's evidence bytes.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.5.0 --global --force`.
+
 ## [9.4.0]
 
 `/flow-auto` carries approved tasks through validation, independent review and

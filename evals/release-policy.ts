@@ -165,6 +165,11 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "9.5.0")
+		return {
+			catalog: AUTO_RELEASE_CATALOG.map((row) => ({ ...row, minProviders: 2 })),
+			requiredModels: null,
+		};
 	if (packageVersion === "9.4.0")
 		return openAiOnlyRelease(AUTO_RELEASE_CATALOG);
 	if (packageVersion === "9.1.0" || packageVersion === "9.2.0") {

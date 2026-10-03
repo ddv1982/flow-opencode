@@ -57,7 +57,7 @@ import { operationInputDigest } from "../src/domain/operation.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 test("current release defaults include three autonomous attempts", () => {
-	expect(packageJson.version).toBe("9.4.0");
+	expect(packageJson.version).toBe("9.5.0");
 	expect(
 		attemptsForScenario("auto-two-features-evidence", { kind: "release" }),
 	).toBe(3);
@@ -328,7 +328,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			tarballPath: artifactPath,
 		});
 		const scenarios = releaseScenarios();
-		const models = ["openai/gpt-6-sol"];
+		const models = ["openai/gpt-6-sol", "xai/grok-4.6"];
 		const plan = campaignPlanFor({
 			models,
 			scenarios,
@@ -560,7 +560,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			completion,
 			allocationCommitmentSha256: null,
 		});
-		expect(report.attempts).toHaveLength(58);
+		expect(report.attempts).toHaveLength(115);
 
 		const preparedDirectory = join(temporary, "prepared-canary");
 		await mkdir(preparedDirectory, { recursive: true });
@@ -676,8 +676,8 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		const transcripts = bundle.files.filter(
 			({ ref }) => ref.role === "transcript",
 		);
-		expect(attempts).toHaveLength(58);
-		expect(transcripts).toHaveLength(58);
+		expect(attempts).toHaveLength(115);
+		expect(transcripts).toHaveLength(115);
 		expect(attempts.map(({ ref }) => ref.id).sort()).toEqual(
 			transcripts.map(({ ref }) => ref.id).sort(),
 		);
@@ -699,7 +699,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			expect(manager?.sessionIds).toEqual(trace.runnerRootSessionIds);
 			autonomousRoots.push(...trace.runnerRootSessionIds);
 		}
-		expect(autonomousRoots).toHaveLength(9);
+		expect(autonomousRoots).toHaveLength(18);
 		expect(new Set(autonomousRoots).size).toBe(autonomousRoots.length);
 		const authority = bundle.files
 			.filter(({ ref }) => ref.role === "authority-source")
@@ -744,7 +744,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			canarySha256: canary.record.recordSha256,
 			artifact,
 		});
-		expect(releaseAuthority.summary.providers).toHaveLength(1);
+		expect(releaseAuthority.summary.providers).toHaveLength(2);
 		const notesPath = join(temporary, "release-notes.md");
 		const metadata = Bun.spawn(
 			[
