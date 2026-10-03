@@ -43,6 +43,8 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
 
       - name: Set up Node
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -65,6 +67,26 @@ jobs:
       # already performed fails here rather than at the next paid matrix.
       - name: Replay recorded model decisions
         run: bun run replay
+
+      - name: Regrade retained qualification archive without providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ ! -f "evals/qualification/archives/${version}.json" ]; then
+            echo "No retained qualification archive declared."
+            exit 0
+          fi
+          bun -e '
+            import { readFile } from "node:fs/promises";
+            import { parseCanaryRecord } from "./scripts/eval-canary.ts";
+            import { assertQualificationBundle } from "./scripts/release-metadata.ts";
+            const { version } = JSON.parse(await readFile("package.json", "utf8"));
+            const parsed = parseCanaryRecord(JSON.parse(await readFile("evals/canary/" + version + ".json", "utf8")));
+            if (!parsed.ok) throw new Error(parsed.issues.join("; "));
+            await assertQualificationBundle({ version, expectedCanarySha256: parsed.value.recordSha256, now: new Date(parsed.value.recordedAt) });
+            console.log("RETAINED: archive regraded at its recorded canary time; no current-release freshness claim.");
+          '
 
   platform-persistence:
     strategy:

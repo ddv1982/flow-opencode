@@ -1,9 +1,18 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import {
+	lstat,
+	mkdtemp,
+	readdir,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ReleaseDecision } from "../evals/analysis.js";
 import { canonicalSha256 } from "../evals/canonical-json.js";
 import {
 	evaluatorIdentity,
+	exactPackageVersion,
 	inspectArtifact,
 	samePackedArtifact,
 } from "../evals/provenance.js";
@@ -31,6 +40,7 @@ import {
 	parseCanaryRecord,
 	canaryRecordIssue as verifyCanaryRecord,
 } from "./eval-canary.js";
+import { materializeQualificationArchive } from "./materialize-qualification.js";
 import { decisionRecordFor, qualifyV2 } from "./qualify-release.js";
 
 export type ReleaseEvidenceSummary = Readonly<{
@@ -378,75 +388,103 @@ export async function assertQualificationBundle(input: {
 }> {
 	const directory =
 		input.directory ?? join("evals", "qualification", "bundles");
-	let names: string[] = [];
+	let paths: string[] = [];
 	try {
-		names = (await readdir(directory, { withFileTypes: true }))
+		paths = (await readdir(directory, { withFileTypes: true }))
 			.filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
-			.map((entry) => entry.name);
+			.map((entry) => join(directory, entry.name));
 	} catch {
-		names = [];
+		paths = [];
 	}
-	const matches: Array<{
-		readonly bundleSha256: string;
-		readonly summary: ReleaseEvidenceSummary;
-	}> = [];
-	for (const name of names) {
-		let manifest: ReturnType<typeof QualificationBundleManifestSchema.parse>;
-		try {
-			manifest = QualificationBundleManifestSchema.parse(
-				JSON.parse(
-					await readFile(join(directory, name, "bundle.json"), "utf8"),
-				),
-			);
-		} catch (error) {
-			throw new Error(`Qualification bundle ${name} has an invalid seal.`, {
-				cause: error,
-			});
-		}
-		if (manifest.packageVersion !== input.version) continue;
-		try {
-			const result = await regradeQualificationBundle({
-				path: join(directory, name),
-				repositoryRoot: join(import.meta.dir, ".."),
-				authority: { qualify: qualifyV2, decisionRecord: decisionRecordFor },
-				...(input.now ? { now: input.now } : {}),
-			});
-			if (
-				result.decision.artifact.packageVersion === input.version &&
-				(!input.expectedArtifact ||
-					samePackedArtifact(
-						result.decision.artifact,
-						input.expectedArtifact,
-					)) &&
-				(input.expectedCanarySha256 === undefined ||
-					result.decision.canarySha256 === input.expectedCanarySha256)
-			)
-				matches.push({
-					bundleSha256: result.bundleSha256,
-					summary: releaseEvidenceSummary({
-						releaseDecision: result.releaseDecision,
-						reportId: result.reportId,
-						bundleSha256: result.bundleSha256,
-						artifact: result.decision.artifact,
-						canarySha256: result.decision.canarySha256,
-					}),
-				});
-		} catch (error) {
-			throw new Error(
-				`Qualification bundle ${name} for ${input.version} did not regrade cleanly.`,
-				{ cause: error },
-			);
-		}
-	}
-	const match = matches[0];
-	if (matches.length === 1 && match) return match;
-	if (matches.length > 1)
-		throw new Error(
-			`Release ${input.version} cannot proceed: multiple sealed qualification bundles match the release.`,
-		);
-	throw new Error(
-		`Release ${input.version} cannot proceed: no sealed qualification bundle independently regrades to the exact VERIFIED decision.`,
+	exactPackageVersion(input.version);
+	const descriptorPath = join(
+		dirname(directory),
+		"archives",
+		`${input.version}.json`,
 	);
+	let archived = false;
+	try {
+		await lstat(descriptorPath);
+		archived = true;
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+	}
+	let temporaryDirectory: string | null = null;
+	try {
+		if (archived) {
+			temporaryDirectory = await mkdtemp(
+				join(tmpdir(), "flow-qualification-archives-"),
+			);
+			paths.push(
+				await materializeQualificationArchive({
+					descriptorPath,
+					outputRoot: temporaryDirectory,
+				}),
+			);
+		}
+		const matches: Array<{
+			readonly bundleSha256: string;
+			readonly summary: ReleaseEvidenceSummary;
+		}> = [];
+		for (const path of paths) {
+			let manifest: ReturnType<typeof QualificationBundleManifestSchema.parse>;
+			try {
+				manifest = QualificationBundleManifestSchema.parse(
+					JSON.parse(await readFile(join(path, "bundle.json"), "utf8")),
+				);
+			} catch (error) {
+				throw new Error(`Qualification bundle ${path} has an invalid seal.`, {
+					cause: error,
+				});
+			}
+			if (manifest.packageVersion !== input.version) continue;
+			try {
+				const result = await regradeQualificationBundle({
+					path,
+					repositoryRoot: join(import.meta.dir, ".."),
+					authority: { qualify: qualifyV2, decisionRecord: decisionRecordFor },
+					...(input.now ? { now: input.now } : {}),
+				});
+				if (
+					result.decision.artifact.packageVersion === input.version &&
+					(!input.expectedArtifact ||
+						samePackedArtifact(
+							result.decision.artifact,
+							input.expectedArtifact,
+						)) &&
+					(input.expectedCanarySha256 === undefined ||
+						result.decision.canarySha256 === input.expectedCanarySha256)
+				)
+					matches.push({
+						bundleSha256: result.bundleSha256,
+						summary: releaseEvidenceSummary({
+							releaseDecision: result.releaseDecision,
+							reportId: result.reportId,
+							bundleSha256: result.bundleSha256,
+							artifact: result.decision.artifact,
+							canarySha256: result.decision.canarySha256,
+						}),
+					});
+			} catch (error) {
+				throw new Error(
+					`Qualification bundle ${path} for ${input.version} did not regrade cleanly.`,
+					{ cause: error },
+				);
+			}
+		}
+		const match = matches[0];
+		if (matches.length === 1 && match) return match;
+		if (matches.length > 1)
+			throw new Error(
+				`Release ${input.version} cannot proceed: multiple sealed qualification bundles match the release.`,
+			);
+		throw new Error(
+			`Release ${input.version} cannot proceed: no sealed qualification bundle independently regrades to the exact VERIFIED decision.`,
+		);
+	} finally {
+		if (temporaryDirectory)
+			await rm(temporaryDirectory, { recursive: true, force: true });
+	}
 }
 
 export async function assertStrictReleaseEvidence(input: {
