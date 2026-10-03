@@ -648,14 +648,14 @@ function inspectionDocumentHasPhases(content: string): boolean {
 	);
 	const phaseSection = (tail: string, marker: string) => {
 		const level = marker.match(/#{1,6}/)?.[0].length ?? 0;
-		const boundary = [...tail.matchAll(/\n(#{1,6})[ \t]+/g)].find(
+		const boundary = [...tail.matchAll(/\n {0,3}(#{1,6})[ \t]+/g)].find(
 			(heading) => level === 0 || (heading[1]?.length ?? 0) <= level,
 		);
 		return tail.slice(0, boundary?.index);
 	};
 	const numberedHeadings = [
 		...content.matchAll(
-			/(?:^|\n)[ \t]*(#{1,6})[ \t]+([12])[.)][ \t]+([^\n]*)/g,
+			/(?:^|\n) {0,3}(#{1,6})[ \t]+([12])[.)][ \t]+([^\n]*)/g,
 		),
 	];
 	const numberedFirst = numberedHeadings.find((heading) => heading[2] === "1");
@@ -672,7 +672,7 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				numberedFirst.index + numberedFirst[0].length,
 				heading.index,
 			);
-			return ![...between.matchAll(/\n(#{1,6})[ \t]+/g)].some(
+			return ![...between.matchAll(/\n {0,3}(#{1,6})[ \t]+/g)].some(
 				(boundary) => (boundary[1]?.length ?? 0) < (heading[1]?.length ?? 0),
 			);
 		});
@@ -713,13 +713,13 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				firstItem.index + firstItem[0].length,
 				secondItem.index,
 			);
-			const firstHeading = /\n#{1,6}\s+/.exec(firstTail);
+			const firstHeading = /\n {0,3}#{1,6}[ \t]+/.exec(firstTail);
 			const separateParagraph = /\r?\n[ \t]*\r?\n[^ \t\r\n]/.test(firstTail);
 			const secondTail = content.slice(
 				secondItem.index + secondItem[0].length,
 				nextItem?.index,
 			);
-			const nextHeading = /\n#{1,6}\s+/.exec(secondTail);
+			const nextHeading = /\n {0,3}#{1,6}[ \t]+/.exec(secondTail);
 			if (!firstHeading && !separateParagraph) {
 				actions = [
 					`${firstItem[2] ?? ""} ${firstTail}`,

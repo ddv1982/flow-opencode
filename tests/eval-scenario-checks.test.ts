@@ -1770,6 +1770,9 @@ describe("inspection-failed-audit-completes", () => {
 		).toEqual([]);
 		for (const phases of [
 			`${first}\n## Unrelated chapter\n${second}`,
+			`${first}\n  ## Unrelated chapter\n${second}`,
+			`### 1. Interval\nTBD.\n  ### Notes\nAdd a regression for inclusiveRangeLength(1,3) and fix src/count.ts.\n${second}`,
+			`${first}\n### 2. Audit\nTBD.\n  ### Notes\nInvestigate the audit advisories and rerun bun run verify.\n`,
 			`${first}\n${second.replace("### 2.", "#### 2.")}`,
 			"### 1. Interval\nTBD.\n### 2. Audit\nTBD.\n",
 			"### 1. Interval\nDo not test inclusiveRangeLength.\n### 2. Audit\nDo not investigate the audit advisories.\n",
