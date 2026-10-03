@@ -66,6 +66,26 @@ jobs:
       - name: Replay recorded model decisions
         run: bun run replay
 
+      - name: Regrade retained qualification archive without providers
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ ! -f "evals/qualification/archives/${version}.json" ]; then
+            echo "No retained qualification archive declared."
+            exit 0
+          fi
+          bun -e '
+            import { readFile } from "node:fs/promises";
+            import { parseCanaryRecord } from "./scripts/eval-canary.ts";
+            import { assertQualificationBundle } from "./scripts/release-metadata.ts";
+            const { version } = JSON.parse(await readFile("package.json", "utf8"));
+            const parsed = parseCanaryRecord(JSON.parse(await readFile("evals/canary/" + version + ".json", "utf8")));
+            if (!parsed.ok) throw new Error(parsed.issues.join("; "));
+            await assertQualificationBundle({ version, expectedCanarySha256: parsed.value.recordSha256, now: new Date(parsed.value.recordedAt) });
+            console.log("RETAINED: archive regraded at its recorded canary time; no current-release freshness claim.");
+          '
+
   platform-persistence:
     strategy:
       fail-fast: false

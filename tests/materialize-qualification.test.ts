@@ -1,8 +1,18 @@
-import { afterEach, expect, test } from "bun:test";
+import { afterEach, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import * as fs from "node:fs/promises";
+import {
+	copyFile,
+	lstat,
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	symlink,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 import {
 	type QualificationBundleInput,
@@ -10,6 +20,7 @@ import {
 	writeQualificationBundle,
 } from "../evals/qualification-bundle.js";
 import { materializeQualificationArchive } from "../scripts/materialize-qualification.js";
+import { assertQualificationBundle } from "../scripts/release-metadata.js";
 
 const temporary: string[] = [];
 afterEach(async () => {
@@ -52,7 +63,7 @@ function tar(entries: readonly Entry[]): Buffer {
 	return Buffer.concat([...blocks, Buffer.alloc(1024)]);
 }
 
-async function fixture() {
+async function fixture(packageVersion = "9.4.0") {
 	const root = await mkdtemp(join(tmpdir(), "flow-materialize-test-"));
 	temporary.push(root);
 	const roles = [
@@ -70,7 +81,7 @@ async function fixture() {
 	] as const;
 	const input: QualificationBundleInput = {
 		reportId: "report-materialization",
-		packageVersion: "9.4.0",
+		packageVersion,
 		verdict: "VERIFIED",
 		files: [
 			...roles.map((role) => ({
@@ -128,7 +139,7 @@ async function fixture() {
 		outputRoot = join(root, "materialized");
 	const descriptor = {
 		schemaVersion: 1,
-		packageVersion: "9.4.0",
+		packageVersion,
 		archive: "9.4.0.tar.gz",
 		archiveSha256: "",
 		bundleId: original.manifest.bundleId,
@@ -269,3 +280,225 @@ test("refuses a conflicting existing object without overwriting retained bytes",
 		"retained conflicting proof",
 	);
 });
+
+test("default archive resolution cleans independent temporary roots after concurrent regrade errors", async () => {
+	const f = await fixture(),
+		archives = join(f.root, "archives");
+	await mkdir(archives);
+	await copyFile(f.archivePath, join(archives, "9.4.0.tar.gz"));
+	await copyFile(f.descriptorPath, join(archives, "9.4.0.json"));
+	const results = await Promise.allSettled(
+		Array.from({ length: 3 }, () =>
+			assertQualificationBundle({
+				version: "9.4.0",
+				directory: join(f.root, "bundles"),
+			}),
+		),
+	);
+	const roots: string[] = [];
+	for (const result of results) {
+		expect(result.status).toBe("rejected");
+		if (result.status !== "rejected" || !(result.reason instanceof Error))
+			throw new Error("Expected strict regrade failure");
+		expect(result.reason.message).toMatch(/did not regrade cleanly/);
+		const match = result.reason.message.match(
+			/Qualification bundle (.+) for 9\.4\.0/,
+		);
+		if (!match?.[1]) throw new Error("Missing rejected bundle path");
+		const root = dirname(match[1]);
+		roots.push(root);
+		await expect(lstat(root)).rejects.toMatchObject({ code: "ENOENT" });
+	}
+	expect(new Set(roots).size).toBe(3);
+});
+
+test("a symlink ancestor targeting the source workspace is refused before mkdir", async () => {
+	const f = await fixture(),
+		source = resolve(import.meta.dir, ".."),
+		leaf = `.materializer-output-${f.root.split("/").at(-1)}`;
+	await symlink(source, join(f.root, "source-link"));
+	const destination = join(source, leaf);
+	temporary.push(destination);
+	await expect(
+		materializeQualificationArchive({
+			descriptorPath: f.descriptorPath,
+			outputRoot: join(f.root, "source-link", leaf),
+		}),
+	).rejects.toThrow(/outside.*workspace/i);
+	await expect(lstat(destination)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+test("concurrent explicit materialization publishes only complete identical proof", async () => {
+	const f = await fixture();
+	const paths = await Promise.all(
+		Array.from({ length: 3 }, () =>
+			materializeQualificationArchive({
+				descriptorPath: f.descriptorPath,
+				outputRoot: f.outputRoot,
+			}),
+		),
+	);
+	expect(new Set(paths).size).toBe(1);
+	const path = paths[0];
+	if (!path) throw new Error("Missing restored proof");
+	expect((await readQualificationBundle(path)).manifest).toEqual(
+		f.original.manifest,
+	);
+	for (const entry of f.entries)
+		expect(await readFile(join(path, entry.name))).toEqual(entry.bytes);
+});
+
+test("existing output comparison settles a publication alias unlink without relaxing archive reads", async () => {
+	const f = await fixture();
+	const path = await materializeQualificationArchive({
+		descriptorPath: f.descriptorPath,
+		outputRoot: f.outputRoot,
+	});
+	const entry = f.entries.find((entry) => entry.name.startsWith("objects/"));
+	if (!entry) throw new Error("Missing publication race object");
+	const destination = join(path, entry.name),
+		alias = join(f.root, "publication-alias");
+	await fs.link(destination, alias);
+	const nativeOpen = fs.open;
+	let opens = 0,
+		intervened = false;
+	const opened = spyOn(fs, "open").mockImplementation(async (...args) => {
+		const file = await nativeOpen(...args);
+		if (args[0] !== destination || ++opens !== 2) return file;
+		return new Proxy(file, {
+			get(target, key) {
+				const value = Reflect.get(target, key, target);
+				if (key === "read")
+					return async (...readArgs: unknown[]) => {
+						const result = await Reflect.apply(value, target, readArgs);
+						if (!intervened) {
+							await fs.unlink(alias);
+							intervened = true;
+						}
+						return result;
+					};
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+		});
+	});
+	try {
+		expect(
+			await materializeQualificationArchive({
+				descriptorPath: f.descriptorPath,
+				outputRoot: f.outputRoot,
+			}),
+		).toBe(path);
+		expect(intervened).toBe(true);
+		expect(await readFile(destination)).toEqual(entry.bytes);
+	} finally {
+		opened.mockRestore();
+	}
+});
+
+test("archive input changing during a read fails once without output retry", async () => {
+	const f = await fixture(),
+		nativeOpen = fs.open;
+	let opens = 0,
+		changed = false;
+	const opened = spyOn(fs, "open").mockImplementation(async (...args) => {
+		const file = await nativeOpen(...args);
+		if (args[0] !== f.archivePath) return file;
+		opens += 1;
+		return new Proxy(file, {
+			get(target, key) {
+				const value = Reflect.get(target, key, target);
+				if (key === "read")
+					return async (...readArgs: unknown[]) => {
+						const result = await Reflect.apply(value, target, readArgs);
+						if (!changed) {
+							const stat = await target.stat();
+							await fs.utimes(
+								f.archivePath,
+								stat.atime,
+								new Date(stat.mtimeMs + 1000),
+							);
+							changed = true;
+						}
+						return result;
+					};
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+		});
+	});
+	try {
+		await expect(
+			materializeQualificationArchive({
+				descriptorPath: f.descriptorPath,
+				outputRoot: f.outputRoot,
+			}),
+		).rejects.toThrow("Archive input changed while reading.");
+		expect(changed).toBe(true);
+		expect(opens).toBe(1);
+		await expect(lstat(f.outputRoot)).rejects.toMatchObject({ code: "ENOENT" });
+	} finally {
+		opened.mockRestore();
+	}
+});
+
+test("bounded SemVer build metadata remains valid for descriptors and legacy bundle discovery", async () => {
+	const f = await fixture("9.4.0+build.1");
+	const path = await materializeQualificationArchive({
+		descriptorPath: f.descriptorPath,
+		outputRoot: f.outputRoot,
+	});
+	expect((await readQualificationBundle(path)).manifest.packageVersion).toBe(
+		"9.4.0+build.1",
+	);
+	await expect(
+		assertQualificationBundle({
+			version: "9.4.0+build.1",
+			directory: join(f.root, "absent-bundles"),
+		}),
+	).rejects.toThrow(/no sealed qualification bundle/);
+});
+
+for (const variant of [
+	"output-link",
+	"object-link",
+	"truncated",
+	"gzip-limit",
+	"descriptor-version",
+] as const) {
+	test(`materialization refuses ${variant} without changing original sealed proof`, async () => {
+		const f = await fixture();
+		if (variant === "output-link") await symlink(f.original.path, f.outputRoot);
+		if (variant === "object-link") {
+			const path = await materializeQualificationArchive({
+				descriptorPath: f.descriptorPath,
+				outputRoot: f.outputRoot,
+			});
+			const entry = f.entries.find((entry) =>
+				entry.name.startsWith("objects/"),
+			);
+			if (!entry) throw new Error("Missing object link control");
+			await rm(join(path, entry.name));
+			await symlink(join(f.original.path, entry.name), join(path, entry.name));
+		}
+		if (variant === "truncated")
+			await f.save(gzipSync(tar(f.entries).subarray(0, -1024)));
+		if (variant === "gzip-limit")
+			await f.save(gzipSync(Buffer.alloc(129 * 1024 * 1024)));
+		if (variant === "descriptor-version") {
+			const descriptor = JSON.parse(await readFile(f.descriptorPath, "utf8"));
+			await writeFile(
+				f.descriptorPath,
+				JSON.stringify({ ...descriptor, packageVersion: "9.4.1" }),
+			);
+		}
+		await expect(
+			materializeQualificationArchive({
+				descriptorPath: f.descriptorPath,
+				outputRoot: f.outputRoot,
+			}),
+		).rejects.toThrow();
+		for (const entry of f.entries)
+			expect(await readFile(join(f.original.path, entry.name))).toEqual(
+				entry.bytes,
+			);
+	});
+}
