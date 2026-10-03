@@ -653,6 +653,29 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		);
 		return tail.slice(0, boundary?.index);
 	};
+	const numberedHeadings = [
+		...content.matchAll(
+			/(?:^|\n)[ \t]*(#{1,6})[ \t]+([12])[.)][ \t]+([^\n]*)/g,
+		),
+	];
+	const numberedFirst = numberedHeadings.find((heading) => heading[2] === "1");
+	const numberedSecond =
+		numberedFirst &&
+		numberedHeadings.find((heading) => {
+			if (
+				heading[2] !== "2" ||
+				heading.index <= numberedFirst.index ||
+				heading[1]?.length !== numberedFirst[1]?.length
+			)
+				return false;
+			const between = content.slice(
+				numberedFirst.index + numberedFirst[0].length,
+				heading.index,
+			);
+			return ![...between.matchAll(/\n(#{1,6})[ \t]+/g)].some(
+				(boundary) => (boundary[1]?.length ?? 0) < (heading[1]?.length ?? 0),
+			);
+		});
 	let actions: readonly [string, string] | null = null;
 	if (first && second) {
 		const firstTail = content.slice(
@@ -663,6 +686,18 @@ function inspectionDocumentHasPhases(content: string): boolean {
 		actions = [
 			`${first[2] ?? ""} ${phaseSection(firstTail, first[0])}`,
 			`${second[2] ?? ""} ${phaseSection(secondTail, second[0])}`,
+		];
+	} else if (numberedFirst && numberedSecond) {
+		const firstTail = content.slice(
+			numberedFirst.index + numberedFirst[0].length,
+			numberedSecond.index,
+		);
+		const secondTail = content.slice(
+			numberedSecond.index + numberedSecond[0].length,
+		);
+		actions = [
+			`${numberedFirst[3] ?? ""} ${phaseSection(firstTail, numberedFirst[0])}`,
+			`${numberedSecond[3] ?? ""} ${phaseSection(secondTail, numberedSecond[0])}`,
 		];
 	} else {
 		const items = [...content.matchAll(/(?:^|\n)\s*(\d+)[.)]\s+([^\n]*)/g)];
@@ -723,6 +758,35 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			plan,
 		)
 	);
+}
+
+function inspectionFindingContradicted(content: string): boolean {
+	if (
+		/\b(?:this|the|above|following)\s+(?:claim|finding|assertion)\s+(?:is|was)\s+(?:false|incorrect|untrue|wrong)\b|\b(?:the\s+)?implementation\s+(?:is|was)\s+correct\b/i.test(
+			content,
+		)
+	)
+		return true;
+	return [
+		...content.matchAll(
+			/\bdo\s+not\s+(?:claim|report|believe)\b([^\n.!?;]*)/gi,
+		),
+	].some((statement) => {
+		const object = (statement[1] ?? "").trim().replace(/^that\s+/i, "");
+		const reference =
+			/^(?:(?:(?:the\s+)?(?:above|following)|this|the)\s+(?:claim|finding|assertion|defect|report|document)|(?:the\s+)?(?:inclusive|closed)\s+(?:interval|range)\s+(?:defect|finding))\b/i.exec(
+				object,
+			);
+		if (reference) {
+			const qualifier = object.slice(reference[0].length).trim();
+			return !/^(?:as|is|was)\s+(?:fixed|resolved|repaired|addressed|closed)\b/i.test(
+				qualifier,
+			);
+		}
+		return /^`?inclusiveRangeLength`?(?:\([^)]*\))?\s+(?:(?:is|was)\s+(?:incorrect|wrong)\b|(?:has|contains)\s+(?:an?\s+)?(?:off[- ]by[- ]one\b|(?:defect|bug|error)\b)|(?:omits|drops)\s+(?:the\s+)?endpoint\b|(?:returns|yields)\s+2\b)/i.test(
+			object,
+		);
+	});
 }
 
 function inspectionAuditIssues(outcome: ScenarioGradeInput): string[] {
@@ -840,10 +904,7 @@ function inspectionAuditIssues(outcome: ScenarioGradeInput): string[] {
 		const content = outcome.reviewDocument.content;
 		const expectedLines = PLANTED_INTERVAL_FINDING.split("\n");
 		const lines = content.split(/\r?\n/);
-		const contradictsFinding =
-			/\b(?:this|the|above|following)\s+(?:claim|finding|assertion)\s+(?:is|was)\s+(?:false|incorrect|untrue|wrong)\b|\b(?:the\s+)?implementation\s+(?:is|was)\s+correct\b|\bdo\s+not\s+(?:claim|report|believe)\b/i.test(
-				content,
-			);
+		const contradictsFinding = inspectionFindingContradicted(content);
 		if (
 			contradictsFinding ||
 			!lines.some(

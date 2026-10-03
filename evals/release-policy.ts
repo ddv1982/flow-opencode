@@ -193,6 +193,12 @@ export const RELEASE_HOST_POLICY = {
 	reviewerSteps: null,
 } as const;
 
+export function releaseHostPermissions(packageVersion: string) {
+	return packageVersion === "9.5.0"
+		? { external_directory: "deny" as const }
+		: undefined;
+}
+
 export function releasePolicySha256(packageVersion: string): string {
 	const profile = releaseProfile(packageVersion);
 	return canonicalSha256("flow-release-policy-v1", {
@@ -200,7 +206,12 @@ export function releasePolicySha256(packageVersion: string): string {
 		...(profile.requiredModels === null
 			? {}
 			: { requiredModels: profile.requiredModels }),
-		host: RELEASE_HOST_POLICY,
+		host: {
+			...RELEASE_HOST_POLICY,
+			...(releaseHostPermissions(packageVersion)
+				? { permission: releaseHostPermissions(packageVersion) }
+				: {}),
+		},
 		analysisSha256: RELEASE_ANALYSIS_SHA256,
 		environmentReservesPerStratum: RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM,
 	});
@@ -344,6 +355,9 @@ export function releaseHostConfigSha256(input: {
 		reviewerModel: model,
 		reviewerSteps: RELEASE_HOST_POLICY.reviewerSteps,
 		platform: RELEASE_HOST_POLICY.platform,
+		...(releaseHostPermissions(input.packageVersion)
+			? { permission: releaseHostPermissions(input.packageVersion) }
+			: {}),
 	});
 }
 

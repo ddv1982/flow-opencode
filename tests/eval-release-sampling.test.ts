@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { hostConfigSha256 } from "../evals/provenance.js";
 import {
 	assertExactReleaseCatalog,
 	assertReleaseHost,
@@ -7,6 +8,8 @@ import {
 	releaseCaseCatalogSha256,
 	releaseCaseIds,
 	releaseCatalog,
+	releaseHostConfigSha256,
+	releaseHostPermissions,
 	releasePolicySha256,
 	releaseScenarioCatalog,
 } from "../evals/release-policy.js";
@@ -22,6 +25,55 @@ import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
 
 describe("release eval sampling", () => {
+	test("binds 9.5.0 unattended permissions without changing historical host inputs", () => {
+		const model = {
+			routeProvider: "openai",
+			gateway: null,
+			family: "gpt-6-sol",
+			model: "gpt-6-sol",
+			revision: null,
+		};
+		for (const packageVersion of [
+			"9.1.0",
+			"9.2.0",
+			"9.3.0",
+			"9.4.0",
+			"standard",
+		]) {
+			expect(releaseHostPermissions(packageVersion)).toBeUndefined();
+			expect(releaseHostConfigSha256({ packageVersion, model })).toBe(
+				hostConfigSha256({
+					opencodeVersion: "1.18.31",
+					plugin: `opencode-plugin-flow@${packageVersion}`,
+					model: "openai/gpt-6-sol",
+					reviewerModel: "openai/gpt-6-sol",
+					reviewerSteps: null,
+					platform: "linux",
+				}),
+			);
+		}
+		const currentModel = {
+			...model,
+			family: "gpt-6.1-sol",
+			model: "gpt-6.1-sol",
+		};
+		expect(releaseHostPermissions("9.5.0")).toEqual({
+			external_directory: "deny",
+		});
+		expect(
+			releaseHostConfigSha256({ packageVersion: "9.5.0", model: currentModel }),
+		).toBe(
+			hostConfigSha256({
+				opencodeVersion: "1.18.31",
+				plugin: "opencode-plugin-flow@9.5.0",
+				model: "openai/gpt-6.1-sol",
+				reviewerModel: "openai/gpt-6.1-sol",
+				reviewerSteps: null,
+				platform: "linux",
+				permission: { external_directory: "deny" },
+			}),
+		);
+	});
 	test("pins the 9.1.0 OpenAI-only grid without weakening later releases", () => {
 		const model = {
 			routeProvider: "openai",

@@ -37,6 +37,7 @@ import {
 	normalizeRequestedModel,
 	redactTranscript,
 } from "./provenance.js";
+import { releaseHostPermissions } from "./release-policy.js";
 import type {
 	ActorIdentity,
 	AttemptRecordV2,
@@ -393,6 +394,9 @@ async function main(): Promise<void> {
 							hostConfigSha256: hostConfigSha256({
 								opencodeVersion,
 								reviewerModel: options.model,
+								...(releaseHostPermissions(packageJson.version)
+									? { permission: releaseHostPermissions(packageJson.version) }
+									: {}),
 							}),
 							actors: actor ? [actor] : [],
 							instructions,
@@ -428,6 +432,9 @@ async function main(): Promise<void> {
 							hostConfigSha256: hostConfigSha256({
 								opencodeVersion,
 								reviewerModel: options.model,
+								...(releaseHostPermissions(packageJson.version)
+									? { permission: releaseHostPermissions(packageJson.version) }
+									: {}),
 							}),
 							actors: [],
 							instructions: [],

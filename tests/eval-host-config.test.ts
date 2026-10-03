@@ -49,6 +49,7 @@ test("eval host writes reviewer model through native plugin tuple options", asyn
 			JSON.parse(await readFile(join(host.project, "opencode.json"), "utf8")),
 		).toEqual({
 			$schema: "https://opencode.ai/config.json",
+			permission: { external_directory: "deny" },
 			plugin: [
 				[
 					`opencode-plugin-flow@${packageJson.version}`,
