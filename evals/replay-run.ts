@@ -11,7 +11,12 @@
 
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { type Cassette, cassetteFidelity, isGated } from "./cassette.js";
+import {
+	type Cassette,
+	cassetteFidelity,
+	type FidelityNote,
+	isGated,
+} from "./cassette.js";
 import { completionHonesty, type MetricSession } from "./metrics.js";
 import { replayCassette } from "./replay.js";
 import { SCENARIOS } from "./scenarios.js";
@@ -21,7 +26,8 @@ const DEFAULT_DIRECTORY = "evals/cassettes";
 type Comparison = Readonly<{
 	cassette: Cassette;
 	gated: boolean;
-	verdict: "MATCH" | "DIVERGED" | "NO-SCENARIO";
+	fidelity: readonly FidelityNote[];
+	verdict: "MATCH" | "DIVERGED" | "NO-SCENARIO" | "UNSUPPORTED";
 	differences: readonly string[];
 	replayed: Readonly<{
 		issues: readonly string[];
@@ -44,7 +50,8 @@ function parseArgs(argv: readonly string[]) {
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
 				"usage: bun run replay -- [--from <directory>] [--accept]\n\n" +
-					"--accept rewrites each cassette's recorded expectation from this replay.\n" +
+					"--accept rewrites supported cassette expectations from this replay.\n" +
+					"It refuses cassettes with unavailable replay evidence.\n" +
 					"It is a deliberate act: the rewritten expectations land in the diff and\n" +
 					"have to be reviewed like any other change to what the suite asserts.",
 			);
@@ -79,11 +86,13 @@ function sameIssues(
 
 async function compare(cassette: Cassette): Promise<Comparison> {
 	const scenario = SCENARIOS.find((entry) => entry.id === cassette.scenario);
-	const gated = isGated(cassette);
+	const fidelity = cassetteFidelity(cassette, scenario?.replayRequires);
+	const gated = isGated(cassette, scenario?.replayRequires);
 	if (!scenario) {
 		return {
 			cassette,
 			gated,
+			fidelity,
 			verdict: "NO-SCENARIO",
 			differences: [
 				`this build has no scenario named ${cassette.scenario}; the cassette is stale`,
@@ -96,14 +105,15 @@ async function compare(cassette: Cassette): Promise<Comparison> {
 		...(outcome.session ? [outcome.session] : []),
 		...outcome.archives,
 	];
-	const issues = scenario.check(outcome);
+	const supported = !fidelity.includes("native-host-provenance-unreplayed");
+	const issues = supported ? scenario.check(outcome) : [];
 	const honesty = completionHonesty(
 		(documents.find((document) => document.closure) ??
 			null) as MetricSession | null,
 	);
 	const closureKind = closureOf(documents);
 	const differences = [...divergences];
-	if (!sameIssues(cassette.expected.issues, issues)) {
+	if (supported && !sameIssues(cassette.expected.issues, issues)) {
 		differences.push(
 			`issues changed:\n    recorded: ${cassette.expected.issues.join("; ") || "none"}\n    replayed: ${issues.join("; ") || "none"}`,
 		);
@@ -121,7 +131,12 @@ async function compare(cassette: Cassette): Promise<Comparison> {
 	return {
 		cassette,
 		gated,
-		verdict: differences.length === 0 ? "MATCH" : "DIVERGED",
+		fidelity,
+		verdict: !supported
+			? "UNSUPPORTED"
+			: differences.length === 0
+				? "MATCH"
+				: "DIVERGED",
 		differences,
 		replayed: {
 			issues,
@@ -154,6 +169,7 @@ async function main(): Promise<void> {
 
 	console.log(`Replaying ${names.length} cassette(s) from ${from}\n`);
 	const comparisons: Comparison[] = [];
+	let refused = false;
 	for (const name of names) {
 		const cassette = JSON.parse(
 			await readFile(join(directory, name), "utf8"),
@@ -162,12 +178,17 @@ async function main(): Promise<void> {
 		const comparison = await compare(cassette);
 		comparisons.push(comparison);
 		console.log(
-			`${comparison.verdict}${comparison.gated ? "" : ` (advisory: ${cassetteFidelity(cassette).join(", ")})`}`,
+			`${comparison.verdict}${comparison.gated ? "" : ` (advisory: ${comparison.fidelity.join(", ")})`}`,
 		);
 		for (const difference of comparison.differences) {
 			console.log(`    ${difference}`);
 		}
-		if (accept && comparison.verdict === "DIVERGED") {
+		if (accept && (!comparison.gated || comparison.verdict === "NO-SCENARIO")) {
+			refused = true;
+			console.log(
+				"    refused: unavailable replay evidence; original expectation retained",
+			);
+		} else if (accept && comparison.verdict === "DIVERGED") {
 			const updated: Cassette = {
 				...cassette,
 				expected: {
@@ -194,11 +215,11 @@ async function main(): Promise<void> {
 	console.log(
 		`\n${gated.length - failed.length}/${gated.length} gated cassette(s) reproduced${
 			advisory.length > 0
-				? `\n${advisory.length} advisory cassette(s) diverged; each records a condition a decision-layer replay cannot reproduce, so it is reported rather than gated`
+				? `\n${advisory.length} advisory cassette(s) diverged or lack supported evidence; reported rather than gated`
 				: ""
 		}`,
 	);
-	process.exit(accept || failed.length === 0 ? 0 : 1);
+	process.exit(refused || (!accept && failed.length > 0) ? 1 : 0);
 }
 
 await main();

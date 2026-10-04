@@ -600,6 +600,7 @@ export type Scenario = {
 	/** Commands sent in order; each waits for the session to go quiet. */
 	readonly steps: readonly ScenarioStep[];
 	readonly title?: string;
+	readonly replayRequires?: readonly "native-host-provenance"[];
 	/**
 	 * Asking the user is an acceptable terminal state for this scenario, so a run
 	 * that ends by asking is checked rather than excluded from the pass rate.

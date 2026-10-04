@@ -408,6 +408,12 @@ source drift between arming and observing, an abort, an excluded ask — carries
 `fidelity` note and is **reported, not gated**, on the same principle the
 thresholds use: gate what is measured, report what is not.
 
+Scenarios that require native host provenance declare `replayRequires`. Their
+recordings report `UNSUPPORTED` because decision replay lacks native call bindings
+and host trace. Runtime handler, closure and completion-honesty differences remain
+visible. Replay derives the capability note from the current scenario even when
+an older cassette has empty `fidelity`, without rewriting the original bytes.
+
 Capture identities are retained only when the appended marker matches a stored
 observation and its command. Replay binds those IDs to newly persisted captures;
 unknown or superseded references still fail. Older recordings without capture
@@ -424,9 +430,10 @@ the developer's real `auth.json` into its throwaway home, so this is a hard rule
 rather than a precaution; `tests/eval-replay.test.ts` pins it.
 
 Only recordings someone has read belong in the committed `evals/cassettes/` set,
-which is what CI gates on. `--accept` rewrites a cassette's recorded expectation
-from the current replay; it is a deliberate act, and the rewritten expectation
-lands in the diff to be reviewed like any other change to what the suite asserts.
+which is what CI gates on. `--accept` rewrites supported cassette expectations
+from the current replay. Review those changes like other test expectations.
+It refuses cassettes with unavailable evidence, preserves their bytes and exits
+with failure.
 
 The driver itself is proven without a model: `tests/eval-replay.test.ts` hand-writes
 the decision sequence of a passing `happy-path` attempt, replays it, and grades it

@@ -105,7 +105,8 @@ export type FidelityNote =
 	| "provider-error"
 	| "evaluator-error"
 	| "validation-identity-unrecorded"
-	| "workspace-diff-unreplayed";
+	| "workspace-diff-unreplayed"
+	| "native-host-provenance-unreplayed";
 
 export type Cassette = Readonly<{
 	cassetteVersion: number;
@@ -300,14 +301,20 @@ function validationReport(output: string): string | null {
 }
 
 /** A cassette is gated only when nothing about it is known to be unreproducible. */
-export function isGated(cassette: Cassette): boolean {
-	return cassetteFidelity(cassette).length === 0;
+export function isGated(
+	cassette: Cassette,
+	requirements: readonly "native-host-provenance"[] = [],
+): boolean {
+	return cassetteFidelity(cassette, requirements).length === 0;
 }
 
 export function cassetteFidelity(
 	cassette: Pick<Cassette, "events" | "fidelity">,
+	requirements: readonly "native-host-provenance"[] = [],
 ): readonly FidelityNote[] {
 	const fidelity = new Set(cassette.fidelity);
+	if (requirements.includes("native-host-provenance"))
+		fidelity.add("native-host-provenance-unreplayed");
 	let identitiesRecorded = false;
 	for (const event of cassette.events) {
 		if (event.kind === "bash" && event.validation) identitiesRecorded = true;
@@ -399,6 +406,7 @@ export function buildCassette(options: {
 	readonly falseCompletion: boolean;
 	readonly documents: readonly Record<string, unknown>[];
 	readonly extraFidelity: readonly FidelityNote[];
+	readonly replayRequires?: readonly "native-host-provenance"[];
 }): Cassette {
 	const events: CassetteEvent[] = [];
 	const pendingResults = new Map<
@@ -522,7 +530,7 @@ export function buildCassette(options: {
 			},
 			finalText: options.finalText,
 			assistantMessages: options.assistantMessages,
-			fidelity: cassetteFidelity({ events, fidelity }),
+			fidelity: cassetteFidelity({ events, fidelity }, options.replayRequires),
 		} satisfies Cassette,
 		options.projectPath,
 	);

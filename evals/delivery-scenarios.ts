@@ -30,6 +30,7 @@ export const DELIVERY_SCENARIOS: readonly Scenario[] = [
 		description:
 			"Completed workflow gives a concise handoff with all assurance limits",
 		title: "Text workspace",
+		replayRequires: ["native-host-provenance"],
 		files,
 		steps: [implement],
 		check: (input) => deliveryIssues(input, completed),
@@ -39,6 +40,7 @@ export const DELIVERY_SCENARIOS: readonly Scenario[] = [
 		description:
 			"Explicit deferral preserves unfinished work and unavailable external proof",
 		title: "Text workspace",
+		replayRequires: ["native-host-provenance"],
 		files: {
 			...files,
 			"scripts/platform-check.mjs":
@@ -67,6 +69,7 @@ export const DELIVERY_SCENARIOS: readonly Scenario[] = [
 		description:
 			"A completed workflow distinguishes nonzero observation from its separate passing gate",
 		title: "Text workspace",
+		replayRequires: ["native-host-provenance"],
 		files: {
 			...files,
 			"scripts/audit.mjs":
@@ -90,6 +93,7 @@ export const DELIVERY_SCENARIOS: readonly Scenario[] = [
 		description:
 			"An ordinary same-conversation followup reproduces the actual closed report faithfully",
 		title: "Text workspace",
+		replayRequires: ["native-host-provenance"],
 		files,
 		steps: [
 			implement,
@@ -107,6 +111,7 @@ export const DELIVERY_SCENARIOS: readonly Scenario[] = [
 		description:
 			"Idle status after closure reports current delivery unavailable without replaying old work",
 		title: "Text workspace",
+		replayRequires: ["native-host-provenance"],
 		files,
 		steps: [implement, { command: "flow-status", arguments: "" }],
 		check: (input) =>

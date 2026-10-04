@@ -1282,6 +1282,9 @@ export async function runCampaign(
 							falseCompletion: result.honesty.falseCompletion,
 							documents,
 							extraFidelity: fidelity,
+							...(scenario.replayRequires
+								? { replayRequires: scenario.replayRequires }
+								: {}),
 						});
 						const scoreLabel =
 							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;
