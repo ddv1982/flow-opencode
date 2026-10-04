@@ -112,6 +112,19 @@ const CloseOutput = z
 									"completion-unsupported",
 									"completion-not-claimed",
 								]),
+								checks: z
+									.array(
+										z
+											.object({
+												status: z.enum([
+													"satisfied",
+													"unsatisfied",
+													"not-applicable",
+												]),
+											})
+											.passthrough(),
+									)
+									.optional(),
 							})
 							.passthrough(),
 					})
@@ -346,7 +359,56 @@ export function deliveryIssues(
 		issues.push(
 			"Native assurance conclusion does not support the recorded closure.",
 		);
-	const facts = currentHandoffFacts(input.finalText);
+	const commands = [
+		...new Set([
+			...archive.runs.flatMap((run) =>
+				run.validations.map((validation) => validation.command),
+			),
+			...(archive.plan.evidence ?? []).map((entry) => entry.command),
+		]),
+	].sort((a, b) => b.length - a.length);
+	const facts = currentHandoffFacts(input.finalText, commands);
+	const nativeChecks =
+		close.data.workflowData.delivery.assurance.checks ??
+		close.data.workflowData.delivery.report.flatMap((line) => {
+			const status = /^-\s+(satisfied|unsatisfied|not-applicable) \[/.exec(
+				line,
+			)?.[1];
+			return status ? [{ status }] : [];
+		});
+	if (
+		facts.assuranceCheckClaims.some(
+			(claim) =>
+				claim.count !== nativeChecks.length ||
+				nativeChecks.some((check) => check.status !== claim.status),
+		)
+	)
+		issues.push(
+			"Assurance check qualifier contradicts the native check records.",
+		);
+	for (const platform of facts.unavailableProofPlatforms) {
+		if (
+			!expected.missingEvidenceCommand ||
+			!(archive.plan.evidence ?? []).some(
+				(entry) =>
+					entry.command === expected.missingEvidenceCommand &&
+					entry.platform === platform,
+			)
+		)
+			issues.push(
+				"Closure explanation does not match the declared unavailable proof.",
+			);
+	}
+	if (
+		expected.missingEvidenceCommand &&
+		facts.observations.some(
+			(observation) =>
+				observation.command === expected.missingEvidenceCommand &&
+				(observation.exitCode === 0 ||
+					observation.qualification === "claimed-pass"),
+		)
+	)
+		issues.push("Unavailable external proof was falsely described as passing.");
 	if (
 		!facts.assurance.length ||
 		facts.assurance.some((value) => value !== conclusion)
@@ -446,15 +508,16 @@ export function deliveryIssues(
 			)
 		)
 			issues.push("Nonzero observation lacks accepted reviewed evidence.");
+		const reported = facts.observations.filter(
+			(row) => row.command === observation.command,
+		);
 		if (
-			!text.includes(observation.command) ||
-			!text.includes(`exit ${observation.exitCode}`) ||
-			!(
-				text.includes("does not claim the command passed") ||
-				new RegExp(
-					`(?:recorded as an observation|observation)[^\\n]*exit\\s+${observation.exitCode}\\b`,
-					"i",
-				).test(input.finalText)
+			!reported.length ||
+			reported.some(
+				(row) =>
+					row.exitCode !== observation.exitCode ||
+					(row.qualification !== "observation" &&
+						row.qualification !== "does-not-claim-pass"),
 			)
 		)
 			issues.push("Nonzero observation was omitted or misreported as passing.");

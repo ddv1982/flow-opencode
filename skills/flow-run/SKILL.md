@@ -38,8 +38,9 @@ Work on exactly one approved feature.
    mutation.
 
 Delivery handoff: report `workflowData.delivery.summary.lines`.
-Keep the supplied Goal line unchanged. Retain all three assurance limitations,
-blockers, unfinished IDs and observed exits. Concise formatting may not omit them.
+Keep the supplied Goal line unchanged. Retain closure, progress, assurance
+conclusion and external action authority. Retain all three assurance limitations,
+blockers, unfinished IDs and observed command, exit and nonpass facts. Concise formatting may not omit them.
 For requested
 full detail or a missing summary, use the retained close response's `report`.
 Map IDs only

@@ -11,6 +11,17 @@ type CurrentHandoffFacts = {
 	authority: ("not-granted" | "granted" | null)[];
 	progress: ({ completed: number; total: number } | null)[];
 	goal: string[];
+	assuranceCheckClaims: { count: number; status: "satisfied" }[];
+	unavailableProofPlatforms: string[];
+	observations: {
+		command: string;
+		exitCode: number | null;
+		qualification:
+			| "observation"
+			| "does-not-claim-pass"
+			| "claimed-pass"
+			| null;
+	}[];
 	unsupported: string[];
 };
 export function presentationText(text: string): string {
@@ -73,24 +84,172 @@ function closureValue(value: string): Closure | null {
 			? plain
 			: null;
 }
-function assuranceValue(value: string): Assurance | null {
-	return (
-		(
-			[
-				"completion-supported",
-				"completion-unsupported",
-				"completion-not-claimed",
-			] as const
-		).find((item) => item.replaceAll("-", " ") === value.toLowerCase()) ?? null
-	);
+function countValue(value: string): number | null {
+	const words: Readonly<Record<string, number>> = {
+		zero: 0,
+		one: 1,
+		two: 2,
+		three: 3,
+		four: 4,
+		five: 5,
+		six: 6,
+	};
+	const count = /^\d+$/.test(value)
+		? Number(value)
+		: words[value.toLowerCase()];
+	return count !== undefined && Number.isSafeInteger(count) && count >= 0
+		? count
+		: null;
 }
-export function currentHandoffFacts(text: string): CurrentHandoffFacts {
+function progressValue(value: string) {
+	const match = /^(\d+)\s*(?:of|\/)\s*(\d+) features complete$/i.exec(value);
+	if (!match) return null;
+	const completed = countValue(match[1] ?? "");
+	const total = countValue(match[2] ?? "");
+	return completed === null || total === null ? null : { completed, total };
+}
+function authorityValue(value: string): "not-granted" | "granted" | null {
+	const plain = value.toLowerCase();
+	return plain === "not granted" || plain === "not-granted"
+		? "not-granted"
+		: plain === "granted"
+			? "granted"
+			: null;
+}
+function assuranceValue(
+	value: string,
+): { conclusion: Assurance; checkCount: number | null } | null {
+	const match =
+		/^(?:completion (?:is )?)?(supported|unsupported|not claimed)(?:(?: by all (\w+) assurance checks)|(?:, with all (\w+) assurance checks satisfied))?$/i.exec(
+			value,
+		);
+	if (!match) return null;
+	const conclusion = (
+		[
+			"completion-supported",
+			"completion-unsupported",
+			"completion-not-claimed",
+		] as const
+	).find(
+		(item) =>
+			item.slice("completion-".length).replaceAll("-", " ") ===
+			match[1]?.toLowerCase(),
+	);
+	const rawCount = match[2] ?? match[3];
+	const checkCount = rawCount === undefined ? null : countValue(rawCount);
+	if (
+		!conclusion ||
+		(rawCount !== undefined &&
+			(checkCount === null || conclusion !== "completion-supported"))
+	)
+		return null;
+	return { conclusion, checkCount };
+}
+function closureStatement(
+	value: string,
+): { closure: Closure; unavailablePlatform: string | null } | null {
+	const match =
+		/^(completed|deferred|abandoned)(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
+			value,
+		);
+	if (!match) return null;
+	const closure = closureValue(match[1] ?? "");
+	const platform = match[2]?.toLowerCase();
+	if (!closure || (platform && closure !== "deferred")) return null;
+	return {
+		closure,
+		unavailablePlatform:
+			platform === "macos"
+				? "darwin"
+				: platform === "windows"
+					? "win32"
+					: (platform ?? null),
+	};
+}
+function observationValue(line: string, commands: readonly string[]) {
+	for (const command of commands) {
+		const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		const prefix = new RegExp(
+			`^(?:Observed )?["']?${escaped}["']?(?=[:\\s]|$)(.*)$`,
+		);
+		const candidates = [line, line.replace(/^[^:]+:\s*/, "")];
+		const matched = candidates
+			.map((candidate) => prefix.exec(candidate))
+			.find((value) => value !== null);
+		if (!matched) continue;
+		const body = (matched[1] ?? "")
+			.trim()
+			.replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
+		const invalid = { command, exitCode: null, qualification: null };
+		if (
+			!/\b(?:exit|exited|passed|succeeded|recorded as an observation)\b/i.test(
+				body,
+			)
+		)
+			continue;
+		if (commands.some((other) => body.includes(other))) return invalid;
+		const parts = body
+			.split(/;|\.\s+(?=[A-Z])/)
+			.map((part) => part.trim().replace(/\.$/, ""));
+		const status = parts.shift() ?? "";
+		const value =
+			/^(?:(passed),\s*|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
+				status,
+			);
+		if (!value) return invalid;
+		const rawExit = value[3] ?? "";
+		const exitCode =
+			rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
+		if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
+		const malformed = { command, exitCode, qualification: null };
+		const metadata = value[4] ?? "";
+		if (
+			metadata &&
+			!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
+				metadata,
+			)
+		)
+			return malformed;
+		if (/\b(?:passed|succeeded|granted|complete|completion)\b/i.test(metadata))
+			return malformed;
+		let qualification:
+			| "observation"
+			| "does-not-claim-pass"
+			| "claimed-pass"
+			| null = value[1] ? "claimed-pass" : value[2] ? "observation" : null;
+		for (const qualifier of parts) {
+			if (
+				/^(?:this observation does not claim a pass|this does not claim the command passed)$/i.test(
+					qualifier,
+				)
+			) {
+				if (qualification !== "claimed-pass")
+					qualification = "does-not-claim-pass";
+			} else if (
+				/^(?:this (?:command|observation)|it) (?:passed|succeeded)$/i.test(
+					qualifier,
+				)
+			)
+				qualification = "claimed-pass";
+			else return malformed;
+		}
+		return { command, exitCode, qualification };
+	}
+	return null;
+}
+export function currentHandoffFacts(
+	text: string,
+	observationCommands: readonly string[] = [],
+): CurrentHandoffFacts {
 	const facts: CurrentHandoffFacts = {
 		closure: [],
 		assurance: [],
 		authority: [],
 		progress: [],
 		goal: [],
+		assuranceCheckClaims: [],
+		unavailableProofPlatforms: [],
+		observations: [],
 		unsupported: [],
 	};
 	for (const line of currentLines(text)) {
@@ -98,6 +257,11 @@ export function currentHandoffFacts(text: string): CurrentHandoffFacts {
 		if (goal) {
 			facts.goal.push(goal[1] ?? "");
 			continue;
+		}
+		const observation = observationValue(line, observationCommands);
+		if (observation) {
+			facts.observations.push(observation);
+			if (observation.qualification === null) facts.unsupported.push(line);
 		}
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
@@ -109,33 +273,28 @@ export function currentHandoffFacts(text: string): CurrentHandoffFacts {
 			if (field) {
 				const value = field[2] ?? "";
 				switch (field[1]?.toLowerCase()) {
-					case "closure":
-						facts.closure.push(
-							/^(completed|deferred|abandoned)$/i.test(value)
-								? closureValue(value)
-								: null,
-						);
-						break;
-					case "assurance":
-						facts.assurance.push(assuranceValue(value));
-						break;
-					case "progress": {
-						const progress = /^(\d+) of (\d+) features complete$/i.exec(value);
-						facts.progress.push(
-							progress
-								? { completed: Number(progress[1]), total: Number(progress[2]) }
-								: null,
-						);
+					case "closure": {
+						const parsed = closureStatement(value);
+						facts.closure.push(parsed?.closure ?? null);
+						if (parsed?.unavailablePlatform)
+							facts.unavailableProofPlatforms.push(parsed.unavailablePlatform);
 						break;
 					}
+					case "assurance": {
+						const parsed = assuranceValue(value);
+						facts.assurance.push(parsed?.conclusion ?? null);
+						if (parsed?.checkCount !== null && parsed?.checkCount !== undefined)
+							facts.assuranceCheckClaims.push({
+								count: parsed.checkCount,
+								status: "satisfied",
+							});
+						break;
+					}
+					case "progress":
+						facts.progress.push(progressValue(value));
+						break;
 					default:
-						facts.authority.push(
-							value.toLowerCase() === "not-granted"
-								? "not-granted"
-								: value.toLowerCase() === "granted"
-									? "granted"
-									: null,
-						);
+						facts.authority.push(authorityValue(value));
 				}
 				continue;
 			}
@@ -151,12 +310,14 @@ export function currentHandoffFacts(text: string): CurrentHandoffFacts {
 				facts.closure.push(closureValue(closure[1] ?? closure[2] ?? ""));
 				continue;
 			}
-			const assurance =
-				/^(?:completion (?:is )?)(supported|unsupported|not claimed)(?: by all four assurance checks)?$/i.exec(
-					claim,
-				);
-			if (assurance) {
-				facts.assurance.push(assuranceValue(`completion ${assurance[1]}`));
+			if (/^completion /i.test(claim)) {
+				const parsed = assuranceValue(claim);
+				facts.assurance.push(parsed?.conclusion ?? null);
+				if (parsed?.checkCount !== null && parsed?.checkCount !== undefined)
+					facts.assuranceCheckClaims.push({
+						count: parsed.checkCount,
+						status: "satisfied",
+					});
 				continue;
 			}
 			if (
@@ -167,15 +328,15 @@ export function currentHandoffFacts(text: string): CurrentHandoffFacts {
 				facts.assurance.push("completion-supported");
 				continue;
 			}
-			const progress =
-				/^(?:Flow handoff:\s*)?(\d+)\s*(?:of|\/)\s*(\d+) features complete$/i.exec(
-					claim,
-				);
+			const progress = progressValue(claim.replace(/^Flow handoff:\s*/i, ""));
 			if (progress) {
-				facts.progress.push({
-					completed: Number(progress[1]),
-					total: Number(progress[2]),
-				});
+				facts.progress.push(progress);
+				continue;
+			}
+			const authority =
+				/^external[- ]action authority(?: is| has been)? (.+)$/i.exec(claim);
+			if (authority) {
+				facts.authority.push(authorityValue(authority[1] ?? ""));
 				continue;
 			}
 			if (
@@ -184,12 +345,6 @@ export function currentHandoffFacts(text: string): CurrentHandoffFacts {
 				)
 			) {
 				facts.authority.push("not-granted");
-				continue;
-			}
-			if (
-				/^external[- ]action authority (?:is |has been )?granted$/i.test(claim)
-			) {
-				facts.authority.push("granted");
 				continue;
 			}
 			if (
