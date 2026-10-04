@@ -19,11 +19,18 @@ export type DecisionPacket = Readonly<{
 	findings: readonly { id: string; summary: string; evidence: string }[];
 	candidates: readonly RecoveryCandidate[];
 }>;
+export type DecisionTelemetry = Readonly<{
+	transportLatencyMs: number | null;
+	transportAttempts: number | null;
+	transportReservedUsd: number | null;
+	responseUsage: Readonly<{ inputTokens: number; outputTokens: number }> | null;
+}>;
 export type DecisionAdvice =
 	| Readonly<{
 			kind: "unavailable";
 			reason: string;
 			resolvedModel?: string;
+			telemetry?: DecisionTelemetry;
 	  }>
 	| Readonly<{
 			kind: "answered";
@@ -37,6 +44,7 @@ export type DecisionAdvice =
 			inputTokens: number;
 			outputTokens: number;
 			latencyMs: number;
+			telemetry?: DecisionTelemetry;
 	  }>;
 export interface DecisionProvider {
 	fitsRequest?(packet: DecisionPacket): boolean;

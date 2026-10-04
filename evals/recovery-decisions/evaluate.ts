@@ -26,15 +26,18 @@ export async function evaluateRecoveryCorpus(
 			packet: DecisionPacket | null;
 			advice: DecisionAdvice | null;
 		} = { packet: null, advice: null };
-		const controller = new RecoveryController({
-			async assess(packet, options) {
-				captured.packet = structuredClone(packet);
-				captured.advice = provider
-					? await provider.assess(packet, options)
-					: { kind: "unavailable", reason: "offline-preparation" };
-				return captured.advice;
+		const controller = new RecoveryController(
+			{
+				async assess(packet, options) {
+					captured.packet = structuredClone(packet);
+					captured.advice = provider
+						? await provider.assess(packet, options)
+						: { kind: "unavailable", reason: "offline-preparation" };
+					return captured.advice;
+				},
 			},
-		});
+			provider ? {} : { now: () => 0 },
+		);
 		controller.activate("evaluation", {
 			mode: "shadow",
 			maxCalls: 3,
