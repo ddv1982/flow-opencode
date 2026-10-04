@@ -523,14 +523,13 @@ different things:
   against the prompts. A scenario that sets `mayEscalate` is the exception: there
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
-- `ABORT` — a step ended without going quiet, either `wedged` (no new message or
-  part while tool calls stayed incomplete, each named with the first line of its
-  command) or `still working` (producing output up to the deadline, so looping
-  rather than stuck). A wedge is called at three minutes of no change rather than
-  waited out to the twenty-minute deadline: three of the four recorded timeouts sat
-  on the same incomplete tool call for the full twenty and then printed exactly that
-  diagnostic, so the remaining seventeen minutes bought no evidence. Tokens and tool
-  calls collected before the abort are kept. Excluded from the pass rate and counted
+- `ABORT` — a step ended without going quiet. Diagnostics distinguish no new
+  messages or parts while tool calls stay incomplete from new messages or parts
+  near the deadline. Updates inside existing parts are not measured. Neither
+  diagnostic establishes whether the model is making useful progress. The harness
+  aborts after three minutes without new messages or parts while calls stay
+  incomplete, or at the twenty-minute hard deadline. Tokens and tool calls
+  collected before the abort are kept. Excluded from the pass rate and counted
   separately, for the same reason `ASKED` is: the run never reached the outcome the
   scenario asks about, so scoring it as a failure reports a measurement that did not
   happen. One wedged attempt was the only failing threshold in a recorded report.
