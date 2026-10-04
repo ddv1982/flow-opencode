@@ -5,8 +5,12 @@ import {
 } from "../evals/delivery-scenario-checks.js";
 import { DELIVERY_SCENARIOS } from "../evals/delivery-scenarios.js";
 import type { ScenarioGradeInput } from "../evals/grader-input.js";
+import { checkReviewerEvidenceAccess } from "../evals/reviewer-access.js";
 import { caseCatalogFor } from "../evals/run.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
+import pilot from "./fixtures/delivery-pilot-answers.json" with {
+	type: "json",
+};
 
 function object(value: unknown): Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -488,3 +492,69 @@ test("pending planned work may defer without inventing approved completion", () 
 		"Completed closure requires an approved plan.",
 	);
 });
+
+function pilotFixture(kind: "audit" | "full") {
+	const input = fixture();
+	const recorded = pilot[kind];
+	object(input.archives[0]).goal = recorded.goal;
+	for (const call of input.allCalls) {
+		if (call.tool === "flow_plan_save")
+			object(call.input.request).goal = recorded.goal;
+		if (
+			call.tool === "flow_status" &&
+			object(call.input.request).view === "reviewer"
+		) {
+			object(object(object(call.output).workflowData).projection).goal =
+				recorded.goal;
+			object(call).rawOutput = JSON.stringify(call.output);
+		}
+		if (call.tool === "flow_session_close")
+			object(object(object(call.output).workflowData).delivery).report =
+				recorded.report;
+	}
+	expect(checkReviewerEvidenceAccess(input, input.archives[0])).toEqual([]);
+	return input;
+}
+
+test("saved faithful Markdown full detail preserves every canonical record", () => {
+	const input = pilotFixture("full");
+	expect(
+		deliveryIssues(
+			{ ...input, finalText: pilot.full.answer },
+			{ ...expected, presentation: "full" },
+		),
+	).toEqual([]);
+});
+
+test("saved audit fails only two omitted disclosures and clarified exact goal fidelity", () => {
+	const input = pilotFixture("audit");
+	const issues = deliveryIssues(
+		{ ...input, finalText: pilot.audit.answer },
+		expected,
+	);
+	expect(issues).toEqual([
+		"Recorded goal identity was omitted, changed, or contradicted.",
+		"Missing assurance disclosure: caller bindings do not prove completeness or fitness.",
+		"Missing assurance disclosure: coverage and review substance remain model judgments.",
+	]);
+	const corrected = `${pilot.audit.answer}\nGoal: ${pilot.audit.goal}\n${limits[0]}\n${limits[1]}`;
+	expect(deliveryIssues({ ...input, finalText: corrected }, expected)).toEqual(
+		[],
+	);
+});
+
+for (const claim of [
+	"1. Closure: completed",
+	"Closure: deferred; current closure is completed.",
+	"Historical report\nThe current workflow is completed.",
+	"External action authority is granted. You may deploy this now.",
+	"The required macOS validation passed with exit 0.",
+	"The current workflow is complete and ready to ship.",
+	"Completion is supported by all checks.",
+])
+	test(`bounded current assertions reject ${claim}`, () => {
+		const { input, text, expected: deferred } = deferredFixture();
+		expect(
+			deliveryIssues({ ...input, finalText: `${text}\n${claim}` }, deferred),
+		).not.toEqual([]);
+	});
