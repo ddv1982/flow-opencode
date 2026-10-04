@@ -9,7 +9,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 
 | Threshold | Value | Why |
 | --- | --- | --- |
-| Distinct providers | 1 for 9.1.0, 9.2.0, 9.3.0, and 9.4.0; otherwise ≥ 2 | These exceptions pin `openai/gpt-6-sol` and support OpenAI-only claims. |
+| Distinct providers | 1 for 9.1.0, 9.2.0, 9.3.0, 9.4.0, and 9.5.0; otherwise ≥ 2 | 9.5.0 pins `openai/gpt-6.1-sol`; earlier exceptions pin GPT-6 Sol. OpenAI-only claims. |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Gated once measured: 54 runs across three providers submitted all 22 assignments, including runs that stopped to ask or at a blocker. |
 | Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
@@ -23,16 +23,15 @@ This page owns release thresholds, candidate freezing, and publication order.
 | `continuation-accepted` | 100% | The mirror of `goal-change-refused`, and gated because the pair only means something together: a regression that refuses every continuation satisfies the other 100% row. 9/9 across three providers. |
 | `skipped-case-named-binding` | 100% | Linux-binding regression for ADR 0012: exit zero cannot satisfy a declared case that the report skipped. |
 | `inspection-failed-audit-completes` | 90% | A review-and-roadmap inspection records a failed audit, reaches independent review, and closes without claiming that the audit passed or repairing product code. |
-| `auto-two-features-evidence` | 100% in 9.4.0 | Two dependent features, native reviewer packet access and final gate. |
-| `auto-prerequisite-repair` | 100% in 9.4.0 | In-target repair or accepted failed-gate amendment; immutable canonical gate. |
-| `auto-observe-with-required-pass` | 100% in 9.4.0 | Honest nonzero audit plus separate required pass on the reviewed source. |
+| `auto-two-features-evidence` | 100% in 9.4.0 and 9.5.0 | Two dependent features, native reviewer packet access and final gate. |
+| `auto-prerequisite-repair` | 100% in 9.4.0 and 9.5.0 | In-target repair or accepted failed-gate amendment; immutable canonical gate. |
+| `auto-observe-with-required-pass` | 100% in 9.4.0 and 9.5.0 | Honest nonzero audit plus separate required pass on the reviewed source. |
 
 Ungated exploratory scenarios are listed in [evals](../evals/README.md#scenarios).
 
-Offline verifier fixes may reuse runs for unchanged package bytes and case policy.
-Current code regrades outcomes without executing historical code; execution sources
-must match their recorded Git commit. Missing sources or changed outcomes fail.
-Canary retries must retain consistent manager/reviewer identity.
+Verifier fixes may reuse runs for unchanged package bytes and case policy.
+Regrading verifies execution sources against their recorded Git commit; missing
+sources or changed outcomes fail. Canary retries keep manager/reviewer identity.
 
 Reviewed offline exceptions: [narrow patches](../.agents/plans/06-patch-release/README.md)
 and [frozen features](../.agents/plans/09-planning-models/README.md), each measuring
@@ -55,9 +54,10 @@ persistence failure stops without a finalized report.
 Repository code owns the release catalog; persisted `catalog.json` must match.
 Versions 9.1.0 and 9.2.0 use 38 primary cells and eight reserves on GPT-6 Sol.
 Version 9.3.0 uses 48 primary cells and nine reserves. Version 9.4.0 adds three
-autonomous cases, giving 57 primary cells and 12 reserves on GPT-6 Sol. Other
-versions use 96 primary cells and 18 reserves on distinct providers.
-Narrowed, extended, or merged summary reports cannot qualify.
+autonomous cases: 57 primary cells and 12 reserves on GPT-6 Sol. Version 9.5.0
+retains those twelve cases on GPT-6.1 Sol: 57 primary cells and 12 reserves.
+Other versions use 96 primary cells and 18 reserves. Narrowed or merged reports
+cannot qualify.
 
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
 messages, duration, tokens, and cost.
@@ -105,10 +105,10 @@ For 9.4.0, use
 
 Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
-For 9.1.0, 9.2.0, 9.3.0, and 9.4.0, run the pinned OpenAI model.
+For 9.1.0 through 9.4.0, pin GPT-6 Sol; 9.5.0 pins GPT-6.1 Sol.
 
 ```bash
-bun run eval -- --release --model openai/gpt-6-sol
+bun run eval -- --release --model openai/gpt-6.1-sol
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
 # Run the prepared fixture, then record its session and transcript.
 bun run eval:canary -- record <record-options>

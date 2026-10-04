@@ -57,7 +57,7 @@ import { operationInputDigest } from "../src/domain/operation.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 test("current release defaults include three autonomous attempts", () => {
-	expect(packageJson.version).toBe("9.4.0");
+	expect(packageJson.version).toBe("9.5.0");
 	expect(
 		attemptsForScenario("auto-two-features-evidence", { kind: "release" }),
 	).toBe(3);
@@ -328,7 +328,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 			tarballPath: artifactPath,
 		});
 		const scenarios = releaseScenarios();
-		const models = ["openai/gpt-6-sol"];
+		const models = ["openai/gpt-6.1-sol"];
 		const plan = campaignPlanFor({
 			models,
 			scenarios,

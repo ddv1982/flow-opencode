@@ -96,6 +96,7 @@ import {
 	RecoveryTreatmentSchema,
 	validateTreatmentBudget,
 } from "./recovery-decisions/treatment.js";
+import { releaseHostPermissions } from "./release-policy.js";
 import {
 	collectReviewerPacketBytes,
 	type ReviewerPacketBytes,
@@ -2042,6 +2043,9 @@ export class EvalHost {
 				join(project, "opencode.json"),
 				`${JSON.stringify(
 					{
+						...(releaseHostPermissions(version)
+							? { permission: releaseHostPermissions(version) }
+							: {}),
 						plugin: [
 							...(options.requestBudget && !liveTreatment
 								? [

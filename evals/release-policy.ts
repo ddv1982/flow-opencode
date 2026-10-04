@@ -146,14 +146,17 @@ export type ReleaseProfile = {
 	readonly requiredModels: readonly ModelIdentity[] | null;
 };
 
-const openAiOnlyRelease = (catalog: ValidatedCaseCatalog): ReleaseProfile => ({
+const openAiOnlyRelease = (
+	catalog: ValidatedCaseCatalog,
+	model = "gpt-6-sol",
+): ReleaseProfile => ({
 	catalog: catalog.map((row) => ({ ...row, minProviders: 1 })),
 	requiredModels: [
 		{
 			routeProvider: "openai",
 			gateway: null,
-			family: "gpt-6-sol",
-			model: "gpt-6-sol",
+			family: model,
+			model,
 			revision: null,
 		},
 	],
@@ -165,6 +168,8 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "9.5.0")
+		return openAiOnlyRelease(AUTO_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (packageVersion === "9.4.0")
 		return openAiOnlyRelease(AUTO_RELEASE_CATALOG);
 	if (packageVersion === "9.1.0" || packageVersion === "9.2.0") {
@@ -188,6 +193,12 @@ export const RELEASE_HOST_POLICY = {
 	reviewerSteps: null,
 } as const;
 
+export function releaseHostPermissions(packageVersion: string) {
+	return packageVersion === "9.5.0"
+		? { external_directory: "deny" as const }
+		: undefined;
+}
+
 export function releasePolicySha256(packageVersion: string): string {
 	const profile = releaseProfile(packageVersion);
 	return canonicalSha256("flow-release-policy-v1", {
@@ -195,7 +206,12 @@ export function releasePolicySha256(packageVersion: string): string {
 		...(profile.requiredModels === null
 			? {}
 			: { requiredModels: profile.requiredModels }),
-		host: RELEASE_HOST_POLICY,
+		host: {
+			...RELEASE_HOST_POLICY,
+			...(releaseHostPermissions(packageVersion)
+				? { permission: releaseHostPermissions(packageVersion) }
+				: {}),
+		},
 		analysisSha256: RELEASE_ANALYSIS_SHA256,
 		environmentReservesPerStratum: RELEASE_ENVIRONMENT_RESERVES_PER_STRATUM,
 	});
@@ -339,6 +355,9 @@ export function releaseHostConfigSha256(input: {
 		reviewerModel: model,
 		reviewerSteps: RELEASE_HOST_POLICY.reviewerSteps,
 		platform: RELEASE_HOST_POLICY.platform,
+		...(releaseHostPermissions(input.packageVersion)
+			? { permission: releaseHostPermissions(input.packageVersion) }
+			: {}),
 	});
 }
 

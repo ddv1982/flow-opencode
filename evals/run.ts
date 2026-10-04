@@ -103,6 +103,7 @@ import {
 	releaseCellsFor,
 	releaseGraderBundle,
 	releaseHostConfigSha256,
+	releaseHostPermissions,
 	releaseRandomizationSeed,
 	releaseScenarioCatalog,
 	selectReleaseScenarios,
@@ -1000,6 +1001,9 @@ export async function runCampaign(
 							reviewerModel: reviewer.requestedModel,
 							reviewerSteps: reviewer.requestedSteps,
 							platform: hostPlatform,
+							...(releaseHostPermissions(packageJson.version)
+								? { permission: releaseHostPermissions(packageJson.version) }
+								: {}),
 						});
 			const label = `${scenario.id} @ ${model} (${attempt}/${scheduledAttempts})`;
 			let cassette: Cassette | null = null;

@@ -64,6 +64,7 @@ import {
 	normalizeRequestedModel,
 	redactTranscript,
 } from "./provenance.js";
+import { releaseHostPermissions } from "./release-policy.js";
 import type {
 	ActorIdentity,
 	AttemptRecordV2,
@@ -625,6 +626,11 @@ async function main(): Promise<void> {
 									opencodeVersion,
 									model: options.model,
 									flow,
+									...(releaseHostPermissions(packageJson.version)
+										? {
+												permission: releaseHostPermissions(packageJson.version),
+											}
+										: {}),
 								}),
 								transcript: stored,
 								requested,
@@ -679,6 +685,11 @@ async function main(): Promise<void> {
 									opencodeVersion,
 									model: options.model,
 									flow,
+									...(releaseHostPermissions(packageJson.version)
+										? {
+												permission: releaseHostPermissions(packageJson.version),
+											}
+										: {}),
 								}),
 								actors: [],
 								instructions: [],
