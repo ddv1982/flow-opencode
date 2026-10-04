@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { assuranceProjection } from "../src/application/delivery.js";
+import {
+	assuranceProjection,
+	deliveryProjection,
+} from "../src/application/delivery.js";
 import type {
 	EvidenceEntry,
 	Session,
@@ -420,4 +423,160 @@ describe("assurance projection", () => {
 			}),
 		);
 	});
+});
+
+describe("delivery summary", () => {
+	test("compresses successful histories and artifacts while retaining assurance limits", () => {
+		const base = completedSession();
+		const session: Session = {
+			...base,
+			runs: base.runs.map((run) => ({
+				...run,
+				summary: "A long successful history. ".repeat(50),
+				artifactsChanged: Array.from({ length: 20 }, (_, index) => ({
+					path: `src/reported-artifact-${index}.ts`,
+				})),
+			})),
+		};
+		const delivery = deliveryProjection(session);
+		const summary = delivery.summary.lines.join("\n");
+		expect(summary).toContain("Closure: completed. Shipped.");
+		expect(summary).toContain("Progress: 1 of 1 features complete");
+		expect(summary).toContain("Unfinished features: none");
+		expect(summary).toContain(
+			"Reported artifacts: 20 latest, 0 superseded only.",
+		);
+		expect(summary).toContain("External action authority: not-granted");
+		expect(summary).toContain(
+			"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+		);
+		expect(summary).toContain(
+			"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+		);
+		expect(summary).toContain(
+			"Freshness holds when review is accepted; an archive does not attest the current workspace.",
+		);
+		expect(summary).toContain(
+			"Full report is included in this close response.",
+		);
+		expect(summary.length).toBeLessThan(
+			delivery.report.join("\n").length * 0.6,
+		);
+		expect(delivery.report.join("\n")).toContain(
+			"A long successful history. ".repeat(50),
+		);
+		expect(delivery.report.join("\n")).toContain("src/reported-artifact-19.ts");
+	});
+	test("deferred summary retains every live blocker and unfinished feature without clipping", () => {
+		const base = completedSession();
+		if (!base.closure || !base.plan)
+			throw new Error("fixture requires plan and closure");
+		const session: Session = {
+			...base,
+			closure: {
+				...base.closure,
+				kind: "deferred",
+				summary: "Evidence unavailable.",
+			},
+			plan: {
+				...base.plan,
+				features: [
+					...base.plan.features,
+					{
+						id: "followup",
+						title: "Followup",
+						summary: "Followup",
+						targets: ["src"],
+						validation: ["bun test"],
+						dependsOn: ["delivery"],
+					},
+				],
+			},
+			runs: base.runs.map((run) => ({
+				...run,
+				state: "blocked",
+				reviews: run.reviews.map((review) => {
+					if (!review.result) throw new Error("fixture result missing");
+					return {
+						...review,
+						result: {
+							...review.result,
+							verdict: "failed",
+							findings: [
+								...Array.from({ length: 12 }, (_, index) => ({
+									findingId: `blocker-${index}`,
+									severity: "blocking" as const,
+									summary: `Failure ${index}.`,
+									evidence: `source-${index}.ts`,
+								})),
+								{
+									findingId: "advisory",
+									severity: "advisory" as const,
+									summary: "Nonblocker.",
+								},
+							],
+						},
+					};
+				}),
+			})),
+		};
+		const summary = deliveryProjection(session).summary.lines.join("\n");
+		expect(summary).toContain("Closure: deferred. Evidence unavailable.");
+		expect(summary).toContain("Progress: 0 of 2 features complete");
+		expect(summary).toContain("Unfinished features: delivery, followup");
+		for (let index = 0; index < 12; index++)
+			expect(summary).toContain(
+				`Blocking finding delivery blocker-${index}: Failure ${index}.`,
+			);
+		expect(summary).toContain("Nonblocking live findings: advisory 1.");
+		expect(summary).toContain("Assurance: completion not claimed");
+	});
+	test("contradictory completion preserves every unsatisfied check", () => {
+		const base = completedSession();
+		const delivery = deliveryProjection({
+			...base,
+			runs: base.runs.map((run) => ({ ...run, validations: [], reviews: [] })),
+		});
+		const summary = delivery.summary.lines.join("\n");
+		expect(summary).toContain("Assurance: completion unsupported");
+		const unsatisfied = delivery.assurance.checks.filter(
+			(check) => check.status === "unsatisfied",
+		);
+		expect(unsatisfied.length).toBeGreaterThan(0);
+		for (const check of unsatisfied) {
+			expect(summary).toContain(`unsatisfied ${check.id}`);
+			expect(summary).toContain(check.explanation);
+		}
+	});
+	for (const exitCode of [0, 21, null]) {
+		test(`observed exit ${exitCode} remains explicit without claiming a pass`, () => {
+			const base = completedSession();
+			if (!base.plan) throw new Error("fixture requires plan");
+			const session: Session = {
+				...base,
+				plan: {
+					...base.plan,
+					features: base.plan.features.map((feature) => ({
+						...feature,
+						kind: "inspect",
+					})),
+					evidence: base.plan.evidence?.map((entry) => ({
+						...entry,
+						scope: "gate-observe",
+					})),
+				},
+				runs: base.runs.map((run) => ({
+					...run,
+					validations: run.validations.map((validation) => ({
+						...validation,
+						exitCode,
+					})),
+				})),
+			};
+			const summary = deliveryProjection(session).summary.lines.join("\n");
+			expect(summary).toContain(
+				`Observed "bun test": exit ${exitCode ?? "unavailable"}, host linux; this does not claim the command passed.`,
+			);
+		});
+	}
 });

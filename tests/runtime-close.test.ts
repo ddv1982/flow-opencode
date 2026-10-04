@@ -799,6 +799,10 @@ describe("Flow close recovery and delivery", () => {
 			// The runtime renders the handoff so its shape, ordering, and the artifact
 			// qualifier are guarantees rather than instructions restated per surface.
 			report: expect.any(Array),
+			summary: expect.objectContaining({
+				fullReportAvailable: true,
+				lines: expect.any(Array),
+			}),
 		};
 
 		repository.archiveFailure = new Error("injected delivery archive failure");
@@ -912,6 +916,10 @@ describe("Flow close recovery and delivery", () => {
 			}),
 			findingsDigest: [],
 			report: expect.any(Array),
+			summary: expect.objectContaining({
+				fullReportAvailable: true,
+				lines: expect.any(Array),
+			}),
 			reportedArtifacts: {
 				latestAttempts: [],
 				supersededAttemptsOnly: [],
@@ -1032,6 +1040,10 @@ describe("Flow close recovery and delivery", () => {
 				// Rendering is asserted line-by-line in the delivery and planless cases;
 				// here the interesting part is the never-started feature.
 				report: expect.any(Array),
+				summary: expect.objectContaining({
+					fullReportAvailable: true,
+					lines: expect.any(Array),
+				}),
 			});
 			if (!("delivery" in deferred.workflowData)) {
 				throw new Error("Expected deferred close delivery data.");

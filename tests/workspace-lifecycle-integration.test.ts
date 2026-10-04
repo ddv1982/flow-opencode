@@ -337,6 +337,10 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			}),
 			findingsDigest: expect.any(Array),
 			report: expect.any(Array),
+			summary: expect.objectContaining({
+				fullReportAvailable: true,
+				lines: expect.any(Array),
+			}),
 		});
 		expect(await loadSession(workspace)).toBeNull();
 		const archived = await loadArchivedSession(

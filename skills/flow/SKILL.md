@@ -105,6 +105,7 @@ Unresolved blockers forbid completed closure. Fresh close: projected session
 id/revision, fresh operation id, kind, optional summary. Replay byte-for-byte
 only the `archiveRetry` of a durably accepted close. Rejected revision conflict:
 refresh compact, confirm the same session/goal, then build a fresh request.
-Report `workflowData.delivery.report` verbatim. Report external prerequisites only
+Report `workflowData.delivery.summary.lines`. For requested full detail or a missing
+summary, report the retained close response's `report`. Report external prerequisites only
 from terminal text; otherwise mark them unavailable. Create no other ledger or
 report.
