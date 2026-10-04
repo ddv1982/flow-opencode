@@ -1,0 +1,265 @@
+{
+	"measuredSource": "c92093674de66f3d292a11eb9bc701b3a52f825b",
+	"campaign": "2026-10-04T22-54-27-074Z.v2",
+	"cases": {
+		"delivery-summary-observed-failure": {
+			"answer": "Completed and archived the Flow session.\n\nGoal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with audit observation and separate required Linux verification.\n\nUpdated `src/parser.mjs`:\n```js\nexport function parse(input) { return input === null ? '' : input.trim(); }\n```\n\n- **Required Linux verification:** `node scripts/verify.mjs` passed, exit **0**.\n- **Linux audit observation:** `node scripts/audit.mjs` exited **12**, reporting 12 outstanding advisory items. This observation does not claim a pass.\n- **Independent review:** passed.\n- Advisory data and both scripts remain unchanged.\n- **Progress:** 1 of 1 features complete; no unfinished features or blockers. One nonblocking advisory remains.\n\n**Flow handoff:** format 1; external action authority not granted. Completion is supported, with all four assurance checks satisfied. Reported artifacts: one latest, none superseded; these are caller declarations, not an exhaustive Git delta.\n\n**Assurance limitations**\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+			"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with audit observation and separate required Linux verification.",
+			"featureId": "parser-null",
+			"report": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with audit observation and separate required Linux verification.",
+				"Closure: completed — Implemented null guard only in src/parser.mjs; Linux verification passed, audit exit 12 retained as advisory; independent review passed.",
+				"Progress: 1 of 1 features complete",
+				"Features:",
+				"- parser-null — Null-safe parser with preserved trimming",
+				"  attempts: 1; latest state: completed",
+				"  outcome: Verified parser-null and all five approved requirements: null returns ''; string trimming and other-input behavior are preserved; only src/parser.mjs changed with regular-file mode 100644 unchanged; advisory data, both scripts and pre-existing opencode.json are preserved; Linux audit observation retains exit 12 as advisory; separate source-bound broad verification passed with exit 0, and independent final review is complete. Inspected current source, downstream verification, README/package surfaces and complete host baseline/current diff. No deletions, renames, generated artifacts, scope drift or applicable persistence/concurrency/migration risks. No prior findings.",
+				"  terminal findings:",
+				"  - advisory: Observe-only Linux audit retains 12 outstanding advisory items (exit 12); no repair is authorized.",
+				"Findings digest:",
+				"- live parser-null parser-null.R6-01 advisory: Observe-only Linux audit retains 12 outstanding advisory items (exit 12); no repair is authorized.",
+				"Observed \"node scripts/audit.mjs\": exit 12, host linux, source sha256:4b75cc8c7c24a4f1d108ed8d95d682b913cc566e47bd59d2bf21cc8192fa8dae, output sha256:c6793caf5f3c67b895af8671e9d3705639e0d1e4590377e84b77db953ebe017d; this does not claim the command passed.",
+				"Assurance: completion supported",
+				"Assurance checks:",
+				"- satisfied [TS-enforced] Recorded completion: 1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+				"- satisfied [host-attested] Accepted validation: 1/1 terminal runs have eligible host evidence accepted by review.",
+				"- satisfied [host-attested] Canonical gate: \"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+				"- satisfied [host-attested] Declared evidence: 1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+				"Assurance limitations:",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+				"- latest attempts: src/parser.mjs",
+				"- superseded attempts only: none reported"
+			],
+			"summary": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with audit observation and separate required Linux verification.",
+				"Closure: completed. Implemented null guard only in src/parser.mjs; Linux verification passed, audit exit 12 retained as advisory; independent review passed.",
+				"Progress: 1 of 1 features complete",
+				"Unfinished features: none",
+				"Nonblocking live findings: advisory 1. Historical findings: 0.",
+				"Observed \"node scripts/audit.mjs\": exit 12, host linux; this does not claim the command passed.",
+				"Assurance: completion supported",
+				"Assurance checks: 4 satisfied, 0 not applicable, 0 unsatisfied.",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Reported artifacts: 1 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.",
+				"Full report is included in this close response."
+			],
+			"assurance": {
+				"checks": [
+					{
+						"explanation": "1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+						"id": "recorded-completion",
+						"label": "Recorded completion",
+						"status": "satisfied",
+						"tier": "ts-enforced"
+					},
+					{
+						"explanation": "1/1 terminal runs have eligible host evidence accepted by review.",
+						"id": "accepted-validation",
+						"label": "Accepted validation",
+						"status": "satisfied",
+						"tier": "host-attested"
+					},
+					{
+						"explanation": "\"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+						"id": "canonical-gate",
+						"label": "Canonical gate",
+						"status": "satisfied",
+						"tier": "host-attested"
+					},
+					{
+						"explanation": "1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+						"id": "declared-evidence",
+						"label": "Declared evidence",
+						"status": "satisfied",
+						"tier": "host-attested"
+					}
+				],
+				"conclusion": "completion-supported",
+				"limitations": [
+					"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+					"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+					"Freshness holds when review is accepted; an archive does not attest the current workspace."
+				]
+			}
+		},
+		"delivery-summary-completed": {
+			"answer": "Completed and archived the Flow session.\n\nGoal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.\n\n- **Verified:** `parse(null)` returns `''`; string inputs retain `trim()` behavior.\n- **Changed:** only `src/parser.mjs`.\n- **Validation:** unchanged `node scripts/verify.mjs` passed, exit code **0**.\n- **Independent review:** passed with no findings.\n- **Progress:** 1/1 features complete; no unfinished features or blockers.\n- **Assurance:** completion supported; all four assurance checks satisfied.\n\nFlow assurance limitations:\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+			"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+			"featureId": "parser-null",
+			"report": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+				"Closure: completed — Implemented null guard only in src/parser.mjs; unchanged canonical verifier passed with exit 0, and independent review passed without findings.",
+				"Progress: 1 of 1 features complete",
+				"Features:",
+				"- parser-null — Handle null while preserving trimmed strings",
+				"  attempts: 1; latest state: completed",
+				"  outcome: Final review: parser-null verified. All approved requirements verified: null returns empty string; string trim behavior is preserved; only src/parser.mjs changed and the verifier and command remain unchanged. Inspected live parser, verifier, README, package surface, all host evidence pages, and complete baseline diff: no deletion, rename, type or mode changes; preexisting opencode.json preserved. Broad validation is complete, exit 0, and bound to assignment source. No prior findings or remaining gaps.",
+				"  terminal findings: none",
+				"Findings digest: none",
+				"Assurance: completion supported",
+				"Assurance checks:",
+				"- satisfied [TS-enforced] Recorded completion: 1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+				"- satisfied [host-attested] Accepted validation: 1/1 terminal runs have eligible host evidence accepted by review.",
+				"- satisfied [host-attested] Canonical gate: \"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+				"- satisfied [host-attested] Declared evidence: 1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+				"Assurance limitations:",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+				"- latest attempts: src/parser.mjs",
+				"- superseded attempts only: none reported"
+			],
+			"summary": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+				"Closure: completed. Implemented null guard only in src/parser.mjs; unchanged canonical verifier passed with exit 0, and independent review passed without findings.",
+				"Progress: 1 of 1 features complete",
+				"Unfinished features: none",
+				"Nonblocking live findings: advisory 0. Historical findings: 0.",
+				"Assurance: completion supported",
+				"Assurance checks: 4 satisfied, 0 not applicable, 0 unsatisfied.",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Reported artifacts: 1 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.",
+				"Full report is included in this close response."
+			],
+			"assurance": {
+				"checks": [
+					{
+						"explanation": "1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+						"id": "recorded-completion",
+						"label": "Recorded completion",
+						"status": "satisfied",
+						"tier": "ts-enforced"
+					},
+					{
+						"explanation": "1/1 terminal runs have eligible host evidence accepted by review.",
+						"id": "accepted-validation",
+						"label": "Accepted validation",
+						"status": "satisfied",
+						"tier": "host-attested"
+					},
+					{
+						"explanation": "\"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+						"id": "canonical-gate",
+						"label": "Canonical gate",
+						"status": "satisfied",
+						"tier": "host-attested"
+					},
+					{
+						"explanation": "1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+						"id": "declared-evidence",
+						"label": "Declared evidence",
+						"status": "satisfied",
+						"tier": "host-attested"
+					}
+				],
+				"conclusion": "completion-supported",
+				"limitations": [
+					"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+					"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+					"Freshness holds when review is accepted; an archive does not attest the current workspace."
+				]
+			}
+		},
+		"delivery-summary-deferred": {
+			"answer": "**Deferred and archived.** The parser change is retained. The Linux gate passed with exit code 0; required macOS evidence remains **unfulfilled**.\n\nGoal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping verification scripts unchanged; validate locally on Linux and retain required macOS proof as outstanding until run on macOS.\n\n- **Closure:** deferred because macOS validation is unavailable.\n- **Progress:** 0 of 1 features complete; unfinished feature: `parser-null`.\n- **Outstanding proof:** `node scripts/platform-check.mjs` on macOS.\n- **Assurance:** completion not claimed; no independent review performed. Four completion assurance checks are not applicable.\n- **Findings:** no live advisory or historical findings.\n- **Reported artifacts:** 0 latest, 0 superseded-only; these are caller declarations, not an exhaustive Git delta.\n- **External action authority:** not granted. Handoff format: 1.\n\n**Assurance limitations**\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+			"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping verification scripts unchanged; validate locally on Linux and retain required macOS proof as outstanding until run on macOS.",
+			"featureId": "parser-null",
+			"report": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping verification scripts unchanged; validate locally on Linux and retain required macOS proof as outstanding until run on macOS.",
+				"Closure: deferred — Deferred at user direction because required macOS validation is unavailable. Parser change retained and Linux gate passed; node scripts/platform-check.mjs on macOS remains unfulfilled. No independent review or completed outcome claimed.",
+				"Progress: 0 of 1 features complete",
+				"Features:",
+				"- parser-null — Null-safe string parser",
+				"  attempts: 1; latest state: superseded",
+				"  outcome: none recorded",
+				"  terminal findings: none",
+				"Findings digest: none",
+				"Assurance: completion not claimed",
+				"Assurance checks:",
+				"- not-applicable [TS-enforced] Recorded completion: deferred closure makes no completion claim.",
+				"- not-applicable [host-attested] Accepted validation: deferred closure makes no completion claim.",
+				"- not-applicable [host-attested] Canonical gate: deferred closure makes no completion claim.",
+				"- not-applicable [host-attested] Declared evidence: deferred closure makes no completion claim.",
+				"Assurance limitations:",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+				"- latest attempts: none reported",
+				"- superseded attempts only: none reported"
+			],
+			"summary": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping verification scripts unchanged; validate locally on Linux and retain required macOS proof as outstanding until run on macOS.",
+				"Closure: deferred. Deferred at user direction because required macOS validation is unavailable. Parser change retained and Linux gate passed; node scripts/platform-check.mjs on macOS remains unfulfilled. No independent review or completed outcome claimed.",
+				"Progress: 0 of 1 features complete",
+				"Unfinished features: parser-null",
+				"Nonblocking live findings: advisory 0. Historical findings: 0.",
+				"Assurance: completion not claimed",
+				"Assurance checks: 0 satisfied, 4 not applicable, 0 unsatisfied.",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Reported artifacts: 0 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.",
+				"Full report is included in this close response."
+			],
+			"assurance": {
+				"checks": [
+					{
+						"explanation": "deferred closure makes no completion claim.",
+						"id": "recorded-completion",
+						"label": "Recorded completion",
+						"status": "not-applicable",
+						"tier": "ts-enforced"
+					},
+					{
+						"explanation": "deferred closure makes no completion claim.",
+						"id": "accepted-validation",
+						"label": "Accepted validation",
+						"status": "not-applicable",
+						"tier": "host-attested"
+					},
+					{
+						"explanation": "deferred closure makes no completion claim.",
+						"id": "canonical-gate",
+						"label": "Canonical gate",
+						"status": "not-applicable",
+						"tier": "host-attested"
+					},
+					{
+						"explanation": "deferred closure makes no completion claim.",
+						"id": "declared-evidence",
+						"label": "Declared evidence",
+						"status": "not-applicable",
+						"tier": "host-attested"
+					}
+				],
+				"conclusion": "completion-not-claimed",
+				"limitations": [
+					"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+					"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+					"Freshness holds when review is accepted; an archive does not attest the current workspace."
+				]
+			}
+		}
+	}
+}
