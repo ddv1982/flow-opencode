@@ -198,6 +198,45 @@ discharged the entry before assertions existed. Declaring the command is no long
 enough; the plan has to name the case. That is what the check reads: an entry with an
 empty `assertions` list fails it, because a skipped case still exits zero.
 
+## Delivery handoff pilot
+
+Five report-only cases exercise real workflows, archives, host validation, and
+independent review. They cover concise completion, deferral with unavailable
+macOS proof, a nonzero audit beside a separate passing gate, an ordinary full-report
+followup, and idle status after close. Fixtures keep verification scripts immutable.
+Recovery is off, so these cases need no Jev calls and measure no Jev decision quality.
+
+After paid authorization, run one attempt per case on the existing OpenAI route:
+
+```bash
+env -u TYPESAFE_API_KEY -u OPENCODE_FLOW_REVIEWER_STEPS \
+  OPENCODE_FLOW_REVIEWER_MODEL=openai/gpt-6.1-sol bun run eval -- --model openai/gpt-6.1-sol --repeat 1 --concurrency 1 \
+  --scenario delivery-summary-completed --scenario delivery-summary-deferred \
+  --scenario delivery-summary-observed-failure --scenario delivery-full-detail-followup \
+  --scenario delivery-idle-after-close
+```
+
+This pilot has eight manager dispatches, including three followups, plus one
+same-route entitlement probe. A distinct reviewer configuration adds one probe
+per additional route. Reviewer-child generation remains paid work inside each
+workflow. Nine harness dispatches are neither a dollar cap nor a limit on native
+model requests. The parent authorizes and executes the paid run separately.
+
+Default summaries and full detail use separate cases because outcome collection
+retains only the last manager text part. Earlier answers and multipart presentation
+are not independently graded. Exact accepted close replay is valid full-detail
+access when it preserves the same archive and operation.
+
+Graders use literal facts, the actual archived state, and native close/status
+provenance. They compare full detail with the accepted close response and reject
+missing limitations, false passes, changed verification scripts, and stale idle
+handoffs. They import no production delivery formatter. Required release catalogs
+remain unchanged. This single-route pilot establishes no release qualification.
+
+Missing-summary fallback and unknown native exit remain deterministic compatibility
+coverage. Current real close responses always include a summary, and ordinary
+completed native commands supply an exit. This pilot does not inject either shape.
+
 ## Cross-scenario metrics
 
 The original measures are reported for every run and asserted by none. Two are
