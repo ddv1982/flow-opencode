@@ -1,6 +1,14 @@
 import { afterEach, expect, test } from "bun:test";
 import { spawnSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import {
+	chmod,
+	mkdir,
+	mkdtemp,
+	readFile,
+	rm,
+	writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { parse } from "yaml";
@@ -73,10 +81,14 @@ case "$1" in
     printf '%s' "$output" > .prepared-path
     cat "$output"
     ;;
+  scripts/materialize-qualification.ts)
+    printf '%s/qualified-bundle' "$RUNNER_TEMP"
+    ;;
   scripts/restore-exact-release-artifact.ts)
     case "$4" in
       sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b) printf qualified-9.2.0 > "$2" ;;
       sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f) printf qualified-9.3.0 > "$2" ;;
+      sha256:03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd) printf qualified-9.5.0 > "$2" ;;
       *) exit 80 ;;
     esac
     ;;
@@ -118,6 +130,7 @@ function execute(
 			FLOW_RELEASE_RECOVERY_TAG: recovery,
 			FLOW_TEST_REGRADE_LOG: join(f.root, ".regraded-source"),
 			GITHUB_WORKSPACE: f.root,
+			RUNNER_TEMP: f.root,
 		},
 	});
 }
@@ -127,7 +140,8 @@ for (const [job, name] of [
 ] as const) {
 	for (const [version, recovery, expected] of [
 		["9.4.0", "", "qualified-9.4.0"],
-		["9.5.0", "", "generic-9.5.0"],
+		["9.5.0", "", "qualified-9.5.0"],
+		["9.5.0", "v9.5.0", "qualified-9.5.0"],
 		["9.2.0", "v9.2.0", "qualified-9.2.0"],
 		["9.3.0", "v9.3.0", "qualified-9.3.0"],
 	] as const) {
@@ -368,3 +382,47 @@ for (const [version, archived, expected] of [
 			).rejects.toMatchObject({ code: "ENOENT" });
 	});
 }
+
+test("exact restoration accepts permission differences and rejects changed file contents", async () => {
+	const root = await mkdtemp(join(tmpdir(), "flow-release-metadata-"));
+	temporary.push(root);
+	const packageDirectory = join(root, "package");
+	await mkdir(packageDirectory);
+	const file = join(packageDirectory, "README.md");
+	await writeFile(file, "qualified contents");
+	await chmod(file, 0o664);
+	const sealed = join(root, "sealed.tgz"),
+		rebuilt = join(root, "rebuilt.tgz");
+	const pack = (output: string) => {
+		const result = spawnSync("tar", ["-czf", output, "-C", root, "package"], {
+			encoding: "utf8",
+		});
+		expect(result.status, result.stderr).toBe(0);
+	};
+	pack(sealed);
+	const bytes = await readFile(sealed);
+	const digest = `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+	await chmod(file, 0o644);
+	pack(rebuilt);
+	expect(await readFile(rebuilt)).not.toEqual(bytes);
+	const restore = () =>
+		spawnSync(
+			process.execPath,
+			[
+				resolve("scripts/restore-exact-release-artifact.ts"),
+				rebuilt,
+				sealed,
+				digest,
+			],
+			{ encoding: "utf8" },
+		);
+	expect(restore().status).toBe(0);
+	expect(await readFile(rebuilt)).toEqual(bytes);
+	await writeFile(file, "changed contents");
+	pack(rebuilt);
+	const changed = await readFile(rebuilt);
+	const rejected = restore();
+	expect(rejected.status).not.toBe(0);
+	expect(rejected.stderr).toContain("Rebuilt package contents differ");
+	expect(await readFile(rebuilt)).toEqual(changed);
+});

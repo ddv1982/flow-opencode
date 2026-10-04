@@ -30,6 +30,10 @@ const RECOVERY_RELEASES = {
 		commit: "7c7a8669e2ba5d88d94d4940824c8f57a37b4362",
 		tagObject: "879b9b11860cb7c51caa1803e133842805845020",
 	},
+	"v9.5.0": {
+		tagObject: "583b1f158c9dfd9cd1c1a0f0f82b8bcb93705910",
+		commit: "583b1f158c9dfd9cd1c1a0f0f82b8bcb93705910",
+	},
 } as const;
 
 function refEvidence(
@@ -96,7 +100,7 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 describe("release ref proof", () => {
-	test.each(["v9.1.0", "v9.2.0", "v9.3.0"] as const)(
+	test.each(["v9.1.0", "v9.2.0", "v9.3.0", "v9.5.0"] as const)(
 		"accepts a main dispatch for unchanged ancestor tag %s",
 		(tag) => {
 			expect(
@@ -167,7 +171,7 @@ describe("release ref proof", () => {
 		}
 	});
 
-	test.each(["v9.2.0", "v9.3.0"] as const)(
+	test.each(["v9.2.0", "v9.3.0", "v9.5.0"] as const)(
 		"%s recovery rejects pinned and remote tag drift",
 		(tag) => {
 			for (const overrides of [
@@ -189,7 +193,7 @@ describe("release ref proof", () => {
 		},
 	);
 
-	test.each(["v9.2.0", "v9.3.0"] as const)(
+	test.each(["v9.2.0", "v9.3.0", "v9.5.0"] as const)(
 		"%s recovery rejects non-main dispatch",
 		(tag) => {
 			for (const overrides of [
