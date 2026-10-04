@@ -61,5 +61,35 @@
 			"- superseded attempts only: none reported"
 		],
 		"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged; validate and obtain independent review."
+	},
+	"deferred": {
+		"answer": "The Flow session is **deferred and archived**. The change in `src/parser.mjs` is retained, and the Linux gate passed. Required macOS evidence remains **unfulfilled**; final review and completion are not claimed.\n\n### Flow delivery\n```text\nHandoff format: 1\nExternal action authority: not-granted\nGoal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with Linux validation and required external macOS proof.\nClosure: deferred. Deferred at user direction because required macOS validation is unavailable. src/parser.mjs null guard implemented and Linux node scripts/verify.mjs passed. Required macOS node scripts/platform-check.mjs evidence remains unfulfilled; no final review or completion claimed.\nProgress: 0 of 1 features complete\nUnfinished features: parser-null\nNonblocking live findings: advisory 0. Historical findings: 0.\nAssurance: completion not claimed\nAssurance checks: 0 satisfied, 4 not applicable, 0 unsatisfied.\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.\nReported artifacts: 0 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.\nFull report is included in this close response.\n```",
+		"report": [
+			"Handoff format: 1",
+			"External action authority: not-granted",
+			"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with Linux validation and required external macOS proof.",
+			"Closure: deferred — Deferred at user direction because required macOS validation is unavailable. src/parser.mjs null guard implemented and Linux node scripts/verify.mjs passed. Required macOS node scripts/platform-check.mjs evidence remains unfulfilled; no final review or completion claimed.",
+			"Progress: 0 of 1 features complete",
+			"Features:",
+			"- parser-null — Null-safe string parser",
+			"  attempts: 1; latest state: superseded",
+			"  outcome: none recorded",
+			"  terminal findings: none",
+			"Findings digest: none",
+			"Assurance: completion not claimed",
+			"Assurance checks:",
+			"- not-applicable [TS-enforced] Recorded completion: deferred closure makes no completion claim.",
+			"- not-applicable [host-attested] Accepted validation: deferred closure makes no completion claim.",
+			"- not-applicable [host-attested] Canonical gate: deferred closure makes no completion claim.",
+			"- not-applicable [host-attested] Declared evidence: deferred closure makes no completion claim.",
+			"Assurance limitations:",
+			"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+			"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+			"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+			"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+			"- latest attempts: none reported",
+			"- superseded attempts only: none reported"
+		],
+		"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs, with Linux validation and required external macOS proof."
 	}
 }

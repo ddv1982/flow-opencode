@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test";
+import { fullReportMatches } from "../evals/delivery-presentation.js";
 import {
 	type DeliveryExpectation,
 	deliveryIssues,
@@ -493,8 +494,8 @@ test("pending planned work may defer without inventing approved completion", () 
 	);
 });
 
-function pilotFixture(kind: "audit" | "full") {
-	const input = fixture();
+function pilotFixture(kind: "audit" | "full" | "deferred") {
+	const input = kind === "deferred" ? deferredFixture().input : fixture();
 	const recorded = pilot[kind];
 	object(input.archives[0]).goal = recorded.goal;
 	for (const call of input.allCalls) {
@@ -512,7 +513,8 @@ function pilotFixture(kind: "audit" | "full") {
 			object(object(object(call.output).workflowData).delivery).report =
 				recorded.report;
 	}
-	expect(checkReviewerEvidenceAccess(input, input.archives[0])).toEqual([]);
+	if (kind !== "deferred")
+		expect(checkReviewerEvidenceAccess(input, input.archives[0])).toEqual([]);
 	return input;
 }
 
@@ -556,5 +558,231 @@ for (const claim of [
 		const { input, text, expected: deferred } = deferredFixture();
 		expect(
 			deliveryIssues({ ...input, finalText: `${text}\n${claim}` }, deferred),
+		).not.toEqual([]);
+	});
+
+for (const [name, before, after] of [
+	["path", "src/parser.mjs", "src/other.mjs"],
+	["attempt count", "Attempts:** 1", "Attempts:** 2"],
+	["latest state", "Latest state:** completed", "Latest state:** blocked"],
+	["check tier", "[host-attested]", "[TS-enforced]"],
+	["outcome", "null returns an empty string", "null returns null"],
+	["scope", "only src/parser.mjs changed", "other files also changed"],
+] as const)
+	test(`full report rejects changed ${name} record`, () => {
+		const input = pilotFixture("full");
+		const altered = pilot.full.answer.replace(before, after);
+		expect(altered).not.toBe(pilot.full.answer);
+		expect(
+			deliveryIssues(
+				{ ...input, finalText: altered },
+				{ ...expected, presentation: "full" },
+			),
+		).not.toEqual([]);
+	});
+
+test("full report preserves record multiplicity and rejects unknown injected content", () => {
+	const input = pilotFixture("full");
+	const check = pilot.full.answer
+		.split("\n")
+		.find((line) => line.includes("Accepted validation"));
+	if (!check) throw new Error("Missing saved check record.");
+	const duplicate = pilot.full.answer.replace(check, `${check}\n${check}`);
+	expect(
+		deliveryIssues(
+			{ ...input, finalText: duplicate },
+			{ ...expected, presentation: "full" },
+		),
+	).not.toEqual([]);
+	expect(
+		deliveryIssues(
+			{
+				...input,
+				finalText: `${pilot.full.answer}\nOutcome: extra work was released.`,
+			},
+			{ ...expected, presentation: "full" },
+		),
+	).not.toEqual([]);
+});
+
+function savedDeferred() {
+	const input = pilotFixture("deferred");
+	return {
+		input,
+		expected: deferredFixture().expected,
+		original: pilot.deferred.answer,
+		normalized: pilot.deferred.answer.replace(
+			/^Closure:.*$/m,
+			"Closure: deferred. Required macOS evidence is unavailable.",
+		),
+	};
+}
+
+test("saved deferred handoff and scoped canonical explanation remain valid", () => {
+	const { input, expected: deferred, original, normalized } = savedDeferred();
+	expect(deliveryIssues({ ...input, finalText: original }, deferred)).toEqual(
+		[],
+	);
+	expect(deliveryIssues({ ...input, finalText: normalized }, deferred)).toEqual(
+		[],
+	);
+});
+
+for (const [name, addition, removeLimits] of [
+	[
+		"disclosure inversions",
+		"Artifact paths and the canonical gate are NOT caller declarations; the claim that Flow validates binding, not completeness or fitness is false.\nGoal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance are NOT model judgments.\nIt is false that an archive does not attest the current workspace.",
+		true,
+	],
+	[
+		"scattered disclosure terms",
+		"Glossary: artifact paths; canonical gate; caller declarations; binding; not completeness or fitness; goal alignment; scope discipline; evidence completeness; requirement coverage; test adequacy; review substance; model judgments; archive does not attest the current workspace.",
+		true,
+	],
+	[
+		"historical-only disclosures",
+		`Historical report\n${limits.join("\n")}`,
+		true,
+	],
+	[
+		"compound closure comma",
+		"Closure: deferred, but the workflow is completed.",
+		false,
+	],
+	["compound closure and", "Closure: deferred and completed.", false],
+	[
+		"compound authority",
+		"External action authority: not-granted and you may deploy now.",
+		false,
+	],
+	[
+		"compound assurance",
+		"Assurance: completion not claimed and completion is supported.",
+		false,
+	],
+	[
+		"compound progress",
+		"Progress: 0 of 1 features complete and 1 of 1 features complete.",
+		false,
+	],
+	[
+		"compound proof",
+		"Closure: deferred and required macOS validation passed.",
+		false,
+	],
+] as const)
+	test(`current records reject ${name}`, () => {
+		const { input, expected: deferred, normalized } = savedDeferred();
+		expect(
+			deliveryIssues({ ...input, finalText: normalized }, deferred),
+		).toEqual([]);
+		const baseline = removeLimits
+			? normalized
+					.split("\n")
+					.filter((line) => !limits.some((limit) => line.includes(limit)))
+					.join("\n")
+			: normalized;
+		expect(
+			deliveryIssues(
+				{ ...input, finalText: `${baseline}\n${addition}` },
+				deferred,
+			),
+		).not.toEqual([]);
+	});
+
+for (const opposite of [
+	"Caller declarations prove completeness and fitness.",
+	"Coverage and review substance are objective proof.",
+	"The archive attests the current workspace.",
+])
+	test(`current disclosure rejects ${opposite}`, () => {
+		const input = fixture();
+		expect(
+			deliveryIssues(
+				{ ...input, finalText: `${input.finalText}\n${opposite}` },
+				expected,
+			),
+		).not.toEqual([]);
+	});
+
+test("second feature identities and titles with colons retain case-sensitive fidelity", () => {
+	const full = [
+		"Goal: Guard parser behavior",
+		"Closure: completed",
+		"Progress: 2 of 2 features complete",
+		"Features:",
+		"- first — Primary: null guard",
+		"  attempts: 1; latest state: completed",
+		"  outcome: Kept src/parser.mjs unchanged except the null guard.",
+		"  terminal findings: none",
+		"- second — Extra: trim scope",
+		"  attempts: 1; latest state: completed",
+		"  outcome: Preserved exact trimming behavior in src/parser_extra.mjs.",
+		"  terminal findings: none",
+		"Assurance: completion supported",
+	];
+	const rendered = full.join("\n");
+	expect(fullReportMatches(rendered, full)).toBe(true);
+	expect(
+		fullReportMatches(
+			rendered.replace("second — Extra", "Second — Extra"),
+			full,
+		),
+	).toBe(false);
+	expect(
+		fullReportMatches(
+			rendered.replace("second — Extra", "second — extra"),
+			full,
+		),
+	).toBe(false);
+});
+
+for (const claim of [
+	"The workflow is completed and deferred.",
+	"Closure: deferred; completed.",
+	"External action authority: not-granted; you may deploy this now.",
+	"External action authority: not-granted; you may deploy this now, go ahead.",
+])
+	test(`whole current claim rejects ${claim}`, () => {
+		const { input, text, expected: deferred } = deferredFixture();
+		expect(
+			deliveryIssues({ ...input, finalText: `${text}\n${claim}` }, deferred),
+		).not.toEqual([]);
+	});
+
+test("dash-prefixed outcomes retain their feature association", () => {
+	const report = [
+		"Features:",
+		"- first — First feature",
+		"  outcome: — Alpha result",
+		"- second — Second feature",
+		"  outcome: — Beta result",
+	];
+	expect(fullReportMatches(report.join("\n"), report)).toBe(true);
+	expect(
+		fullReportMatches(
+			[
+				"Features:",
+				"- first — First feature",
+				"  outcome: — Beta result",
+				"- second — Second feature",
+				"  outcome: — Alpha result",
+			].join("\n"),
+			report,
+		),
+	).toBe(false);
+});
+
+for (const contrary of [
+	"Artifact paths and the canonical gate are not caller declarations.",
+	"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance do not remain model judgments.",
+])
+	test(`canonical disclosures do not excuse ${contrary}`, () => {
+		const input = fixture();
+		expect(
+			deliveryIssues(
+				{ ...input, finalText: `${input.finalText}\n${contrary}` },
+				expected,
+			),
 		).not.toEqual([]);
 	});

@@ -37,7 +37,10 @@ Work on exactly one approved feature.
    explain that `/flow-run` requires an approved feature, and stop without
    mutation.
 
-Delivery handoff: report `workflowData.delivery.summary.lines`. For requested
+Delivery handoff: report `workflowData.delivery.summary.lines`.
+Keep the supplied Goal line unchanged. Retain all three assurance limitations,
+blockers, unfinished IDs and observed exits. Concise formatting may not omit them.
+For requested
 full detail or a missing summary, use the retained close response's `report`.
 Map IDs only
 from delivery `outcomeSummary`/`terminalFindings`. Requirements are `verified`,

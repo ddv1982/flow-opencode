@@ -1,5 +1,11 @@
 import { z } from "zod";
 import { canonicalJson } from "./canonical-json.js";
+import {
+	currentHandoffFacts,
+	fullReportMatches,
+	missingAssuranceDisclosures,
+	presentationText as prose,
+} from "./delivery-presentation.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
 import { checkReviewerEvidenceAccess } from "./reviewer-access.js";
 
@@ -114,112 +120,6 @@ const CloseOutput = z
 			.passthrough(),
 	})
 	.passthrough();
-const LIMITATIONS = [
-	"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
-	"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
-	"Freshness holds when review is accepted; an archive does not attest the current workspace.",
-];
-function prose(text: string): string {
-	return text
-		.replace(/^\s*```[a-z]*\s*$/gm, "")
-		.replace(/^\s*(?:#{1,6}\s+|>\s*|-\s+)/gm, "")
-		.replace(/\*\*([^*]+)\*\*/g, "$1")
-		.replace(/`([^`]+)`/g, "$1")
-		.replace(/\s+/g, " ")
-		.trim();
-}
-type CurrentHandoffFacts = {
-	closure: ("completed" | "deferred" | "abandoned" | null)[];
-	assurance: (
-		| "completion-supported"
-		| "completion-unsupported"
-		| "completion-not-claimed"
-		| null
-	)[];
-	authority: ("not-granted" | "granted" | null)[];
-	progress: ({ completed: number; total: number } | null)[];
-	goal: string[];
-};
-function currentHandoffFacts(text: string): CurrentHandoffFacts {
-	const facts: CurrentHandoffFacts = {
-		closure: [],
-		assurance: [],
-		authority: [],
-		progress: [],
-		goal: [],
-	};
-	let historical = false;
-	for (const raw of text.split("\n")) {
-		const line = prose(raw);
-		if (
-			/^(?:historical|previous|prior|earlier|superseded)(?:\s+(?:handoff|report|context|reference))?:?$/i.test(
-				line,
-			)
-		) {
-			historical = true;
-			continue;
-		}
-		if (/^current(?:\s+(?:handoff|delivery|state|report))?:?$/i.test(line)) {
-			historical = false;
-			continue;
-		}
-		if (
-			/^(?:historical|previous|prior|earlier|superseded)\b/i.test(line) ||
-			(historical && !/^current\b/i.test(line))
-		)
-			continue;
-		const field =
-			/^(?:current\s+)?(closure|assurance|external action authority|progress|goal):\s*(.*)$/i.exec(
-				line,
-			);
-		if (!field) continue;
-		const value = (field[2] ?? "").trim();
-		const plain = value.replace(/\.$/, "").toLowerCase();
-		switch (field[1]?.toLowerCase()) {
-			case "closure": {
-				const token = /^(completed|deferred|abandoned)(?=[\s.,;:]|$)/i
-					.exec(value)?.[1]
-					?.toLowerCase();
-				facts.closure.push(
-					token === "completed" || token === "deferred" || token === "abandoned"
-						? token
-						: null,
-				);
-				break;
-			}
-			case "assurance":
-				facts.assurance.push(
-					(
-						[
-							"completion-supported",
-							"completion-unsupported",
-							"completion-not-claimed",
-						] as const
-					).find((conclusion) => conclusion.replaceAll("-", " ") === plain) ??
-						null,
-				);
-				break;
-			case "external action authority":
-				facts.authority.push(
-					plain === "not-granted" || plain === "granted" ? plain : null,
-				);
-				break;
-			case "progress": {
-				const progress = /^(\d+) of (\d+) features complete$/.exec(plain);
-				facts.progress.push(
-					progress
-						? { completed: Number(progress[1]), total: Number(progress[2]) }
-						: null,
-				);
-				break;
-			}
-			case "goal":
-				facts.goal.push(value);
-				break;
-		}
-	}
-	return facts;
-}
 function primary(
 	call: ScenarioGradeInput["allCalls"][number],
 	input: ScenarioGradeInput,
@@ -399,14 +299,12 @@ export function deliveryIssues(
 	const text = prose(input.finalText);
 	const report = prose(close.data.workflowData.delivery.report.join("\n"));
 	if (expected.presentation === "full") {
-		for (const limitation of LIMITATIONS)
-			if (!text.includes(prose(limitation)))
-				issues.push("Requested report omitted an assurance limitation.");
-		const fullText = text.replace(
-			/^(?:Here is the full (?:delivery )?report(?: from (?:that|the) close response)?[.:]|Full (?:delivery )?report:?)\s*(?=Handoff format)/i,
-			"",
-		);
-		if (fullText !== report)
+		if (
+			!fullReportMatches(
+				input.finalText,
+				close.data.workflowData.delivery.report,
+			)
+		)
 			issues.push(
 				"Requested full detail differs from the actual accepted close report.",
 			);
@@ -463,9 +361,9 @@ export function deliveryIssues(
 		issues.push(
 			"Recorded goal identity was omitted, changed, or contradicted.",
 		);
-	for (const limitation of LIMITATIONS)
-		if (!text.includes(prose(limitation)))
-			issues.push(`Missing assurance limitation: ${limitation}`);
+	issues.push(...missingAssuranceDisclosures(input.finalText));
+	if (facts.unsupported.length)
+		issues.push("Unsupported or conflicting current handoff assertions.");
 	if (
 		!facts.authority.length ||
 		facts.authority.some((value) => value !== "not-granted")
@@ -551,7 +449,13 @@ export function deliveryIssues(
 		if (
 			!text.includes(observation.command) ||
 			!text.includes(`exit ${observation.exitCode}`) ||
-			!text.includes("does not claim the command passed")
+			!(
+				text.includes("does not claim the command passed") ||
+				new RegExp(
+					`(?:recorded as an observation|observation)[^\\n]*exit\\s+${observation.exitCode}\\b`,
+					"i",
+				).test(input.finalText)
+			)
 		)
 			issues.push("Nonzero observation was omitted or misreported as passing.");
 	}

@@ -233,6 +233,14 @@ missing limitations, false passes, changed verification scripts, and stale idle
 handoffs. They import no production delivery formatter. Required release catalogs
 remain unchanged. This single-route pilot establishes no release qualification.
 
+Summary grading accepts canonical fields and a bounded set of closure, progress,
+assurance and authority sentences. It requires the unchanged Goal line and coherent
+current assurance disclosures. Unsupported critical assertions fail instead of
+guessing their meaning. Full grading permits Markdown sections and split fields,
+while comparing each substantive record's context, value and multiplicity.
+Saved pilot answers are development regressions. Regrading them does not establish
+the behavior of new prompts or replace fresh live confirmation.
+
 Missing-summary fallback and unknown native exit remain deterministic compatibility
 coverage. Current real close responses always include a summary, and ordinary
 completed native commands supply an exit. This pilot does not inject either shape.
