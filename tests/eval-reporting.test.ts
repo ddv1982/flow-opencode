@@ -682,7 +682,7 @@ describe("eval campaign cancellation", () => {
 				expect(error.message).toContain(
 					failure === "timeout"
 						? "Scenario exceeded 0ms"
-						: "Scenario made no progress for 0ms",
+						: "Scenario had no new messages or parts for 0ms",
 				);
 				expect(aborts).toBe(1);
 			} finally {
