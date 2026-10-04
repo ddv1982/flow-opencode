@@ -23,7 +23,6 @@ import {
 import {
 	evaluatorIdentity,
 	inspectArtifact,
-	instructionDelivery,
 	samePackedArtifact,
 } from "../evals/provenance.js";
 import {
@@ -56,6 +55,7 @@ import {
 	reportStoreAttemptFileName,
 	reportStoreCellFileName,
 } from "../evals/report-store.js";
+import { scenarioStepInstruction } from "../evals/scenario-steps.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import {
 	type CanaryRecord,
@@ -577,14 +577,7 @@ async function main(): Promise<void> {
 		const retainedManager = retainedActors.find(
 			({ role }) => role === "manager",
 		);
-		const commandInstructions = scenario.steps.map((step, sequence) =>
-			instructionDelivery({
-				source: "command",
-				name: step.command,
-				sequence,
-				text: `/${step.command} ${step.arguments}`.trim(),
-			}),
-		);
+		const commandInstructions = scenario.steps.map(scenarioStepInstruction);
 		const guidanceInstructions = retainedInstructions(evidence).map(
 			(instruction, sequence) => ({
 				...instruction,

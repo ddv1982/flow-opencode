@@ -2,6 +2,7 @@ import {
 	type EpisodeQuestion,
 	EpisodeQuestionSchema,
 } from "./recovery-decisions/episode-operator.js";
+import type { ScenarioStep } from "./scenario-steps.js";
 // Model-in-the-loop harness for Flow.
 //
 // tests/ proves the runtime and the *text* of prompts deterministically. This
@@ -597,19 +598,8 @@ export type Scenario = {
 	/** Files seeded into the fixture repository before the first command. */
 	readonly files: Readonly<Record<string, string>>;
 	/** Commands sent in order; each waits for the session to go quiet. */
-	readonly steps: readonly {
-		readonly command: string;
-		readonly arguments: string;
-		/**
-		 * Runs this step in a new host session over the same project directory.
-		 *
-		 * The model carries no transcript across that boundary, so it has to recover
-		 * the lifecycle from `.flow/` alone. That is what an interruption actually
-		 * looks like, and it is the only way to prove durable state — not
-		 * conversational memory — is what drives the next action.
-		 */
-		readonly freshSession?: boolean;
-	}[];
+	readonly steps: readonly ScenarioStep[];
+	readonly title?: string;
 	/**
 	 * Asking the user is an acceptable terminal state for this scenario, so a run
 	 * that ends by asking is checked rather than excluded from the pass rate.

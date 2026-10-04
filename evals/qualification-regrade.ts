@@ -19,11 +19,7 @@ import {
 	RetainedScenarioEvidenceSchema,
 } from "./grader-input.js";
 import { nativeActorBindingIssues } from "./native-actors.js";
-import {
-	inspectArtifact,
-	instructionDelivery,
-	samePackedArtifact,
-} from "./provenance.js";
+import { inspectArtifact, samePackedArtifact } from "./provenance.js";
 import { readQualificationBundle } from "./qualification-bundle.js";
 import {
 	RELEASE_ANALYSIS_SHA256,
@@ -32,6 +28,7 @@ import {
 	releasePolicySha256,
 } from "./release-policy.js";
 import type { ArtifactIdentity, ValidatedReport } from "./report.js";
+import { scenarioStepInstruction } from "./scenario-steps.js";
 import { SCENARIOS } from "./scenarios.js";
 
 type BundleFile = Awaited<
@@ -180,14 +177,7 @@ function regradeAttempts(
 			throw new Error(`Bundled attempt ${attempt.attemptId} binding differs.`);
 		const actors = retainedReportActors(evidence);
 		const retainedManager = actors.find(({ role }) => role === "manager");
-		const commands = scenario.steps.map((step, sequence) =>
-			instructionDelivery({
-				source: "command",
-				name: step.command,
-				sequence,
-				text: `/${step.command} ${step.arguments}`.trim(),
-			}),
-		);
+		const commands = scenario.steps.map(scenarioStepInstruction);
 		const guidance = retainedInstructions(evidence).map(
 			(instruction, sequence) => ({
 				...instruction,

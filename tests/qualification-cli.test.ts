@@ -21,11 +21,7 @@ import {
 	scenarioGradeInput,
 } from "../evals/grader-input.js";
 import { type Outcome, packPlugin } from "../evals/harness.js";
-import {
-	evaluatorIdentity,
-	inspectArtifact,
-	instructionDelivery,
-} from "../evals/provenance.js";
+import { evaluatorIdentity, inspectArtifact } from "../evals/provenance.js";
 import {
 	readQualificationBundle,
 	writeQualificationBundle,
@@ -45,6 +41,7 @@ import {
 	campaignPlanFor,
 	releaseScenarios,
 } from "../evals/run.js";
+import { scenarioStepInstruction } from "../evals/scenario-steps.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
 import { prepareCanary, recordCanary } from "../scripts/eval-canary.js";
@@ -491,14 +488,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 				attemptId,
 				text: canonicalJson(evidence),
 			});
-			const commands = scenario.steps.map((step, sequence) =>
-				instructionDelivery({
-					source: "command",
-					name: step.command,
-					sequence,
-					text: `/${step.command} ${step.arguments}`.trim(),
-				}),
-			);
+			const commands = scenario.steps.map(scenarioStepInstruction);
 			await store.writeAttempt({
 				schemaVersion: 2,
 				attemptId,

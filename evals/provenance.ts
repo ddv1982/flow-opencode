@@ -357,6 +357,7 @@ export function instructionDelivery(
 		sequence: input.sequence,
 		sha256: sha256(bytes),
 		bytes: bytes.byteLength,
+		...(input.source === "user-prompt" ? { text: input.text } : {}),
 	};
 }
 

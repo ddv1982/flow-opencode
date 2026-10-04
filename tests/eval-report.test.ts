@@ -7,6 +7,7 @@ import {
 	parseReport,
 	type ReportIssue,
 } from "../evals/report.js";
+import { scenarioStepInstruction } from "../evals/scenario-steps.js";
 
 const digest = (letter: string) => `sha256:${letter.repeat(64)}`;
 
@@ -1027,4 +1028,23 @@ describe("eval report boundary", () => {
 			]),
 		);
 	});
+});
+
+test("user prompt provenance freezes bytes while preserving old command records", () => {
+	const fixture = report();
+	const attempt = fixture.attempts[0];
+	if (!attempt) throw new Error("Missing report fixture attempt.");
+	attempt.instructions = [
+		scenarioStepInstruction(
+			{ kind: "prompt", prompt: "  Show the full report. 漢\n" },
+			0,
+		),
+	];
+	expect(parseReport(fixture, caseCatalog()).ok).toBe(true);
+	const instruction = attempt.instructions[0];
+	if (!instruction) throw new Error("Missing prompt instruction.");
+	instruction.text = "Show another report.";
+	expect(parseReport(fixture, caseCatalog()).ok).toBe(false);
+	delete instruction.text;
+	expect(parseReport(fixture, caseCatalog()).ok).toBe(false);
 });

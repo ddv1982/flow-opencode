@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
 	BenchmarkCaseBindingSchema,
@@ -104,13 +105,42 @@ const ActorIdentitySchema = z
 
 const InstructionDeliverySchema = z
 	.object({
-		source: z.enum(["command", "agent", "guidance", "continuation"]),
+		source: z.enum([
+			"command",
+			"agent",
+			"guidance",
+			"continuation",
+			"user-prompt",
+		]),
+		text: z.string().optional(),
 		name: TextSchema,
 		sequence: CountSchema,
 		sha256: DigestSchema,
 		bytes: CountSchema,
 	})
-	.strict();
+	.strict()
+	.superRefine((instruction, context) => {
+		if (instruction.source !== "user-prompt") {
+			if (instruction.text !== undefined)
+				context.addIssue({
+					code: "custom",
+					message: "Only user prompts retain text.",
+				});
+			return;
+		}
+		const text = instruction.text;
+		if (
+			text === undefined ||
+			!text.isWellFormed() ||
+			Buffer.byteLength(text) !== instruction.bytes ||
+			`sha256:${createHash("sha256").update(text).digest("hex")}` !==
+				instruction.sha256
+		)
+			context.addIssue({
+				code: "custom",
+				message: "User prompt bytes do not match retained instruction.",
+			});
+	});
 
 const FactsSchema = z.record(
 	TextSchema,
