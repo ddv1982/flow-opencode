@@ -12,6 +12,7 @@ import {
 type Mode =
 	| "owned-progress"
 	| "wedged"
+	| "in-place-progress"
 	| "wrong-parent"
 	| "wrong-directory"
 	| "deadline"
@@ -131,7 +132,7 @@ async function observeWait(mode: Mode) {
 		Array.from(
 			{
 				length:
-					mode === "wedged"
+					mode === "wedged" || mode === "in-place-progress"
 						? 1
 						: Math.floor(Math.min(now, finishes ? finishesAt : now) / 16_000) +
 							1,
@@ -155,7 +156,10 @@ async function observeWait(mode: Mode) {
 						state: {
 							status: "completed",
 							input: { filePath: "src/index.ts" },
-							output: `source page ${index}`,
+							output:
+								mode === "in-place-progress"
+									? `source page updated at ${now}`
+									: `source page ${index}`,
 						},
 					},
 				],
@@ -328,7 +332,7 @@ for (const mode of [
 		const observed = await observeWait(mode);
 		expect(observed.result).toBeInstanceOf(Error);
 		expect(String(observed.result)).toContain(
-			"Scenario made no progress for 180000ms: wedged",
+			"Scenario had no new messages or parts for 180000ms",
 		);
 		expect(observed.now).toBe(182_000);
 		expect(observed.aborts).toBe(1);
@@ -340,10 +344,23 @@ for (const mode of [
 test("continuous owned reviewer progress retains the twenty-minute hard deadline", async () => {
 	const observed = await observeWait("deadline");
 	expect(String(observed.result)).toContain(
-		"Scenario exceeded 1200000ms without going quiet: still working",
+		"New messages or parts continued near the deadline",
 	);
 	expect(observed.now).toBe(1_202_000);
 	expect(observed.aborts).toBe(1);
+});
+
+test("count-only stall diagnostics disclose unmeasured in-place updates", async () => {
+	const observed = await observeWait("in-place-progress");
+	expect(String(observed.result)).toContain(
+		"Scenario had no new messages or parts for 180000ms",
+	);
+	expect(String(observed.result)).toContain(
+		"Updates inside existing parts are not measured.",
+	);
+	expect(observed.now).toBe(182_000);
+	expect(observed.aborts).toBe(1);
+	expect(observed.childReads).toBeGreaterThan(80);
 });
 
 for (const mode of ["duplicate-children", "cyclic-children"] as const) {
