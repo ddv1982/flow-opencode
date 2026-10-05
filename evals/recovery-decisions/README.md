@@ -171,6 +171,10 @@ reviewed corpus before collection. The paired report compares manager selections
 with Jev advice replayed through the production controller. Episode-level
 qualification remains separate.
 
+The [advisory decision pilot](run-advisory-pilot.md) instead prepares independent
+Sol decisions with advice visible only in treatment. Its offline checks grant no
+inference authority or qualification.
+
 ## Whole-episode tooling
 
 See [Whole-episode comparisons](episode-outcomes.md) for completion, interruption,
