@@ -88,3 +88,37 @@ test("import schema retains unavailable resolved model and unknown response usag
 	});
 	expect(AdviceSchema.parse(advice)).toEqual(advice);
 });
+
+test("import telemetry stays optional and rejects invalid metrics and unknown fields", () => {
+	const legacy = { kind: "unavailable" as const, reason: "offline" };
+	expect(AdviceSchema.parse(legacy)).toEqual(legacy);
+	const telemetry = {
+		transportLatencyMs: null,
+		transportAttempts: null,
+		transportReservedUsd: null,
+		responseUsage: null,
+	};
+	expect(AdviceSchema.parse({ ...legacy, telemetry })).toEqual({
+		...legacy,
+		telemetry,
+	});
+	for (const mutation of [
+		{ transportLatencyMs: -1 },
+		{ transportLatencyMs: Number.POSITIVE_INFINITY },
+		{ transportAttempts: 4 },
+		{ transportAttempts: 0.5 },
+		{ transportReservedUsd: 1 },
+		{ responseUsage: { inputTokens: -1, outputTokens: 0 } },
+		{ responseUsage: { inputTokens: 0, outputTokens: 0, invoice: 0 } },
+		{ invoiceUsd: 0 },
+	])
+		expect(
+			AdviceSchema.safeParse({
+				...legacy,
+				telemetry: { ...telemetry, ...mutation },
+			}).success,
+		).toBe(false);
+	expect(
+		AdviceSchema.safeParse({ ...legacy, resolvedModel: "other" }).success,
+	).toBe(false);
+});
