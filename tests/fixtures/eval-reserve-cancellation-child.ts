@@ -114,6 +114,9 @@ class FakeReleaseHost {
 			await stopHere(this.signal, primaryCount + 1);
 		return "quiet";
 	}
+	async runPrompt(): Promise<"quiet"> {
+		return this.runCommand();
+	}
 	async outcome(sessionIds: string[]): Promise<Outcome> {
 		event(`outcome:${this.attempt}`);
 		const gap = [1, 4, 7].includes(this.attempt);

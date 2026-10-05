@@ -746,11 +746,21 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 		});
 		expect(releaseAuthority.summary.providers).toHaveLength(1);
 		const notesPath = join(temporary, "release-notes.md");
+		const metadataRoot = join(temporary, "historical-release-metadata");
+		await mkdir(metadataRoot);
+		await writeFile(
+			join(metadataRoot, "package.json"),
+			JSON.stringify({ ...packageJson, version: artifact.packageVersion }),
+		);
+		await writeFile(
+			join(metadataRoot, "CHANGELOG.md"),
+			await readFile(join(repositoryRoot, "CHANGELOG.md")),
+		);
 		const metadata = Bun.spawn(
 			[
 				"bun",
 				"run",
-				"scripts/release-metadata.ts",
+				join(repositoryRoot, "scripts/release-metadata.ts"),
 				"--tag",
 				`v${artifact.packageVersion}`,
 				"--notes-file",
@@ -762,7 +772,7 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 				"--bundles-dir",
 				bundlesDirectory,
 			],
-			{ cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
+			{ cwd: metadataRoot, stdout: "pipe", stderr: "pipe" },
 		);
 		const [metadataStdout, metadataStderr, metadataExit] = await Promise.all([
 			new Response(metadata.stdout).text(),
