@@ -347,3 +347,110 @@ test("filtered cases refuse advice and eligible cases cannot masquerade as prefi
 		checkAdvisoryPilot(prepared, treatment, changed, advice),
 	).rejects.toThrow("binding");
 });
+
+async function orderedFixture() {
+	const value = await fixture();
+	const observations = (arm: "baseline" | "advice") =>
+		value[arm].observations.map((row) => ({
+			...row,
+			executionIndex:
+				row.packetDigest === null
+					? null
+					: value.prepared.order.findIndex(
+							(slot) => slot.caseId === row.caseId && slot.arm === arm,
+						),
+		}));
+	return {
+		...value,
+		baseline: { ...value.baseline, observations: observations("baseline") },
+		advice: { ...value.advice, observations: observations("advice") },
+	};
+}
+
+test("pilot refuses unbound execution order rather than trusting the frozen seed alone", async () => {
+	const { prepared, treatment, baseline, advice } = await fixture();
+	await expect(
+		checkAdvisoryPilot(prepared, treatment, baseline, advice),
+	).rejects.toThrow("execution");
+});
+
+test("pilot accepts only complete internally bound declarations of seeded execution order", async () => {
+	const { prepared, treatment, baseline, advice } = await orderedFixture();
+	const report = await checkAdvisoryPilot(
+		prepared,
+		treatment,
+		baseline,
+		advice,
+	);
+	expect(report).toHaveProperty("executionOrder", {
+		scope: "declared-unverified",
+		status: "complete",
+		planned: 12,
+		recorded: 12,
+		missingIndices: [],
+	});
+});
+
+test("pilot rejects baseline-first and duplicate execution indices across arms", async () => {
+	const { prepared, treatment, baseline, advice } = await orderedFixture();
+	let index = 0;
+	const baselineFirst = {
+		...baseline,
+		observations: baseline.observations.map((row) => ({
+			...row,
+			executionIndex: row.packetDigest === null ? null : index++,
+		})),
+	};
+	const adviceLast = {
+		...advice,
+		observations: advice.observations.map((row) => ({
+			...row,
+			executionIndex: row.packetDigest === null ? null : index++,
+		})),
+	};
+	await expect(
+		checkAdvisoryPilot(prepared, treatment, baselineFirst, adviceLast),
+	).rejects.toThrow("execution order");
+	const first = baseline.observations.find(
+		(row) => row.executionIndex !== null,
+	);
+	const second = advice.observations.find((row) => row.executionIndex !== null);
+	if (!first || !second) throw new Error("Missing eligible observations.");
+	second.executionIndex = first.executionIndex;
+	await expect(
+		checkAdvisoryPilot(prepared, treatment, baseline, advice),
+	).rejects.toThrow("execution order");
+});
+
+test("pilot retains missing prefix and subsequence declarations as incomplete without compacting slots", async () => {
+	const { prepared, treatment, baseline, advice } = await orderedFixture();
+	for (const [keep, status, missing] of [
+		[[0, 1, 2], "incomplete-prefix", [3, 4, 5, 6, 7, 8, 9, 10, 11]],
+		[[0, 2, 4], "incomplete-subsequence", [1, 3, 5, 6, 7, 8, 9, 10, 11]],
+	] as const) {
+		const retained = new Set<number>(keep);
+		const only = (rows: typeof baseline.observations) =>
+			rows.filter(
+				(row) =>
+					row.executionIndex === null || retained.has(row.executionIndex),
+			);
+		const report = await checkAdvisoryPilot(
+			prepared,
+			treatment,
+			{ ...baseline, observations: only(baseline.observations) },
+			{ ...advice, observations: only(advice.observations) },
+		);
+		expect(report).toHaveProperty("executionOrder", {
+			scope: "declared-unverified",
+			status,
+			planned: 12,
+			recorded: 3,
+			missingIndices: [...missing],
+		});
+		const baselineMissing = report.coverage.baseline.missing;
+		const adviceMissing = report.coverage.advice.missing;
+		if (baselineMissing === undefined || adviceMissing === undefined)
+			throw new Error("Missing coverage count.");
+		expect(baselineMissing + adviceMissing).toBe(9);
+	}
+});

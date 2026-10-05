@@ -851,3 +851,91 @@ test("advisory development preparation rejects holdout exposure and retains revi
 		),
 	).rejects.toThrow();
 });
+
+for (const mode of ["rejected", "cancelled"] as const) {
+	test(`import retains answered transport telemetry when controller advice is ${mode}`, async () => {
+		const { corpus, registration } = await fixture();
+		const root = await directory(),
+			outputDirectory = join(root, "collection"),
+			authorizationDirectory = join(root, "simulation-authorization");
+		await authorizePaidRun(authorizationDirectory, {
+			schemaVersion: 1,
+			purpose: "Offline rejected advice fixture",
+			models: ["typesafe/jev-1.13.0"],
+			maxDispatches: 1,
+			expiresAt: new Date(Date.now() + 60000).toISOString(),
+		});
+		const telemetry = {
+			transportLatencyMs: 7,
+			transportAttempts: 1,
+			transportReservedUsd: 0.002688,
+			responseUsage: { inputTokens: 10, outputTokens: 2 },
+		};
+		await collectRecoveryEvaluation({
+			corpus,
+			registration,
+			outputDirectory,
+			authorizationDirectory,
+			apiKey: "test-placeholder",
+			maxCalls: 2,
+			maxUsd: 0.1,
+			simulation: {
+				kind: "simulation",
+				provider: {
+					async assess(packet, options) {
+						if (!options.reserveAttempt())
+							return { kind: "unavailable", reason: "budget" };
+						return { ...answer(packet.candidates[0]?.id), telemetry };
+					},
+				},
+			},
+		});
+		const summaryPath = join(outputDirectory, "summary.json"),
+			casePath = join(outputDirectory, "case-000001.json");
+		const summary = JSON.parse(await readFile(summaryPath, "utf8")),
+			original = JSON.parse(await readFile(casePath, "utf8"));
+		const rejected = {
+			...original,
+			...(mode === "cancelled"
+				? { decision: null, rejection: null }
+				: { rejection: "Recovery advice was rejected." }),
+		};
+		await Bun.write(casePath, JSON.stringify(rejected));
+		await Bun.write(
+			summaryPath,
+			JSON.stringify({
+				...summary,
+				rows: [rejected, ...summary.rows.slice(1)],
+			}),
+		);
+		const imported = await importJevEvidence(registration, outputDirectory, {
+			kind: "simulation",
+		});
+		if (imported.evidence.arm !== "manager-plus-jev")
+			throw new Error("Wrong imported arm.");
+		expect(imported.evidence.observations[0]?.advice).toEqual({
+			kind: "unavailable",
+			reason: "controller-rejected",
+			telemetry,
+		});
+		const { telemetry: omitted, ...legacyAdvice } = original.advice;
+		expect(omitted).toEqual(telemetry);
+		const legacy = { ...rejected, advice: legacyAdvice };
+		await Bun.write(casePath, JSON.stringify(legacy));
+		await Bun.write(
+			summaryPath,
+			JSON.stringify({ ...summary, rows: [legacy, ...summary.rows.slice(1)] }),
+		);
+		const legacyImported = await importJevEvidence(
+			registration,
+			outputDirectory,
+			{ kind: "simulation" },
+		);
+		if (legacyImported.evidence.arm !== "manager-plus-jev")
+			throw new Error("Wrong legacy imported arm.");
+		expect(legacyImported.evidence.observations[0]?.advice).toEqual({
+			kind: "unavailable",
+			reason: "controller-rejected",
+		});
+	});
+}
