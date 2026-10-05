@@ -104,6 +104,16 @@ const CloseOutput = z
 					.passthrough(),
 				delivery: z
 					.object({
+						findingsDigest: z
+							.array(
+								z
+									.object({
+										live: z.boolean(),
+										severity: z.enum(["blocking", "advisory"]),
+									})
+									.passthrough(),
+							)
+							.optional(),
 						report: z.array(z.string()).min(1),
 						assurance: z
 							.object({
@@ -424,6 +434,42 @@ export function deliveryIssues(
 			"Recorded goal identity was omitted, changed, or contradicted.",
 		);
 	issues.push(...missingAssuranceDisclosures(input.finalText));
+	for (const result of facts.observations.filter(
+		(record) => record.qualification === "claimed-pass",
+	)) {
+		const acceptedPass =
+			result.exitCode === 0 &&
+			archive.runs.some((run) =>
+				run.reviews.some(
+					(review) =>
+						review.result?.verdict === "passed" &&
+						run.validations.some(
+							(validation) =>
+								review.validationIds.includes(validation.id) &&
+								validation.command === result.command &&
+								validation.exitCode === result.exitCode &&
+								validation.outputComplete &&
+								validation.intent !== "observe" &&
+								validation.sourceDigest === review.sourceDigest,
+						),
+				),
+			);
+		if (!acceptedPass)
+			issues.push(
+				"Claimed command pass lacks matching accepted complete source evidence.",
+			);
+		if (
+			result.unchangedInvocation &&
+			(result.command !== expected.gate ||
+				input.workspaceChanges?.kind !== "observed" ||
+				input.workspaceChanges.paths.some((path) =>
+					result.command.split(/\s+/).includes(path),
+				))
+		)
+			issues.push(
+				"Unchanged invocation claim does not match the gate and immutable script paths.",
+			);
+	}
 	if (facts.unsupported.length)
 		issues.push("Unsupported or conflicting current handoff assertions.");
 	if (
@@ -454,6 +500,29 @@ export function deliveryIssues(
 		issues.push(
 			"Recorded feature progress was omitted, changed, or contradicted.",
 		);
+	const findings =
+		close.data.workflowData.delivery.findingsDigest?.filter(
+			(finding) => finding.live,
+		) ??
+		archive.plan.features.flatMap(
+			(feature) =>
+				archive.runs
+					.filter(
+						(run) => run.featureId === feature.id && run.state !== "superseded",
+					)
+					.at(-1)
+					?.reviews.at(-1)?.result?.findings ?? [],
+		);
+	for (const claim of facts.auxiliaryCounts) {
+		const count =
+			claim.kind === "unfinished"
+				? archive.plan.features.length - complete
+				: findings.filter((finding) => finding.severity === claim.kind).length;
+		if (claim.count !== count)
+			issues.push(
+				"Auxiliary handoff count contradicts the current archive or finding records.",
+			);
+	}
 	for (const feature of archive.plan.features)
 		if (
 			!archive.runs.some(

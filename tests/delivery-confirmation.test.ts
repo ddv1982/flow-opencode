@@ -287,3 +287,129 @@ test("targeted faithful closure, compound counts and passing command result reta
 		deliveryIssues({ ...input, finalText: targeted.answer }, expectation),
 	).toEqual([]);
 });
+
+for (const [name, before, after] of [
+	[
+		"contradictory closure",
+		"Flow closure:** completed and archived",
+		"Flow closure:** completed and archived and deferred",
+	],
+	[
+		"incorrect progress",
+		"1 of 1 features complete, none unfinished",
+		"0 of 1 features complete, none unfinished",
+	],
+	["unfinished zero contradiction", "none unfinished", "one unfinished"],
+	[
+		"invented blocker count",
+		"no blockers or advisory findings",
+		"one blockers, no advisory findings",
+	],
+	[
+		"wrong check count",
+		"all 4 assurance checks satisfied",
+		"all 3 assurance checks satisfied",
+	],
+	[
+		"check count tail",
+		"all 4 assurance checks satisfied",
+		"all 4 assurance checks satisfied and unsupported",
+	],
+	[
+		"passing result wrong exit",
+		"passed with exit code 0",
+		"passed with exit code 1",
+	],
+	[
+		"passing result unknown tail",
+		"Its script and invocation are unchanged",
+		"Its script and invocation are unchanged and external publication is authorized",
+	],
+	[
+		"unconsumed compound progress",
+		"none unfinished, no blockers or advisory findings",
+		"none unfinished, no blockers or advisory findings and the workflow is deferred",
+	],
+] as const)
+	test(`typed targeted records reject ${name}`, () => {
+		const { input, expectation } = targetedFixture();
+		expect(
+			deliveryIssues({ ...input, finalText: targeted.answer }, expectation),
+		).toEqual([]);
+		const changed = targeted.answer.replace(before, after);
+		expect(changed).not.toBe(targeted.answer);
+		expect(
+			deliveryIssues({ ...input, finalText: changed }, expectation),
+		).not.toEqual([]);
+	});
+
+test("advisory zero counts use current native finding records", () => {
+	const { input, expectation } = targetedFixture();
+	const close = input.allCalls.find(
+		(call) => call.tool === "flow_session_close",
+	);
+	if (!close) throw new Error("Missing native close.");
+	object(object(object(close.output).workflowData).delivery).findingsDigest = [
+		{ live: true, severity: "advisory" },
+	];
+	expect(
+		deliveryIssues({ ...input, finalText: targeted.answer }, expectation),
+	).not.toEqual([]);
+});
+
+test("passing command records require accepted complete source evidence", () => {
+	for (const mutation of ["source", "complete", "review"] as const) {
+		const { input, expectation } = targetedFixture();
+		const archive = object(input.archives[0]);
+		const runs = archive.runs;
+		if (!Array.isArray(runs) || !runs[0])
+			throw new Error("Missing native run.");
+		const run = object(runs[0]);
+		const validations = run.validations;
+		const reviews = run.reviews;
+		if (
+			!Array.isArray(validations) ||
+			!validations[0] ||
+			!Array.isArray(reviews) ||
+			!reviews[0]
+		)
+			throw new Error("Missing bound records.");
+		if (mutation === "source")
+			object(validations[0]).sourceDigest = `sha256:${"f".repeat(64)}`;
+		else if (mutation === "complete")
+			object(validations[0]).outputComplete = false;
+		else object(reviews[0]).validationIds = [];
+		expect(
+			deliveryIssues({ ...input, finalText: targeted.answer }, expectation),
+		).not.toEqual([]);
+	}
+});
+
+test("appended malformed known progress cannot hide behind the valid targeted progress", () => {
+	const { input, expectation } = targetedFixture();
+	expect(
+		deliveryIssues({ ...input, finalText: targeted.answer }, expectation),
+	).toEqual([]);
+	expect(
+		deliveryIssues(
+			{
+				...input,
+				finalText: `${targeted.answer}\n1 of 1 features complete, none unfinished, no blockers or advisory findings and deployed.`,
+			},
+			expectation,
+		),
+	).not.toEqual([]);
+});
+
+test("explicit unregistered Node passing results do not become unbound proof", () => {
+	const { input, expectation } = targetedFixture();
+	expect(
+		deliveryIssues(
+			{
+				...input,
+				finalText: `${targeted.answer}\nnode scripts/other.mjs passed with exit code 0.`,
+			},
+			expectation,
+		),
+	).not.toEqual([]);
+});

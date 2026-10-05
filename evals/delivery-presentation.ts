@@ -11,11 +11,16 @@ type CurrentHandoffFacts = {
 	authority: ("not-granted" | "granted" | null)[];
 	progress: ({ completed: number; total: number } | null)[];
 	goal: string[];
+	auxiliaryCounts: {
+		kind: "unfinished" | "blocking" | "advisory";
+		count: number;
+	}[];
 	assuranceCheckClaims: { count: number; status: "satisfied" }[];
 	unavailableProofPlatforms: string[];
 	observations: {
 		command: string;
 		exitCode: number | null;
+		unchangedInvocation: boolean;
 		qualification:
 			| "observation"
 			| "does-not-claim-pass"
@@ -101,12 +106,57 @@ function countValue(value: string): number | null {
 		? count
 		: null;
 }
-function progressValue(value: string) {
-	const match = /^(\d+)\s*(?:of|\/)\s*(\d+) features complete$/i.exec(value);
+type AuxiliaryCount = {
+	kind: "unfinished" | "blocking" | "advisory";
+	count: number;
+};
+function auxiliaryCounts(value: string): AuxiliaryCount[] | null {
+	if (/^none unfinished$/i.test(value))
+		return [{ kind: "unfinished", count: 0 }];
+	if (/^no blockers or advisory findings$/i.test(value))
+		return [
+			{ kind: "blocking", count: 0 },
+			{ kind: "advisory", count: 0 },
+		];
+	const match =
+		/^(no|\d+|zero|one|two|three|four|five|six) (unfinished(?: features)?|blockers|advisory findings)$/i.exec(
+			value,
+		);
 	if (!match) return null;
+	const count =
+		match[1]?.toLowerCase() === "no" ? 0 : countValue(match[1] ?? "");
+	if (count === null) return null;
+	return [
+		{
+			kind: match[2]?.toLowerCase().startsWith("unfinished")
+				? "unfinished"
+				: match[2]?.toLowerCase() === "blockers"
+					? "blocking"
+					: "advisory",
+			count,
+		},
+	];
+}
+function progressValue(value: string) {
+	const match = /^(\d+)\s*(?:of|\/)\s*(\d+) features complete(.*)$/i.exec(
+		value,
+	);
+	if (!match) return undefined;
 	const completed = countValue(match[1] ?? "");
 	const total = countValue(match[2] ?? "");
-	return completed === null || total === null ? null : { completed, total };
+	if (completed === null || total === null) return null;
+	const tail = match[3] ?? "";
+	if (tail && !/^,\s*/.test(tail)) return null;
+	const counts: AuxiliaryCount[] = [];
+	for (const clause of tail
+		.replace(/^,\s*/, "")
+		.split(/,\s*/)
+		.filter(Boolean)) {
+		const parsed = auxiliaryCounts(clause);
+		if (!parsed) return null;
+		counts.push(...parsed);
+	}
+	return { progress: { completed, total }, counts };
 }
 function authorityValue(value: string): "not-granted" | "granted" | null {
 	const plain = value.toLowerCase();
@@ -149,7 +199,7 @@ function closureStatement(
 	value: string,
 ): { closure: Closure; unavailablePlatform: string | null } | null {
 	const match =
-		/^(completed|deferred|abandoned)(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
+		/^(completed|deferred|abandoned)(?: and archived)?(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
 			value,
 		);
 	if (!match) return null;
@@ -166,7 +216,7 @@ function closureStatement(
 					: (platform ?? null),
 	};
 }
-function observationValue(line: string, commands: readonly string[]) {
+function commandResultValue(line: string, commands: readonly string[]) {
 	for (const command of commands) {
 		const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 		const prefix = new RegExp(
@@ -180,7 +230,12 @@ function observationValue(line: string, commands: readonly string[]) {
 		const body = (matched[1] ?? "")
 			.trim()
 			.replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
-		const invalid = { command, exitCode: null, qualification: null };
+		const invalid = {
+			command,
+			exitCode: null,
+			qualification: null,
+			unchangedInvocation: false,
+		};
 		if (
 			!/\b(?:exit|exited|passed|succeeded|recorded as an observation)\b/i.test(
 				body,
@@ -193,7 +248,7 @@ function observationValue(line: string, commands: readonly string[]) {
 			.map((part) => part.trim().replace(/\.$/, ""));
 		const status = parts.shift() ?? "";
 		const value =
-			/^(?:(passed),\s*|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
+			/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 				status,
 			);
 		if (!value) return invalid;
@@ -201,7 +256,12 @@ function observationValue(line: string, commands: readonly string[]) {
 		const exitCode =
 			rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
 		if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
-		const malformed = { command, exitCode, qualification: null };
+		const malformed = {
+			command,
+			exitCode,
+			qualification: null,
+			unchangedInvocation: false,
+		};
 		const metadata = value[4] ?? "";
 		if (
 			metadata &&
@@ -217,6 +277,7 @@ function observationValue(line: string, commands: readonly string[]) {
 			| "does-not-claim-pass"
 			| "claimed-pass"
 			| null = value[1] ? "claimed-pass" : value[2] ? "observation" : null;
+		let unchangedInvocation = false;
 		for (const qualifier of parts) {
 			if (
 				/^(?:this observation does not claim a pass|this does not claim the command passed)$/i.test(
@@ -231,9 +292,14 @@ function observationValue(line: string, commands: readonly string[]) {
 				)
 			)
 				qualification = "claimed-pass";
+			else if (
+				qualification === "claimed-pass" &&
+				/^Its script and invocation are unchanged$/i.test(qualifier)
+			)
+				unchangedInvocation = true;
 			else return malformed;
 		}
-		return { command, exitCode, qualification };
+		return { command, exitCode, qualification, unchangedInvocation };
 	}
 	return null;
 }
@@ -247,6 +313,7 @@ export function currentHandoffFacts(
 		authority: [],
 		progress: [],
 		goal: [],
+		auxiliaryCounts: [],
 		assuranceCheckClaims: [],
 		unavailableProofPlatforms: [],
 		observations: [],
@@ -258,16 +325,22 @@ export function currentHandoffFacts(
 			facts.goal.push(goal[1] ?? "");
 			continue;
 		}
-		const observation = observationValue(line, observationCommands);
+		const observation = commandResultValue(line, observationCommands);
 		if (observation) {
 			facts.observations.push(observation);
 			if (observation.qualification === null) facts.unsupported.push(line);
+		} else if (
+			/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
+				line,
+			)
+		) {
+			facts.unsupported.push(line);
 		}
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
 			const field =
-				/^(?:current\s+)?(closure|assurance|external[- ]action authority|progress):\s*(.*)$/i.exec(
+				/^(?:(?:current|Flow)\s+)?(closure|assurance|external[- ]action authority|progress):\s*(.*)$/i.exec(
 					claim,
 				);
 			if (field) {
@@ -290,9 +363,12 @@ export function currentHandoffFacts(
 							});
 						break;
 					}
-					case "progress":
-						facts.progress.push(progressValue(value));
+					case "progress": {
+						const parsed = progressValue(value);
+						facts.progress.push(parsed?.progress ?? null);
+						if (parsed) facts.auxiliaryCounts.push(...parsed.counts);
 						break;
+					}
 					default:
 						facts.authority.push(authorityValue(value));
 				}
@@ -329,8 +405,21 @@ export function currentHandoffFacts(
 				continue;
 			}
 			const progress = progressValue(claim.replace(/^Flow handoff:\s*/i, ""));
-			if (progress) {
-				facts.progress.push(progress);
+			if (progress !== undefined) {
+				facts.progress.push(progress?.progress ?? null);
+				if (progress) facts.auxiliaryCounts.push(...progress.counts);
+				continue;
+			}
+			if (/^all \w+ assurance checks\b/i.test(claim)) {
+				const checks = /^all (\w+) assurance checks satisfied$/i.exec(claim);
+				const count = checks ? countValue(checks[1] ?? "") : null;
+				if (count === null) facts.unsupported.push(claim);
+				else facts.assuranceCheckClaims.push({ count, status: "satisfied" });
+				continue;
+			}
+			const counts = auxiliaryCounts(claim);
+			if (counts) {
+				facts.auxiliaryCounts.push(...counts);
 				continue;
 			}
 			const authority =
