@@ -2,6 +2,7 @@ import { afterEach, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { prepareAdvisoryPilot } from "../evals/recovery-decisions/advisory-pilot.js";
 import {
 	registerCampaign,
 	validateRegistration,
@@ -26,6 +27,7 @@ import {
 	snapshotPayload,
 } from "../evals/recovery-decisions/schema.js";
 import { authorizePaidRun, paidRunStatus } from "../scripts/paid-budget.js";
+import { createJevDecisionProvider } from "../src/infrastructure/jev-decision-provider.js";
 
 const dirs: string[] = [];
 afterEach(async () => {
@@ -777,3 +779,163 @@ test("qualification recomputes evidence and keeps simulations and missing review
 		JSON.parse(await readFile(join(output, "report.json"), "utf8")),
 	).toEqual(report);
 });
+
+test("simulation collection imports real adapter failure telemetry and preserves transport reservations", async () => {
+	const { registration, corpus } = await fixture();
+	const root = await directory();
+	const authorizationDirectory = join(root, "simulation-authorization");
+	await authorizePaidRun(authorizationDirectory, {
+		schemaVersion: 1,
+		purpose: "Explicit offline adapter simulation",
+		models: ["typesafe/jev-1.13.0"],
+		maxDispatches: 1,
+		expiresAt: new Date(Date.now() + 60000).toISOString(),
+	});
+	let transportCalls = 0;
+	const provider = createJevDecisionProvider(
+		() => "local-test-placeholder",
+		async () => {
+			transportCalls++;
+			return Response.json({ model: "jev-1.14.0" });
+		},
+	);
+	const outputDirectory = join(root, "simulation-collection");
+	const summary = await collectRecoveryEvaluation({
+		corpus,
+		registration,
+		outputDirectory,
+		authorizationDirectory,
+		apiKey: "local-test-placeholder",
+		maxCalls: 3,
+		maxUsd: 0.1,
+		simulation: { kind: "simulation", provider },
+	});
+	const { evidence } = await importJevEvidence(registration, outputDirectory, {
+		kind: "simulation",
+	});
+	expect(transportCalls).toBe(2);
+	expect(summary.calls).toBe(transportCalls);
+	expect(evidence.origin).toEqual({ kind: "simulation" });
+	expect(evidence.qualification).toBe("inconclusive");
+	if (evidence.arm !== "manager-plus-jev")
+		throw new Error("Wrong imported arm.");
+	const raw = JSON.parse(
+		await readFile(join(outputDirectory, "case-000001.json"), "utf8"),
+	);
+	expect(evidence.observations[0]?.advice).toEqual(raw.advice);
+	expect(evidence.observations[0]?.advice).toMatchObject({
+		kind: "unavailable",
+		reason: "model-mismatch",
+		resolvedModel: "jev-1.14.0",
+		telemetry: { transportAttempts: 1, responseUsage: null },
+	});
+	expect(evidence.observations[0]?.reservedUsd).toBe(raw.reservedUsd);
+});
+
+test("advisory development preparation rejects holdout exposure and retains reviewed calibration bindings", async () => {
+	const { corpus } = await fixture();
+	await expect(prepareAdvisoryPilot(corpus, 12)).rejects.toThrow("holdout");
+	const calibration = await buildReviewedCorpus([reviewed(0)]);
+	const prepared = await prepareAdvisoryPilot(calibration, 12);
+	expect(prepared.corpus.purpose).toBe("reviewed-evaluation");
+	expect(prepared.corpus.cases[0]).toEqual(calibration.cases[0]);
+	expect(prepared.qualification).toBe("inconclusive");
+	await expect(
+		prepareAdvisoryPilot(
+			{
+				...development,
+				purpose: "reviewed-evaluation",
+				labelStatus: "independently-reviewed",
+			},
+			12,
+		),
+	).rejects.toThrow();
+});
+
+for (const mode of ["rejected", "cancelled"] as const) {
+	test(`import retains answered transport telemetry when controller advice is ${mode}`, async () => {
+		const { corpus, registration } = await fixture();
+		const root = await directory(),
+			outputDirectory = join(root, "collection"),
+			authorizationDirectory = join(root, "simulation-authorization");
+		await authorizePaidRun(authorizationDirectory, {
+			schemaVersion: 1,
+			purpose: "Offline rejected advice fixture",
+			models: ["typesafe/jev-1.13.0"],
+			maxDispatches: 1,
+			expiresAt: new Date(Date.now() + 60000).toISOString(),
+		});
+		const telemetry = {
+			transportLatencyMs: 7,
+			transportAttempts: 1,
+			transportReservedUsd: 0.002688,
+			responseUsage: { inputTokens: 10, outputTokens: 2 },
+		};
+		await collectRecoveryEvaluation({
+			corpus,
+			registration,
+			outputDirectory,
+			authorizationDirectory,
+			apiKey: "test-placeholder",
+			maxCalls: 2,
+			maxUsd: 0.1,
+			simulation: {
+				kind: "simulation",
+				provider: {
+					async assess(packet, options) {
+						if (!options.reserveAttempt())
+							return { kind: "unavailable", reason: "budget" };
+						return { ...answer(packet.candidates[0]?.id), telemetry };
+					},
+				},
+			},
+		});
+		const summaryPath = join(outputDirectory, "summary.json"),
+			casePath = join(outputDirectory, "case-000001.json");
+		const summary = JSON.parse(await readFile(summaryPath, "utf8")),
+			original = JSON.parse(await readFile(casePath, "utf8"));
+		const rejected = {
+			...original,
+			...(mode === "cancelled"
+				? { decision: null, rejection: null }
+				: { rejection: "Recovery advice was rejected." }),
+		};
+		await Bun.write(casePath, JSON.stringify(rejected));
+		await Bun.write(
+			summaryPath,
+			JSON.stringify({
+				...summary,
+				rows: [rejected, ...summary.rows.slice(1)],
+			}),
+		);
+		const imported = await importJevEvidence(registration, outputDirectory, {
+			kind: "simulation",
+		});
+		if (imported.evidence.arm !== "manager-plus-jev")
+			throw new Error("Wrong imported arm.");
+		expect(imported.evidence.observations[0]?.advice).toEqual({
+			kind: "unavailable",
+			reason: "controller-rejected",
+			telemetry,
+		});
+		const { telemetry: omitted, ...legacyAdvice } = original.advice;
+		expect(omitted).toEqual(telemetry);
+		const legacy = { ...rejected, advice: legacyAdvice };
+		await Bun.write(casePath, JSON.stringify(legacy));
+		await Bun.write(
+			summaryPath,
+			JSON.stringify({ ...summary, rows: [legacy, ...summary.rows.slice(1)] }),
+		);
+		const legacyImported = await importJevEvidence(
+			registration,
+			outputDirectory,
+			{ kind: "simulation" },
+		);
+		if (legacyImported.evidence.arm !== "manager-plus-jev")
+			throw new Error("Wrong legacy imported arm.");
+		expect(legacyImported.evidence.observations[0]?.advice).toEqual({
+			kind: "unavailable",
+			reason: "controller-rejected",
+		});
+	});
+}

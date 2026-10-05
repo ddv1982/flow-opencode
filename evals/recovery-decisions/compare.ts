@@ -18,9 +18,34 @@ import { datasetDigest, digest } from "./schema.js";
 
 const NumberMetric = z.number().finite().nonnegative();
 const Probability = NumberMetric.max(1);
+const Telemetry = z
+	.object({
+		transportLatencyMs: NumberMetric.nullable(),
+		transportAttempts: NumberMetric.int().safe().max(3).nullable(),
+		transportReservedUsd: NumberMetric.max(
+			3 * JEV_ATTEMPT_RESERVATION_USD,
+		).nullable(),
+		responseUsage: z
+			.object({
+				inputTokens: NumberMetric.int().safe(),
+				outputTokens: NumberMetric.int().safe(),
+			})
+			.strict()
+			.nullable(),
+	})
+	.strict();
 export const AdviceSchema = z.discriminatedUnion("kind", [
 	z
-		.object({ kind: z.literal("unavailable"), reason: z.string().min(1) })
+		.object({
+			kind: z.literal("unavailable"),
+			reason: z.string().min(1),
+			resolvedModel: z
+				.string()
+				.max(32)
+				.regex(/^jev-\d+\.\d+\.\d+$/)
+				.optional(),
+			telemetry: Telemetry.optional(),
+		})
 		.strict(),
 	z
 		.object({
@@ -36,6 +61,7 @@ export const AdviceSchema = z.discriminatedUnion("kind", [
 			inputTokens: NumberMetric.int().safe(),
 			outputTokens: NumberMetric.int().safe(),
 			latencyMs: NumberMetric,
+			telemetry: Telemetry.optional(),
 		})
 		.strict(),
 ]);
@@ -247,7 +273,8 @@ export async function compareCampaign(
 							async assess(_packet, options) {
 								if (!options.reserveAttempt())
 									throw new Error("Replay decision budget exhausted.");
-								return advice;
+								const { telemetry, ...fields } = advice;
+								return { ...fields, ...(telemetry ? { telemetry } : {}) };
 							},
 						},
 					);
@@ -560,7 +587,13 @@ export async function importJevEvidence(
 				advice:
 					row.advice?.kind === "answered" &&
 					(row.decision === null || row.rejection !== null)
-						? { kind: "unavailable", reason: "controller-rejected" }
+						? {
+								kind: "unavailable",
+								reason: "controller-rejected",
+								...(row.advice.telemetry
+									? { telemetry: row.advice.telemetry }
+									: {}),
+							}
 						: row.advice,
 			};
 		}),
