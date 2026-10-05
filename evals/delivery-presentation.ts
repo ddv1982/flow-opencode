@@ -339,6 +339,22 @@ export function currentHandoffFacts(
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
+			const compound = observation
+				? null
+				: /^(.+?)\s+[—–]\s+(\d+\s*(?:of|\/)\s*\d+\s+features\b.*)$/i.exec(
+						claim,
+					);
+			if (compound) {
+				const closure = closureStatement(compound[1] ?? "");
+				const progress = progressValue(compound[2] ?? "");
+				facts.closure.push(closure?.closure ?? null);
+				facts.progress.push(progress?.progress ?? null);
+				if (!closure || !progress) facts.unsupported.push(claim);
+				if (closure?.unavailablePlatform)
+					facts.unavailableProofPlatforms.push(closure.unavailablePlatform);
+				if (progress) facts.auxiliaryCounts.push(...progress.counts);
+				continue;
+			}
 			const field =
 				/^(?:(?:current|Flow)\s+)?(closure|assurance|external[- ]action authority|progress):\s*(.*)$/i.exec(
 					claim,

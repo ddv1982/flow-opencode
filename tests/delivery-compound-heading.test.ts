@@ -113,3 +113,29 @@ test("combined presentation does not supply a missing scalar fact", () => {
 		).not.toEqual([]);
 	}
 });
+
+test("compound-looking bytes in goals and registered commands remain their original records", () => {
+	const goal =
+		'Keep "Completed and archived — 1 of 1 features complete" as a label.';
+	const goalFacts = currentHandoffFacts(`Goal: ${goal}`);
+	expect(goalFacts.goal).toEqual([goal]);
+	expect(goalFacts.closure).toEqual([]);
+	expect(goalFacts.progress).toEqual([]);
+	const command =
+		'node scripts/verify.mjs --label "Completed and archived — 1 of 1 features complete"';
+	const commandFacts = currentHandoffFacts(
+		`${command} passed with exit code 0.`,
+		[command],
+	);
+	expect(commandFacts.observations).toEqual([
+		{
+			command,
+			exitCode: 0,
+			unchangedInvocation: false,
+			qualification: "claimed-pass",
+		},
+	]);
+	expect(commandFacts.closure).toEqual([]);
+	expect(commandFacts.progress).toEqual([]);
+	expect(commandFacts.unsupported).toEqual([]);
+});
