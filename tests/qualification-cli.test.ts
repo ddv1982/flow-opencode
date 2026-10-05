@@ -1,10 +1,9 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import { canonicalJson } from "../evals/canonical-json.js";
 import { mapStrings } from "../evals/cassette.js";
 import {
@@ -20,7 +19,7 @@ import {
 	retainedFailureEvidence,
 	scenarioGradeInput,
 } from "../evals/grader-input.js";
-import { type Outcome, packPlugin } from "../evals/harness.js";
+import type { Outcome } from "../evals/harness.js";
 import { evaluatorIdentity, inspectArtifact } from "../evals/provenance.js";
 import {
 	readQualificationBundle,
@@ -45,6 +44,7 @@ import { scenarioStepInstruction } from "../evals/scenario-steps.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
 import { prepareCanary, recordCanary } from "../scripts/eval-canary.js";
+import { materializeQualificationArchive } from "../scripts/materialize-qualification.js";
 import { decisionRecordFor, qualifyV2 } from "../scripts/qualify-release.js";
 import { assertQualificationBundle } from "../scripts/release-metadata.js";
 import { assuranceProjection } from "../src/application/delivery.js";
@@ -54,7 +54,7 @@ import { operationInputDigest } from "../src/domain/operation.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 test("current release defaults include three autonomous attempts", () => {
-	expect(packageJson.version).toBe("9.5.0");
+	expect(packageJson.version).toBe("9.6.0");
 	expect(
 		attemptsForScenario("auto-two-features-evidence", { kind: "release" }),
 	).toBe(3);
@@ -307,7 +307,7 @@ function canaryTranscript(input: {
 	};
 }
 
-test("qualifies and seals a complete exact-artifact campaign through the CLI", async () => {
+test("qualifies and seals a historical 9.5 exact-artifact fixture campaign through the CLI", async () => {
 	const repositoryRoot = join(import.meta.dir, "..");
 	const regradeAuthority = {
 		qualify: qualifyV2,
@@ -315,16 +315,26 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 	};
 	const temporary = await mkdtemp(join(tmpdir(), "flow-qualification-cli-"));
 	try {
-		const artifactPath = await packPlugin(
-			repositoryRoot,
-			temporary,
-			currentBunToolchain(packageJson.packageManager),
+		const artifactPath = join(temporary, "historical-9.5.0.tgz");
+		const historicalPath = await materializeQualificationArchive({
+			descriptorPath: join(
+				repositoryRoot,
+				"evals/qualification/archives/9.5.0.json",
+			),
+			outputRoot: join(temporary, "historical"),
+		});
+		const historical = await readQualificationBundle(historicalPath);
+		const historicalArtifact = historical.files.find(
+			({ ref }) => ref.role === "artifact",
 		);
+		if (!historicalArtifact)
+			throw new Error("Historical artifact role is absent.");
+		await writeFile(artifactPath, historicalArtifact.bytes);
 		const artifact = await inspectArtifact({
 			repositoryRoot,
 			tarballPath: artifactPath,
 		});
-		const scenarios = releaseScenarios();
+		const scenarios = releaseScenarios("9.5.0");
 		const models = ["openai/gpt-6.1-sol"];
 		const plan = campaignPlanFor({
 			models,
@@ -655,7 +665,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		const bundlePath = stdout.trim().slice("VERIFIED: ".length);
 		const bundle = await readQualificationBundle(bundlePath);
 		expect(bundle.manifest.verdict).toBe("VERIFIED");
-		expect(bundle.manifest.packageVersion).toBe(packageJson.version);
+		expect(bundle.manifest.packageVersion).toBe("9.5.0");
 		for (const role of FIXED_ROLES) {
 			expect(
 				bundle.files.filter(({ ref }) => ref.role === role && !ref.id),
@@ -736,11 +746,21 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 		});
 		expect(releaseAuthority.summary.providers).toHaveLength(1);
 		const notesPath = join(temporary, "release-notes.md");
+		const metadataRoot = join(temporary, "historical-release-metadata");
+		await mkdir(metadataRoot);
+		await writeFile(
+			join(metadataRoot, "package.json"),
+			JSON.stringify({ ...packageJson, version: artifact.packageVersion }),
+		);
+		await writeFile(
+			join(metadataRoot, "CHANGELOG.md"),
+			await readFile(join(repositoryRoot, "CHANGELOG.md")),
+		);
 		const metadata = Bun.spawn(
 			[
 				"bun",
 				"run",
-				"scripts/release-metadata.ts",
+				join(repositoryRoot, "scripts/release-metadata.ts"),
 				"--tag",
 				`v${artifact.packageVersion}`,
 				"--notes-file",
@@ -752,7 +772,7 @@ test("qualifies and seals a complete exact-artifact campaign through the CLI", a
 				"--bundles-dir",
 				bundlesDirectory,
 			],
-			{ cwd: repositoryRoot, stdout: "pipe", stderr: "pipe" },
+			{ cwd: metadataRoot, stdout: "pipe", stderr: "pipe" },
 		);
 		const [metadataStdout, metadataStderr, metadataExit] = await Promise.all([
 			new Response(metadata.stdout).text(),

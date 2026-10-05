@@ -900,6 +900,34 @@ function semanticIssues(
 					`Requested ${actor.role} model does not match its scheduled cell.`,
 				);
 			}
+			if (
+				"packageVersion" in attempt.artifact &&
+				attempt.artifact.packageVersion === "9.6.0" &&
+				expectedModel !== null
+			) {
+				const actual =
+					actor.actualModel.kind === "observed"
+						? actor.actualModel.value
+						: null;
+				const host =
+					actor.hostObservation?.model.kind === "observed"
+						? actor.hostObservation.model.value
+						: null;
+				if (
+					(actual &&
+						(actual.routeProvider !== expectedModel.routeProvider ||
+							actual.model !== expectedModel.model)) ||
+					(host &&
+						(host.providerID !== expectedModel.routeProvider ||
+							host.modelID !== expectedModel.model))
+				)
+					issue(
+						issues,
+						`${base}.actors`,
+						"provenance",
+						`Observed ${actor.role} route does not match its scheduled cell.`,
+					);
+			}
 		}
 		const sequences = new Set<number>();
 		for (const instruction of attempt.instructions) {

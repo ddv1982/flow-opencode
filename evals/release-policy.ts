@@ -142,6 +142,29 @@ if (!prospectiveParsed.ok)
 	throw new Error("Prospective release policy is invalid.");
 const AUTO_RELEASE_CATALOG = prospectiveParsed.value;
 
+const deliveryParsed = parseCaseCatalog([
+	...AUTO_RELEASE_CATALOG,
+	...[
+		"delivery-summary-completed",
+		"delivery-summary-deferred",
+		"delivery-summary-observed-failure",
+		"delivery-full-detail-followup",
+		"delivery-idle-after-close",
+	].map((caseId) => ({
+		caseId,
+		caseVersion: 1,
+		evidenceClass: "conformance",
+		oracle: "durable-state",
+		release: "required",
+		minProviders: 1,
+		minScoredAttempts: 3,
+		minPassRate: 1,
+		reviewerPromotionRecordSha256: null,
+	})),
+]);
+if (!deliveryParsed.ok) throw new Error("Delivery release policy is invalid.");
+const DELIVERY_RELEASE_CATALOG = deliveryParsed.value;
+
 export type ReleaseProfile = {
 	readonly catalog: ValidatedCaseCatalog;
 	readonly requiredModels: readonly ModelIdentity[] | null;
@@ -169,6 +192,8 @@ const STANDARD_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "9.6.0")
+		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (packageVersion === "9.5.0")
 		return openAiOnlyRelease(AUTO_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (packageVersion === "9.4.0")
@@ -179,6 +204,15 @@ export function releaseProfile(packageVersion: string): ReleaseProfile {
 	return packageVersion === "9.3.0"
 		? openAiOnlyRelease(STANDARD_RELEASE_CATALOG)
 		: STANDARD_RELEASE;
+}
+
+export function releaseReviewerModel(
+	packageVersion: string,
+): ModelIdentity | null {
+	if (packageVersion !== "9.6.0") return null;
+	const model = releaseProfile(packageVersion).requiredModels?.[0];
+	if (!model) throw new Error("Pinned release reviewer model is absent.");
+	return model;
 }
 
 export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {
@@ -195,7 +229,7 @@ export const RELEASE_HOST_POLICY = {
 } as const;
 
 export function releaseHostPermissions(packageVersion: string) {
-	return packageVersion === "9.5.0"
+	return packageVersion === "9.5.0" || packageVersion === "9.6.0"
 		? { external_directory: "deny" as const }
 		: undefined;
 }
@@ -295,7 +329,7 @@ export function releasePrimaryCellsFor(
 					armToken: null,
 					repetition,
 					managerModel: model,
-					reviewerModel: null,
+					reviewerModel: releaseReviewerModel(packageVersion),
 					schedule: "primary" as const,
 				};
 			}),
@@ -325,7 +359,7 @@ export function releaseCellsFor(
 				armToken: null,
 				repetition: policy.minScoredAttempts,
 				managerModel: model,
-				reviewerModel: null,
+				reviewerModel: releaseReviewerModel(packageVersion),
 				schedule: "environment-reserve" as const,
 			};
 		}),
@@ -363,11 +397,17 @@ export function releaseHostConfigSha256(input: {
 }
 
 export function assertReleaseHost(input: {
+	readonly packageVersion?: string;
+	readonly recoveryApiKeySet?: boolean;
 	readonly platform: string;
 	readonly opencodeOverride?: string | undefined;
 	readonly reviewerModelOverride?: string | undefined;
 	readonly reviewerStepsOverride?: string | undefined;
 }): void {
+	if (input.packageVersion === "9.6.0" && input.recoveryApiKeySet)
+		throw new Error(
+			"9.6.0 release evaluation requires recovery off; unset TYPESAFE_API_KEY.",
+		);
 	if (
 		input.platform !== RELEASE_HOST_POLICY.platform ||
 		input.opencodeOverride?.trim() ||

@@ -23,7 +23,10 @@ import {
 	packedPackageManifest,
 	samePackedArtifact,
 } from "../evals/provenance.js";
-import { RELEASE_HOST_POLICY } from "../evals/release-policy.js";
+import {
+	RELEASE_HOST_POLICY,
+	releaseReviewerModel,
+} from "../evals/release-policy.js";
 import type { ActorIdentity, ArtifactIdentity } from "../evals/report.js";
 import { reportArtifactForCanary } from "../evals/report-artifact.js";
 import { assuranceProjection } from "../src/application/delivery.js";
@@ -1172,6 +1175,23 @@ export async function canaryRecordIssue(input: {
 	if (!samePackedArtifact(record.artifact, input.expectedArtifact))
 		return "Canary artifact does not match the rebuilt artifact.";
 	if (record.status !== "passed") return `Canary status is ${record.status}.`;
+	const pinned = releaseReviewerModel(input.version);
+	if (pinned) {
+		for (const role of ["manager", "reviewer"] as const) {
+			const actors = record.actors.filter((item) => item.role === role);
+			if (
+				!actors.length ||
+				actors.some(
+					(actor) =>
+						canonicalJson(actor.requestedModel) !== canonicalJson(pinned) ||
+						(actor.actualModel.kind === "observed" &&
+							(actor.actualModel.value.routeProvider !== pinned.routeProvider ||
+								actor.actualModel.value.model !== pinned.model)),
+				)
+			)
+				return `Canary ${role} model does not match the pinned release route.`;
+		}
+	}
 	const now = (input.now ?? new Date()).getTime();
 	if (Date.parse(record.recordedAt) > now) return "Canary is future-dated.";
 	if (
