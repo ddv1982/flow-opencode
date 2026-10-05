@@ -587,7 +587,13 @@ export async function importJevEvidence(
 				advice:
 					row.advice?.kind === "answered" &&
 					(row.decision === null || row.rejection !== null)
-						? { kind: "unavailable", reason: "controller-rejected" }
+						? {
+								kind: "unavailable",
+								reason: "controller-rejected",
+								...(row.advice.telemetry
+									? { telemetry: row.advice.telemetry }
+									: {}),
+							}
 						: row.advice,
 			};
 		}),

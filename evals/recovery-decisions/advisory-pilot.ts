@@ -80,6 +80,7 @@ const TreatmentSchema = z
 const Observation = z
 	.object({
 		caseId: z.string(),
+		executionIndex: Metric.int().safe().nullable(),
 		packetDigest: Hash.nullable(),
 		promptDigest: Hash.nullable(),
 		result: Result,
@@ -303,6 +304,14 @@ export async function checkAdvisoryPilot(
 				(bound.packetDigest === null) !== (row.result.kind === "filtered")
 			)
 				throw new Error("Pilot observation binding mismatch.");
+			const slot =
+				row.executionIndex === null ? null : parsed.order[row.executionIndex];
+			if (
+				bound.packetDigest === null
+					? row.executionIndex !== null
+					: !slot || slot.caseId !== row.caseId || slot.arm !== arm.arm
+			)
+				throw new Error("Pilot execution order binding mismatch.");
 		}
 	}
 	if (
@@ -310,6 +319,30 @@ export async function checkAdvisoryPilot(
 		baseline.origin !== adviceArm.origin
 	)
 		throw new Error("Pilot arm provenance mismatch.");
+	const executionIndices = [baseline, adviceArm]
+		.flatMap((arm) =>
+			arm.observations.flatMap((row) =>
+				row.executionIndex === null ? [] : [row.executionIndex],
+			),
+		)
+		.sort((left, right) => left - right);
+	if (new Set(executionIndices).size !== executionIndices.length)
+		throw new Error("Pilot execution order contains duplicate indices.");
+	const missingIndices = parsed.order.flatMap((_slot, index) =>
+		executionIndices.includes(index) ? [] : [index],
+	);
+	const executionOrder = {
+		scope: "declared-unverified",
+		status:
+			missingIndices.length === 0
+				? "complete"
+				: executionIndices.every((index, position) => index === position)
+					? "incomplete-prefix"
+					: "incomplete-subsequence",
+		planned: parsed.order.length,
+		recorded: executionIndices.length,
+		missingIndices,
+	};
 	const rows = evaluated.rows.map((row, index) => {
 		const entry = parsed.corpus.cases[index];
 		if (!entry) throw new Error("Missing case.");
@@ -439,6 +472,7 @@ export async function checkAdvisoryPilot(
 		corpusPurpose: parsed.corpus.purpose,
 		labelStatus: parsed.corpus.labelStatus,
 		origin: baseline.origin,
+		executionOrder,
 		provenanceDeclared: true,
 		inferenceProvenance: "unverified",
 		jevAdviceProvenance: "unverified-import",

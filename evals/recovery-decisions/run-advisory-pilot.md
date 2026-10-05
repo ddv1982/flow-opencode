@@ -36,7 +36,14 @@ Baseline and advice arms declare `schemaVersion: 1`, `qualification:
 "inconclusive"`, their arm, `model: "openai/gpt-6.1-sol"`, `preparationDigest`,
 `origin` and `observations`. Treatment also binds `treatmentDigest`. Each
 observation binds case, packet and prompt digests, a result, nullable latency,
-reservation and response usage. Results are selection with `candidateId`,
+reservation and response usage. It also requires `executionIndex`, the zero-based
+shared slot in the preparation order. Only filtered observations use null.
+Indices must be unique across arms and match the retained case and arm. Missing
+observations leave gaps; they are never compacted. The report marks complete,
+incomplete prefix or incomplete subsequence declarations. These bindings do not
+authenticate execution or prove that missing contexts ran. Earlier manual arm
+files without this field cannot establish execution order and are rejected.
+Results are selection with `candidateId`,
 abstain, unavailable with reason, or filtered. Omitted observations stay missing.
 `origin` is simulation or retained-model-responses. Both are declarations; retain
 actual manager output and serving-route evidence separately for future review.

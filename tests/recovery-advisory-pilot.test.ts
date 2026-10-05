@@ -29,6 +29,12 @@ async function fixture() {
 	};
 	const observations = prepared.rows.map((row) => ({
 		caseId: row.caseId,
+		executionIndex:
+			row.packetDigest === null
+				? null
+				: prepared.order.findIndex(
+						(slot) => slot.caseId === row.caseId && slot.arm === "baseline",
+					),
 		packetDigest: row.packetDigest,
 		promptDigest: row.baselinePromptDigest,
 		result: initialDecision(row.packetDigest === null),
@@ -41,10 +47,20 @@ async function fixture() {
 		...base,
 		arm: "advice",
 		treatmentDigest: datasetDigest(treatment),
-		observations: observations.map((row, index) => ({
-			...row,
-			promptDigest: treatment.rows[index]?.promptDigest,
-		})),
+		observations: observations.map((row, index) => {
+			const bound = treatment.rows[index];
+			if (!bound) throw new Error("Missing treatment binding.");
+			return {
+				...row,
+				executionIndex:
+					row.packetDigest === null
+						? null
+						: prepared.order.findIndex(
+								(slot) => slot.caseId === row.caseId && slot.arm === "advice",
+							),
+				promptDigest: bound.promptDigest,
+			};
+		}),
 	};
 	return { prepared, treatment, baseline, advice };
 }
@@ -199,7 +215,7 @@ test("pilot refuses changed prompts, advice, packet/source bindings, duplicate o
 });
 
 test("answered advice validates the complete packet distribution and retains scoped telemetry", async () => {
-	const { prepared, baseline } = await fixture();
+	const { prepared, baseline, advice: initialAdvice } = await fixture();
 	const payload = JSON.parse(
 		prepared.rows[0]?.baselinePrompt?.split("\n").slice(1).join("\n") ?? "null",
 	);
@@ -242,7 +258,7 @@ test("answered advice validates the complete packet distribution and retains sco
 		...baseline,
 		arm: "advice",
 		treatmentDigest: datasetDigest(treatment),
-		observations: baseline.observations.map((value, index) => ({
+		observations: initialAdvice.observations.map((value, index) => ({
 			...value,
 			promptDigest: treatment.rows[index]?.promptDigest,
 		})),
@@ -348,34 +364,25 @@ test("filtered cases refuse advice and eligible cases cannot masquerade as prefi
 	).rejects.toThrow("binding");
 });
 
-async function orderedFixture() {
-	const value = await fixture();
-	const observations = (arm: "baseline" | "advice") =>
-		value[arm].observations.map((row) => ({
-			...row,
-			executionIndex:
-				row.packetDigest === null
-					? null
-					: value.prepared.order.findIndex(
-							(slot) => slot.caseId === row.caseId && slot.arm === arm,
-						),
-		}));
-	return {
-		...value,
-		baseline: { ...value.baseline, observations: observations("baseline") },
-		advice: { ...value.advice, observations: observations("advice") },
-	};
-}
-
 test("pilot refuses unbound execution order rather than trusting the frozen seed alone", async () => {
 	const { prepared, treatment, baseline, advice } = await fixture();
+	const unbound = (rows: typeof baseline.observations) =>
+		rows.map((row) => {
+			const { executionIndex: _executionIndex, ...fields } = row;
+			return fields;
+		});
 	await expect(
-		checkAdvisoryPilot(prepared, treatment, baseline, advice),
+		checkAdvisoryPilot(
+			prepared,
+			treatment,
+			{ ...baseline, observations: unbound(baseline.observations) },
+			{ ...advice, observations: unbound(advice.observations) },
+		),
 	).rejects.toThrow("execution");
 });
 
 test("pilot accepts only complete internally bound declarations of seeded execution order", async () => {
-	const { prepared, treatment, baseline, advice } = await orderedFixture();
+	const { prepared, treatment, baseline, advice } = await fixture();
 	const report = await checkAdvisoryPilot(
 		prepared,
 		treatment,
@@ -392,7 +399,7 @@ test("pilot accepts only complete internally bound declarations of seeded execut
 });
 
 test("pilot rejects baseline-first and duplicate execution indices across arms", async () => {
-	const { prepared, treatment, baseline, advice } = await orderedFixture();
+	const { prepared, treatment, baseline, advice } = await fixture();
 	let index = 0;
 	const baselineFirst = {
 		...baseline,
@@ -423,7 +430,7 @@ test("pilot rejects baseline-first and duplicate execution indices across arms",
 });
 
 test("pilot retains missing prefix and subsequence declarations as incomplete without compacting slots", async () => {
-	const { prepared, treatment, baseline, advice } = await orderedFixture();
+	const { prepared, treatment, baseline, advice } = await fixture();
 	for (const [keep, status, missing] of [
 		[[0, 1, 2], "incomplete-prefix", [3, 4, 5, 6, 7, 8, 9, 10, 11]],
 		[[0, 2, 4], "incomplete-subsequence", [1, 3, 5, 6, 7, 8, 9, 10, 11]],
@@ -453,4 +460,41 @@ test("pilot retains missing prefix and subsequence declarations as incomplete wi
 			throw new Error("Missing coverage count.");
 		expect(baselineMissing + adviceMissing).toBe(9);
 	}
+});
+
+test("execution slots reject invalid values and prefiltered execution declarations", async () => {
+	const { prepared, treatment, baseline, advice } = await fixture();
+	const eligible = baseline.observations.find(
+		(row) => row.executionIndex !== null,
+	);
+	const filtered = baseline.observations.find(
+		(row) => row.executionIndex === null,
+	);
+	if (!eligible || !filtered) throw new Error("Missing slot fixtures.");
+	for (const executionIndex of [
+		null,
+		-1,
+		0.5,
+		12,
+		Number.MAX_SAFE_INTEGER + 1,
+	]) {
+		const changed = {
+			...baseline,
+			observations: baseline.observations.map((row) =>
+				row.caseId === eligible.caseId ? { ...row, executionIndex } : row,
+			),
+		};
+		await expect(
+			checkAdvisoryPilot(prepared, treatment, changed, advice),
+		).rejects.toThrow();
+	}
+	const changed = {
+		...baseline,
+		observations: baseline.observations.map((row) =>
+			row.caseId === filtered.caseId ? { ...row, executionIndex: 0 } : row,
+		),
+	};
+	await expect(
+		checkAdvisoryPilot(prepared, treatment, changed, advice),
+	).rejects.toThrow("execution order");
 });
