@@ -2,6 +2,29 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [9.6.0]
+
+- Short delivery handoffs retain goal, closure, progress, assurance, authority,
+  all assurance limitations, blockers, unfinished work and observation facts.
+  Full reports remain in the accepted close response.
+- Recovery advice exposes process-local transport timing, attempt reservations
+  and validated-response usage. Reservations are upper bounds, not billed cost.
+  Unknown usage remains null. Advice grants no additional authority.
+- Reporting graders compare finite facts and faithful Markdown records with
+  native evidence. Command results distinguish passing proof from observations.
+  Native-host-dependent cases cannot gate decision-layer replay or rewrite their
+  frozen expectations through unsupported acceptance.
+- The 9.6.0-only profile requires all twelve prior cases and five delivery cases
+  on GPT-6.1 Sol for manager and reviewer. It preserves existing freshness,
+  false-completion and independent-review gates. Qualification requires a fresh
+  live matrix and exact-artifact canary. No cross-provider or Jev-quality claim
+  follows from the profile.
+- Session v5 schema and persistence are unchanged. Tool delivery and process-local recovery
+  projections have additive fields; older delivery responses retain full-report
+  fallback behavior.
+
+Upgrade with `opencode plugin opencode-plugin-flow@9.6.0 --global --force`.
+
 ## [9.5.0]
 
 `/flow-auto` can continue supported same-goal prerequisite repairs without a

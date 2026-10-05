@@ -110,6 +110,7 @@ import {
 	releaseHostConfigSha256,
 	releaseHostPermissions,
 	releaseRandomizationSeed,
+	releaseReviewerModel,
 	releaseScenarioCatalog,
 	selectReleaseScenarios,
 } from "./release-policy.js";
@@ -282,6 +283,21 @@ const ORDINARY_ANALYSIS_SHA256 = canonicalSha256(
 	"flow-v2-ordinary-analysis-v1",
 	{ kind: "rate", primaryOutcome: "conformance-pass" },
 );
+
+export function evalReleaseReviewerConfiguration(
+	managerModel: string,
+	packageVersion: string,
+) {
+	const pinned = releaseReviewerModel(packageVersion);
+	return evalReviewerConfiguration(
+		managerModel,
+		pinned
+			? {
+					OPENCODE_FLOW_REVIEWER_MODEL: `${pinned.routeProvider}/${pinned.model}`,
+				}
+			: process.env,
+	);
+}
 
 export function caseCatalogFor(
 	scenarios: readonly (typeof SCENARIOS)[number][],
@@ -824,6 +840,8 @@ export async function runCampaign(
 
 	if (sampling.kind === "release") {
 		assertReleaseHost({
+			packageVersion: packageJson.version,
+			recoveryApiKeySet: Boolean(process.env.TYPESAFE_API_KEY),
 			platform: normalizeEvidencePlatform(process.platform),
 			opencodeOverride: process.env.FLOW_OPENCODE_SMOKE_VERSION,
 			reviewerModelOverride: process.env.OPENCODE_FLOW_REVIEWER_MODEL,
@@ -913,9 +931,10 @@ export async function runCampaign(
 		if ((await tarballSha256(tarball)) !== artifact.tarballSha256) {
 			throw new Error("Packed artifact changed before host installation.");
 		}
-		const reviewerModel = evalReviewerConfiguration(
-			models[0] ?? "",
-			process.env,
+		const reviewerModel = (
+			sampling.kind === "release"
+				? evalReleaseReviewerConfiguration(models[0] ?? "", packageJson.version)
+				: evalReviewerConfiguration(models[0] ?? "")
 		).pluginOptions?.model;
 		await preflight(
 			packageCache,
@@ -984,7 +1003,10 @@ export async function runCampaign(
 		/** One attempt, start to finish, printing a single line when it lands. */
 		const runAttempt = async (job: Job): Promise<Recorded> => {
 			const { model, scenario, attempt, scheduledAttempts } = job;
-			const reviewer = evalReviewerConfiguration(model);
+			const reviewer =
+				sampling.kind === "release"
+					? evalReleaseReviewerConfiguration(model, packageJson.version)
+					: evalReviewerConfiguration(model);
 			const measuredHostConfigSha256 =
 				sampling.kind === "release"
 					? releaseHostConfigSha256({

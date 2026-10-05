@@ -11,7 +11,10 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { RELEASE_HOST_POLICY } from "../evals/release-policy.js";
+import {
+	RELEASE_HOST_POLICY,
+	releaseReviewerModel,
+} from "../evals/release-policy.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
@@ -1177,4 +1180,56 @@ describe("canary preparation", () => {
 			},
 		});
 	});
+});
+
+test("9.6 canary rejects every wrong-role model including a second reviewer", async () => {
+	const model = releaseReviewerModel("9.6.0");
+	if (!model) throw new Error("Missing candidate pin.");
+	for (const variant of [
+		"manager",
+		"reviewer",
+		"second-reviewer",
+		"observed",
+	] as const) {
+		const value = record({
+			artifactValue: { ...artifact, packageVersion: "9.6.0" },
+		});
+		value.actors = ["manager", "reviewer"].map((role) => ({
+			...actor,
+			role: role === "manager" ? "manager" : "reviewer",
+			requestedModel: model,
+			actualModel: { kind: "observed", value: model },
+			sessionIds: ["<redacted-id>"],
+		}));
+		if (variant === "second-reviewer")
+			value.actors.push({
+				...value.actors[1],
+				role: "reviewer",
+				requestedModel: { ...model, model: "other" },
+				actualModel: { kind: "unobserved", reason: "unknown" },
+				sessionIds: ["<redacted-id>"],
+			});
+		else {
+			const index = variant === "manager" ? 0 : 1;
+			const selected = value.actors[index];
+			if (!selected) throw new Error("Missing role.");
+			if (variant === "observed")
+				selected.actualModel = {
+					kind: "observed",
+					value: { ...model, routeProvider: "xai" },
+				};
+			else selected.requestedModel = { ...model, model: "other" };
+		}
+		const { recordSha256: _prior, ...base } = value;
+		const candidate = { ...base, recordSha256: canaryRecordSha256(base) };
+		expect(
+			await canaryRecordIssue({
+				version: "9.6.0",
+				record: candidate,
+				expectedArtifact: candidate.artifact,
+				directory: "/unused",
+				now: new Date("2026-08-25T00:00:01Z"),
+			}),
+		).toContain("pinned release route");
+	}
 });

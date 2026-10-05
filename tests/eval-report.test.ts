@@ -1048,3 +1048,38 @@ test("user prompt provenance freezes bytes while preserving old command records"
 	delete instruction.text;
 	expect(parseReport(fixture, caseCatalog()).ok).toBe(false);
 });
+
+test("9.6 scheduled roles reject observed route substitutions without inventing revisions", () => {
+	for (const kind of ["actual", "host"] as const) {
+		const fixture = report();
+		const attempt = fixture.attempts[0];
+		const cell = fixture.plan.cells[0];
+		if (!attempt || !cell || !("packageVersion" in attempt.artifact))
+			throw new Error("Missing role fixture.");
+		attempt.artifact.packageVersion = "9.6.0";
+		const actor = attempt.actors[0];
+		if (!actor) throw new Error("Missing actor.");
+		cell.managerModel = actor.requestedModel;
+		cell.reviewerModel = actor.requestedModel;
+		fixture.plan.planSha256 = campaignPlanSha256(fixture.plan);
+		expect(parseReport(fixture, caseCatalog()).ok).toBe(true);
+		if (kind === "actual")
+			actor.actualModel = {
+				kind: "observed",
+				value: {
+					...actor.requestedModel,
+					routeProvider: "xai",
+					model: "other",
+				},
+			};
+		else
+			actor.hostObservation = {
+				model: {
+					kind: "observed",
+					value: { providerID: "xai", modelID: "other" },
+				},
+				variant: { kind: "unobserved", reason: "field-unavailable" },
+			};
+		expect(parseReport(fixture, caseCatalog()).ok).toBe(false);
+	}
+});

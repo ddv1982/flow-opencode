@@ -344,9 +344,9 @@ describe("release eval sampling", () => {
 		).toHaveLength(57);
 	});
 
-	test("current 9.5 candidate retains all twelve cases on its OpenAI-only grid", () => {
+	test("current 9.6 candidate retains all seventeen cases on its OpenAI-only grid", () => {
 		const scenarios = releaseScenarios();
-		expect(scenarios).toHaveLength(12);
+		expect(scenarios).toHaveLength(17);
 		expect(
 			releaseCatalog(packageJson.version).every(
 				(row) => row.minProviders === 1,
@@ -358,12 +358,12 @@ describe("release eval sampling", () => {
 			sampling: { kind: "release", packageVersion: packageJson.version },
 			opencodeVersion: "1.18.31",
 		});
-		expect(plan.stoppingRule.count).toBe(57);
-		expect(plan.budget.maxAttempts).toBe(69);
-		expect(plan.abortPolicy.maxReplacementBlocks).toBe(12);
+		expect(plan.stoppingRule.count).toBe(72);
+		expect(plan.budget.maxAttempts).toBe(89);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(17);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "primary"),
-		).toHaveLength(57);
+		).toHaveLength(72);
 		expect(() =>
 			campaignPlanFor({
 				models: ["openai/gpt-6-sol"],
