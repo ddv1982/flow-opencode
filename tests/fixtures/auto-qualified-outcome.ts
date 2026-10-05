@@ -5,8 +5,10 @@ import { collectReviewerPacketBytes } from "../../evals/reviewer-packet-bytes.js
 
 const digest = `sha256:${"a".repeat(64)}`;
 export function autoQualifiedOutcome(
-	kind: "two" | "prerequisite" | "audit",
+	kind: "two" | "prerequisite" | "audit" | "single",
+	options: Readonly<{ goal?: string; featureId?: string }> = {},
 ): ScenarioGradeInput {
+	const goal = options.goal ?? "Implement text behavior";
 	const features =
 		kind === "two"
 			? [
@@ -29,7 +31,7 @@ export function autoQualifiedOutcome(
 				]
 			: [
 					{
-						id: "parser",
+						id: options.featureId ?? "parser",
 						title: "Parser",
 						summary: "Guard null",
 						targets:
@@ -190,7 +192,7 @@ export function autoQualifiedOutcome(
 			view: "reviewer",
 			sessionId: "session:qualification",
 			revision: created,
-			goal: "Implement text behavior",
+			goal,
 			planContext: plan,
 			feature,
 			assignment: { ...assignment, result: null },
@@ -299,7 +301,7 @@ export function autoQualifiedOutcome(
 		version: 5,
 		id: "session:qualification",
 		revision: 12,
-		goal: "Implement text behavior",
+		goal,
 		approval: "approved",
 		plan,
 		runs,

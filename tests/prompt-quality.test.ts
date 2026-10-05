@@ -566,3 +566,19 @@ describe("Flow prompt economy", () => {
 		);
 	});
 });
+
+test("delivery handoffs use summary with retained full-detail fallback", () => {
+	for (const id of ["flow", "flow-run", "flow-plan"] as const) {
+		const content = getFlowGuidance(id).content.replace(/\s+/g, " ");
+		expect(content).toContain("workflowData.delivery.summary.lines");
+		expect(content).toContain("missing summary");
+		expect(content).toContain("retained close response's `report`");
+		expect(content).not.toContain("delivery.report` verbatim");
+	}
+	const status = compileFlowPromptSurface("flow-status");
+	expect(status).toContain("If current `workflowData.delivery` exists");
+	expect(status).toContain("report its `summary.lines`, or its `report`");
+	expect(status).toContain("Otherwise say unavailable.");
+	expect(status).not.toContain("use retained close `report`");
+	expect(status).toContain("workflowData.statusReport` verbatim");
+});

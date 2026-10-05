@@ -14,6 +14,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ToolContext } from "@opencode-ai/plugin";
+import { z } from "zod";
 import {
 	CapturingRecoveryController,
 	RawRecoveryCaptureSchema,
@@ -374,11 +375,27 @@ test("active shadow capture preserves unavailable advice and never grants a muta
 	const expected = await baseline
 		.guard(context)
 		.propose(f.session, f.sourceDigest, proposal);
-	expect(
-		await controller
-			.guard(context)
-			.propose(f.session, f.sourceDigest, proposal),
-	).toEqual(expected);
+	const actual = await controller
+		.guard(context)
+		.propose(f.session, f.sourceDigest, proposal);
+	const withoutElapsed = (input: unknown) => {
+		const assessment = z
+			.object({
+				telemetry: z
+					.object({ assessmentElapsedMs: z.number().finite().nonnegative() })
+					.passthrough(),
+			})
+			.passthrough()
+			.parse(input);
+		expect(Number.isFinite(assessment.telemetry.assessmentElapsedMs)).toBe(
+			true,
+		);
+		expect(assessment.telemetry.assessmentElapsedMs).toBeGreaterThanOrEqual(0);
+		const { assessmentElapsedMs: _elapsed, ...telemetry } =
+			assessment.telemetry;
+		return { ...assessment, telemetry };
+	};
+	expect(withoutElapsed(actual)).toEqual(withoutElapsed(expected));
 	expect(expected).toMatchObject({
 		kind: "unavailable",
 		mode: "shadow",
@@ -387,7 +404,16 @@ test("active shadow capture preserves unavailable advice and never grants a muta
 		action: null,
 	});
 	expect(expected).not.toHaveProperty("recommended");
-	expect(controller.snapshot()).toEqual(baseline.snapshot());
+	const snapshot = z.object({ last: z.unknown() }).passthrough();
+	const actualSnapshot = snapshot.parse(controller.snapshot());
+	const expectedSnapshot = snapshot.parse(baseline.snapshot());
+	expect({
+		...actualSnapshot,
+		last: withoutElapsed(actualSnapshot.last),
+	}).toEqual({
+		...expectedSnapshot,
+		last: withoutElapsed(expectedSnapshot.last),
+	});
 	expect((await records(f.directory))[0]?.payload.proposal).toEqual(proposal);
 });
 

@@ -2,6 +2,7 @@ import {
 	type EpisodeQuestion,
 	EpisodeQuestionSchema,
 } from "./recovery-decisions/episode-operator.js";
+import type { ScenarioStep } from "./scenario-steps.js";
 // Model-in-the-loop harness for Flow.
 //
 // tests/ proves the runtime and the *text* of prompts deterministically. This
@@ -133,19 +134,6 @@ async function abortable<T>(
 
 /** What OpenCode names the error it stamps on a message an abort killed. */
 const ABORT_ERROR_NAME = "MessageAbortedError";
-/**
- * How long a session may make no progress at all before it is called wedged.
- *
- * Distinct from the whole-scenario deadline, which a wedge would otherwise wait
- * out in full: three of the four recorded timeouts sat with the same incomplete
- * tool call for twenty minutes, and the diagnostic the deadline printed said so.
- * Once nothing has changed for this long while a call stays incomplete, waiting
- * the remaining seventeen minutes buys no further evidence.
- *
- * Generous on purpose. It bounds a *silent* session, not a slow one — any new
- * message or part resets it — so the only way to trip it honestly is a command
- * that emits nothing for three minutes, which no scenario fixture does.
- */
 const STALLED_MS = 3 * 60_000;
 
 /** A single tool invocation observed in the transcript. */
@@ -597,19 +585,9 @@ export type Scenario = {
 	/** Files seeded into the fixture repository before the first command. */
 	readonly files: Readonly<Record<string, string>>;
 	/** Commands sent in order; each waits for the session to go quiet. */
-	readonly steps: readonly {
-		readonly command: string;
-		readonly arguments: string;
-		/**
-		 * Runs this step in a new host session over the same project directory.
-		 *
-		 * The model carries no transcript across that boundary, so it has to recover
-		 * the lifecycle from `.flow/` alone. That is what an interruption actually
-		 * looks like, and it is the only way to prove durable state — not
-		 * conversational memory — is what drives the next action.
-		 */
-		readonly freshSession?: boolean;
-	}[];
+	readonly steps: readonly ScenarioStep[];
+	readonly title?: string;
+	readonly replayRequires?: readonly "native-host-provenance"[];
 	/**
 	 * Asking the user is an acceptable terminal state for this scenario, so a run
 	 * that ends by asking is checked rather than excluded from the pass rate.
@@ -1210,15 +1188,6 @@ export function isSelfAbortError(
 	return (error as { name?: unknown }).name === ABORT_ERROR_NAME;
 }
 
-/**
- * Whether a session has stopped rather than slowed.
- *
- * An incomplete tool call is what separates the two: with one outstanding and no
- * new message or part for this long, nothing is coming, and the whole-scenario
- * deadline would only reach the same finding with the same evidence after
- * seventeen more minutes of it. With nothing outstanding the session is between
- * turns, which is the quiet window's business, not this one's.
- */
 export function isWedged(
 	pending: readonly string[],
 	unchangedMs: number,
@@ -2550,15 +2519,15 @@ export class EvalHost {
 				? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
 				: "";
 		const wedgeNote = (elapsedMs: number) =>
-			`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}.`;
+			`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}. Updates inside existing parts are not measured.`;
 		const failDeadline = async (): Promise<never> => {
 			const stalled = Date.now() - changedAt;
 			const [count = "0", parts = "0"] = signature.split(":");
 			await abortWait();
 			throw new Error(
 				(stalled >= quietMs
-					? `Scenario exceeded ${timeoutMs}ms without going quiet: wedged. ${wedgeNote(stalled)}`
-					: `Scenario exceeded ${timeoutMs}ms without going quiet: still working. The session was producing output up to the deadline (${count} messages, ${parts} parts), so it was working or looping rather than stuck.`) +
+					? `Scenario exceeded ${timeoutMs}ms without going quiet. ${wedgeNote(stalled)}`
+					: `Scenario exceeded ${timeoutMs}ms without going quiet. New messages or parts continued near the deadline (${count} messages, ${parts} parts). This does not establish useful progress.`) +
 					suspensionNote(),
 			);
 		};
@@ -2725,7 +2694,7 @@ export class EvalHost {
 			if (isWedged(ownedPending, stalled, stalledMs)) {
 				await abortWait();
 				throw new Error(
-					`Scenario made no progress for ${stalledMs}ms: wedged. ${wedgeNote(stalled)}${suspensionNote()}`,
+					`Scenario had no new messages or parts for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
 				);
 			}
 			if (Date.now() > deadline) {

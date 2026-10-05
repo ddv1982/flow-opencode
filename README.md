@@ -7,17 +7,15 @@ benefits from an approved plan and an independent review:
 plan → approve → run one feature → validate → review → repeat or close
 ```
 
-Flow keeps one durable active feature run at a time. Once a session starts it
-stays the workflow for that goal until Flow records completed, deferred, or
-abandoned closure. It never silently falls back to ordinary coding, and it does
-not fold a materially different request into the active goal.
+Flow keeps one durable active feature run. Its goal stays active until completed,
+deferred, or abandoned closure. Flow never silently resumes ordinary coding or
+adds a materially different request to that goal.
 
 State lives in `.flow/session.json`, so the workflow survives a restart, a
 context change, or a lost transcript.
 
-Flow is in preview: an opinionated workflow for consequential multi-step changes,
-for people who read the review. It is worth its ceremony when a wrong change is
-expensive, and it is overhead when it is not.
+Flow is in preview. Its planning and review cost is worthwhile when a wrong
+change is expensive and you read the review.
 
 ## When not to use Flow
 
@@ -147,9 +145,9 @@ you granted.
    without shell access. New failures, source drift, or missing packets stop
    assignment without counting a failed review.
 6. A passing review advances the plan. A failed feature needs an explicit retry
-   or independent-feature choice. Closure returns a versioned delivery report
-   with attempts, findings, and assurance limits. It grants no PR, merge,
-   publish, or release authority.
+   or independent-feature choice. Closure returns a short delivery summary
+   and the full versioned report in the same response. Both retain assurance
+   limits. Closure grants no PR, merge, publish, or release authority.
 
 Failed reviews retain finding ids; dropped live findings fail.
 `flow_plan_amend` records a same-goal reversible gate repair before review,
@@ -205,34 +203,32 @@ bun install --frozen-lockfile
 bun run check
 ```
 
-`bun run check` runs typechecking, lint, build verification, tests, and package
-smoke. Release CI also exercises the packed plugin in a real OpenCode host.
+`bun run check` checks types, lint, builds, tests, and packages. Release CI tests
+that package in OpenCode.
 
-Maintained documentation starts at [docs/index.md](docs/index.md):
-[development](docs/development.md) for repository structure,
-[troubleshooting](docs/troubleshooting.md) for recovery,
-[the maintainer contract](docs/maintainer-contract.md) for tools and runtime
-invariants, and [ADR 0006](docs/adr/0006-bounded-intra-feature-waves.md) for the
-bounded-wave rationale.
+[Documentation](docs/index.md) includes [development](docs/development.md),
+[troubleshooting](docs/troubleshooting.md), [runtime contracts](docs/maintainer-contract.md),
+and [bounded waves](docs/adr/0006-bounded-intra-feature-waves.md).
 
 ## Recovery advice development preview
 
-With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow
-advice, capped at six attempts and $0.02. Without it, advice is off. Use
-`--recovery=off` to opt out or the options below to change limits.
+With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow advice, six attempts and
+$0.02. Without the key or with `--recovery=off`, advice is off.
 
 ```text
 /flow-auto --recovery=shadow --recovery-calls=6 --recovery-usd=0.02 <goal>
 ```
 
-Shadow sends bounded goal, finding and candidate-remedy packets to TypeSafe.
-It reports advice without authorizing mutations. Bare `flow_status` never calls
-Jev. Attempts count retries. `/flow-auto stop` cancels auto and advice. Advice expires
-after one hour; automatic retry limits remain until invocation ends. Neither
-survives restart. `recoveryStatus` reports configuration, attempts and outcome.
+Shadow sends bounded goal, finding and remedy packets to TypeSafe. It grants no
+mutation authority. Bare `flow_status` never calls Jev. Retries count as attempts.
+`/flow-auto stop` cancels auto and advice. Advice expires after one hour; retry limits last
+until invocation ends. Neither survives restart.
 
-Delegated mode requires release qualification; flags cannot bypass it. Tests prove
-mechanics, not decision quality. See [ADR 0016](docs/adr/0016-delegated-recovery.md).
+`recoveryStatus.last` exposes process-local timing, reservations, and decision
+checks. See [telemetry semantics](docs/maintainer-contract.md#opencode-surface).
+
+Delegation needs release qualification. Tests prove mechanics, not decision quality.
+See [ADR 0016](docs/adr/0016-delegated-recovery.md).
 
 ## License
 

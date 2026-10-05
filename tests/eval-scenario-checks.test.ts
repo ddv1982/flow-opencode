@@ -1615,21 +1615,20 @@ describe("inspection-failed-audit-completes", () => {
 			(entry) => entry.id === "inspection-failed-audit-completes",
 		);
 		if (!scenario) throw new Error("Expected the inspection scenario.");
+		const step = scenario.steps[0];
+		if (!step || "kind" in step)
+			throw new Error("Expected inspection command.");
 		expect(Object.hasOwn(scenario.files, "docs/README.md")).toBe(true);
-		expect(scenario.steps[0]?.arguments).toContain(
-			"observed count and severity",
-		);
-		expect(scenario.steps[0]?.arguments).not.toContain("21");
-		expect(scenario.steps[0]?.arguments).toContain(
+		expect(step.arguments).toContain("observed count and severity");
+		expect(step.arguments).not.toContain("21");
+		expect(step.arguments).toContain(
 			"Finding: inclusiveRangeLength is incorrect for 1..3.",
 		);
-		expect(scenario.steps[0]?.arguments).toContain(
+		expect(step.arguments).toContain(
 			"specific defect or audit target in each phase",
 		);
-		expect(scenario.steps[0]?.arguments).toContain(
-			"Number at least two phases as 1. and 2.",
-		);
-		expect(scenario.steps[0]?.arguments).toContain("State a concrete action");
+		expect(step.arguments).toContain("Number at least two phases as 1. and 2.");
+		expect(step.arguments).toContain("State a concrete action");
 	});
 	function recordedOutcome(overrides: Partial<Outcome> = {}): Outcome {
 		const document = session({

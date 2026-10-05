@@ -6,6 +6,7 @@
 // rewritten freely as long as these still hold.
 
 import { AUTO_SCENARIOS } from "./auto-scenarios.js";
+import { DELIVERY_SCENARIOS } from "./delivery-scenarios.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
 import { askedQuestions, type Scenario } from "./harness.js";
 
@@ -1184,6 +1185,7 @@ const INSPECTION_AUDIT_FIXTURE: Record<string, string> = {
  */
 export const SCENARIOS: readonly Scenario[] = [
 	...AUTO_SCENARIOS,
+	...DELIVERY_SCENARIOS,
 	{
 		id: "happy-path",
 		description:

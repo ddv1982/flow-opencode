@@ -16,6 +16,7 @@ import {
 	buildCassette,
 	CASSETTE_VERSION,
 	type Cassette,
+	cassetteFidelity,
 	cassetteFileName,
 	isGated,
 	normalizeRecorded,
@@ -375,6 +376,47 @@ describe("decision-layer replay", () => {
 		});
 		expect(cassette.fidelity).toContain("provider-error");
 		expect(cassette.fidelity).not.toContain("host-error");
+	});
+
+	test("scenario requirements retain native provenance limits during recording", () => {
+		const required = scenario("delivery-summary-deferred").replayRequires;
+		if (!required) throw new Error("Missing native replay requirement.");
+		const original = happyPathCassette();
+		expect(cassetteFidelity(original, required)).toEqual([
+			"native-host-provenance-unreplayed",
+		]);
+		expect(isGated(original, required)).toBe(false);
+		expect(isGated(original)).toBe(true);
+		const recorded = buildCassette({
+			flowVersion: "test",
+			scenario: "delivery-summary-deferred",
+			model: "provider/model",
+			attempt: 1,
+			hostPlatform: "linux",
+			files: {},
+			projectPath: "/workspace",
+			calls: [],
+			finalText: "",
+			assistantMessages: 0,
+			verdict: "PASS",
+			issues: [],
+			falseCompletion: false,
+			documents: [],
+			extraFidelity: [],
+			replayRequires: required,
+		});
+		expect(recorded.fidelity).toEqual([
+			"no-flow-calls",
+			"native-host-provenance-unreplayed",
+		]);
+	});
+
+	test("decision replay does not manufacture native host provenance", async () => {
+		const replayed = await replayCassette(happyPathCassette());
+		expect(replayed.outcome.hostTrace).toBeUndefined();
+		expect(
+			replayed.outcome.allCalls.every((call) => call.native === undefined),
+		).toBe(true);
 	});
 
 	test("retains the derived named-result witness for replay", () => {

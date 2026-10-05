@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { createFlowService } from "../src/application/flow-service.js";
-import type { DecisionProvider } from "../src/application/ports/decision-provider.js";
+import {
+	type DecisionProvider,
+	JEV_ATTEMPT_RESERVATION_USD,
+} from "../src/application/ports/decision-provider.js";
 import {
 	RecoveryController,
 	type RecoveryMutation,
@@ -1851,4 +1854,94 @@ test("plain auto in another host rejects the previous host's pending grant", asy
 	});
 	expect((await apply(s, mutation)).status).toBe("error");
 	await replacement;
+});
+
+for (const [dimension, values] of [
+	["choice", { choice: 0.89, goal: 1, suitability: 1 }],
+	["goal", { choice: 1, goal: 0.94, suitability: 1 }],
+	["suitability", { choice: 1, goal: 1, suitability: 0.94 }],
+] as const) {
+	test(`recovery tool exposes ${dimension} threshold rejection without authority`, async () => {
+		const s = await setup("delegated", {
+			async assess(packet, options) {
+				const answer = await provider.assess(packet, options);
+				if (answer.kind !== "answered")
+					throw new Error("fixture answer unavailable");
+				return {
+					...answer,
+					probabilities: { repair: values.choice, abstain: 1 - values.choice },
+					assessments: {
+						repair: { goal: values.goal, suitability: values.suitability },
+					},
+				};
+			},
+		});
+		const response = await s.flow.status({
+			request: { view: "compact" },
+			recoveryProposal: s.proposal(),
+		});
+		if (response.status !== "ok" || !("recovery" in response.workflowData))
+			throw new Error(response.summary);
+		expect(response.workflowData.recovery).toMatchObject({
+			kind: "abstain",
+			telemetry: {
+				attemptsReserved: 1,
+				reservedUsd: JEV_ATTEMPT_RESERVATION_USD,
+				transportAttempts: null,
+				responseUsage: { inputTokens: 100, outputTokens: 10 },
+			},
+			decision: {
+				choice: "repair",
+				confidence: 1,
+				probabilities: { repair: values.choice, abstain: 1 - values.choice },
+				assessments: {
+					repair: { goal: values.goal, suitability: values.suitability },
+				},
+				thresholds: { choice: 0.9, goal: 0.95, suitability: 0.95 },
+				checks: {
+					attemptReserved: true,
+					modelMatched: true,
+					candidatePresent: true,
+					assessmentPresent: true,
+					choicePassed: dimension !== "choice",
+					goalPassed: dimension !== "goal",
+					suitabilityPassed: dimension !== "suitability",
+				},
+			},
+		});
+		expect(response.workflowData.recovery).not.toHaveProperty("recommended");
+		expect(s.controller.snapshot("host")).toMatchObject({
+			last: response.workflowData.recovery,
+		});
+	});
+}
+test("opaque provider failure retains measured assessment and actual reservation deltas", async () => {
+	const s = await setup("shadow", {
+		async assess(_packet, options) {
+			expect(options.reserveAttempt()).toBe(true);
+			throw new Error("opaque failure with private content");
+		},
+	});
+	const response = await s.flow.status({
+		request: { view: "compact" },
+		recoveryProposal: s.proposal(),
+	});
+	if (response.status !== "ok" || !("recovery" in response.workflowData))
+		throw new Error(response.summary);
+	expect(response.workflowData.recovery).toMatchObject({
+		kind: "unavailable",
+		reason: "provider",
+		decision: null,
+		telemetry: {
+			attemptsReserved: 1,
+			reservedUsd: JEV_ATTEMPT_RESERVATION_USD,
+			transportLatencyMs: null,
+			transportAttempts: null,
+			transportReservedUsd: null,
+			responseUsage: null,
+		},
+	});
+	expect(JSON.stringify(response.workflowData.recovery)).not.toContain(
+		"private content",
+	);
 });

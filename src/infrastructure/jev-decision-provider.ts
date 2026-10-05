@@ -2,6 +2,7 @@ import { z } from "zod";
 import type {
 	DecisionPacket,
 	DecisionProvider,
+	DecisionTelemetry,
 } from "../application/ports/decision-provider.js";
 import {
 	JEV_MAX_REQUEST_BYTES,
@@ -72,8 +73,19 @@ export function createJevDecisionProvider(
 			);
 		},
 		async assess(packet, options) {
+			const skipped: DecisionTelemetry = {
+				transportLatencyMs: null,
+				transportAttempts: 0,
+				transportReservedUsd: 0,
+				responseUsage: null,
+			};
 			const key = readApiKey();
-			if (!key) return { kind: "unavailable", reason: "missing-key" };
+			if (!key)
+				return {
+					kind: "unavailable",
+					reason: "missing-key",
+					telemetry: skipped,
+				};
 			const state = JSON.stringify(packet);
 			const packetText = [
 				packet.goal,
@@ -90,7 +102,11 @@ export function createJevDecisionProvider(
 				state.includes(key) ||
 				packetText.some((value) => sensitiveField.test(value))
 			)
-				return { kind: "unavailable", reason: "sensitive-packet" };
+				return {
+					kind: "unavailable",
+					reason: "sensitive-packet",
+					telemetry: skipped,
+				};
 			const { body, answers } = buildRequest(packet);
 			const response = await requestJev(body, {
 				apiKey: key,
@@ -98,7 +114,14 @@ export function createJevDecisionProvider(
 				budget: { reserve: options.reserveAttempt },
 				...(transport ? { transport } : {}),
 			});
-			if (!response.ok) return { kind: "unavailable", reason: response.reason };
+			const telemetry: DecisionTelemetry = {
+				transportLatencyMs: response.latencyMs,
+				transportAttempts: response.attempts,
+				transportReservedUsd: response.reservedUsd,
+				responseUsage: null,
+			};
+			if (!response.ok)
+				return { kind: "unavailable", reason: response.reason, telemetry };
 			const resolved = z
 				.object({
 					model: z
@@ -112,6 +135,7 @@ export function createJevDecisionProvider(
 					kind: "unavailable",
 					reason: "model-mismatch",
 					resolvedModel: resolved.data.model,
+					telemetry,
 				};
 			const parsed = z
 				.object({
@@ -124,7 +148,7 @@ export function createJevDecisionProvider(
 				})
 				.safeParse(response.payload);
 			if (!parsed.success)
-				return { kind: "unavailable", reason: "invalid-response" };
+				return { kind: "unavailable", reason: "invalid-response", telemetry };
 			const choice = Choice.parse(parsed.data.answers.choice),
 				ids = [...packet.candidates.map((c) => c.id), "abstain"];
 			if (
@@ -137,7 +161,11 @@ export function createJevDecisionProvider(
 				choice.probabilities[choice.choice] !==
 					Math.max(...Object.values(choice.probabilities))
 			)
-				return { kind: "unavailable", reason: "invalid-distribution" };
+				return {
+					kind: "unavailable",
+					reason: "invalid-distribution",
+					telemetry,
+				};
 			const assessments: Record<string, { goal: number; suitability: number }> =
 				{};
 			for (const [index, candidate] of packet.candidates.entries())
@@ -155,6 +183,13 @@ export function createJevDecisionProvider(
 				inputTokens: parsed.data.usage.input_tokens,
 				outputTokens: parsed.data.usage.output_tokens,
 				latencyMs: response.latencyMs,
+				telemetry: {
+					...telemetry,
+					responseUsage: {
+						inputTokens: parsed.data.usage.input_tokens,
+						outputTokens: parsed.data.usage.output_tokens,
+					},
+				},
 			};
 		},
 	};

@@ -33,8 +33,10 @@ import type {
 } from "./ports/decision-provider.js";
 import { JEV_ATTEMPT_RESERVATION_USD } from "./ports/decision-provider.js";
 import {
+	type LastRecoveryAssessment,
 	type RecoveryActivation,
 	recoveryActivationView,
+	recoveryDecisionView,
 } from "./recovery-status.js";
 import type { SessionCloseRequest } from "./schema.js";
 import { compactProjection } from "./session-projection.js";
@@ -79,7 +81,11 @@ type Lease = {
 	selections: Set<string>;
 	pending: Grant | null;
 	inFlight: boolean;
-	last: Record<string, unknown> | null;
+	last:
+		| LastRecoveryAssessment
+		| Readonly<{ kind: "stale" | "cancelled" }>
+		| Readonly<{ kind: "executed"; operationId: string; featureId: string }>
+		| null;
 	proposalPrompt: string | null;
 };
 type Host = {
@@ -818,6 +824,9 @@ export class RecoveryController {
 		lease.inFlight = true;
 		const controller = lease.controller;
 		let attemptReserved = false;
+		const assessmentStarted = this.#now();
+		const initialCalls = lease.calls;
+		const initialReservedUsd = lease.reservedUsd;
 		let advice: DecisionAdvice;
 		try {
 			advice = await this.#provider.assess(packet, {
@@ -901,6 +910,30 @@ export class RecoveryController {
 					? advice.model
 					: (advice.resolvedModel ?? null),
 			requestedModel: "jev-1.13.0",
+			telemetry: {
+				...(advice.telemetry ?? {
+					transportLatencyMs:
+						advice.kind === "answered" ? advice.latencyMs : null,
+					transportAttempts: null,
+					transportReservedUsd: null,
+					responseUsage:
+						advice.kind === "answered"
+							? {
+									inputTokens: advice.inputTokens,
+									outputTokens: advice.outputTokens,
+								}
+							: null,
+				}),
+				assessmentElapsedMs: this.#now() - assessmentStarted,
+				attemptsReserved: lease.calls - initialCalls,
+				reservedUsd: lease.reservedUsd - initialReservedUsd,
+			},
+			decision: recoveryDecisionView(
+				advice,
+				candidate,
+				attemptReserved,
+				profile,
+			),
 			selectedCandidateId: selected?.id ?? null,
 			action: selected?.action ?? null,
 			featureId: selected?.featureId ?? null,

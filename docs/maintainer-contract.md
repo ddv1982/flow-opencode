@@ -225,17 +225,15 @@ manager contract.
   rather than overwrite or delete either side. Closed status re-derives an
   archive collision from the existing history document, so interruption cannot
   restore automatic retry. This behavior adds no persisted recovery state.
-- Every close path whose terminal state was durably accepted returns the same
-  derived `workflowData.delivery`: initial success, archive-pending recovery,
-  exact retry, and delayed replay from history. The projection declares a
-  `handoff` with `formatVersion: 1` and
-  `externalActionAuthority: "not-granted"`, then contains
-  the goal, closure, completed/total progress, every planned feature's attempt
-  count, latest outcome, terminal findings, Flow-reported artifact groups, and
-  derived tiered assurance with explicit limitations.
-- Delivery is recomputed from the canonical closed Session or archive. It is not
-  written into Session v5 or archive JSON and is not a report artifact unless
-  the user separately requests one.
+- Every durably accepted close returns identical derived `workflowData.delivery`
+  on success, archive-pending recovery, exact retry, and delayed history replay.
+  `handoff` declares `formatVersion: 1` and `externalActionAuthority: "not-granted"`.
+  Delivery contains goal, closure, progress, each feature's attempts, outcome,
+  terminal findings, reported artifact groups, and tiered assurance limits.
+  `summary.lines` is the default handoff. Full detail remains in `report` in
+  that same close response. Blocked `statusReport` stays unchanged.
+- Delivery derives from the closed Session or archive. Session v5 and archive
+  JSON store neither projection nor report. A report artifact needs a user request.
 - Source identity hashes sorted effective workspace path/type/content tuples;
   `.git` and `.flow` are excluded. It is a content fingerprint, not a Git audit
   chain.
@@ -257,8 +255,11 @@ implicit selection. See [Session v5](#session-v5).
 With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow advice (six attempts,
 $0.02). Off disables advice, not retry limits. First retry stays automatic;
 fresh direction permits one retry/start. Shadow grants nothing; release
-delegation is disabled. `recoveryStatus` separates configuration, attempts and
-outcome. See
+delegation is disabled. `recoveryStatus.last` adds process-local assessment duration,
+transport attempts, reservation deltas, scores, and threshold checks. `reservedUsd`
+is an upper-bound reservation, not billed cost. `responseUsage` counts only the
+final validated response, excluding failed attempts. Without validated usage it
+is null. Custom providers may leave transport facts null. See
 [ADR 0016](adr/0016-delegated-recovery.md).
 
 ### Commands

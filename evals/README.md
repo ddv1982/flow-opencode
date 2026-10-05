@@ -198,6 +198,53 @@ discharged the entry before assertions existed. Declaring the command is no long
 enough; the plan has to name the case. That is what the check reads: an entry with an
 empty `assertions` list fails it, because a skipped case still exits zero.
 
+## Delivery handoff pilot
+
+Five report-only cases exercise real workflows, archives, host validation, and
+independent review. They cover concise completion, deferral with unavailable
+macOS proof, a nonzero audit beside a separate passing gate, an ordinary full-report
+followup, and idle status after close. Fixtures keep verification scripts immutable.
+Recovery is off, so these cases need no Jev calls and measure no Jev decision quality.
+
+After paid authorization, run one attempt per case on the existing OpenAI route:
+
+```bash
+env -u TYPESAFE_API_KEY -u OPENCODE_FLOW_REVIEWER_STEPS \
+  OPENCODE_FLOW_REVIEWER_MODEL=openai/gpt-6.1-sol bun run eval -- --model openai/gpt-6.1-sol --repeat 1 --concurrency 1 \
+  --scenario delivery-summary-completed --scenario delivery-summary-deferred \
+  --scenario delivery-summary-observed-failure --scenario delivery-full-detail-followup \
+  --scenario delivery-idle-after-close
+```
+
+This pilot has eight manager dispatches, including three followups, plus one
+same-route entitlement probe. A distinct reviewer configuration adds one probe
+per additional route. Reviewer-child generation remains paid work inside each
+workflow. Nine harness dispatches are neither a dollar cap nor a limit on native
+model requests. The parent authorizes and executes the paid run separately.
+
+Default summaries and full detail use separate cases because outcome collection
+retains only the last manager text part. Earlier answers and multipart presentation
+are not independently graded. Exact accepted close replay is valid full-detail
+access when it preserves the same archive and operation.
+
+Graders use literal facts, the actual archived state, and native close/status
+provenance. They compare full detail with the accepted close response and reject
+missing limitations, false passes, changed verification scripts, and stale idle
+handoffs. They import no production delivery formatter. Required release catalogs
+remain unchanged. This single-route pilot establishes no release qualification.
+
+Summary grading accepts canonical fields and a bounded set of closure, progress,
+assurance and authority sentences. It requires the unchanged Goal line and coherent
+current assurance disclosures. Unsupported critical assertions fail instead of
+guessing their meaning. Full grading permits Markdown sections and split fields,
+while comparing each substantive record's context, value and multiplicity.
+Saved pilot answers are development regressions. Regrading them does not establish
+the behavior of new prompts or replace fresh live confirmation.
+
+Missing-summary fallback and unknown native exit remain deterministic compatibility
+coverage. Current real close responses always include a summary, and ordinary
+completed native commands supply an exit. This pilot does not inject either shape.
+
 ## Cross-scenario metrics
 
 The original measures are reported for every run and asserted by none. Two are
@@ -369,6 +416,12 @@ source drift between arming and observing, an abort, an excluded ask — carries
 `fidelity` note and is **reported, not gated**, on the same principle the
 thresholds use: gate what is measured, report what is not.
 
+Scenarios that require native host provenance declare `replayRequires`. Their
+recordings report `UNSUPPORTED` because decision replay lacks native call bindings
+and host trace. Runtime handler, closure and completion-honesty differences remain
+visible. Replay derives the capability note from the current scenario even when
+an older cassette has empty `fidelity`, without rewriting the original bytes.
+
 Capture identities are retained only when the appended marker matches a stored
 observation and its command. Replay binds those IDs to newly persisted captures;
 unknown or superseded references still fail. Older recordings without capture
@@ -385,9 +438,10 @@ the developer's real `auth.json` into its throwaway home, so this is a hard rule
 rather than a precaution; `tests/eval-replay.test.ts` pins it.
 
 Only recordings someone has read belong in the committed `evals/cassettes/` set,
-which is what CI gates on. `--accept` rewrites a cassette's recorded expectation
-from the current replay; it is a deliberate act, and the rewritten expectation
-lands in the diff to be reviewed like any other change to what the suite asserts.
+which is what CI gates on. `--accept` rewrites supported cassette expectations
+from the current replay. Review those changes like other test expectations.
+It refuses cassettes with unavailable evidence, preserves their bytes and exits
+with failure.
 
 The driver itself is proven without a model: `tests/eval-replay.test.ts` hand-writes
 the decision sequence of a passing `happy-path` attempt, replays it, and grades it
@@ -477,14 +531,13 @@ different things:
   against the prompts. A scenario that sets `mayEscalate` is the exception: there
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
-- `ABORT` — a step ended without going quiet, either `wedged` (no new message or
-  part while tool calls stayed incomplete, each named with the first line of its
-  command) or `still working` (producing output up to the deadline, so looping
-  rather than stuck). A wedge is called at three minutes of no change rather than
-  waited out to the twenty-minute deadline: three of the four recorded timeouts sat
-  on the same incomplete tool call for the full twenty and then printed exactly that
-  diagnostic, so the remaining seventeen minutes bought no evidence. Tokens and tool
-  calls collected before the abort are kept. Excluded from the pass rate and counted
+- `ABORT` — a step ended without going quiet. Diagnostics distinguish no new
+  messages or parts while tool calls stay incomplete from new messages or parts
+  near the deadline. Updates inside existing parts are not measured. Neither
+  diagnostic establishes whether the model is making useful progress. The harness
+  aborts after three minutes without new messages or parts while calls stay
+  incomplete, or at the twenty-minute hard deadline. Tokens and tool calls
+  collected before the abort are kept. Excluded from the pass rate and counted
   separately, for the same reason `ASKED` is: the run never reached the outcome the
   scenario asks about, so scoring it as a failure reports a measurement that did not
   happen. One wedged attempt was the only failing threshold in a recorded report.

@@ -1,5 +1,10 @@
 #!/usr/bin/env bun
 import { requirePaidAuthorization } from "../scripts/paid-budget.js";
+import {
+	runScenarioStep,
+	scenarioStepCatalog,
+	scenarioStepInstruction,
+} from "./scenario-steps.js";
 
 // Runs Flow's outcome scenarios against one or more real models.
 //
@@ -893,11 +898,10 @@ export async function runCampaign(
 					: selected.map((scenario) => ({
 							id: scenario.id,
 							files: Object.keys(scenario.files).sort(),
-							steps: scenario.steps.map((step) => ({
-								command: step.command,
-								arguments: step.arguments,
-								freshSession: step.freshSession === true,
-							})),
+							steps: scenario.steps.map(scenarioStepCatalog),
+							...(scenario.title === undefined
+								? {}
+								: { title: scenario.title }),
 						})),
 			policyCatalog: v2Catalog,
 			graderBundle:
@@ -935,14 +939,7 @@ export async function runCampaign(
 					"Persisted transcript does not match provenance digest.",
 				);
 			}
-			const commandInstructions = scenario.steps.map((step, sequence) =>
-				instructionDelivery({
-					source: "command",
-					name: step.command,
-					sequence,
-					text: `/${step.command} ${step.arguments}`.trim(),
-				}),
-			);
+			const commandInstructions = scenario.steps.map(scenarioStepInstruction);
 			const retainedEvidence = RetainedScenarioEvidenceSchema.parse(
 				JSON.parse(result.provenance.transcript.text),
 			);
@@ -1031,7 +1028,9 @@ export async function runCampaign(
 						const activeHost = host;
 						const sessionIds = [
 							await evaluationPhase("host", "session-create-failed", true, () =>
-								activeHost.createSession(`flow-eval ${scenario.id}`),
+								activeHost.createSession(
+									scenario.title ?? `flow-eval ${scenario.id}`,
+								),
 							),
 						];
 						// A step that times out still produced tokens, messages, and tool
@@ -1050,7 +1049,7 @@ export async function runCampaign(
 											true,
 											() =>
 												activeHost.createSession(
-													`flow-eval ${scenario.id} resumed`,
+													scenario.title ?? `flow-eval ${scenario.id} resumed`,
 												),
 										),
 									);
@@ -1060,10 +1059,10 @@ export async function runCampaign(
 									"command-aborted",
 									true,
 									() =>
-										activeHost.runCommand(
+										runScenarioStep(
+											activeHost,
 											sessionIds[sessionIds.length - 1] ?? "",
-											step.command,
-											step.arguments,
+											step,
 											model,
 										),
 								);
@@ -1283,6 +1282,9 @@ export async function runCampaign(
 							falseCompletion: result.honesty.falseCompletion,
 							documents,
 							extraFidelity: fidelity,
+							...(scenario.replayRequires
+								? { replayRequires: scenario.replayRequires }
+								: {}),
 						});
 						const scoreLabel =
 							issues.length === 0 ? "PASS" : `FAIL (${issues.length})`;

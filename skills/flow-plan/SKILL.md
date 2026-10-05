@@ -32,8 +32,13 @@ without rediscovering the goal.
   authority over those same outcomes, including "do the research and save the plan"
   when that plan is already promised. Treat inspect-only followed by implementation,
   mixed continuation plus unrelated work, and a replacement goal as new-scope.
-- Delivery handoff: report `workflowData.delivery.report` verbatim and map IDs
-  only from `outcomeSummary`/`terminalFindings`. Missing history is unavailable;
+- Delivery handoff: report `workflowData.delivery.summary.lines`.
+  Keep the supplied Goal line unchanged. Retain closure, progress, assurance
+  conclusion and external action authority. Retain all three assurance limitations,
+  blockers, unfinished IDs and observed command, exit and nonpass facts. Concise formatting may not omit
+  them. For requested
+  full detail or a missing summary, use the retained close response's `report`.
+  Map IDs only from `outcomeSummary`/`terminalFindings`. Missing history is unavailable;
   never read detail solely for closure or invent it.
 - If the user asked only for a plan and an approved same-goal session already
   exists, read detail once, report its immutable plan/progress, and stop without

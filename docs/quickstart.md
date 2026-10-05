@@ -58,7 +58,8 @@ Choose work where an incorrect change would be expensive:
 Flow inspects the repository and proposes an immutable feature plan. Confirm the
 canonical repository gate and any external evidence before approval. After
 approval, Flow implements one feature at a time, observes validation, dispatches
-an independent review, and closes with a versioned delivery report.
+an independent review, and closes with a short delivery summary. The same close
+response retains the full versioned report for requested detail.
 
 If the host cannot continue between features, run `/flow-run` for each next
 feature. Run `/flow-status` after any interruption or failed review.

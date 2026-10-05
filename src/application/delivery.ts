@@ -64,6 +64,10 @@ export type DeliveryProjection = Readonly<{
 	findingsDigest: FindingsDigest;
 	observations?: readonly ValidationObservation[];
 	report: ReadonlyArray<string>;
+	summary: Readonly<{
+		lines: ReadonlyArray<string>;
+		fullReportAvailable: true;
+	}>;
 }>;
 
 const LIMITATIONS = [
@@ -241,7 +245,9 @@ const TIER_LABELS = {
 	"caller-declared": "caller-declared",
 } as const;
 
-function formatReport(delivery: Omit<DeliveryProjection, "report">): string[] {
+function formatReport(
+	delivery: Omit<DeliveryProjection, "report" | "summary">,
+): string[] {
 	const lines = delivery.features.flatMap((feature) => [
 		`- ${feature.id} — ${feature.title}`,
 		`  attempts: ${feature.attempts}; latest state: ${feature.latestState}`,
@@ -279,6 +285,44 @@ function formatReport(delivery: Omit<DeliveryProjection, "report">): string[] {
 		"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
 		`- latest attempts: ${delivery.reportedArtifacts.latestAttempts.join(", ") || "none reported"}`,
 		`- superseded attempts only: ${delivery.reportedArtifacts.supersededAttemptsOnly.join(", ") || "none reported"}`,
+	];
+}
+
+function formatSummary(
+	delivery: Omit<DeliveryProjection, "report" | "summary">,
+	unfinishedFeatureIds: readonly string[],
+): string[] {
+	const live = delivery.findingsDigest.filter((finding) => finding.live);
+	const checks = delivery.assurance.checks;
+	return [
+		`Handoff format: ${delivery.handoff.formatVersion}`,
+		`External action authority: ${delivery.handoff.externalActionAuthority}`,
+		`Goal: ${delivery.goal}`,
+		`Closure: ${delivery.closure.kind}${delivery.closure.summary ? `. ${delivery.closure.summary}` : ""}`,
+		`Progress: ${delivery.progress.completed} of ${delivery.progress.total} features complete`,
+		`Unfinished features: ${unfinishedFeatureIds.join(", ") || "none"}`,
+		...live
+			.filter((finding) => finding.severity === "blocking")
+			.map(
+				(finding) =>
+					`Blocking finding ${finding.featureId} ${finding.findingId}: ${finding.summary}`,
+			),
+		`Nonblocking live findings: advisory ${live.filter((finding) => finding.severity === "advisory").length}. Historical findings: ${delivery.findingsDigest.length - live.length}.`,
+		...(delivery.observations ?? []).map(
+			(observation) =>
+				`Observed ${JSON.stringify(observation.command)}: exit ${observation.exitCode ?? "unavailable"}, host ${observation.hostPlatform ?? "unrecorded"}; this does not claim the command passed.`,
+		),
+		`Assurance: ${delivery.assurance.conclusion.replaceAll("-", " ")}`,
+		`Assurance checks: ${checks.filter((check) => check.status === "satisfied").length} satisfied, ${checks.filter((check) => check.status === "not-applicable").length} not applicable, ${checks.filter((check) => check.status === "unsatisfied").length} unsatisfied.`,
+		...checks
+			.filter((check) => check.status === "unsatisfied")
+			.map(
+				(check) =>
+					`- unsatisfied ${check.id} [${TIER_LABELS[check.tier]}] ${check.label}: ${check.explanation}`,
+			),
+		...delivery.assurance.limitations.map((limitation) => `- ${limitation}`),
+		`Reported artifacts: ${delivery.reportedArtifacts.latestAttempts.length} latest, ${delivery.reportedArtifacts.supersededAttemptsOnly.length} superseded only. Caller declarations, not an exact or exhaustive Git delta.`,
+		"Full report is included in this close response.",
 	];
 }
 
@@ -345,6 +389,18 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 		assurance: assuranceProjection(session),
 		findingsDigest: digest,
 		...(observations.length > 0 ? { observations } : {}),
-	} satisfies Omit<DeliveryProjection, "report">;
-	return { ...delivery, report: formatReport(delivery) };
+	} satisfies Omit<DeliveryProjection, "report" | "summary">;
+	return {
+		...delivery,
+		report: formatReport(delivery),
+		summary: {
+			lines: formatSummary(
+				delivery,
+				features
+					.filter((feature) => !isFeatureComplete(session, feature.id))
+					.map((feature) => feature.id),
+			),
+			fullReportAvailable: true,
+		},
+	};
 }

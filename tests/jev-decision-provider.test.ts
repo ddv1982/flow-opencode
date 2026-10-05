@@ -1,5 +1,8 @@
 import { expect, spyOn, test } from "bun:test";
-import type { DecisionPacket } from "../src/application/ports/decision-provider.js";
+import {
+	type DecisionPacket,
+	JEV_ATTEMPT_RESERVATION_USD,
+} from "../src/application/ports/decision-provider.js";
 import { createJevDecisionProvider } from "../src/infrastructure/jev-decision-provider.js";
 
 const packet: DecisionPacket = {
@@ -68,13 +71,13 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 		};
 		expect(
 			await createJevDecisionProvider(() => undefined).assess(packet, options),
-		).toEqual({ kind: "unavailable", reason: "missing-key" });
+		).toMatchObject({ kind: "unavailable", reason: "missing-key" });
 		expect(
 			await createJevDecisionProvider(() => "credential").assess(
 				{ ...packet, goal: "password=credential" },
 				options,
 			),
-		).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
+		).toMatchObject({ kind: "unavailable", reason: "sensitive-packet" });
 		for (const altered of [
 			{ ...packet, goal: '{"password":"hunter2hunter2"}' },
 			{ ...packet, goal: "GITHUB_TOKEN=ghp_secretvalue" },
@@ -114,7 +117,7 @@ test("runtime adapter refuses absent keys and sensitive packets before transport
 					altered as DecisionPacket,
 					options,
 				),
-			).toEqual({ kind: "unavailable", reason: "sensitive-packet" });
+			).toMatchObject({ kind: "unavailable", reason: "sensitive-packet" });
 		expect(spy).toHaveBeenCalledTimes(0);
 	} finally {
 		spy.mockRestore();
@@ -197,7 +200,7 @@ test("runtime adapter rejects unknown model and invalid distributions", async ()
 				signal: new AbortController().signal,
 				reserveAttempt: () => true,
 			}),
-		).toEqual({
+		).toMatchObject({
 			kind: "unavailable",
 			reason: "model-mismatch",
 			resolvedModel: "jev-1.14.0",
@@ -214,7 +217,7 @@ test("runtime adapter rejects unknown model and invalid distributions", async ()
 				signal: new AbortController().signal,
 				reserveAttempt: () => true,
 			}),
-		).toEqual({ kind: "unavailable", reason: "invalid-response" });
+		).toMatchObject({ kind: "unavailable", reason: "invalid-response" });
 	} finally {
 		unrecognized.mockRestore();
 	}
@@ -247,4 +250,115 @@ test("runtime adapter rejects unknown model and invalid distributions", async ()
 			spy.mockRestore();
 		}
 	}
+});
+
+for (const [name, payload, reason] of [
+	["malformed", "{", "malformed"],
+	["schema", JSON.stringify({ model: "jev-1.13.0" }), "invalid-response"],
+	[
+		"model",
+		JSON.stringify({ ...response(), model: "jev-1.14.0" }),
+		"model-mismatch",
+	],
+] as const) {
+	test(`failed ${name} response retains transport facts without validated usage`, async () => {
+		const result = await createJevDecisionProvider(
+			() => "fixture",
+			async () => new Response(payload),
+		).assess(packet, {
+			signal: new AbortController().signal,
+			reserveAttempt: () => true,
+		});
+		expect(result).toMatchObject({
+			kind: "unavailable",
+			reason,
+			telemetry: {
+				transportAttempts: 1,
+				transportReservedUsd: JEV_ATTEMPT_RESERVATION_USD,
+				responseUsage: null,
+			},
+		});
+		expect(result.telemetry?.transportLatencyMs).toBeGreaterThanOrEqual(0);
+	});
+}
+test("retry telemetry counts attempts but usage belongs only to the validated final response", async () => {
+	let attempts = 0;
+	const result = await createJevDecisionProvider(
+		() => "fixture",
+		async () => {
+			attempts++;
+			return attempts === 1
+				? new Response("busy", { status: 503 })
+				: Response.json(response());
+		},
+	).assess(packet, {
+		signal: new AbortController().signal,
+		reserveAttempt: () => true,
+	});
+	expect(result).toMatchObject({
+		kind: "answered",
+		telemetry: {
+			transportAttempts: 2,
+			transportReservedUsd: 2 * JEV_ATTEMPT_RESERVATION_USD,
+			responseUsage: { inputTokens: 100, outputTokens: 10 },
+		},
+	});
+});
+test("HTTP failure retains all reserved attempts and unknown usage", async () => {
+	const result = await createJevDecisionProvider(
+		() => "fixture",
+		async () => new Response("busy", { status: 503 }),
+	).assess(packet, {
+		signal: new AbortController().signal,
+		reserveAttempt: () => true,
+	});
+	expect(result).toMatchObject({
+		kind: "unavailable",
+		reason: "http",
+		telemetry: {
+			transportAttempts: 3,
+			transportReservedUsd: 3 * JEV_ATTEMPT_RESERVATION_USD,
+			responseUsage: null,
+		},
+	});
+});
+test("skipped requests disclose zero reservations and unknown transport duration", async () => {
+	const result = await createJevDecisionProvider(() => undefined).assess(
+		packet,
+		{
+			signal: new AbortController().signal,
+			reserveAttempt: () => {
+				throw new Error("must not reserve");
+			},
+		},
+	);
+	expect(result.telemetry).toEqual({
+		transportLatencyMs: null,
+		transportAttempts: 0,
+		transportReservedUsd: 0,
+		responseUsage: null,
+	});
+});
+test("timeout retains latency and reservation without usage", async () => {
+	const result = await createJevDecisionProvider(
+		() => "fixture",
+		async () =>
+			new Response("limited", {
+				status: 429,
+				headers: { "retry-after": "60" },
+			}),
+	).assess(packet, {
+		signal: new AbortController().signal,
+		reserveAttempt: () => true,
+	});
+	expect(result).toMatchObject({
+		kind: "unavailable",
+		reason: "timeout",
+		telemetry: {
+			transportAttempts: 1,
+			transportReservedUsd: JEV_ATTEMPT_RESERVATION_USD,
+			responseUsage: null,
+		},
+	});
+	expect(result.telemetry?.transportLatencyMs).toBeGreaterThanOrEqual(0);
 });

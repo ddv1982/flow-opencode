@@ -4,6 +4,7 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { parseCaseCatalog, type ValidatedCaseCatalog } from "./catalog.js";
 import type { ModelIdentity, ScheduledCell } from "./report.js";
+import { type ScenarioStep, scenarioStepCatalog } from "./scenario-steps.js";
 
 const RELEASE_POLICY_INPUT = [
 	{
@@ -427,22 +428,14 @@ export function releaseScenarioCatalog(
 	scenarios: readonly {
 		readonly id: string;
 		readonly files: Readonly<Record<string, string>>;
-		readonly steps: readonly {
-			readonly command: string;
-			readonly arguments: string;
-			readonly freshSession?: boolean;
-		}[];
+		readonly steps: readonly ScenarioStep[];
 	}[],
 	packageVersion = "standard",
 ) {
 	return selectReleaseScenarios(scenarios, packageVersion).map((scenario) => ({
 		id: scenario.id,
 		files: Object.keys(scenario.files).sort(),
-		steps: scenario.steps.map((step) => ({
-			command: step.command,
-			arguments: step.arguments,
-			freshSession: step.freshSession === true,
-		})),
+		steps: scenario.steps.map(scenarioStepCatalog),
 	}));
 }
 

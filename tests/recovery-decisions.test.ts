@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { z } from "zod";
 import {
 	CorpusSchema,
 	evaluateRecoveryCorpus,
@@ -144,5 +145,41 @@ describe("runtime recovery evaluation", () => {
 		} finally {
 			await rm(directory, { recursive: true, force: true });
 		}
+	});
+});
+
+test("offline preparation repeats exactly while provider assessments retain measured duration", async () => {
+	const corpus = await load();
+	const first = await evaluateRecoveryCorpus(corpus);
+	await new Promise((resolve) => setTimeout(resolve, 10));
+	const second = await evaluateRecoveryCorpus(corpus);
+	expect(second).toEqual(first);
+	expect(
+		first.rows.find((row) => row.id === "supported-retry")?.decision,
+	).toMatchObject({
+		telemetry: { assessmentElapsedMs: 0 },
+	});
+	const entry = corpus.cases.find((row) => row.id === "supported-retry");
+	if (!entry) throw new Error("Missing eligible fixture.");
+	const evaluated = await evaluateRecoveryCorpus(
+		{ ...corpus, cases: [entry] },
+		{
+			async assess(packet, options) {
+				await new Promise((resolve) => setTimeout(resolve, 10));
+				return certain.assess(packet, options);
+			},
+		},
+	);
+	const decision = z
+		.object({
+			telemetry: z.object({
+				assessmentElapsedMs: z.number().finite().nonnegative(),
+			}),
+		})
+		.parse(evaluated.rows[0]?.decision);
+	expect(decision.telemetry.assessmentElapsedMs).toBeGreaterThanOrEqual(5);
+	expect(evaluated.rows[0]?.decision).toMatchObject({
+		kind: "selected",
+		selectedCandidateId: "repair",
 	});
 });
