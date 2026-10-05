@@ -9,6 +9,9 @@ import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 import confirmation from "./fixtures/delivery-confirmation-answers.json" with {
 	type: "json",
 };
+import targeted from "./fixtures/delivery-targeted-answer.json" with {
+	type: "json",
+};
 
 function object(value: unknown): Record<string, unknown> {
 	if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -247,3 +250,40 @@ for (const claim of [
 			),
 		).not.toEqual([]);
 	});
+
+function targetedFixture() {
+	const input = autoQualifiedOutcome("single", {
+		goal: targeted.goal,
+		featureId: targeted.featureId,
+	});
+	const close = input.allCalls.find(
+		(call) => call.tool === "flow_session_close",
+	);
+	if (!close) throw new Error("Missing native helper close.");
+	object(object(close.output).workflowData).delivery = structuredClone({
+		report: targeted.report,
+		assurance: targeted.assurance,
+		findingsDigest: targeted.findingsDigest,
+	});
+	const expectation: DeliveryExpectation = {
+		closure: "completed",
+		presentation: "summary",
+		gate: "node scripts/verify.mjs",
+		allowedPaths: ["src/parser.mjs"],
+	};
+	expect(checkReviewerEvidenceAccess(input, input.archives[0])).toEqual([]);
+	expect(
+		deliveryIssues(
+			{ ...input, finalText: targeted.summary.join("\n") },
+			expectation,
+		),
+	).toEqual([]);
+	return { input, expectation };
+}
+
+test("targeted faithful closure, compound counts and passing command result retain every required fact", () => {
+	const { input, expectation } = targetedFixture();
+	expect(
+		deliveryIssues({ ...input, finalText: targeted.answer }, expectation),
+	).toEqual([]);
+});
