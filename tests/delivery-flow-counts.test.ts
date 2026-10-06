@@ -251,7 +251,7 @@ test("malformed registered command results remain unsupported without borrowing 
 			qualification: null,
 		},
 	]);
-	expect(facts.unsupported).toEqual([line.slice(0, -1)]);
+	expect(facts.unsupported).toEqual([line]);
 	expect(facts.closure).toEqual([]);
 	expect(facts.progress).toEqual([]);
 	expect(facts.authority).toEqual([]);
