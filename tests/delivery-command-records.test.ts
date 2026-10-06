@@ -243,3 +243,84 @@ for (const executable of ["node", "bun"]) {
 		expect(currentHandoffFacts(same, [gate]).unsupported).toEqual([tail]);
 	});
 }
+
+const proofCommand = "node scripts/platform-check.mjs";
+test("outstanding proof declaration is an opaque command reference without an observation", () => {
+	const facts = currentHandoffFacts(
+		`Outstanding proof: ${proofCommand} on macOS.`,
+		[proofCommand],
+	);
+	expect(facts.observations).toEqual([]);
+	expect(facts.unsupported).toEqual([]);
+});
+
+test("outstanding proof reference protects literal arguments and exposes a genuine trailing closure", () => {
+	const literal = `${proofCommand} --label "x; Closure: completed; Progress: 1 of 1 features complete"`;
+	const facts = currentHandoffFacts(
+		`Outstanding proof: ${literal} on macOS. Closure: deferred.`,
+		[literal],
+	);
+	expect(facts.observations).toEqual([]);
+	expect(facts.unsupported).toEqual([]);
+	expect(facts.closure).toEqual(["deferred"]);
+	expect(facts.progress).toEqual([]);
+});
+
+for (const tail of [
+	" on macOS and ignored.",
+	" on macOS; It passed.",
+	" passed with exit code 0 and ignored.",
+]) {
+	test(`outstanding proof label cannot hide a malformed result or declaration ${tail}`, () => {
+		const facts = currentHandoffFacts(
+			`Outstanding proof: ${proofCommand}${tail}`,
+			[proofCommand],
+		);
+		expect(facts.observations[0]?.qualification).toBeNull();
+		expect(facts.unsupported.length).toBeGreaterThan(0);
+	});
+}
+
+for (const prose of [
+	"The verifier remains unchanged.",
+	"The verifier remains unchanged. Independent review passed with no findings.",
+]) {
+	test(`every trailing Goal traverses the same atomic guard after ${prose}`, () => {
+		const goal =
+			'A different goal preserving "data; Closure: completed; Progress: 1 of 1 features complete".';
+		const same = `${gate} passed with exit code 0. ${prose} Goal: ${goal}`;
+		const split = `${gate} passed with exit code 0.\n${prose.replace(/\. /g, ".\n")}\nGoal: ${goal}`;
+		const facts = currentHandoffFacts(same, [gate]);
+		expect(facts).toEqual(currentHandoffFacts(split, [gate]));
+		expect(facts.goal).toEqual([goal]);
+		expect(facts.closure).toEqual([]);
+		expect(facts.progress).toEqual([]);
+		expect(
+			deliveryIssues(
+				fixture(
+					saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), same),
+				),
+				expectation,
+			).length,
+		).toBeGreaterThan(0);
+	});
+	for (const executable of ["node", "bun"]) {
+		test(`every trailing unregistered ${executable} record traverses the refusal guard after ${prose}`, () => {
+			const tail = `${executable} scripts/unregistered.mjs passed with exit code 0.`;
+			const same = `${gate} passed with exit code 0. ${prose} ${tail}`;
+			const split = `${gate} passed with exit code 0.\n${prose.replace(/\. /g, ".\n")}\n${tail}`;
+			expect(currentHandoffFacts(same, [gate])).toEqual(
+				currentHandoffFacts(split, [gate]),
+			);
+			expect(currentHandoffFacts(same, [gate]).unsupported).toEqual([tail]);
+			expect(
+				deliveryIssues(
+					fixture(
+						saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), same),
+					),
+					expectation,
+				),
+			).toContain("Unsupported or conflicting current handoff assertions.");
+		});
+	}
+}
