@@ -46,6 +46,51 @@ export const NativeToolProvenanceSchema = z
 	.strict();
 export type NativeToolProvenance = z.infer<typeof NativeToolProvenanceSchema>;
 
+export const HostAbortObservationSchema = z
+	.object({
+		rootSessionId: Id,
+		observedAt: Order,
+		abortRequestedAt: Order,
+		startedAt: Order,
+		excludedMs: Order,
+		trigger: z.discriminatedUnion("kind", [
+			z
+				.object({
+					kind: z.literal("stall"),
+					unchangedMs: Order,
+					lastActivityAt: Order,
+					thresholdMs: z.literal(180000),
+				})
+				.strict(),
+			z
+				.object({
+					kind: z.literal("deadline"),
+					observedElapsedMs: Order,
+					timeoutMs: z.literal(1200000),
+				})
+				.strict(),
+		]),
+		pending: z
+			.array(
+				z
+					.object({
+						native: NativeToolProvenanceSchema,
+						tool: Id,
+						status: z.enum(["pending", "running"]),
+						input: z.record(z.string(), z.unknown()),
+					})
+					.strict(),
+			)
+			.min(1)
+			.max(128),
+	})
+	.strict()
+	.refine(
+		(value) => Buffer.byteLength(JSON.stringify(value)) <= 256 * 1024,
+		"Host abort observation exceeds its byte bound.",
+	);
+export type HostAbortObservation = z.infer<typeof HostAbortObservationSchema>;
+
 const UserPartSchema = z
 	.object({
 		id: Id,

@@ -531,12 +531,16 @@ different things:
   against the prompts. A scenario that sets `mayEscalate` is the exception: there
   the ask is the end the contract leaves, so the run is checked like any other and
   reads `PASS+ASK` or `FAIL+ASK`.
-- `ABORT` — a step ended without going quiet. Diagnostics distinguish no new
-  messages or parts while tool calls stay incomplete from new messages or parts
-  near the deadline. Updates inside existing parts are not measured. Neither
-  diagnostic establishes whether the model is making useful progress. The harness
-  aborts after three minutes without new messages or parts while calls stay
-  incomplete, or at the twenty-minute hard deadline. Tokens and tool calls
+- `ABORT` — a step ended without going quiet. Diagnostics distinguish no observed activity
+  while tool calls stay incomplete from activity near the deadline. Owned active
+  text, reasoning and supported tool-argument changes count as activity. Completed
+  history, metadata and timestamp changes do not. Activity does not establish
+  useful progress. The harness aborts after three minutes without observed
+  activity while calls stay incomplete, or at the twenty-minute hard deadline.
+  Before its own watchdog abort, it can retain bounded native pending-call proof.
+  Reserve eligibility requires matching final native identities, inputs, owned
+  lineage and trigger measurements. Missing or conflicting proof stays ineligible.
+  Final native statuses and metadata remain unchanged. Tokens and tool calls
   collected before the abort are kept. Excluded from the pass rate and counted
   separately, for the same reason `ASKED` is: the run never reached the outcome the
   scenario asks about, so scoring it as a failure reports a measurement that did not

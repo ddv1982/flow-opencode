@@ -643,17 +643,31 @@ describe("eval campaign cancellation", () => {
 					return cleanup.promise;
 				}
 				if (url.endsWith("/command")) return Response.json({});
+				if (url.endsWith("/children")) return Response.json([]);
 				return Response.json(
 					failure === "timeout"
 						? []
 						: [
 								{
-									info: { role: "assistant" },
+									info: {
+										id: "msg_wedge",
+										sessionID: "id",
+										role: "assistant",
+										time: { created: 1 },
+									},
 									parts: [
 										{
+											id: "prt_wedge",
+											sessionID: "id",
+											messageID: "msg_wedge",
+											callID: "call_wedge",
 											type: "tool",
 											tool: "bash",
-											state: { status: "running" },
+											state: {
+												status: "running",
+												input: {},
+												time: { start: 1 },
+											},
 										},
 									],
 								},
@@ -682,7 +696,7 @@ describe("eval campaign cancellation", () => {
 				expect(error.message).toContain(
 					failure === "timeout"
 						? "Scenario exceeded 0ms"
-						: "Scenario had no new messages or parts for 0ms",
+						: "Scenario had no observed activity for 0ms",
 				);
 				expect(aborts).toBe(1);
 			} finally {

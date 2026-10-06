@@ -40,6 +40,7 @@ import { consumePaidDispatch } from "../scripts/paid-budget.js";
 import { isArtifactPath } from "../src/domain/artifact.js";
 import { type BunToolchain, runPinnedBunSync } from "./bun-toolchain.js";
 import { CampaignCancelled } from "./campaign-stop.js";
+import { canonicalJson } from "./canonical-json.js";
 import { normalizeRecorded } from "./cassette.js";
 import {
 	type AttemptFailure,
@@ -76,6 +77,8 @@ import {
 } from "./host-observation.js";
 import {
 	collectHostTrace,
+	type HostAbortObservation,
+	HostAbortObservationSchema,
 	type HostTrace,
 	type NativeToolProvenance,
 	nativeToolProvenance,
@@ -322,6 +325,7 @@ type ProviderErrorObservation = Readonly<{
 }>;
 
 export type Outcome = {
+	readonly abortObservation?: HostAbortObservation | undefined;
 	readonly packetBytes?: readonly ReviewerPacketBytes[] | undefined;
 	readonly hostTrace?: HostTrace | undefined;
 	/** Ordered `flow_*` calls only — the workflow's observable spine. */
@@ -1552,10 +1556,12 @@ type MessageEntry = {
 		type: string;
 		tool?: string;
 		text?: string;
+		time?: { start?: number; end?: number };
 		synthetic?: boolean;
 		auto?: boolean;
 		metadata?: Record<string, unknown>;
 		state?: {
+			raw?: string;
 			time?: { start?: number; end?: number };
 			status: string;
 			input?: Record<string, unknown>;
@@ -1565,6 +1571,114 @@ type MessageEntry = {
 		};
 	}[];
 };
+
+type OwnedProgressSession = { id: string; messages: readonly MessageEntry[] };
+function isProgressId(value: unknown): value is string {
+	return (
+		typeof value === "string" &&
+		value.length > 0 &&
+		value.length <= 256 &&
+		!/\s/.test(value)
+	);
+}
+function activeProgressSnapshot(
+	sessions: readonly OwnedProgressSession[],
+	completedMessages: Set<string>,
+	completedParts: Set<string>,
+) {
+	const active: string[] = [];
+	const messageIds = new Set<string>();
+	const partIds = new Set<string>();
+	for (const session of sessions) {
+		for (const entry of session.messages) {
+			const message = entry.info.id;
+			if (
+				!isProgressId(message) ||
+				entry.info.sessionID !== session.id ||
+				messageIds.has(message)
+			)
+				throw new Error("Owned progress transcript is malformed.");
+			messageIds.add(message);
+			for (const part of entry.parts) {
+				if (
+					!isProgressId(part.id) ||
+					!isProgressId(part.type) ||
+					part.sessionID !== session.id ||
+					part.messageID !== message ||
+					partIds.has(part.id)
+				)
+					throw new Error("Owned progress transcript is malformed.");
+				if (
+					part.type === "tool" &&
+					(!isProgressId(part.tool) ||
+						!isProgressId(part.callID) ||
+						!part.state ||
+						!["pending", "running", "completed", "error"].includes(
+							part.state.status,
+						))
+				)
+					throw new Error("Owned progress tool is malformed.");
+				partIds.add(part.id);
+			}
+			const messageKey = canonicalJson([session.id, message]);
+			if (
+				entry.info.role !== "assistant" ||
+				entry.info.time?.completed !== undefined
+			)
+				completedMessages.add(messageKey);
+			if (completedMessages.has(messageKey)) continue;
+			active.push(canonicalJson([messageKey, "assistant"]));
+			for (const part of entry.parts) {
+				const key = canonicalJson([session.id, message, part.id]);
+				const terminal =
+					part.time?.end !== undefined ||
+					(part.type === "tool" &&
+						(part.state?.status === "completed" ||
+							part.state?.status === "error"));
+				if (terminal) completedParts.add(key);
+				if (completedParts.has(key)) continue;
+				let value: unknown = null;
+				if (part.type === "text" || part.type === "reasoning") {
+					if (typeof part.text !== "string")
+						throw new Error("Owned progress content is malformed.");
+					value = part.text;
+				} else if (part.type === "tool") {
+					if (!part.state || !isRecord(part.state.input))
+						throw new Error("Owned progress tool input is malformed.");
+					if (
+						part.state.status === "pending" &&
+						part.state.raw !== undefined &&
+						typeof part.state.raw !== "string"
+					)
+						throw new Error("Owned progress pending arguments are malformed.");
+					value = [
+						part.tool,
+						part.callID,
+						part.state.status,
+						part.state.input,
+						part.state.status === "pending" ? (part.state.raw ?? "") : null,
+					];
+				}
+				active.push(
+					canonicalJson([
+						key,
+						part.type,
+						createHash("sha256").update(canonicalJson(value)).digest("hex"),
+					]),
+				);
+			}
+		}
+	}
+	return createHash("sha256")
+		.update(
+			canonicalJson([
+				active.toSorted(),
+				[...completedMessages].sort(),
+				[...completedParts].sort(),
+			]),
+		)
+		.digest("hex");
+}
 
 type SessionMessages = ObservedSession & {
 	readonly messages: readonly MessageEntry[] | null;
@@ -1613,6 +1727,7 @@ export class EvalHost {
 	 * and a bare flag would have swallowed it for the rest of the attempt.
 	 */
 	private lastSelfAbortAt = 0;
+	private commandAbortObservation: HostAbortObservation | undefined;
 	private readonly escalationQuestions = new Map<string, EpisodeQuestion>();
 	escalationQuestion(sessionId: string): EpisodeQuestion {
 		const question = this.escalationQuestions.get(sessionId);
@@ -2409,6 +2524,7 @@ export class EvalHost {
 			variant?: string;
 		} = {},
 	): Promise<CommandEnd> {
+		this.commandAbortObservation = undefined;
 		checkCancellation(this.signal);
 		await this.verifyArtifacts();
 		checkCancellation(this.signal);
@@ -2450,6 +2566,7 @@ export class EvalHost {
 			variant?: string;
 		} = {},
 	): Promise<CommandEnd> {
+		this.commandAbortObservation = undefined;
 		checkCancellation(this.signal);
 		await this.verifyArtifacts();
 		checkCancellation(this.signal);
@@ -2487,6 +2604,13 @@ export class EvalHost {
 			request: SessionRequest;
 		},
 	): Promise<CommandEnd> {
+		this.commandAbortObservation = undefined;
+		const startedAt = Date.now();
+		const completedMessages = new Set<string>();
+		const completedParts = new Set<string>();
+		let activitySignature = "";
+		let lastSessions: readonly OwnedProgressSession[] = [];
+		let observedAt = startedAt;
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
 		const stalledMs = Math.min(options.stalledMs ?? STALLED_MS, timeoutMs);
@@ -2519,15 +2643,70 @@ export class EvalHost {
 				? ` Excluded ${Math.round(suspendedMs / 1_000)}s this process did not observe, most likely machine suspend.`
 				: "";
 		const wedgeNote = (elapsedMs: number) =>
-			`No new message or part for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}. Updates inside existing parts are not measured.`;
+			`No observed activity for ${Math.round(elapsedMs / 1_000)}s while these tool calls stayed incomplete: ${ownedPending.join(", ") || "none"}. Activity does not establish useful progress.`;
+		const captureAbort = (kind: "stall" | "deadline") => {
+			const pending: HostAbortObservation["pending"] = [];
+			for (const session of lastSessions)
+				for (const entry of session.messages)
+					for (const [partIndex, part] of entry.parts.entries()) {
+						if (
+							part.type !== "tool" ||
+							(part.state?.status !== "running" &&
+								part.state?.status !== "pending")
+						)
+							continue;
+						const native = nativeToolProvenance(
+							session.id,
+							entry.info,
+							part,
+							partIndex,
+						);
+						if (!native || !part.tool || !isRecord(part.state.input)) return;
+						pending.push({
+							native,
+							tool: part.tool,
+							status: part.state.status,
+							input: part.state.input,
+						});
+					}
+			const abortRequestedAt = Date.now();
+			const trigger =
+				kind === "stall"
+					? {
+							kind,
+							unchangedMs: abortRequestedAt - changedAt,
+							lastActivityAt: changedAt,
+							thresholdMs: stalledMs,
+						}
+					: {
+							kind,
+							observedElapsedMs: abortRequestedAt - startedAt - suspendedMs,
+							timeoutMs,
+						};
+			const candidate = {
+				rootSessionId: sessionId,
+				observedAt,
+				abortRequestedAt,
+				startedAt,
+				excludedMs: suspendedMs,
+				trigger,
+				pending,
+			};
+			if (Buffer.byteLength(JSON.stringify(candidate)) > 256 * 1024) return;
+			const result = HostAbortObservationSchema.safeParse(candidate);
+			this.commandAbortObservation = result.success
+				? structuredClone(result.data)
+				: undefined;
+		};
 		const failDeadline = async (): Promise<never> => {
 			const stalled = Date.now() - changedAt;
 			const [count = "0", parts = "0"] = signature.split(":");
+			captureAbort("deadline");
 			await abortWait();
 			throw new Error(
 				(stalled >= quietMs
 					? `Scenario exceeded ${timeoutMs}ms without going quiet. ${wedgeNote(stalled)}`
-					: `Scenario exceeded ${timeoutMs}ms without going quiet. New messages or parts continued near the deadline (${count} messages, ${parts} parts). This does not establish useful progress.`) +
+					: `Scenario exceeded ${timeoutMs}ms without going quiet. Observed activity continued near the deadline (${count} messages, ${parts} parts). This does not establish useful progress.`) +
 					suspensionNote(),
 			);
 		};
@@ -2609,6 +2788,19 @@ export class EvalHost {
 				throw error;
 			}
 			accountPollElapsed();
+			lastSessions = sessions;
+			observedAt = Date.now();
+			let nextActivity: string;
+			try {
+				nextActivity = activeProgressSnapshot(
+					sessions,
+					completedMessages,
+					completedParts,
+				);
+			} catch (error) {
+				await abortWait();
+				throw error;
+			}
 			const ownedMessages = sessions.flatMap((session) => session.messages);
 			pending = messages.flatMap((entry) =>
 				entry.parts
@@ -2650,7 +2842,8 @@ export class EvalHost {
 				}))
 				.toSorted((left, right) => left.id.localeCompare(right.id));
 			const next = `${ownedMessages.length}:${ownedMessages.reduce((total, entry) => total + entry.parts.length, 0)}:${JSON.stringify(counts)}`;
-			const changed = next !== signature;
+			const changed = nextActivity !== activitySignature;
+			activitySignature = nextActivity;
 			signature = next;
 			if (changed) changedAt = Date.now();
 			if (changed || busy) settledAt = Date.now();
@@ -2685,16 +2878,11 @@ export class EvalHost {
 				return "escalated";
 			}
 			const stalled = Date.now() - changedAt;
-			// A wedge is diagnosable long before the deadline, and the deadline used to
-			// prove it the slow way: three of the four recorded timeouts spent seventeen
-			// further minutes on the same incomplete tool call, then printed the sentence
-			// below. Ending it here reaches the same finding with the same evidence and
-			// hands the remaining attempts their wall clock back. Wedges are already out
-			// of every pass-rate denominator, so nothing scored changes.
 			if (isWedged(ownedPending, stalled, stalledMs)) {
+				captureAbort("stall");
 				await abortWait();
 				throw new Error(
-					`Scenario had no new messages or parts for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
+					`Scenario had no observed activity for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
 				);
 			}
 			if (Date.now() > deadline) {
@@ -3139,6 +3327,10 @@ export class EvalHost {
 				childrenComplete:
 					rootMetadataComplete && !descendantResult.endpointFailed,
 			}),
+			...(this.commandAbortObservation &&
+			sessionIds.includes(this.commandAbortObservation.rootSessionId)
+				? { abortObservation: this.commandAbortObservation }
+				: {}),
 			allCalls,
 			flowCalls: allCalls.filter((call) => call.tool.startsWith("flow_")),
 			actors,
