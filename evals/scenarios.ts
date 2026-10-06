@@ -736,7 +736,10 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			...content.matchAll(/(?:^|\n)([ \t]*)(\d+)[.)][ \t]+([^\n]*)/g),
 		];
 		for (const [index, firstItem] of items.entries()) {
-			const secondItem = items[index + 1];
+			const indentation = firstItem[1]?.length ?? 0;
+			const secondItem = items
+				.slice(index + 1)
+				.find((item) => (item[1]?.length ?? 0) <= indentation);
 			if (
 				firstItem[2] !== "1" ||
 				secondItem?.[2] !== "2" ||
@@ -749,7 +752,6 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			);
 			const firstHeading = /\n {0,3}#{1,6}[ \t]+/.exec(firstTail);
 			const separateParagraph = /\r?\n[ \t]*\r?\n[^ \t\r\n]/.test(firstTail);
-			const indentation = firstItem[1]?.length ?? 0;
 			const outsideList = firstTail
 				.split(/\r?\n/)
 				.some(
@@ -758,9 +760,14 @@ function inspectionDocumentHasPhases(content: string): boolean {
 						(line.match(/^[ \t]*/)?.[0].length ?? 0) <= indentation,
 				);
 			if (firstHeading || separateParagraph || outsideList) continue;
+			const nextItem = items.find(
+				(item) =>
+					item.index > secondItem.index &&
+					(item[1]?.length ?? 0) <= indentation,
+			);
 			const secondTail = content.slice(
 				secondItem.index + secondItem[0].length,
-				items[index + 2]?.index,
+				nextItem?.index,
 			);
 			const nextHeading = /\n {0,3}#{1,6}[ \t]+/.exec(secondTail);
 			const secondLines = secondTail
