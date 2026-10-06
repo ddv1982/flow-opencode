@@ -1390,6 +1390,9 @@ export async function runCampaign(
 						const failureObservation = retainedFailureObservation({
 							...failure,
 							gradeInput: failureGradeInput,
+							...(outcome?.abortObservation
+								? { abortObservation: outcome.abortObservation }
+								: {}),
 							...(outcome?.providerErrorObservation
 								? {
 										providerErrorObservation: outcome.providerErrorObservation,
