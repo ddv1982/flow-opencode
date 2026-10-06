@@ -341,6 +341,7 @@ export function currentHandoffFacts(
 		if (observation) {
 			facts.observations.push(observation);
 			if (observation.qualification === null) facts.unsupported.push(line);
+			continue;
 		} else if (
 			/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
