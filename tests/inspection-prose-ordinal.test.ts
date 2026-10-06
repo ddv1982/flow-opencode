@@ -68,3 +68,20 @@ for (const content of [
 		);
 	});
 }
+
+test("an earlier actionable count-only pair cannot preempt a later complete roadmap", () => {
+	const incomplete =
+		"1. Correct inclusiveRangeLength in src/count.ts for the closed interval 1..3.\n2. Review inclusiveRangeLength and add closed interval regression tests.\n";
+	expect(
+		issues(
+			`${finding}\n## Count notes\n${incomplete}\n## Complete roadmap\n${actions}`,
+		),
+	).toEqual([]);
+});
+
+test("phase two cannot borrow audit coverage from unindented prose after the numbered list", () => {
+	const content = `${finding}\n1. Correct inclusiveRangeLength in src/count.ts and add the closed interval 1..3 regression.\n2. Review inclusiveRangeLength and add closed interval regression tests.\n\nInvestigate dependency audit advisories and rerun bun run verify with reproducible evidence.\n`;
+	expect(issues(content)).toContain(
+		"review document omitted a phased remediation plan",
+	);
+});
