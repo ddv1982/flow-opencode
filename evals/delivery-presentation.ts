@@ -170,7 +170,7 @@ function assuranceValue(
 	value: string,
 ): { conclusion: Assurance; checkCount: number | null } | null {
 	const match =
-		/^(?:completion (?:is )?)?(supported|unsupported|not claimed)(?:(?: by all (\w+) assurance checks)|(?:, with all (\w+) assurance checks satisfied))?$/i.exec(
+		/^(?:completion (?:is )?)?(supported|unsupported|not claimed)(?:(?: by all (\w+) (?:assurance )?checks)|(?:, with all (\w+) (?:assurance )?checks satisfied))?$/i.exec(
 			value,
 		);
 	if (!match) return null;
