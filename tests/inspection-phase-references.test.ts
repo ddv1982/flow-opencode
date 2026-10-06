@@ -110,19 +110,33 @@ test("retained campaign phase-two directive is actionable without borrowing phas
 	expect(issues(content)).toEqual([]);
 });
 
+test("named phase refusal cannot fall through to weaker generic numbered-list parsing", () => {
+	const phase = retainedPhaseTwo2.replace(
+		"Establish actionable audit evidence and restore the gate",
+		"Do not establish actionable audit evidence and restore the gate",
+	);
+	const content = `${finding}\n1. **Phase 1: Range.** ${rangeAction}\n${phase}\n3. **Phase 3: Notes.** No further actions.\n`;
+	expect(issues(content)).toContain(
+		"review document omitted a phased remediation plan",
+	);
+});
+
 for (const title of [
-	"Do not establish actionable audit evidence and restore the gate",
 	"Audit evidence is established and the gate is clear",
 	"Establishing audit evidence is discussed for the future",
 ]) {
-	test(`phase-two directive grammar rejects refusal and descriptions ${title}`, () => {
+	test(`descriptive phase title with descriptive body is not a directive ${title}`, () => {
+		const content = `${finding}\n1. **Phase 1: Range.** ${rangeAction}\n2. **Phase 2: ${title}.**\n   The dependency audit evidence describes the reported advisories and failed gate.\n   The current inventory and advisory provenance are incomplete.\n3. **Phase 3: Notes.** No further actions.\n`;
+		expect(issues(content)).toContain(
+			"review document omitted a phased remediation plan",
+		);
+	});
+	test(`descriptive phase title retains genuine directive body actions ${title}`, () => {
 		const phase = retainedPhaseTwo2.replace(
 			"Establish actionable audit evidence and restore the gate",
 			title,
 		);
 		const content = `${finding}\n1. **Phase 1: Range.** ${rangeAction}\n${phase}\n3. **Phase 3: Notes.** No further actions.\n`;
-		expect(issues(content)).toContain(
-			"review document omitted a phased remediation plan",
-		);
+		expect(issues(content)).toEqual([]);
 	});
 }
