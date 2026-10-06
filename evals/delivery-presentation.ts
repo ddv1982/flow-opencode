@@ -229,7 +229,7 @@ function closureStatement(
 	};
 }
 function commandStatusAssertion(text: string): boolean {
-	return /^(?:(?:the|this) (?:command|observation)|it)\b[^.!?]*\b(?:pass(?:ed)?|succeed(?:ed)?|fail(?:ed)?|exit(?:ed)?|unavailable)\b/i.test(
+	return /^(?:(?:(?:the|this) )?(?:command|observation)|it)\b[^.!?]*\b(?:pass(?:ed)?|succeed(?:ed)?|fail(?:ed)?|exit(?:ed)?|unavailable)\b/i.test(
 		text,
 	);
 }
