@@ -1573,6 +1573,14 @@ type MessageEntry = {
 };
 
 type OwnedProgressSession = { id: string; messages: readonly MessageEntry[] };
+function isProgressId(value: unknown): value is string {
+	return (
+		typeof value === "string" &&
+		value.length > 0 &&
+		value.length <= 256 &&
+		!/\s/.test(value)
+	);
+}
 function activeProgressSnapshot(
 	sessions: readonly OwnedProgressSession[],
 	completedMessages: Set<string>,
@@ -1585,9 +1593,7 @@ function activeProgressSnapshot(
 		for (const entry of session.messages) {
 			const message = entry.info.id;
 			if (
-				!message ||
-				message.length > 256 ||
-				/\s/.test(message) ||
+				!isProgressId(message) ||
 				entry.info.sessionID !== session.id ||
 				messageIds.has(message)
 			)
@@ -1595,9 +1601,8 @@ function activeProgressSnapshot(
 			messageIds.add(message);
 			for (const part of entry.parts) {
 				if (
-					!part.id ||
-					part.id.length > 256 ||
-					/\s/.test(part.id) ||
+					!isProgressId(part.id) ||
+					!isProgressId(part.type) ||
 					part.sessionID !== session.id ||
 					part.messageID !== message ||
 					partIds.has(part.id)
@@ -1605,8 +1610,8 @@ function activeProgressSnapshot(
 					throw new Error("Owned progress transcript is malformed.");
 				if (
 					part.type === "tool" &&
-					(!part.tool ||
-						!part.callID ||
+					(!isProgressId(part.tool) ||
+						!isProgressId(part.callID) ||
 						!part.state ||
 						!["pending", "running", "completed", "error"].includes(
 							part.state.status,
@@ -1640,6 +1645,12 @@ function activeProgressSnapshot(
 				} else if (part.type === "tool") {
 					if (!part.state || !isRecord(part.state.input))
 						throw new Error("Owned progress tool input is malformed.");
+					if (
+						part.state.status === "pending" &&
+						part.state.raw !== undefined &&
+						typeof part.state.raw !== "string"
+					)
+						throw new Error("Owned progress pending arguments are malformed.");
 					value = [
 						part.tool,
 						part.callID,
