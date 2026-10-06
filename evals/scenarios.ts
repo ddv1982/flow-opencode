@@ -634,6 +634,37 @@ function inspectGoalIssues(outcome: ScenarioGradeInput): string[] {
 }
 
 function inspectionDocumentHasPhases(content: string): boolean {
+	const actionablePhase = (value: string) => {
+		const visible = value.replace(/[`*_#]/g, " ").replace(/^[:;.,\-—\s]+/, "");
+		const plain = visible.replace(/\s+/g, " ").trim();
+		return (
+			plain.length >= 24 &&
+			(plain.match(/\b[a-z][a-z-]*\b/gi)?.length ?? 0) >= 4 &&
+			!/^(?:tbd|todo|none|no action|do not|don't|skip|(?:we|i|the team)\s+(?:(?:will|would|should|can|do)\s+not|won't|don't|cannot))\b/i.test(
+				plain,
+			) &&
+			!/\?\s*(?:no|none|not necessary)\b/i.test(plain) &&
+			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
+				visible,
+			) &&
+			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b|\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
+				plain,
+			)
+		);
+	};
+	const actionablePlan = (actions: readonly [string, string]) => {
+		const plan = actions.join(" ");
+		return (
+			actionablePhase(actions[0]) &&
+			actionablePhase(actions[1]) &&
+			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i.test(
+				plan,
+			) &&
+			/\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bbun run verify\b|\b(?:package|failed) gate\b/i.test(
+				plan,
+			)
+		);
+	};
 	const headings = [
 		...content.matchAll(
 			/(?:^|\n)\s*(?:(?:#{1,6}|\d+[.)])\s*)?(?:\*\*)?(?:phase|step)\s*(1|one|i|2|two|ii)\b([^\n]*)/gi,
@@ -701,64 +732,60 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			`${numberedSecond[3] ?? ""} ${phaseSection(secondTail, numberedSecond[0])}`,
 		];
 	} else {
-		const items = [...content.matchAll(/(?:^|\n)\s*(\d+)[.)]\s+([^\n]*)/g)];
-		const firstItem = items.find((item) => item[1] === "1");
-		const secondItem = items.find(
-			(item) => item[1] === "2" && item.index > (firstItem?.index ?? Infinity),
-		);
-		const nextItem = items.find(
-			(item) => item.index > (secondItem?.index ?? Infinity),
-		);
-		if (firstItem && secondItem) {
+		const items = [
+			...content.matchAll(/(?:^|\n)([ \t]*)(\d+)[.)][ \t]+([^\n]*)/g),
+		];
+		for (const [index, firstItem] of items.entries()) {
+			const secondItem = items[index + 1];
+			if (
+				firstItem[2] !== "1" ||
+				secondItem?.[2] !== "2" ||
+				firstItem[1] !== secondItem[1]
+			)
+				continue;
 			const firstTail = content.slice(
 				firstItem.index + firstItem[0].length,
 				secondItem.index,
 			);
 			const firstHeading = /\n {0,3}#{1,6}[ \t]+/.exec(firstTail);
 			const separateParagraph = /\r?\n[ \t]*\r?\n[^ \t\r\n]/.test(firstTail);
+			const indentation = firstItem[1]?.length ?? 0;
+			const outsideList = firstTail
+				.split(/\r?\n/)
+				.some(
+					(line) =>
+						line.trim() &&
+						(line.match(/^[ \t]*/)?.[0].length ?? 0) <= indentation,
+				);
+			if (firstHeading || separateParagraph || outsideList) continue;
 			const secondTail = content.slice(
 				secondItem.index + secondItem[0].length,
-				nextItem?.index,
+				items[index + 2]?.index,
 			);
 			const nextHeading = /\n {0,3}#{1,6}[ \t]+/.exec(secondTail);
-			if (!firstHeading && !separateParagraph) {
-				actions = [
-					`${firstItem[2] ?? ""} ${firstTail}`,
-					`${secondItem[2] ?? ""} ${secondTail.slice(0, nextHeading?.index)}`,
-				];
+			const secondLines = secondTail
+				.slice(0, nextHeading?.index)
+				.split(/\r?\n/);
+			const boundary = secondLines.findIndex(
+				(line) =>
+					line.trim() &&
+					(line.match(/^[ \t]*/)?.[0].length ?? 0) <= indentation,
+			);
+			const continuation = secondLines
+				.slice(0, boundary < 0 ? undefined : boundary)
+				.join("\n");
+			const candidate: readonly [string, string] = [
+				`${firstItem[3] ?? ""} ${firstTail}`,
+				`${secondItem[3] ?? ""} ${continuation}`,
+			];
+			if (actionablePlan(candidate)) {
+				actions = candidate;
+				break;
 			}
 		}
 	}
 	if (!actions) return false;
-	const actionablePhase = (value: string) => {
-		const visible = value.replace(/[`*_#]/g, " ").replace(/^[:;.,\-—\s]+/, "");
-		const plain = visible.replace(/\s+/g, " ").trim();
-		return (
-			plain.length >= 24 &&
-			(plain.match(/\b[a-z][a-z-]*\b/gi)?.length ?? 0) >= 4 &&
-			!/^(?:tbd|todo|none|no action|do not|don't|skip|(?:we|i|the team)\s+(?:(?:will|would|should|can|do)\s+not|won't|don't|cannot))\b/i.test(
-				plain,
-			) &&
-			!/\?\s*(?:no|none|not necessary)\b/i.test(plain) &&
-			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
-				visible,
-			) &&
-			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b|\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
-				plain,
-			)
-		);
-	};
-	const plan = actions.join(" ");
-	return (
-		actionablePhase(actions[0]) &&
-		actionablePhase(actions[1]) &&
-		/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b/i.test(
-			plan,
-		) &&
-		/\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bbun run verify\b|\b(?:package|failed) gate\b/i.test(
-			plan,
-		)
-	);
+	return actionablePlan(actions);
 }
 
 function inspectionFindingContradicted(content: string): boolean {
