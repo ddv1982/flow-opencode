@@ -85,3 +85,48 @@ test("phase two cannot borrow audit coverage from unindented prose after the num
 		"review document omitted a phased remediation plan",
 	);
 });
+
+test("peer roadmap phases retain numbered substeps in both phase bodies", () => {
+	const content = `${finding}\n## Roadmap\n1. **Range actions.**\n   1. Correct inclusiveRangeLength in src/count.ts for closed interval 1..3.\n   2. Add singleton and closed interval regression tests to count.ts coverage.\n2. **Audit actions.**\n   1. Investigate dependency audit advisories and retained failure evidence.\n   2. Run bun run verify after documenting advisory provenance and remediation.\n3. Document the resulting validation process and retain its evidence.\n`;
+	expect(issues(content)).toEqual([]);
+});
+
+for (const separator of [
+	"7. Document unrelated release notes.",
+	"## Separate section",
+	"Unrelated prose outside the numbered list.",
+]) {
+	test(`nested substeps do not hide a peer phase boundary ${separator}`, () => {
+		const content = `${finding}\n1. Correct inclusiveRangeLength in src/count.ts for closed interval 1..3.\n   1. Add singleton and closed interval regression tests.\n${separator}\n2. Investigate dependency audit advisories and rerun bun run verify.\n   1. Document advisory provenance and retain audit evidence.\n`;
+		expect(issues(content)).toContain(
+			"review document omitted a phased remediation plan",
+		);
+	});
+}
+
+test("outdented ancestor items stop nested peer phase pairing", () => {
+	const content = `${finding}\n   1. Correct inclusiveRangeLength in src/count.ts for closed interval 1..3.\n      1. Add singleton and closed interval regression tests.\n9. Document unrelated release notes.\n   2. Investigate dependency audit advisories and rerun bun run verify.\n`;
+	expect(issues(content)).toContain(
+		"review document omitted a phased remediation plan",
+	);
+});
+
+for (const boundary of [
+	"7. Investigate dependency audit advisories and rerun bun run verify.",
+	"## Unrelated audit notes\nInvestigate dependency audit advisories and rerun bun run verify.",
+	"Investigate dependency audit advisories and rerun bun run verify.",
+]) {
+	test(`phase-two nested body cannot borrow coverage beyond ${boundary}`, () => {
+		const content = `${finding}\n1. Correct inclusiveRangeLength in src/count.ts for closed interval 1..3.\n   1. Add singleton and closed interval regression tests.\n2. Review inclusiveRangeLength in src/count.ts for closed interval 1..3.\n   1. Add singleton and closed interval regression tests.\n${boundary}\n`;
+		expect(issues(content)).toContain(
+			"review document omitted a phased remediation plan",
+		);
+	});
+}
+
+test("phase-two nested body stops at an outdented ancestor item", () => {
+	const content = `${finding}\n   1. Correct inclusiveRangeLength in src/count.ts for closed interval 1..3.\n      1. Add singleton and closed interval regression tests.\n   2. Review inclusiveRangeLength in src/count.ts for closed interval 1..3.\n      1. Add singleton and closed interval regression tests.\n9. Investigate dependency audit advisories and rerun bun run verify.\n`;
+	expect(issues(content)).toContain(
+		"review document omitted a phased remediation plan",
+	);
+});
