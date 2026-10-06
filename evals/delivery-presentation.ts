@@ -113,11 +113,23 @@ type AuxiliaryCount = {
 function auxiliaryCounts(value: string): AuxiliaryCount[] | null {
 	if (/^none unfinished$/i.test(value))
 		return [{ kind: "unfinished", count: 0 }];
-	if (/^no blockers or advisory findings$/i.test(value))
-		return [
-			{ kind: "blocking", count: 0 },
-			{ kind: "advisory", count: 0 },
-		];
+	const kinds = new Map<string, AuxiliaryCount["kind"]>([
+		["unfinished", "unfinished"],
+		["unfinished features", "unfinished"],
+		["blockers", "blocking"],
+		["advisory findings", "advisory"],
+	]);
+	if (/^no /i.test(value)) {
+		const nouns = value
+			.slice(3)
+			.toLowerCase()
+			.split(/ (?:and|or) /);
+		const counts = nouns.map((noun) => {
+			const kind = kinds.get(noun);
+			return kind ? { kind, count: 0 } : null;
+		});
+		return counts.every((count) => count !== null) ? counts : null;
+	}
 	const match =
 		/^(no|\d+|zero|one|two|three|four|five|six) (unfinished(?: features)?|blockers|advisory findings)$/i.exec(
 			value,
@@ -329,6 +341,7 @@ export function currentHandoffFacts(
 		if (observation) {
 			facts.observations.push(observation);
 			if (observation.qualification === null) facts.unsupported.push(line);
+			continue;
 		} else if (
 			/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
@@ -356,12 +369,13 @@ export function currentHandoffFacts(
 				continue;
 			}
 			const field =
-				/^(?:(?:current|Flow)\s+)?(closure|assurance|external[- ]action authority|progress):\s*(.*)$/i.exec(
+				/^(?:(?:current|Flow)\s+)?(closure|flow|assurance|external[- ]action authority|progress):\s*(.*)$/i.exec(
 					claim,
 				);
 			if (field) {
 				const value = field[2] ?? "";
 				switch (field[1]?.toLowerCase()) {
+					case "flow":
 					case "closure": {
 						const parsed = closureStatement(value);
 						facts.closure.push(parsed?.closure ?? null);
