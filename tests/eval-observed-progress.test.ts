@@ -482,6 +482,7 @@ for (const mutation of [
 	"input",
 	"native",
 	"time",
+	"stale-observation",
 	"trigger",
 	"completed",
 	"empty",
@@ -505,6 +506,8 @@ for (const mutation of [
 			};
 		const task = value.gradeInput.allCalls.find((call) => call.tool === "task");
 		if (!task?.native) throw new Error("Missing native fixture task.");
+		if (mutation === "stale-observation")
+			observation.observedAt = task.native.startedAt;
 		if (mutation === "input") Reflect.set(task, "input", { different: true });
 		if (mutation === "native") task.native.partId = "prt_different";
 		if (mutation === "completed") Reflect.set(task, "status", "completed");
