@@ -464,7 +464,7 @@ function verifiedAbortPending(
 		elapsed > evidence.usage.durationMs ||
 		(trigger.kind === "stall"
 			? trigger.lastActivityAt < observation.startedAt ||
-				trigger.lastActivityAt > observation.abortRequestedAt ||
+				trigger.lastActivityAt > observation.observedAt ||
 				trigger.unchangedMs !==
 					observation.abortRequestedAt - trigger.lastActivityAt ||
 				trigger.thresholdMs !== 180000 ||
