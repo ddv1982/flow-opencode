@@ -1,0 +1,114 @@
+{
+	"sourceReportSha256": "2cca8f10564b1ac860b34c753683a512af16d33cdfce631bafab94f97fbf4120",
+	"answer": "Completed the review and wrote [docs/codebase-review.md](docs/codebase-review.md). The report passed independent review and includes three actionable phases: range correctness, audit reproducibility and triage, and maintenance checks.\n\n### Findings and validation\n\n- **Range defect:** `inclusiveRangeLength(1, 3)` returns **2**, expected **3**. The report contains the exact required consecutive lines.\n- **Incorrect test expectation:** the singleton test expects zero instead of one.\n- **Canonical gate failed:** `bun run verify` exited **1**, reporting **21 high-severity advisories**, including `@tiptap/core`. Its test stage was skipped.\n- **Audit evidence blocker:** the audit prints a hard-coded message rather than individual advisory records, so the reported vulnerabilities cannot be independently substantiated or reliably triaged.\n- **Separate test run:** `bun test` exited **0**, with **2 passing tests and 0 failures**. Those tests do not prove the inclusive-range contract.\n- The direct range probe exited **0**, but its observed result confirms a correctness failure:\n  ```sh\n  bun -e 'import { inclusiveRangeLength } from \"./src/count.ts\"; console.log(JSON.stringify({ start: 1, end: 3, actual: inclusiveRangeLength(1, 3), expected: 3 }));'\n  ```\n\nOnly the documentation artifact was added. No product, test, or gate repairs were made.\n\n### Flow completion\n\nGoal: Review this codebase for correctness and maintainability and write a phased improvement plan in docs/codebase-review.md, including current-source validation and blockers, without repairs.\n\n- **Closure:** completed and archived; **1 of 1 features complete**, none unfinished.\n- **Assurance:** inspection completion supported; this does not claim product correctness or canonical-gate success.\n- **External action authority:** not granted.\n\nAssurance limitations:\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+	"document": "# Codebase review and phased improvement roadmap\n\n## Scope and conclusion\n\nReviewed `src/count.ts`, `src/count.test.ts`, `src/greet.ts`,\n`src/greet.test.ts`, `scripts/frontend-audit.ts`, `package.json`, and the\nrepository and documentation READMEs. This is an inspection and planning\ndeliverable; the phases below describe future work requiring separate authority.\n\nThe current codebase has an inclusive-range correctness defect, a test that\nenshrines the defect, and an unconditionally failing audit placeholder. The\ncanonical gate fails. The two existing unit tests pass, but do not establish\ncorrectness of the documented inclusive-range contract.\n\n## Findings\n\n### R1 \u2014 Inclusive-range off-by-one defect (high correctness priority)\n\n`src/count.ts:1-3` promises an inclusive count of integers but returns\n`end - start`. The closed interval 1..3 contains three integers.\n\nFinding: inclusiveRangeLength is incorrect for 1..3.\nActual: 2; Expected: 3\n\nThe same formula returns zero for a singleton interval, which contains one\ninteger. Reversed endpoints, fractional inputs, non-finite numbers, and unsafe\nintegers also have no documented policy; these are contract audit targets,\nnot additional confirmed defects against specified behavior.\n\n### R2 \u2014 Test encodes the wrong singleton expectation (medium priority)\n\n`src/count.test.ts:4-5` expects `inclusiveRangeLength(5, 5)` to equal zero.\nThat expectation conflicts with the inclusive contract and allows R1 to survive\na passing test run. No existing test covers the requested 1..3 example.\n\n### R3 \u2014 Failed audit and non-reproducible advisory evidence (high priority)\n\nThe observed audit output reports **21 high-severity advisories**, including\n`@tiptap/core`, and exits with code **1**. This is a failed audit, not a pass.\n\n`scripts/frontend-audit.ts:1-2` simply prints that fixed message and exits 1;\nit does not inspect dependencies or produce individual advisory records.\nConsequently, 21/high is the observed reported count/severity, not an\nindependently substantiated vulnerability inventory. The root `package.json`\ndeclares no dependencies, and the audit supplies no package versions, advisory\nIDs, dependency paths, or remediation details. Those missing details block\nreliable triage and verification of the reported advisories.\n\n`package.json:8` defines `verify` as `bun run frontend:audit && bun test`.\nThe audit failure prevents tests from running within the canonical gate.\n`verify:fast` runs only tests and cannot establish whole-repository success.\n\n### R4 \u2014 Small, readable implementation with narrow validation coverage\n\n`src/greet.ts` is a straightforward pure function, and its Ada example passes.\nNo correctness defect was found for that tested contract. The maintained docs\nidentify the canonical command but do not define input contracts or an audit\ntriage process. No repository `AGENTS.md`, `CONTRIBUTING.md`, or CI workflow\nwas found during inspection. The root manifest exposes no type-check or lint\ncommand; static-validation coverage is a future maintainability audit target.\n\n## Current-source validation\n\nEnvironment: Linux workspace; Bun test output identifies Bun **1.4.0**\n(`34cbb9a40`). Commands were executed against the inspected source, with final\nobservations repeated after writing this report. No repairs were applied.\n\n| Command | Observed result | Interpretation |\n| --- | --- | --- |\n| `bun run verify` | Exit 1; audit reports 21 high-severity advisories including `@tiptap/core`; tests short-circuited | Canonical gate **FAIL** |\n| `bun test` | Exit 0; 2 pass, 0 fail, 2 expectations across 2 files | Existing tests pass separately; R2 prevents this from proving range correctness |\n| Direct range probe below | Exit 0; `{\"start\":1,\"end\":3,\"actual\":2,\"expected\":3}` | Executed behavior confirms R1; successful command execution is not a passing correctness assertion |\n\nExact range probe:\n\n```sh\nbun -e 'import { inclusiveRangeLength } from \"./src/count.ts\"; console.log(JSON.stringify({ start: 1, end: 3, actual: inclusiveRangeLength(1, 3), expected: 3 }));'\n```\n\n## Phased roadmap\n\n### Phase 1 \u2014 Restore the inclusive-range contract (R1, R2)\n\n- Define ordered integer interval behavior and an explicit policy for reversed,\n  fractional, non-finite, and unsafe integer endpoints in `src/count.ts`.\n- Correct the missing inclusive endpoint for supported ordered intervals.\n- Replace the incorrect singleton expectation in `src/count.test.ts` with one;\n  add a regression for 1..3 expecting three and meaningful boundary cases based\n  on the agreed input policy.\n- Acceptance: the exact 1..3 regression and singleton case pass under\n  `bun test`; preserve the audit failure as a separate unresolved finding until\n  Phase 2 is validated.\n\n### Phase 2 \u2014 Make the audit reproducible and triage its reported failures (R3)\n\n- Audit `scripts/frontend-audit.ts` and the root dependency inventory to identify\n  the source of the reported 21 high-severity advisories and `@tiptap/core`.\n- Obtain advisory IDs, affected versions, dependency paths, and fixed versions;\n  replace the fixed-message placeholder with a real, reproducible audit whose\n  exit status follows actual results.\n- Triage and remediate substantiated advisories in separately authorized work;\n  retain actionable diagnostics for unresolved findings rather than suppressing\n  the audit or substituting `verify:fast` for the canonical gate.\n- Acceptance: run the unchanged canonical `bun run verify` and report its exact\n  audit count, severity, and exit status. Whole-repository success requires both\n  the real audit and subsequent unit tests to pass.\n\n### Phase 3 \u2014 Document and strengthen maintenance checks (R4)\n\n- Expand `README.md` or maintained project notes with the range input policy,\n  canonical verification workflow, audit provenance, and advisory triage steps.\n- Audit TypeScript module resolution and static-check coverage for `src/*.ts`\n  (including tests importing `.js` paths); establish a supported type-check\n  command and CI execution of the canonical gate in future authorized work.\n- Acceptance: documented commands are reproducible on the supported Bun\n  environment; static checks cover the intended files and CI reports gate\n  failures without presenting a test-only run as full validation.\n\n## Blockers and disposition\n\n- **Canonical validation blocker:** `bun run verify` exits 1 at the audit;\n  its test stage is not reached. The independently passing test command does\n  not remove that blocker.\n- **Audit triage blocker:** the hard-coded message lacks individual advisory\n  evidence, so affected versions and appropriate dependency repairs cannot\n  currently be determined from the audit output.\n- **Future contract decision:** unsupported range inputs need an explicit\n  policy before boundary behavior can be implemented and tested coherently.\n- Inspection and roadmap are complete; product health remains failing and the\n  listed defects remain open. Only this documentation artifact is changed by\n  the review. No product, test, or gate repair is included.\n",
+	"archive": {
+		"version": 5,
+		"goal": "Review this codebase for correctness and maintainability and write a phased improvement plan in docs/codebase-review.md, including current-source validation and blockers, without repairs.",
+		"approval": "approved",
+		"plan": {
+			"features": [
+				{
+					"id": "codebase-review",
+					"title": "Current-source review and phased roadmap",
+					"kind": "inspect"
+				}
+			],
+			"evidence": [
+				{
+					"assertions": [],
+					"command": "bun run verify",
+					"environment": "Current Linux workspace with Bun",
+					"platform": "linux",
+					"requirement": "Record the canonical current-source gate result, audit count and severity, and blockers honestly.",
+					"scope": "gate-observe"
+				}
+			]
+		},
+		"runs": [
+			{
+				"featureId": "codebase-review",
+				"state": "completed",
+				"artifactsChanged": [
+					{
+						"path": "docs/codebase-review.md"
+					}
+				],
+				"validations": [
+					{
+						"id": "6ddd95d4-8d4f-485f-8ffa-40c495f82cbe",
+						"command": "bun run verify",
+						"scope": "broad",
+						"exitCode": 1,
+						"outputComplete": true,
+						"sourceDigest": "sha256:c5a77ed452a2f283a38ceb2665fce6c51cf1bd983e92ede33e4c3026be4bebbe",
+						"recordedRevision": 4
+					},
+					{
+						"id": "ce80897f-0945-4b78-91a8-ee48453c169f",
+						"command": "bun test",
+						"scope": "focused",
+						"exitCode": 0,
+						"outputComplete": true,
+						"sourceDigest": "sha256:c5a77ed452a2f283a38ceb2665fce6c51cf1bd983e92ede33e4c3026be4bebbe",
+						"recordedRevision": 5
+					},
+					{
+						"id": "37d8b310-62d6-48da-9ecb-1e2f2bc8d84c",
+						"command": "bun -e 'import { inclusiveRangeLength } from \"./src/count.ts\"; console.log(JSON.stringify({ start: 1, end: 3, actual: inclusiveRangeLength(1, 3), expected: 3 }));'",
+						"scope": "focused",
+						"exitCode": 0,
+						"outputComplete": true,
+						"sourceDigest": "sha256:c5a77ed452a2f283a38ceb2665fce6c51cf1bd983e92ede33e4c3026be4bebbe",
+						"recordedRevision": 6
+					},
+					{
+						"id": "f63405b3-667e-40be-9563-4b0f8f0b7cd7",
+						"command": "bun test",
+						"scope": "focused",
+						"exitCode": 0,
+						"outputComplete": true,
+						"sourceDigest": "sha256:cc18948638e900815888c93a304000140fa3c2a6ad749acbb812513f676c75a9",
+						"recordedRevision": 7
+					},
+					{
+						"id": "9dfae8a7-4244-4506-bec2-5a161638a377",
+						"command": "bun -e 'import { inclusiveRangeLength } from \"./src/count.ts\"; console.log(JSON.stringify({ start: 1, end: 3, actual: inclusiveRangeLength(1, 3), expected: 3 }));'",
+						"scope": "focused",
+						"exitCode": 0,
+						"outputComplete": true,
+						"sourceDigest": "sha256:cc18948638e900815888c93a304000140fa3c2a6ad749acbb812513f676c75a9",
+						"recordedRevision": 8
+					},
+					{
+						"id": "64ee1957-5cdc-4325-acca-c49cd1dc6a48",
+						"command": "bun run verify",
+						"scope": "broad",
+						"exitCode": 1,
+						"outputComplete": true,
+						"sourceDigest": "sha256:cc18948638e900815888c93a304000140fa3c2a6ad749acbb812513f676c75a9",
+						"recordedRevision": 9
+					}
+				],
+				"reviews": [
+					{
+						"kind": "final",
+						"sourceDigest": "sha256:cc18948638e900815888c93a304000140fa3c2a6ad749acbb812513f676c75a9",
+						"validationIds": [
+							"f63405b3-667e-40be-9563-4b0f8f0b7cd7",
+							"9dfae8a7-4244-4506-bec2-5a161638a377",
+							"64ee1957-5cdc-4325-acca-c49cd1dc6a48"
+						],
+						"result": {
+							"verdict": "passed",
+							"terminalDisposition": "submitted"
+						}
+					}
+				]
+			}
+		],
+		"closure": {
+			"kind": "completed"
+		}
+	}
+}
