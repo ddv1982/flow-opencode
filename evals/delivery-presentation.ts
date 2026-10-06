@@ -228,8 +228,40 @@ function closureStatement(
 					: (platform ?? null),
 	};
 }
+function commandStatusAssertion(text: string): boolean {
+	return /^(?:(?:the|this) (?:command|observation)|it)\b[^.!?]*\b(?:pass(?:ed)?|succeed(?:ed)?|fail(?:ed)?|exit(?:ed)?|unavailable)\b/i.test(
+		text,
+	);
+}
+function sentenceBoundary(text: string, start = 0) {
+	let quote: string | null = null;
+	for (let index = start; index < text.length; index++) {
+		const character = text[index];
+		if (character === "\\") {
+			index++;
+			continue;
+		}
+		if (quote) {
+			if (character === quote) quote = null;
+			continue;
+		}
+		if (character === '"' || character === "'") {
+			if (
+				character === "'" &&
+				/[A-Za-z]/.test(text[index - 1] ?? "") &&
+				/[A-Za-z]/.test(text[index + 1] ?? "")
+			)
+				continue;
+			quote = character;
+			continue;
+		}
+		if (character === "." && /^\s+[A-Za-z0-9]/.test(text.slice(index + 1)))
+			return { end: index + 1, unterminatedQuote: false };
+	}
+	return { end: text.length, unterminatedQuote: quote !== null };
+}
 function commandResultValue(line: string, commands: readonly string[]) {
-	for (const command of commands) {
+	for (const command of [...commands].sort((a, b) => b.length - a.length)) {
 		const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 		const prefix = new RegExp(
 			`^(?:Observed )?["']?${escaped}["']?(?=[:\\s]|$)(.*)$`,
@@ -239,81 +271,119 @@ function commandResultValue(line: string, commands: readonly string[]) {
 			.map((candidate) => prefix.exec(candidate))
 			.find((value) => value !== null);
 		if (!matched) continue;
-		const body = (matched[1] ?? "")
-			.trim()
-			.replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
-		const invalid = {
-			command,
-			exitCode: null,
-			qualification: null,
-			unchangedInvocation: false,
-		};
-		if (
-			!/\b(?:exit|exited|passed|succeeded|recorded as an observation)\b/i.test(
-				body,
-			)
-		)
-			continue;
-		if (commands.some((other) => body.includes(other))) return invalid;
-		const parts = body
-			.split(/;|\.\s+(?=[A-Z])/)
-			.map((part) => part.trim().replace(/\.$/, ""));
-		const status = parts.shift() ?? "";
-		const value =
-			/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
-				status,
-			);
-		if (!value) return invalid;
-		const rawExit = value[3] ?? "";
-		const exitCode =
-			rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
-		if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
-		const malformed = {
-			command,
-			exitCode,
-			qualification: null,
-			unchangedInvocation: false,
-		};
-		const metadata = value[4] ?? "";
-		if (
-			metadata &&
-			!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
-				metadata,
-			)
-		)
-			return malformed;
-		if (/\b(?:passed|succeeded|granted|complete|completion)\b/i.test(metadata))
-			return malformed;
-		let qualification:
-			| "observation"
-			| "does-not-claim-pass"
-			| "claimed-pass"
-			| null = value[1] ? "claimed-pass" : value[2] ? "observation" : null;
-		let unchangedInvocation = false;
-		for (const qualifier of parts) {
-			if (
-				/^(?:this observation does not claim a pass|this does not claim the command passed)$/i.test(
-					qualifier,
-				)
-			) {
-				if (qualification !== "claimed-pass")
-					qualification = "does-not-claim-pass";
-			} else if (
-				/^(?:this (?:command|observation)|it) (?:passed|succeeded)$/i.test(
-					qualifier,
-				)
-			)
-				qualification = "claimed-pass";
-			else if (
-				qualification === "claimed-pass" &&
-				/^Its script and invocation are unchanged$/i.test(qualifier)
-			)
-				unchangedInvocation = true;
-			else return malformed;
+		const rawBody = matched[1] ?? "";
+		let boundary = sentenceBoundary(rawBody);
+		while (
+			boundary.end < rawBody.length &&
+			(commandStatusAssertion(rawBody.slice(boundary.end).trimStart()) ||
+				/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its)\b/i.test(
+					rawBody.slice(boundary.end).trimStart(),
+				))
+		) {
+			boundary = sentenceBoundary(rawBody, boundary.end);
 		}
-		return { command, exitCode, qualification, unchangedInvocation };
+		const remainderStart = boundary.end;
+		const record = rawBody.slice(0, remainderStart);
+		const remainder = rawBody.slice(remainderStart).trim();
+		if (
+			/^Outstanding proof:/i.test(line) &&
+			/^\s+on (?:macOS|darwin|Linux|Windows)\.?\s*$/i.test(record)
+		)
+			return {
+				observation: null,
+				remainder,
+				source: line
+					.slice(0, line.length - rawBody.length + remainderStart)
+					.trim(),
+			};
+		const parsed = parseCommandResult(
+			record,
+			command,
+			commands,
+			boundary.unterminatedQuote,
+		);
+		return {
+			observation: parsed,
+			remainder,
+			source: line
+				.slice(0, line.length - rawBody.length + remainderStart)
+				.trim(),
+		};
 	}
 	return null;
+}
+function parseCommandResult(
+	rawBody: string,
+	command: string,
+	commands: readonly string[],
+	unterminatedQuote: boolean,
+) {
+	const body = rawBody.trim().replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
+	const invalid = {
+		command,
+		exitCode: null,
+		qualification: null,
+		unchangedInvocation: false,
+	};
+	if (unterminatedQuote) return invalid;
+	if (commands.some((other) => body.includes(other))) return invalid;
+	const parts = body
+		.split(/;|\.\s+(?=[A-Za-z])/)
+		.map((part) => part.trim().replace(/\.$/, ""));
+	const status = parts.shift() ?? "";
+	const value =
+		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
+			status,
+		);
+	if (!value) return invalid;
+	const rawExit = value[3] ?? "";
+	const exitCode =
+		rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
+	if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
+	const malformed = {
+		command,
+		exitCode,
+		qualification: null,
+		unchangedInvocation: false,
+	};
+	const metadata = value[4] ?? "";
+	if (
+		metadata &&
+		!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
+			metadata,
+		)
+	)
+		return malformed;
+	if (/\b(?:passed|succeeded|granted|complete|completion)\b/i.test(metadata))
+		return malformed;
+	let qualification:
+		| "observation"
+		| "does-not-claim-pass"
+		| "claimed-pass"
+		| null = value[1] ? "claimed-pass" : value[2] ? "observation" : null;
+	let unchangedInvocation = false;
+	for (const qualifier of parts) {
+		if (
+			/^(?:this observation does not claim a pass|this does not claim the command passed)$/i.test(
+				qualifier,
+			)
+		) {
+			if (qualification !== "claimed-pass")
+				qualification = "does-not-claim-pass";
+		} else if (
+			/^(?:this (?:command|observation)|it) (?:passed|succeeded)$/i.test(
+				qualifier,
+			)
+		)
+			qualification = "claimed-pass";
+		else if (
+			qualification === "claimed-pass" &&
+			/^Its script and invocation are unchanged$/i.test(qualifier)
+		)
+			unchangedInvocation = true;
+		else return malformed;
+	}
+	return { command, exitCode, qualification, unchangedInvocation };
 }
 export function currentHandoffFacts(
 	text: string,
@@ -331,18 +401,31 @@ export function currentHandoffFacts(
 		observations: [],
 		unsupported: [],
 	};
-	for (const line of currentLines(text)) {
+	const pending = currentLines(text);
+	for (let index = 0; index < pending.length; index++) {
+		let line = pending[index] ?? "";
 		const goal = /^(?:current\s+)?goal:\s*(.*)$/i.exec(line);
 		if (goal) {
 			facts.goal.push(goal[1] ?? "");
 			continue;
 		}
-		const observation = commandResultValue(line, observationCommands);
-		if (observation) {
-			facts.observations.push(observation);
-			if (observation.qualification === null) facts.unsupported.push(line);
+		const commandRecord = commandResultValue(line, observationCommands);
+		if (commandRecord) {
+			if (commandRecord.observation) {
+				facts.observations.push(commandRecord.observation);
+				if (commandRecord.observation.qualification === null)
+					facts.unsupported.push(commandRecord.source);
+			}
+			if (commandRecord.remainder)
+				pending.splice(index + 1, 0, commandRecord.remainder);
 			continue;
-		} else if (
+		}
+		const boundary = sentenceBoundary(line);
+		if (boundary.end < line.length) {
+			pending.splice(index + 1, 0, line.slice(boundary.end).trim());
+			line = line.slice(0, boundary.end);
+		}
+		if (
 			/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
 			)
@@ -352,11 +435,8 @@ export function currentHandoffFacts(
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
-			const compound = observation
-				? null
-				: /^(.+?)\s+[—–]\s+(\d+\s*(?:of|\/)\s*\d+\s+features\b.*)$/i.exec(
-						claim,
-					);
+			const compound =
+				/^(.+?)\s+[—–]\s+(\d+\s*(?:of|\/)\s*\d+\s+features\b.*)$/i.exec(claim);
 			if (compound) {
 				const closure = closureStatement(compound[1] ?? "");
 				const progress = progressValue(compound[2] ?? "");
@@ -475,6 +555,7 @@ export function currentHandoffFacts(
 				continue;
 			}
 			const critical =
+				commandStatusAssertion(claim) ||
 				/\b(?:ready to ship|(?:workflow|session) (?:is |was |has been )(?:completed|complete|deferred|abandoned)|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority (?:is|granted)|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
 					claim,
 				);
