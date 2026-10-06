@@ -324,3 +324,50 @@ for (const prose of [
 		});
 	}
 }
+
+for (const prose of [
+	"",
+	"The verifier remains unchanged. ",
+	"The verifier remains unchanged. Independent review passed with no findings. ",
+]) {
+	for (const status of [
+		"The command did not pass.",
+		"The observation failed.",
+	]) {
+		test(`explicit command status cannot disappear after ${JSON.stringify(prose)} ${status}`, () => {
+			const line = `${gate} passed with exit code 0. ${prose}${status}`;
+			expect(
+				currentHandoffFacts(line, [gate]).unsupported.length,
+			).toBeGreaterThan(0);
+			expect(
+				deliveryIssues(
+					fixture(
+						saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), line),
+					),
+					expectation,
+				),
+			).toContain("Unsupported or conflicting current handoff assertions.");
+		});
+	}
+}
+
+test("script-only command prose does not become invocation evidence", () => {
+	const line = `${gate} passed with exit code 0. The command and script are unchanged.`;
+	expect(currentHandoffFacts(line, [gate]).observations).toEqual([
+		{
+			command: gate,
+			exitCode: 0,
+			qualification: "claimed-pass",
+			unchangedInvocation: false,
+		},
+	]);
+	expect(currentHandoffFacts(line, [gate]).unsupported).toEqual([]);
+	expect(
+		deliveryIssues(
+			fixture(
+				saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), line),
+			),
+			expectation,
+		),
+	).toEqual([]);
+});

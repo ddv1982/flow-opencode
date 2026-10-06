@@ -93,3 +93,36 @@ test("bare Phase 3 audit actions cannot supply coverage to range-only Phase 1 an
 		"review document omitted a phased remediation plan",
 	);
 });
+
+const retainedPhaseTwo2 =
+	"2. **Phase 2 — Establish actionable audit evidence and restore the gate.**\n   Audit the fixed-output implementation in `scripts/frontend-audit.ts` and\n   establish the actual dependency inventory, especially the claimed\n   `@tiptap/core` exposure. Replace the placeholder with a reproducible scan that\n   reports advisory IDs, affected versions, count, severity, and actionable\n   remediation; resolve verified high-severity findings under separate approval.\n   Preserve truthful failure reporting. Acceptance: a real scan provides\n   traceable evidence and `bun run verify` completes both audit and tests\n   successfully. Until then, report tests separately without calling the gate a\n   pass.\n";
+
+test("retained campaign phase-two directive is actionable without borrowing phase-three actions 2", () => {
+	const content = `${finding}\n1. **Phase 1: Range.** ${rangeAction}\n${retainedPhaseTwo2}\n3. **Phase 3: Notes.** No further actions.\n`;
+	expect(issues(content)).toEqual([]);
+});
+
+const retainedPhaseTwo10 =
+	"2. **Phase 2 — Establish actionable audit evidence and clear the gate (F3).**\n   Audit `scripts/frontend-audit.ts` and the dependency inventory to establish\n   the provenance of the reported 21 high-severity advisories and `@tiptap/core`.\n   Replace the fixed-output audit with a reproducible dependency-backed check\n   that names affected packages, installed versions, advisory identifiers,\n   and available fixes. Remediate confirmed advisories through targeted,\n   reviewed dependency updates and rerun the canonical `bun run verify`.\n   Acceptance: documented audit provenance, actionable findings, and a genuinely\n   passing audit followed by passing tests; do not bypass the audit to claim\n   gate success.\n";
+
+test("retained campaign phase-two directive is actionable without borrowing phase-three actions 10", () => {
+	const content = `${finding}\n1. **Phase 1: Range.** ${rangeAction}\n${retainedPhaseTwo10}\n3. **Phase 3: Notes.** No further actions.\n`;
+	expect(issues(content)).toEqual([]);
+});
+
+for (const title of [
+	"Do not establish actionable audit evidence and restore the gate",
+	"Audit evidence is established and the gate is clear",
+	"Establishing audit evidence is discussed for the future",
+]) {
+	test(`phase-two directive grammar rejects refusal and descriptions ${title}`, () => {
+		const phase = retainedPhaseTwo2.replace(
+			"Establish actionable audit evidence and restore the gate",
+			title,
+		);
+		const content = `${finding}\n1. **Phase 1: Range.** ${rangeAction}\n${phase}\n3. **Phase 3: Notes.** No further actions.\n`;
+		expect(issues(content)).toContain(
+			"review document omitted a phased remediation plan",
+		);
+	});
+}
