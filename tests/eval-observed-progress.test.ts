@@ -37,9 +37,10 @@ type Mode =
 	| "foreign-root-part"
 	| "foreign-child-part"
 	| "duplicate-part"
-	| "deadline";
-const root = "ses_progress_root";
-const child = "ses_progress_child";
+	| "deadline"
+	| "oversize-proof";
+const root = "ses_progressroot";
+const child = "ses_progresschild";
 const model = {
 	routeProvider: "openai",
 	gateway: null,
@@ -47,7 +48,11 @@ const model = {
 	model: "gpt-6.1-sol",
 	revision: null,
 };
-async function observe(mode: Mode) {
+async function observe(
+	mode: Mode,
+	afterWait?: (host: EvalHost) => Promise<void>,
+	outcomeRoots: readonly string[] = [root],
+) {
 	const project = await mkdtemp(join(tmpdir(), "flow-observed-progress-"));
 	let now = 0;
 	let aborts = 0;
@@ -63,21 +68,24 @@ async function observe(mode: Mode) {
 	const completed = () => active && now >= 210_000;
 	const taskInput = {
 		subagent_type: "flow-reviewer",
-		prompt: `Inspect ${root} in ${project} and ${homedir()}/fixture-review.`,
+		prompt:
+			mode === "oversize-proof"
+				? "x".repeat(256 * 1024)
+				: `Inspect ${root} in ${project} and ${homedir()}/fixture-review.`,
 		apiKey: "synthetic-private-token-for-redaction",
 	};
 	const user = (sessionID: string) => ({
 		info: {
-			id: `${sessionID}_user`,
+			id: sessionID === root ? "msg_rootuser" : "msg_childuser",
 			sessionID,
 			role: "user",
 			time: { created: 1 },
 		},
 		parts: [
 			{
-				id: `${sessionID}_prompt`,
+				id: sessionID === root ? "prt_rootprompt" : "prt_childprompt",
 				sessionID,
-				messageID: `${sessionID}_user`,
+				messageID: sessionID === root ? "msg_rootuser" : "msg_childuser",
 				type: "text",
 				text: "Inspect the fixture.",
 			},
@@ -86,7 +94,7 @@ async function observe(mode: Mode) {
 	const info = (sessionID: string, id: string, history = false) => ({
 		id,
 		sessionID,
-		parentID: `${sessionID}_user`,
+		parentID: sessionID === root ? "msg_rootuser" : "msg_childuser",
 		role: "assistant",
 		agent: sessionID === root ? "build" : "flow-reviewer",
 		summary: false,
@@ -261,7 +269,8 @@ async function observe(mode: Mode) {
 		} catch (error) {
 			result = error;
 		}
-		const outcome = await host.outcome([root], now);
+		await afterWait?.(host);
+		const outcome = await host.outcome(outcomeRoots, now);
 		return { result, now, aborts, outcome, project };
 	} finally {
 		sleep.mockRestore();
@@ -323,6 +332,13 @@ test("real HTTP continuous owned content retains the twenty-minute hard deadline
 	expect(observed.now).toBeLessThanOrEqual(1_204_000);
 	expect(observed.now).toBeGreaterThanOrEqual(1_200_000);
 	expect(observed.aborts).toBe(1);
+	const proof: unknown = Reflect.get(observed.outcome, "abortObservation");
+	expect(proof).toBeDefined();
+	expect(deriveRetainedFailure(evidence(observed.outcome, proof))).toEqual({
+		origin: "host",
+		code: "command-aborted",
+		retryable: true,
+	});
 });
 
 function evidence(outcome: Outcome, abortObservation: unknown) {
@@ -369,7 +385,7 @@ function evidence(outcome: Outcome, abortObservation: unknown) {
 		gradeInput,
 		failure: { origin: "host", code: "command-aborted", retryable: true },
 		failureObservation: retainedFailureObservation(input),
-		usage: { durationMs: 182_000, outputTokens: 1, costUsd: null },
+		usage: { durationMs: outcome.durationMs, outputTokens: 1, costUsd: null },
 	});
 }
 async function captured() {
@@ -569,3 +585,72 @@ test("replayed native abort proof continues scheduling and uses only the predecl
 	});
 	expect(attempts[0]?.outcome.kind).toBe("failure");
 });
+
+for (const method of ["runCommand", "runPrompt"] as const) {
+	test(`a new ${method} that fails before dispatch cannot borrow prior abort proof`, async () => {
+		const observed = await observe("silent", async (host) => {
+			const before = await host.outcome([root], 182000);
+			expect(Reflect.get(before, "abortObservation")).toBeDefined();
+			Object.assign(host, {
+				verifyArtifacts: async () => {
+					throw new Error("Fixture pre-dispatch rejection.");
+				},
+			});
+			const request =
+				method === "runCommand"
+					? host.runCommand(root, "flow-auto", "fixture", "openai/gpt-6.1-sol")
+					: host.runPrompt(root, "fixture", "openai/gpt-6.1-sol");
+			await expect(request).rejects.toThrow("Fixture pre-dispatch rejection.");
+		});
+		expect(Reflect.get(observed.outcome, "abortObservation")).toBeUndefined();
+	});
+}
+test("outcome for a different root cannot borrow the original abort proof", async () => {
+	const observed = await observe("silent", undefined, [child]);
+	expect(Reflect.get(observed.outcome, "abortObservation")).toBeUndefined();
+});
+test("oversize native input declines proof instead of truncating into reserve authority", async () => {
+	const observed = await observe("oversize-proof");
+	expect(observed.aborts).toBe(1);
+	expect(Reflect.get(observed.outcome, "abortObservation")).toBeUndefined();
+	expect(
+		deriveRetainedFailure(evidence(observed.outcome, undefined)),
+	).toBeNull();
+});
+
+for (const kind of ["stall", "deadline"] as const) {
+	test(`replay refuses ${kind} proof exceeding the established suspension-credit cap`, async () => {
+		const observed = await captured();
+		const value = structuredClone(observed.retained);
+		const proof = Reflect.get(
+			value.failureObservation ?? {},
+			"abortObservation",
+		) as Record<string, unknown>;
+		proof.startedAt = 0;
+		proof.excludedMs = 1_300_000;
+		proof.observedAt = 2_502_000;
+		proof.abortRequestedAt = 2_502_000;
+		proof.trigger =
+			kind === "stall"
+				? {
+						kind,
+						lastActivityAt: 2_322_000,
+						unchangedMs: 180_000,
+						thresholdMs: 180_000,
+					}
+				: { kind, observedElapsedMs: 1_202_000, timeoutMs: 1_200_000 };
+		value.usage.durationMs = 2_502_000;
+		const task = value.gradeInput.allCalls.find((call) => call.tool === "task");
+		const trace = value.gradeInput.hostTrace;
+		if (!task?.native || trace?.kind !== "observed")
+			throw new Error("Missing native clock-proof fixture.");
+		task.native.completedAt = 2_502_000;
+		for (const message of trace.messages)
+			if (message.role === "assistant")
+				for (const tool of message.tools)
+					if (tool.callId === task.native.callId) tool.completedAt = 2_502_000;
+		expect(
+			deriveRetainedFailure(RetainedScenarioEvidenceSchema.parse(value)),
+		).toBeNull();
+	});
+}

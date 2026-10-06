@@ -332,7 +332,7 @@ for (const mode of [
 		const observed = await observeWait(mode);
 		expect(observed.result).toBeInstanceOf(Error);
 		expect(String(observed.result)).toContain(
-			"Scenario had no new messages or parts for 180000ms",
+			"Scenario had no observed activity for 180000ms",
 		);
 		expect(observed.now).toBe(182_000);
 		expect(observed.aborts).toBe(1);
@@ -344,19 +344,19 @@ for (const mode of [
 test("continuous owned reviewer progress retains the twenty-minute hard deadline", async () => {
 	const observed = await observeWait("deadline");
 	expect(String(observed.result)).toContain(
-		"New messages or parts continued near the deadline",
+		"Observed activity continued near the deadline",
 	);
 	expect(observed.now).toBe(1_202_000);
 	expect(observed.aborts).toBe(1);
 });
 
-test("count-only stall diagnostics disclose unmeasured in-place updates", async () => {
+test("completed historical output updates do not count as active observation", async () => {
 	const observed = await observeWait("in-place-progress");
 	expect(String(observed.result)).toContain(
-		"Scenario had no new messages or parts for 180000ms",
+		"Scenario had no observed activity for 180000ms",
 	);
 	expect(String(observed.result)).toContain(
-		"Updates inside existing parts are not measured.",
+		"Activity does not establish useful progress.",
 	);
 	expect(observed.now).toBe(182_000);
 	expect(observed.aborts).toBe(1);

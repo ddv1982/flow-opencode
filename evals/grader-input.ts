@@ -1,10 +1,15 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { isArtifactPath } from "../src/domain/artifact.js";
-import { canonicalSha256 } from "./canonical-json.js";
+import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
 import { mapStrings } from "./cassette.js";
 import type { ObservedToolCall, Outcome } from "./harness.js";
-import { HostTraceSchema, NativeToolProvenanceSchema } from "./host-trace.js";
+import {
+	type HostAbortObservation,
+	HostAbortObservationSchema,
+	HostTraceSchema,
+	NativeToolProvenanceSchema,
+} from "./host-trace.js";
 import { ReviewerPacketBytesListSchema } from "./reviewer-packet-bytes.js";
 
 const TextSchema = z
@@ -237,6 +242,7 @@ const FailureObservationSchema = z.discriminatedUnion("kind", [
 				"command-aborted",
 			]),
 			pendingTools: z.array(TextSchema).max(4096),
+			abortObservation: HostAbortObservationSchema.optional(),
 		})
 		.strict(),
 	z
@@ -396,6 +402,7 @@ export function retainedFailureObservation(input: {
 		readonly name: string;
 		readonly message: string;
 	} | null;
+	readonly abortObservation?: unknown;
 }): RetainedScenarioEvidence["failureObservation"] {
 	if (!isRetainableEnvironmentFailure(input)) return null;
 	if (input.origin === "provider") {
@@ -410,11 +417,144 @@ export function retainedFailureObservation(input: {
 			input.code !== "command-aborted")
 	)
 		return null;
+	const parsedAbort =
+		input.abortObservation === undefined
+			? null
+			: HostAbortObservationSchema.safeParse(input.abortObservation);
+	if (parsedAbort && !parsedAbort.success) return null;
+	const abortObservation = parsedAbort?.success ? parsedAbort.data : undefined;
 	return {
 		kind: "host-phase",
 		code: input.code,
-		pendingTools: retainedPendingTools(input.gradeInput),
+		pendingTools: abortObservation
+			? abortObservation.pending.map((call) => call.tool).sort()
+			: retainedPendingTools(input.gradeInput),
+		...(abortObservation ? { abortObservation: abortObservation } : {}),
 	};
+}
+
+function verifiedAbortPending(
+	evidence: RetainedScenarioEvidence,
+	observation: HostAbortObservation,
+): string[] | null {
+	const trace = evidence.gradeInput.hostTrace;
+	if (
+		trace?.kind !== "observed" ||
+		!trace.runnerRootSessionIds.includes(observation.rootSessionId) ||
+		!evidence.actors.some(
+			(actor) =>
+				actor.role === "manager" &&
+				actor.sessionIds.includes(observation.rootSessionId),
+		) ||
+		observation.observedAt > observation.abortRequestedAt ||
+		evidence.gradeInput.providerErrors.length > 0
+	)
+		return null;
+	if (
+		observation.startedAt > observation.observedAt ||
+		observation.excludedMs > 1_200_000 ||
+		observation.excludedMs >
+			observation.abortRequestedAt - observation.startedAt
+	)
+		return null;
+	const trigger = observation.trigger;
+	const elapsed =
+		trigger.kind === "stall" ? trigger.unchangedMs : trigger.observedElapsedMs;
+	if (
+		elapsed > evidence.usage.durationMs ||
+		(trigger.kind === "stall"
+			? trigger.lastActivityAt < observation.startedAt ||
+				trigger.lastActivityAt > observation.abortRequestedAt ||
+				trigger.unchangedMs !==
+					observation.abortRequestedAt - trigger.lastActivityAt ||
+				trigger.thresholdMs !== 180000 ||
+				trigger.unchangedMs < trigger.thresholdMs
+			: trigger.observedElapsedMs !==
+					observation.abortRequestedAt -
+						observation.startedAt -
+						observation.excludedMs ||
+				trigger.timeoutMs !== 1200000 ||
+				trigger.observedElapsedMs < trigger.timeoutMs)
+	)
+		return null;
+	const owned = new Set([observation.rootSessionId]);
+	for (;;) {
+		const before = owned.size;
+		for (const session of trace.sessions)
+			if (session.parentId && owned.has(session.parentId))
+				owned.add(session.id);
+		if (owned.size === before) break;
+	}
+	const known = new Set<string>();
+	const tools: string[] = [];
+	for (const pending of observation.pending) {
+		const native = pending.native;
+		const identity = canonicalJson([
+			native.sessionId,
+			native.messageId,
+			native.partId,
+			native.partIndex,
+			native.callId,
+		]);
+		if (
+			!owned.has(native.sessionId) ||
+			!native.callId ||
+			native.completedAt !== null ||
+			native.startedAt === null ||
+			native.startedAt > observation.observedAt ||
+			known.has(identity)
+		)
+			return null;
+		known.add(identity);
+		const matches = evidence.gradeInput.allCalls.filter(
+			(call) =>
+				call.tool === pending.tool &&
+				call.native &&
+				canonicalJson([
+					call.native.sessionId,
+					call.native.messageId,
+					call.native.partId,
+					call.native.partIndex,
+					call.native.callId,
+				]) === identity,
+		);
+		const call = matches[0];
+		if (
+			matches.length !== 1 ||
+			!call?.native ||
+			call.status === "completed" ||
+			call.native.startedAt !== native.startedAt ||
+			(call.native.completedAt !== null &&
+				call.native.completedAt < observation.abortRequestedAt) ||
+			(call.status === "error" && call.native.completedAt === null) ||
+			canonicalJson(call.input) !== canonicalJson(pending.input)
+		)
+			return null;
+		const nativeMatches = trace.messages
+			.flatMap((message) => (message.role === "assistant" ? message.tools : []))
+			.filter(
+				(tool) =>
+					tool.tool === pending.tool &&
+					canonicalJson([
+						tool.sessionId,
+						tool.messageId,
+						tool.partId,
+						tool.partIndex,
+						tool.callId,
+					]) === identity,
+			);
+		const counterpart = nativeMatches[0];
+		if (
+			nativeMatches.length !== 1 ||
+			!counterpart ||
+			counterpart.status !== call.status ||
+			counterpart.startedAt !== call.native.startedAt ||
+			counterpart.completedAt !== call.native.completedAt
+		)
+			return null;
+		tools.push(pending.tool);
+	}
+	return tools.sort();
 }
 
 export function deriveRetainedFailure(
@@ -444,7 +584,12 @@ export function deriveRetainedFailure(
 			retryable: true,
 		};
 	}
-	const pendingTools = retainedPendingTools(evidence.gradeInput);
+	const abortProof = observation.abortObservation;
+	if (abortProof && observation.code !== "command-aborted") return null;
+	const pendingTools = abortProof
+		? verifiedAbortPending(evidence, abortProof)
+		: retainedPendingTools(evidence.gradeInput);
+	if (!pendingTools) return null;
 	const noInteractionEvidence =
 		evidence.gradeInput.flowCalls.length === 0 &&
 		evidence.gradeInput.allCalls.length === 0 &&
