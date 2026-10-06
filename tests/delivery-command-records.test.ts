@@ -333,6 +333,12 @@ for (const prose of [
 	for (const status of [
 		"The command did not pass.",
 		"The observation failed.",
+		"Command failed.",
+		"Observation failed.",
+		"command failed.",
+		"observation failed.",
+		"COMMAND failed.",
+		"OBSERVATION failed.",
 	]) {
 		test(`explicit command status cannot disappear after ${JSON.stringify(prose)} ${status}`, () => {
 			const line = `${gate} passed with exit code 0. ${prose}${status}`;
@@ -351,23 +357,25 @@ for (const prose of [
 	}
 }
 
-test("script-only command prose does not become invocation evidence", () => {
-	const line = `${gate} passed with exit code 0. The command and script are unchanged.`;
-	expect(currentHandoffFacts(line, [gate]).observations).toEqual([
-		{
-			command: gate,
-			exitCode: 0,
-			qualification: "claimed-pass",
-			unchangedInvocation: false,
-		},
-	]);
-	expect(currentHandoffFacts(line, [gate]).unsupported).toEqual([]);
-	expect(
-		deliveryIssues(
-			fixture(
-				saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), line),
+for (const subject of ["The command", "Command", "command", "COMMAND"]) {
+	test(`script-only ${subject} prose does not become invocation evidence`, () => {
+		const line = `${gate} passed with exit code 0. ${subject} and script are unchanged.`;
+		expect(currentHandoffFacts(line, [gate]).observations).toEqual([
+			{
+				command: gate,
+				exitCode: 0,
+				qualification: "claimed-pass",
+				unchangedInvocation: false,
+			},
+		]);
+		expect(currentHandoffFacts(line, [gate]).unsupported).toEqual([]);
+		expect(
+			deliveryIssues(
+				fixture(
+					saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), line),
+				),
+				expectation,
 			),
-			expectation,
-		),
-	).toEqual([]);
-});
+		).toEqual([]);
+	});
+}
