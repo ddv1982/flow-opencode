@@ -644,7 +644,7 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				plain,
 			) &&
 			!/\?\s*(?:no|none|not necessary)\b/i.test(plain) &&
-			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
+			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|establish|fix|identify|investigate|make|measure|repair|reproduce|restore|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
 				visible,
 			) &&
 			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b|\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
@@ -665,73 +665,115 @@ function inspectionDocumentHasPhases(content: string): boolean {
 			)
 		);
 	};
-	const headings = [
-		...content.matchAll(
-			/(?:^|\n)\s*(?:(?:#{1,6}|\d+[.)])\s*)?(?:\*\*)?(?:phase|step)\s*(1|one|i|2|two|ii)\b([^\n]*)/gi,
-		),
-	];
-	const first = headings.find((heading) =>
-		/^(?:1|one|i)$/i.test(heading[1] ?? ""),
-	);
-	const second = headings.find(
-		(heading) =>
-			heading.index > (first?.index ?? Infinity) &&
-			/^(?:2|two|ii)$/i.test(heading[1] ?? ""),
-	);
-	const phaseSection = (tail: string, marker: string) => {
-		const level = marker.match(/#{1,6}/)?.[0].length ?? 0;
-		const boundary = [...tail.matchAll(/\n {0,3}(#{1,6})[ \t]+/g)].find(
-			(heading) => level === 0 || (heading[1]?.length ?? 0) <= level,
-		);
-		return tail.slice(0, boundary?.index);
+	type PhaseMarker = {
+		ordinal: number;
+		start: number;
+		bodyStart: number;
+		title: string;
+		level: number;
+		indent: string;
+		style: "heading" | "ordered" | "label";
 	};
-	const numberedHeadings = [
-		...content.matchAll(
-			/(?:^|\n) {0,3}(#{1,6})[ \t]+([12])[.)][ \t]+([^\n]*)/g,
-		),
+	const markers: PhaseMarker[] = [];
+	const sectionHeadings = [
+		...content.matchAll(/(?:^|\n) {0,3}(#{1,6})[ \t]+[^\n]*/g),
 	];
-	const numberedFirst = numberedHeadings.find((heading) => heading[2] === "1");
-	const numberedSecond =
-		numberedFirst &&
-		numberedHeadings.find((heading) => {
-			if (
-				heading[2] !== "2" ||
-				heading.index <= numberedFirst.index ||
-				heading[1]?.length !== numberedFirst[1]?.length
-			)
-				return false;
-			const between = content.slice(
-				numberedFirst.index + numberedFirst[0].length,
-				heading.index,
-			);
-			return ![...between.matchAll(/\n {0,3}(#{1,6})[ \t]+/g)].some(
-				(boundary) => (boundary[1]?.length ?? 0) < (heading[1]?.length ?? 0),
-			);
+	for (const line of content.matchAll(/(?:^|\n)([ \t]*)([^\n]+)/g)) {
+		const raw = line[2] ?? "";
+		const structure = /^(#{1,6})[ \t]+|^(\d+)[.)][ \t]+/.exec(raw);
+		const label = raw.slice(structure?.[0].length ?? 0).replace(/^\*\*/, "");
+		const named = /^(?:phase|step)\s*(\d+|one|two|three|i|ii|iii)\b(.*)$/i.exec(
+			label,
+		);
+		const numbered = structure?.[1] && /^(\d+)[.)][ \t]+(.*)$/.exec(label);
+		if (!named && !numbered) continue;
+		const tail = (named?.[2] ?? numbered?.[2] ?? "").replace(/\*\*/g, "");
+		if (!structure && tail.trim() && !/^\s*[:.;—–-]/.test(tail)) continue;
+		const rawOrdinal = (named?.[1] ?? numbered?.[1] ?? "").toLowerCase();
+		const words = new Map([
+			["one", 1],
+			["i", 1],
+			["two", 2],
+			["ii", 2],
+			["three", 3],
+			["iii", 3],
+		]);
+		const ordinal = words.get(rawOrdinal) ?? Number(rawOrdinal);
+		markers.push({
+			ordinal,
+			start: line.index,
+			bodyStart: line.index + line[0].length,
+			title: tail,
+			level: structure?.[1]?.length ?? 0,
+			indent: line[1] ?? "",
+			style: structure?.[1] ? "heading" : structure ? "ordered" : "label",
 		});
-	let actions: readonly [string, string] | null = null;
-	if (first && second) {
-		const firstTail = content.slice(
-			first.index + first[0].length,
-			second.index,
+	}
+	const orderedItems = [
+		...content.matchAll(/(?:^|\n)([ \t]*)(\d+)[.)][ \t]+[^\n]*/g),
+	];
+	for (const [index, first] of markers.entries()) {
+		if (first.ordinal !== 1) continue;
+		const second = markers
+			.slice(index + 1)
+			.find(
+				(marker) =>
+					marker.level <= first.level &&
+					marker.indent.length <= first.indent.length,
+			);
+		if (
+			second?.ordinal !== 2 ||
+			second.style !== first.style ||
+			second.level !== first.level ||
+			second.indent !== first.indent
+		)
+			continue;
+		if (first.style === "ordered") {
+			const peer = orderedItems.find(
+				(item) =>
+					item.index > first.start &&
+					(item[1]?.length ?? 0) <= first.indent.length,
+			);
+			if (peer?.index !== second.start) continue;
+		}
+		const interveningSection = sectionHeadings.some(
+			(heading) =>
+				heading.index > first.start &&
+				heading.index < second.start &&
+				(first.level === 0 || (heading[1]?.length ?? 0) <= first.level),
 		);
-		const secondTail = content.slice(second.index + second[0].length);
-		actions = [
-			`${first[2] ?? ""} ${phaseSection(firstTail, first[0])}`,
-			`${second[2] ?? ""} ${phaseSection(secondTail, second[0])}`,
+		if (interveningSection) continue;
+		const nextMarker = markers.find(
+			(marker) =>
+				marker.start > second.start &&
+				marker.level <= second.level &&
+				marker.indent.length <= second.indent.length,
+		);
+		const nextHeading = sectionHeadings.find(
+			(heading) =>
+				heading.index > second.start &&
+				(second.level === 0 || (heading[1]?.length ?? 0) <= second.level),
+		);
+		const nextItem =
+			second.style === "ordered"
+				? orderedItems.find(
+						(item) =>
+							item.index > second.start &&
+							(item[1]?.length ?? 0) <= second.indent.length,
+					)
+				: undefined;
+		const end = Math.min(
+			nextMarker?.start ?? content.length,
+			nextHeading?.index ?? content.length,
+			nextItem?.index ?? content.length,
+		);
+		const candidate: readonly [string, string] = [
+			`${first.title} ${content.slice(first.bodyStart, second.start)}`,
+			`${second.title} ${content.slice(second.bodyStart, end)}`,
 		];
-	} else if (numberedFirst && numberedSecond) {
-		const firstTail = content.slice(
-			numberedFirst.index + numberedFirst[0].length,
-			numberedSecond.index,
-		);
-		const secondTail = content.slice(
-			numberedSecond.index + numberedSecond[0].length,
-		);
-		actions = [
-			`${numberedFirst[3] ?? ""} ${phaseSection(firstTail, numberedFirst[0])}`,
-			`${numberedSecond[3] ?? ""} ${phaseSection(secondTail, numberedSecond[0])}`,
-		];
-	} else {
+		if (actionablePlan(candidate)) return true;
+	}
+	{
 		const items = [
 			...content.matchAll(/(?:^|\n)([ \t]*)(\d+)[.)][ \t]+([^\n]*)/g),
 		];
@@ -744,6 +786,14 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				firstItem[2] !== "1" ||
 				secondItem?.[2] !== "2" ||
 				firstItem[1] !== secondItem[1]
+			)
+				continue;
+			if (
+				markers.some(
+					(marker) =>
+						marker.start === firstItem.index ||
+						marker.start === secondItem.index,
+				)
 			)
 				continue;
 			const firstTail = content.slice(
@@ -785,14 +835,10 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				`${firstItem[3] ?? ""} ${firstTail}`,
 				`${secondItem[3] ?? ""} ${continuation}`,
 			];
-			if (actionablePlan(candidate)) {
-				actions = candidate;
-				break;
-			}
+			if (actionablePlan(candidate)) return true;
 		}
 	}
-	if (!actions) return false;
-	return actionablePlan(actions);
+	return false;
 }
 
 function inspectionFindingContradicted(content: string): boolean {
