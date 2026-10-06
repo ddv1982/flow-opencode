@@ -46,7 +46,9 @@ test("same-line and separate-line native prose have identical command and handof
 	);
 	expect(
 		deliveryIssues(
-			fixture(saved.answer.replace(nativeLine, split)),
+			fixture(
+				saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), split),
+			),
 			expectation,
 		),
 	).toEqual([]);
@@ -106,7 +108,9 @@ for (const assertion of [
 		);
 		expect(
 			deliveryIssues(
-				fixture(saved.answer.replace(nativeLine, same)),
+				fixture(
+					saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), same),
+				),
 				expectation,
 			).length,
 		).toBeGreaterThan(0);
@@ -207,8 +211,12 @@ test("genuine trailing goal is checked against the exact native goal", () => {
 	);
 	expect(currentHandoffFacts(same, [gate]).goal).toEqual(["A different goal."]);
 	expect(
-		deliveryIssues(fixture(saved.answer.replace(nativeLine, same)), expectation)
-			.length,
+		deliveryIssues(
+			fixture(
+				saved.answer.replace(nativeLine.replace(gate, `\`${gate}\``), same),
+			),
+			expectation,
+		).length,
 	).toBeGreaterThan(0);
 });
 
