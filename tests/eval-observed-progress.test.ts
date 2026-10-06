@@ -38,7 +38,12 @@ type Mode =
 	| "foreign-child-part"
 	| "duplicate-part"
 	| "deadline"
-	| "oversize-proof";
+	| "oversize-proof"
+	| "numeric-message"
+	| "numeric-part"
+	| "object-call"
+	| "object-tool"
+	| "object-pending-raw";
 const root = "ses_progressroot";
 const child = "ses_progresschild";
 const model = {
@@ -64,6 +69,11 @@ async function observe(
 		"pending-raw",
 		"pending-input",
 		"running-input",
+		"numeric-message",
+		"numeric-part",
+		"object-call",
+		"object-tool",
+		"object-pending-raw",
 	].includes(mode);
 	const completed = () => active && now >= 210_000;
 	const taskInput = {
@@ -109,37 +119,51 @@ async function observe(
 					: {}),
 		},
 	});
-	const rootMessages = () => [
-		user(root),
-		{
-			info: info(root, "msg_root"),
-			parts: [
-				{
-					id: "prt_task",
-					sessionID: mode === "foreign-root-part" ? "ses_foreign" : root,
-					messageID: "msg_root",
-					type: "tool",
-					tool: "task",
-					callID: "call_task",
-					state: {
-						status: aborted ? "error" : completed() ? "completed" : "running",
-						input: taskInput,
-						...(aborted ? { error: "Task cancelled" } : {}),
-						metadata: {
-							sessionId: child,
-							parentSessionId: root,
-							model: { providerID: "openai", modelID: "gpt-6.1-sol" },
-							heartbeat: mode === "metadata" ? now : 0,
-						},
-						time: {
-							start: 2,
-							...(aborted ? { end: now } : completed() ? { end: 210_000 } : {}),
+	const rootMessages = () => {
+		const entries = [
+			user(root),
+			{
+				info: info(root, "msg_root"),
+				parts: [
+					{
+						id: "prt_task",
+						sessionID: mode === "foreign-root-part" ? "ses_foreign" : root,
+						messageID: "msg_root",
+						type: "tool",
+						tool: "task",
+						callID: "call_task",
+						state: {
+							status: aborted ? "error" : completed() ? "completed" : "running",
+							input: taskInput,
+							...(aborted ? { error: "Task cancelled" } : {}),
+							metadata: {
+								sessionId: child,
+								parentSessionId: root,
+								model: { providerID: "openai", modelID: "gpt-6.1-sol" },
+								heartbeat: mode === "metadata" ? now : 0,
+							},
+							time: {
+								start: 2,
+								...(aborted
+									? { end: now }
+									: completed()
+										? { end: 210_000 }
+										: {}),
+							},
 						},
 					},
-				},
-			],
-		},
-	];
+				],
+			},
+		];
+		const part = entries[1]?.parts[0];
+		if (!part) throw new Error("Missing root fixture part.");
+		if (!aborted && !completed()) {
+			if (mode === "object-call")
+				Reflect.set(part, "callID", { heartbeat: now });
+			if (mode === "object-tool") Reflect.set(part, "tool", { heartbeat: now });
+		}
+		return entries;
+	};
 	const childMessages = () => {
 		const tick = Math.floor(Math.min(now, 210_000) / 2_000);
 		const history = [
@@ -155,6 +179,7 @@ async function observe(
 			"pending-input",
 			"running-input",
 			"running-output",
+			"object-pending-raw",
 		].includes(mode);
 		const part = {
 			id: "prt_stream",
@@ -168,7 +193,7 @@ async function observe(
 						state: {
 							status: completed()
 								? "completed"
-								: mode.startsWith("pending")
+								: mode.startsWith("pending") || mode === "object-pending-raw"
 									? "pending"
 									: "running",
 							input,
@@ -214,10 +239,23 @@ async function observe(
 				: mode === "duplicate-part"
 					? [part]
 					: [];
-		return [
-			user(child),
-			{ info: info(child, "msg_child", history), parts: [part, ...extra] },
-		];
+		const entry = {
+			info: info(child, "msg_child", history),
+			parts: [part, ...extra],
+		};
+		if (!aborted && !completed()) {
+			if (mode === "numeric-message") {
+				Reflect.set(entry.info, "id", 42);
+				Reflect.set(part, "messageID", 42);
+			}
+			if (mode === "numeric-part") Reflect.set(part, "id", 42);
+			if (mode === "object-pending-raw") {
+				const state: unknown = Reflect.get(part, "state");
+				if (state && typeof state === "object")
+					Reflect.set(state, "raw", { heartbeat: now });
+			}
+		}
+		return [user(child), entry];
 	};
 	const server = Bun.serve({
 		port: 0,
@@ -316,6 +354,11 @@ for (const mode of [
 	"foreign-root-part",
 	"foreign-child-part",
 	"duplicate-part",
+	"numeric-message",
+	"numeric-part",
+	"object-call",
+	"object-tool",
+	"object-pending-raw",
 ] as const) {
 	test(`real HTTP malformed ${mode} fails at the owned observation boundary`, async () => {
 		const observed = await observe(mode);
