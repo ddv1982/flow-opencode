@@ -406,11 +406,36 @@ function commandResultValue(line: string, commands: readonly string[]) {
 	return null;
 }
 function proseGateClause(line: string) {
-	const match = /^(?:(.+), and )?the Linux gate ((?:node|bun) .+)$/i.exec(line);
-	if (!match) return null;
-	const prefix = match[1] ?? null;
-	if (prefix && /[:"']/.test(prefix)) return null;
-	return { prefix, commandClause: match[2] ?? "" };
+	const leading = /^the Linux gate ((?:node|bun) .+)$/i.exec(line);
+	if (leading) return { prefix: null, commandClause: leading[1] ?? "" };
+	if (/^Example:/i.test(line)) return null;
+	let quote: string | null = null;
+	for (let index = 0; index < line.length; index++) {
+		const character = line[index];
+		if (character === "\\") {
+			index++;
+			continue;
+		}
+		if (quote) {
+			if (character === quote) quote = null;
+			continue;
+		}
+		if (character === '"' || character === "'") {
+			if (character === "'" && /[A-Za-z]/.test(line[index - 1] ?? "")) continue;
+			quote = character;
+			continue;
+		}
+		if (character !== ",") continue;
+		const conjunction = /^, and the Linux gate ((?:node|bun) .+)$/i.exec(
+			line.slice(index),
+		);
+		if (conjunction)
+			return {
+				prefix: line.slice(0, index).trim() || null,
+				commandClause: conjunction[1] ?? "",
+			};
+	}
+	return null;
 }
 function parseCommandResult(
 	rawBody: string,
