@@ -421,7 +421,11 @@ function proseGateClause(line: string) {
 			continue;
 		}
 		if (character === '"' || character === "'") {
-			if (character === "'" && /[A-Za-z]/.test(line[index - 1] ?? "")) continue;
+			if (
+				character === "'" &&
+				/[\p{L}\p{N}\p{M}_]$/u.test(line.slice(0, index))
+			)
+				continue;
 			quote = character;
 			continue;
 		}
