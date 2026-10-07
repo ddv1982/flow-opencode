@@ -595,11 +595,22 @@ export function deliveryIssues(
 					.at(-1)
 					?.reviews.at(-1)?.result?.findings ?? [],
 		);
+	const blockedFeatures = archive.plan.features.filter(
+		(feature) =>
+			archive.runs.findLast(
+				(run) => run.featureId === feature.id && run.state !== "superseded",
+			)?.state === "blocked",
+	).length;
+	const auxiliaryCounts = {
+		unfinished: archive.plan.features.length - complete,
+		"blocked-feature": blockedFeatures,
+		blocking: findings.filter((finding) => finding.severity === "blocking")
+			.length,
+		advisory: findings.filter((finding) => finding.severity === "advisory")
+			.length,
+	};
 	for (const claim of facts.auxiliaryCounts) {
-		const count =
-			claim.kind === "unfinished"
-				? archive.plan.features.length - complete
-				: findings.filter((finding) => finding.severity === claim.kind).length;
+		const count = auxiliaryCounts[claim.kind];
 		if (claim.count !== count)
 			issues.push(
 				"Auxiliary handoff count contradicts the current archive or finding records.",
