@@ -533,7 +533,9 @@ export function currentHandoffFacts(
 				continue;
 			}
 			const authority =
-				/^external[- ]action authority(?: is| has been)? (.+)$/i.exec(claim);
+				/^external[- ]action authority(?: is| was| has been)? (.+)$/i.exec(
+					claim,
+				);
 			if (authority) {
 				facts.authority.push(authorityValue(authority[1] ?? ""));
 				continue;
@@ -556,7 +558,7 @@ export function currentHandoffFacts(
 			}
 			const critical =
 				commandStatusAssertion(claim) ||
-				/\b(?:ready to ship|(?:workflow|session) (?:is |was |has been )(?:completed|complete|deferred|abandoned)|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority (?:is|granted)|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
+				/\b(?:ready to ship|(?:workflow|session) (?:is |was |has been )(?:completed|complete|deferred|abandoned)|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
 					claim,
 				);
 			if (critical) facts.unsupported.push(claim);
