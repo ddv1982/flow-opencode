@@ -533,7 +533,7 @@ export function currentHandoffFacts(
 				continue;
 			}
 			const authority =
-				/^external[- ]action authority(?: is| has been)? (.+)$/i.exec(claim);
+				/^external[- ]action authority(?: is| was| has been)? (.+)$/i.exec(claim);
 			if (authority) {
 				facts.authority.push(authorityValue(authority[1] ?? ""));
 				continue;
