@@ -24,8 +24,10 @@ if (!model) throw new Error("Candidate model is absent.");
 
 test("candidate retains all prior policy rows and promotes five truthful delivery boundaries", () => {
 	const prior = releaseCatalog("9.5.0");
-	expect(profile.catalog.slice(0, prior.length)).toEqual([...prior]);
-	const added = profile.catalog.slice(prior.length);
+	const priorIds = new Set(prior.map((row) => row.caseId));
+	const added = profile.catalog.filter((row) => !priorIds.has(row.caseId));
+	expect(profile.catalog.slice(added.length)).toEqual([...prior]);
+	expect(profile.catalog.slice(0, added.length)).toEqual(added);
 	expect(added.map((row) => row.caseId)).toEqual([
 		"delivery-summary-completed",
 		"delivery-summary-deferred",
@@ -57,6 +59,22 @@ test("candidate grid binds both roles and scheduled top-level dispatch counts", 
 		(cell) => cell.schedule === "environment-reserve",
 	);
 	expect(primary).toHaveLength(72);
+	expect(primary.slice(0, 3).map((cell) => cell.caseId)).toEqual([
+		"delivery-summary-completed",
+		"delivery-summary-completed",
+		"delivery-summary-completed",
+	]);
+	expect(
+		releaseScenarios(version)
+			.slice(0, 5)
+			.map((scenario) => scenario.id),
+	).toEqual([
+		"delivery-summary-completed",
+		"delivery-summary-deferred",
+		"delivery-summary-observed-failure",
+		"delivery-full-detail-followup",
+		"delivery-idle-after-close",
+	]);
 	expect(reserve).toHaveLength(17);
 	for (const cell of cells)
 		expect([cell.managerModel, cell.reviewerModel]).toEqual([model, model]);

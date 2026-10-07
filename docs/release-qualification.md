@@ -49,13 +49,13 @@ second external failure or an unallowed ask leaves a gap. Product and evaluator
 failures never activate reserves. Evaluator failure is `NOT VERIFIED`;
 persistence failure stops without a finalized report.
 
-Repository code owns the release catalog; persisted `catalog.json` must match.
-Versions 9.1.0 and 9.2.0 use 38 primary cells and eight reserves on GPT-6 Sol.
-Version 9.3.0 uses 48 primary cells and nine reserves. Version 9.4.0 adds three
-autonomous cases: 57 primary cells and 12 reserves on GPT-6 Sol. Version 9.5.0
-retains those twelve cases on GPT-6.1 Sol: 57 primary cells and 12 reserves.
-Version 9.6.0 adds five delivery cases: 72 primary cells and 17 reserves.
-Other versions use 96 primary cells and 18 reserves. Narrowed or merged reports
+Repository code owns catalog order; persisted `catalog.json` must match.
+Primary/reserve cells on GPT-6 Sol are 38/8 in 9.1.0 and 9.2.0, 48/9 in
+9.3.0, and 57/12 in 9.4.0. The 9.4.0 profile adds three autonomous cases.
+Version 9.5.0 keeps those twelve cases on GPT-6.1 Sol, with 57/12 cells.
+Version 9.6.0 adds five delivery cases, collects them first, and uses 72/17
+cells. Other versions use 96/18. Changed order requires a new freeze and
+approval. Existing campaigns stay immutable; narrowed or merged reports
 cannot qualify.
 
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,

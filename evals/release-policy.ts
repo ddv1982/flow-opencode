@@ -143,7 +143,6 @@ if (!prospectiveParsed.ok)
 const AUTO_RELEASE_CATALOG = prospectiveParsed.value;
 
 const deliveryParsed = parseCaseCatalog([
-	...AUTO_RELEASE_CATALOG,
 	...[
 		"delivery-summary-completed",
 		"delivery-summary-deferred",
@@ -161,6 +160,7 @@ const deliveryParsed = parseCaseCatalog([
 		minPassRate: 1,
 		reviewerPromotionRecordSha256: null,
 	})),
+	...AUTO_RELEASE_CATALOG,
 ]);
 if (!deliveryParsed.ok) throw new Error("Delivery release policy is invalid.");
 const DELIVERY_RELEASE_CATALOG = deliveryParsed.value;

@@ -1,4 +1,6 @@
+import { posix } from "node:path";
 import { z } from "zod";
+import { isArtifactPath } from "../src/domain/artifact.js";
 import { canonicalJson } from "./canonical-json.js";
 import {
 	currentHandoffFacts,
@@ -8,6 +10,75 @@ import {
 } from "./delivery-presentation.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
 import { checkReviewerEvidenceAccess } from "./reviewer-access.js";
+
+function invokingScript(command: string): string | null {
+	const words: string[] = [];
+	let value = "";
+	let started = false;
+	let quote: "'" | '"' | null = null;
+	for (let index = 0; index < command.length; index++) {
+		const character = command[index] ?? "";
+		if (/\r|\n|\0/.test(character)) return null;
+		if (quote === "'") {
+			if (character === "'") quote = null;
+			else if (words.length < 2) value += character;
+			continue;
+		}
+		if (character === "\\") {
+			const next = command[index + 1];
+			if (next === undefined || /\r|\n|\0/.test(next)) return null;
+			started = true;
+			if (quote === '"' && !['"', "\\", "$", "`"].includes(next)) {
+				if (words.length < 2) value += "\\";
+			} else {
+				if (words.length < 2) value += next;
+				index++;
+			}
+			continue;
+		}
+		if (quote === '"') {
+			if (character === '"') quote = null;
+			else {
+				if (character === "$" || character === "`") return null;
+				if (words.length < 2) value += character;
+			}
+			continue;
+		}
+		if (character === "'" || character === '"') {
+			quote = character;
+			started = true;
+			continue;
+		}
+		if (/[;|&<>`$*?[\]{}~#()]/.test(character)) return null;
+		if (/\s/.test(character)) {
+			if (started && words.length < 2) words.push(value);
+			value = "";
+			started = false;
+		} else {
+			started = true;
+			if (words.length < 2) value += character;
+		}
+	}
+	if (quote) return null;
+	if (started && words.length < 2) words.push(value);
+	const runner = words[0];
+	const script = words[1];
+	if (
+		!runner ||
+		!script ||
+		!["node", "bun"].includes(runner) ||
+		script.startsWith("-")
+	)
+		return null;
+	if (
+		(runner === "node" && script === "inspect") ||
+		(runner === "bun" && !/\.(?:[cm]?[jt]s|[jt]sx)$/.test(script))
+	)
+		return null;
+	if (script.split("/").includes("..")) return null;
+	const path = posix.normalize(script);
+	return isArtifactPath(path) ? path : null;
+}
 
 export type DeliveryExpectation = Readonly<{
 	closure: "completed" | "deferred";
@@ -458,17 +529,28 @@ export function deliveryIssues(
 			issues.push(
 				"Claimed command pass lacks matching accepted complete source evidence.",
 			);
-		if (
-			result.unchangedInvocation &&
-			(result.command !== expected.gate ||
-				input.workspaceChanges?.kind !== "observed" ||
-				input.workspaceChanges.paths.some((path) =>
-					result.command.split(/\s+/).includes(path),
-				))
-		)
+	}
+	for (const result of facts.observations) {
+		if (result.integrity === "not-claimed") continue;
+		const script = invokingScript(result.command);
+		const immutableScript =
+			script !== null &&
+			input.workspaceChanges?.kind === "observed" &&
+			!input.workspaceChanges.paths.includes(script);
+		if (result.integrity === "script-unchanged") {
+			if (!immutableScript)
+				issues.push(
+					"Unchanged script claim lacks immutable workspace evidence.",
+				);
+		} else if (
+			result.qualification !== "claimed-pass" ||
+			result.command !== expected.gate ||
+			!immutableScript
+		) {
 			issues.push(
 				"Unchanged invocation claim does not match the gate and immutable script paths.",
 			);
+		}
 	}
 	if (facts.unsupported.length)
 		issues.push("Unsupported or conflicting current handoff assertions.");

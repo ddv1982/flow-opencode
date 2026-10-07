@@ -131,7 +131,7 @@ test("compound-looking bytes in goals and registered commands remain their origi
 		{
 			command,
 			exitCode: 0,
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 			qualification: "claimed-pass",
 		},
 	]);

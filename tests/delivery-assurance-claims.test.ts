@@ -170,7 +170,7 @@ test("assurance-like quoted goal and registered command arguments remain in thei
 		{
 			command,
 			exitCode: 0,
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 			qualification: "claimed-pass",
 		},
 	]);

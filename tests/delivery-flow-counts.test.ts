@@ -201,7 +201,7 @@ test("Goal and quoted known commands retain Flow and count bytes without current
 		{
 			command,
 			exitCode: 0,
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 			qualification: "claimed-pass",
 		},
 	]);
@@ -224,7 +224,7 @@ for (const label of [
 			{
 				command,
 				exitCode: 0,
-				unchangedInvocation: false,
+				integrity: "not-claimed",
 				qualification: "claimed-pass",
 			},
 		]);
@@ -247,7 +247,7 @@ test("malformed registered command results remain unsupported without borrowing 
 		{
 			command,
 			exitCode: 0,
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 			qualification: null,
 		},
 	]);
