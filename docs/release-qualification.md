@@ -55,6 +55,9 @@ Version 9.3.0 uses 48 primary cells and nine reserves. Version 9.4.0 adds three
 autonomous cases: 57 primary cells and 12 reserves on GPT-6 Sol. Version 9.5.0
 retains those twelve cases on GPT-6.1 Sol: 57 primary cells and 12 reserves.
 Version 9.6.0 adds five delivery cases: 72 primary cells and 17 reserves.
+It collects those delivery cases first, then the unchanged prior policy rows.
+The declared order is part of the frozen catalog and plan; do not reorder an
+existing campaign or reuse its approval for a changed candidate.
 Other versions use 96 primary cells and 18 reserves. Narrowed or merged reports
 cannot qualify.
 
