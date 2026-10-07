@@ -18,6 +18,8 @@ type CommandObservation = {
 function commandIntegrityValue(
 	clause: string,
 ): Exclude<CommandIntegrity, "not-claimed"> | null {
+	if (/^the script (?:is|was|remains|remained) unchanged$/i.test(clause))
+		return "script-unchanged";
 	const match =
 		/^its (script|invocation|command)(?: and (script|invocation|command))? (is|was|remains|remained|are|were|remain) unchanged$/i.exec(
 			clause,
@@ -367,7 +369,7 @@ function commandResultValue(line: string, commands: readonly string[]) {
 		while (
 			boundary.end < rawBody.length &&
 			(commandStatusAssertion(rawBody.slice(boundary.end).trimStart()) ||
-				/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its)\b/i.test(
+				/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its|the (?:script|invocation))\b/i.test(
 					rawBody.slice(boundary.end).trimStart(),
 				))
 		) {
