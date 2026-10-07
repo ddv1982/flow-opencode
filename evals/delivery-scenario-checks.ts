@@ -458,17 +458,28 @@ export function deliveryIssues(
 			issues.push(
 				"Claimed command pass lacks matching accepted complete source evidence.",
 			);
-		if (
-			result.unchangedInvocation &&
-			(result.command !== expected.gate ||
-				input.workspaceChanges?.kind !== "observed" ||
-				input.workspaceChanges.paths.some((path) =>
-					result.command.split(/\s+/).includes(path),
-				))
-		)
+	}
+	for (const result of facts.observations) {
+		if (result.integrity === "not-claimed") continue;
+		const immutableScript =
+			input.workspaceChanges?.kind === "observed" &&
+			!input.workspaceChanges.paths.some((path) =>
+				result.command.split(/\s+/).includes(path),
+			);
+		if (result.integrity === "script-unchanged") {
+			if (!immutableScript)
+				issues.push(
+					"Unchanged script claim lacks immutable workspace evidence.",
+				);
+		} else if (
+			result.qualification !== "claimed-pass" ||
+			result.command !== expected.gate ||
+			!immutableScript
+		) {
 			issues.push(
 				"Unchanged invocation claim does not match the gate and immutable script paths.",
 			);
+		}
 	}
 	if (facts.unsupported.length)
 		issues.push("Unsupported or conflicting current handoff assertions.");

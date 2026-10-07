@@ -86,7 +86,7 @@ test("longest exact registered command owns all literal argument punctuation", (
 			command,
 			exitCode: 0,
 			qualification: "claimed-pass",
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 		},
 	]);
 	expect(facts.closure).toEqual(["deferred"]);
@@ -138,7 +138,7 @@ test("independent script statement does not claim an unchanged invocation", () =
 			command: gate,
 			exitCode: 0,
 			qualification: "claimed-pass",
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 		},
 	]);
 	expect(facts.unsupported).toEqual([]);
@@ -154,7 +154,7 @@ test("the stronger script and invocation qualifier retains its exact meaning", (
 			command: gate,
 			exitCode: 0,
 			qualification: "claimed-pass",
-			unchangedInvocation: true,
+			integrity: "script-and-invocation-unchanged",
 		},
 	]);
 	expect(facts.closure).toEqual(["completed"]);
@@ -171,7 +171,7 @@ test("nonzero exit cannot borrow pass qualification from independent review pros
 			command: gate,
 			exitCode: 1,
 			qualification: "observation",
-			unchangedInvocation: false,
+			integrity: "not-claimed",
 		},
 	]);
 	expect(facts.unsupported).toEqual([]);
@@ -365,7 +365,7 @@ for (const subject of ["The command", "Command", "command", "COMMAND"]) {
 				command: gate,
 				exitCode: 0,
 				qualification: "claimed-pass",
-				unchangedInvocation: false,
+				integrity: "not-claimed",
 			},
 		]);
 		expect(currentHandoffFacts(line, [gate]).unsupported).toEqual([]);

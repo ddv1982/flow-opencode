@@ -71,9 +71,7 @@ for (const verb of ["is", "was", "remains", "remained"]) {
 			[gate],
 		);
 		expect(facts.observations[0]?.qualification).toBe("claimed-pass");
-		expect(Reflect.get(facts.observations[0] ?? {}, "integrity")).toBe(
-			"script-unchanged",
-		);
+		expect(facts.observations[0]?.integrity).toBe("script-unchanged");
 		expect(facts.unsupported).toEqual([]);
 	});
 }
@@ -82,7 +80,7 @@ test("explicit combined subject alone carries combined integrity", () => {
 		`${gate} passed with exit code 0; Its script and invocation are unchanged.`,
 		[gate],
 	);
-	expect(Reflect.get(facts.observations[0] ?? {}, "integrity")).toBe(
+	expect(facts.observations[0]?.integrity).toBe(
 		"script-and-invocation-unchanged",
 	);
 	expect(facts.unsupported).toEqual([]);
@@ -96,9 +94,7 @@ test("native audit observation plus script-only integrity is truthful beside a s
 		[audit],
 	);
 	expect(facts.observations[0]?.qualification).toBe("does-not-claim-pass");
-	expect(Reflect.get(facts.observations[0] ?? {}, "integrity")).toBe(
-		"script-unchanged",
-	);
+	expect(facts.observations[0]?.integrity).toBe("script-unchanged");
 });
 for (const path of ["scripts/verify.mjs", "scripts/audit.mjs"]) {
 	test(`script-only native claim rejects actual script mutation ${path}`, () => {
@@ -202,9 +198,7 @@ test("repeated consistent qualifiers are idempotent", () => {
 		[gate],
 	);
 	expect(facts.observations[0]?.qualification).toBe("claimed-pass");
-	expect(Reflect.get(facts.observations[0] ?? {}, "integrity")).toBe(
-		"script-unchanged",
-	);
+	expect(facts.observations[0]?.integrity).toBe("script-unchanged");
 	expect(facts.unsupported).toEqual([]);
 });
 test("script-only modifier cannot hide a current external permission", () => {
@@ -222,9 +216,7 @@ test("command argument qualifiers and permissions remain opaque before longest m
 		command,
 	]);
 	expect(facts.observations[0]?.command).toBe(command);
-	expect(Reflect.get(facts.observations[0] ?? {}, "integrity")).toBe(
-		"not-claimed",
-	);
+	expect(facts.observations[0]?.integrity).toBe("not-claimed");
 	expect(facts.authority).toEqual([]);
 	expect(facts.unsupported).toEqual([]);
 });

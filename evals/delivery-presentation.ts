@@ -5,6 +5,42 @@ type Assurance =
 	| "completion-supported"
 	| "completion-unsupported"
 	| "completion-not-claimed";
+const COMMAND_INTEGRITY = [
+	{
+		subject: "its script",
+		copulas: ["is", "was", "remains", "remained"],
+		predicate: "unchanged",
+		value: "script-unchanged",
+	},
+	{
+		subject: "its script and invocation",
+		copulas: ["are"],
+		predicate: "unchanged",
+		value: "script-and-invocation-unchanged",
+	},
+] as const;
+type CommandIntegrity =
+	| "not-claimed"
+	| (typeof COMMAND_INTEGRITY)[number]["value"];
+type CommandObservation = {
+	command: string;
+	exitCode: number | null;
+	integrity: CommandIntegrity;
+	qualification: "observation" | "does-not-claim-pass" | "claimed-pass" | null;
+};
+function commandIntegrityValue(
+	clause: string,
+): Exclude<CommandIntegrity, "not-claimed"> | null {
+	const text = clause.toLowerCase();
+	for (const rule of COMMAND_INTEGRITY)
+		if (
+			rule.copulas.some(
+				(copula) => text === `${rule.subject} ${copula} ${rule.predicate}`,
+			)
+		)
+			return rule.value;
+	return null;
+}
 type CurrentHandoffFacts = {
 	closure: (Closure | null)[];
 	assurance: (Assurance | null)[];
@@ -17,16 +53,7 @@ type CurrentHandoffFacts = {
 	}[];
 	assuranceCheckClaims: { count: number; status: "satisfied" }[];
 	unavailableProofPlatforms: string[];
-	observations: {
-		command: string;
-		exitCode: number | null;
-		unchangedInvocation: boolean;
-		qualification:
-			| "observation"
-			| "does-not-claim-pass"
-			| "claimed-pass"
-			| null;
-	}[];
+	observations: CommandObservation[];
 	unsupported: string[];
 };
 export function presentationText(text: string): string {
@@ -319,11 +346,11 @@ function parseCommandResult(
 	unterminatedQuote: boolean,
 ) {
 	const body = rawBody.trim().replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
-	const invalid = {
+	const invalid: CommandObservation = {
 		command,
 		exitCode: null,
 		qualification: null,
-		unchangedInvocation: false,
+		integrity: "not-claimed",
 	};
 	if (unterminatedQuote) return invalid;
 	if (commands.some((other) => body.includes(other))) return invalid;
@@ -340,11 +367,11 @@ function parseCommandResult(
 	const exitCode =
 		rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
 	if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
-	const malformed = {
+	const malformed: CommandObservation = {
 		command,
 		exitCode,
 		qualification: null,
-		unchangedInvocation: false,
+		integrity: "not-claimed",
 	};
 	const metadata = value[4] ?? "";
 	if (
@@ -361,29 +388,42 @@ function parseCommandResult(
 		| "does-not-claim-pass"
 		| "claimed-pass"
 		| null = value[1] ? "claimed-pass" : value[2] ? "observation" : null;
-	let unchangedInvocation = false;
+	let integrity: CommandIntegrity = "not-claimed";
 	for (const qualifier of parts) {
 		if (
 			/^(?:this observation does not claim a pass|this does not claim the command passed)$/i.test(
 				qualifier,
 			)
 		) {
-			if (qualification !== "claimed-pass")
-				qualification = "does-not-claim-pass";
+			if (qualification === "claimed-pass") return malformed;
+			qualification = "does-not-claim-pass";
 		} else if (
 			/^(?:this (?:command|observation)|it) (?:passed|succeeded)$/i.test(
 				qualifier,
 			)
-		)
+		) {
+			if (
+				qualification === "observation" ||
+				qualification === "does-not-claim-pass"
+			)
+				return malformed;
 			qualification = "claimed-pass";
-		else if (
-			qualification === "claimed-pass" &&
-			/^Its script and invocation are unchanged$/i.test(qualifier)
-		)
-			unchangedInvocation = true;
-		else return malformed;
+		} else {
+			const claim = commandIntegrityValue(qualifier);
+			if (
+				!claim ||
+				(claim === "script-and-invocation-unchanged" &&
+					qualification !== "claimed-pass")
+			)
+				return malformed;
+			if (
+				integrity === "not-claimed" ||
+				claim === "script-and-invocation-unchanged"
+			)
+				integrity = claim;
+		}
 	}
-	return { command, exitCode, qualification, unchangedInvocation };
+	return { command, exitCode, qualification, integrity };
 }
 export function currentHandoffFacts(
 	text: string,
