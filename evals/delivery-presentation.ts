@@ -5,23 +5,10 @@ type Assurance =
 	| "completion-supported"
 	| "completion-unsupported"
 	| "completion-not-claimed";
-const COMMAND_INTEGRITY = [
-	{
-		subject: "its script",
-		copulas: ["is", "was", "remains", "remained"],
-		predicate: "unchanged",
-		value: "script-unchanged",
-	},
-	{
-		subject: "its script and invocation",
-		copulas: ["are"],
-		predicate: "unchanged",
-		value: "script-and-invocation-unchanged",
-	},
-] as const;
 type CommandIntegrity =
 	| "not-claimed"
-	| (typeof COMMAND_INTEGRITY)[number]["value"];
+	| "script-unchanged"
+	| "script-and-invocation-unchanged";
 type CommandObservation = {
 	command: string;
 	exitCode: number | null;
@@ -31,15 +18,26 @@ type CommandObservation = {
 function commandIntegrityValue(
 	clause: string,
 ): Exclude<CommandIntegrity, "not-claimed"> | null {
-	const text = clause.toLowerCase();
-	for (const rule of COMMAND_INTEGRITY)
-		if (
-			rule.copulas.some(
-				(copula) => text === `${rule.subject} ${copula} ${rule.predicate}`,
-			)
-		)
-			return rule.value;
-	return null;
+	const match =
+		/^its (script|invocation|command)(?: and (script|invocation|command))? (is|was|remains|remained|are|were|remain) unchanged$/i.exec(
+			clause,
+		);
+	if (!match) return null;
+	const subjects = [match[1], match[2]]
+		.filter((subject): subject is string => subject !== undefined)
+		.map((subject) => subject.toLowerCase());
+	const singular = ["is", "was", "remains", "remained"].includes(
+		(match[3] ?? "").toLowerCase(),
+	);
+	if (
+		singular !== (subjects.length === 1) ||
+		new Set(subjects).size !== subjects.length ||
+		!subjects.includes("script")
+	)
+		return null;
+	return subjects.length === 1
+		? "script-unchanged"
+		: "script-and-invocation-unchanged";
 }
 type CurrentHandoffFacts = {
 	closure: (Closure | null)[];
@@ -47,10 +45,7 @@ type CurrentHandoffFacts = {
 	authority: ("not-granted" | "granted" | null)[];
 	progress: ({ completed: number; total: number } | null)[];
 	goal: string[];
-	auxiliaryCounts: {
-		kind: "unfinished" | "blocking" | "advisory";
-		count: number;
-	}[];
+	auxiliaryCounts: AuxiliaryCount[];
 	assuranceCheckClaims: { count: number; status: "satisfied" }[];
 	unavailableProofPlatforms: string[];
 	observations: CommandObservation[];
@@ -134,68 +129,108 @@ function countValue(value: string): number | null {
 		: null;
 }
 type AuxiliaryCount = {
-	kind: "unfinished" | "blocking" | "advisory";
+	kind: "unfinished" | "blocked-feature" | "blocking" | "advisory";
 	count: number;
 };
-function auxiliaryCounts(value: string): AuxiliaryCount[] | null {
-	if (/^none unfinished$/i.test(value))
-		return [{ kind: "unfinished", count: 0 }];
+function auxiliaryCounts(
+	value: string,
+	featureScope = false,
+): AuxiliaryCount[] | null {
+	const match = /^(none|no|zero|one|two|three|four|five|six|\d+) (.+)$/i.exec(
+		value,
+	);
+	if (!match) return null;
+	const count = /^(none|no)$/i.test(match[1] ?? "")
+		? 0
+		: countValue(match[1] ?? "");
+	if (count === null) return null;
+	const nouns = (match[2] ?? "").toLowerCase().split(/ (?:and|or) /);
+	if (nouns.length > 1 && count !== 0) return null;
 	const kinds = new Map<string, AuxiliaryCount["kind"]>([
 		["unfinished", "unfinished"],
 		["unfinished features", "unfinished"],
+		["blocked features", "blocked-feature"],
 		["blockers", "blocking"],
 		["advisory findings", "advisory"],
 	]);
-	if (/^no /i.test(value)) {
-		const nouns = value
-			.slice(3)
-			.toLowerCase()
-			.split(/ (?:and|or) /);
-		const counts = nouns.map((noun) => {
-			const kind = kinds.get(noun);
-			return kind ? { kind, count: 0 } : null;
-		});
-		return counts.every((count) => count !== null) ? counts : null;
-	}
-	const match =
-		/^(no|\d+|zero|one|two|three|four|five|six) (unfinished(?: features)?|blockers|advisory findings)$/i.exec(
-			value,
-		);
-	if (!match) return null;
-	const count =
-		match[1]?.toLowerCase() === "no" ? 0 : countValue(match[1] ?? "");
-	if (count === null) return null;
-	return [
-		{
-			kind: match[2]?.toLowerCase().startsWith("unfinished")
-				? "unfinished"
-				: match[2]?.toLowerCase() === "blockers"
-					? "blocking"
-					: "advisory",
-			count,
-		},
-	];
+	if (featureScope && count === 0) kinds.set("blocked", "blocked-feature");
+	const claims = nouns.map((noun) => {
+		const kind = kinds.get(noun);
+		return kind ? { kind, count } : null;
+	});
+	return claims.every((claim) => claim !== null) ? claims : null;
 }
 function progressValue(value: string) {
 	const match = /^(\d+)\s*(?:of|\/)\s*(\d+) features complete(.*)$/i.exec(
 		value,
 	);
-	if (!match) return undefined;
+	if (!match) return null;
 	const completed = countValue(match[1] ?? "");
 	const total = countValue(match[2] ?? "");
 	if (completed === null || total === null) return null;
 	const tail = match[3] ?? "";
-	if (tail && !/^,\s*/.test(tail)) return null;
+	if (tail && !/^,\s*\S/.test(tail)) return null;
 	const counts: AuxiliaryCount[] = [];
-	for (const clause of tail
-		.replace(/^,\s*/, "")
-		.split(/,\s*/)
-		.filter(Boolean)) {
-		const parsed = auxiliaryCounts(clause);
-		if (!parsed) return null;
-		counts.push(...parsed);
-	}
+	if (tail)
+		for (const clause of tail.replace(/^,\s*/, "").split(/,\s*/)) {
+			const parsed = auxiliaryCounts(clause, true);
+			if (!parsed) return null;
+			counts.push(...parsed);
+		}
 	return { progress: { completed, total }, counts };
+}
+type HandoffRecord = {
+	closure?: Closure | null;
+	progress?: { completed: number; total: number } | null;
+	counts: AuxiliaryCount[];
+	unavailablePlatform: string | null;
+	invalid: boolean;
+};
+function closureProgressValue(claim: string): HandoffRecord | null {
+	const heading =
+		/^(?:(?:current|Flow)\s+)?(closure|flow|progress):\s*(.*)$/i.exec(claim);
+	const body = heading
+		? (heading[2] ?? "")
+		: claim.replace(/^Flow handoff:\s*/i, "");
+	const progressOnly =
+		heading?.[1]?.toLowerCase() === "progress" ||
+		(!heading && /^\d+\s*(?:of|\/)\s*\d+\s+features\b/i.test(body));
+	if (progressOnly) {
+		const parsed = progressValue(body);
+		return {
+			progress: parsed?.progress ?? null,
+			counts: parsed?.counts ?? [],
+			unavailablePlatform: null,
+			invalid: !parsed,
+		};
+	}
+	const subject =
+		/^(?:(?:The |This )?(?:current )?(?:Flow )?(?:workflow|session)|(?:current )?closure)\s+/i.exec(
+			body,
+		);
+	const terminal =
+		/^(?:completed|complete|deferred|abandoned)(?:$| and archived\b)/i.test(
+			body,
+		);
+	const compound =
+		/^[^"']+?(?::\s*|\s+[—–]\s+)\d+\s*(?:of|\/)\s*\d+\s+features\b/i.test(body);
+	if (!heading && !subject && !terminal && !compound) return null;
+	const rest = subject
+		? body.slice(subject[0].length).replace(/^(?:is |was |has been )/i, "")
+		: body;
+	const joined = /^(.+?)(?::\s*|\s+[—–]\s+)(.*)$/i.exec(rest);
+	const closure = closureStatement(joined?.[1] ?? rest);
+	const progress = joined ? progressValue(joined[2] ?? "") : null;
+	const valid = !!closure && (!joined || !!progress);
+	return {
+		closure: valid ? closure.closure : null,
+		...(joined
+			? { progress: valid ? (progress?.progress ?? null) : null }
+			: {}),
+		counts: valid ? (progress?.counts ?? []) : [],
+		unavailablePlatform: valid ? closure.unavailablePlatform : null,
+		invalid: !valid,
+	};
 }
 function authorityValue(value: string): "not-granted" | "granted" | null {
 	const plain = value.toLowerCase();
@@ -238,7 +273,7 @@ function closureStatement(
 	value: string,
 ): { closure: Closure; unavailablePlatform: string | null } | null {
 	const match =
-		/^(completed|deferred|abandoned)(?: and archived)?(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
+		/^(completed|complete|deferred|abandoned)(?: and archived(?: the Flow session)?)?(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
 			value,
 		);
 	if (!match) return null;
@@ -475,34 +510,24 @@ export function currentHandoffFacts(
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
-			const compound =
-				/^(.+?)\s+[—–]\s+(\d+\s*(?:of|\/)\s*\d+\s+features\b.*)$/i.exec(claim);
-			if (compound) {
-				const closure = closureStatement(compound[1] ?? "");
-				const progress = progressValue(compound[2] ?? "");
-				facts.closure.push(closure?.closure ?? null);
-				facts.progress.push(progress?.progress ?? null);
-				if (!closure || !progress) facts.unsupported.push(claim);
-				if (closure?.unavailablePlatform)
-					facts.unavailableProofPlatforms.push(closure.unavailablePlatform);
-				if (progress) facts.auxiliaryCounts.push(...progress.counts);
+			const handoff = closureProgressValue(claim);
+			if (handoff) {
+				if ("closure" in handoff) facts.closure.push(handoff.closure ?? null);
+				if ("progress" in handoff)
+					facts.progress.push(handoff.progress ?? null);
+				facts.auxiliaryCounts.push(...handoff.counts);
+				if (handoff.unavailablePlatform)
+					facts.unavailableProofPlatforms.push(handoff.unavailablePlatform);
+				if (handoff.invalid) facts.unsupported.push(claim);
 				continue;
 			}
 			const field =
-				/^(?:(?:current|Flow)\s+)?(closure|flow|assurance|external[- ]action authority|progress):\s*(.*)$/i.exec(
+				/^(?:(?:current|Flow)\s+)?(assurance|external[- ]action authority):\s*(.*)$/i.exec(
 					claim,
 				);
 			if (field) {
 				const value = field[2] ?? "";
 				switch (field[1]?.toLowerCase()) {
-					case "flow":
-					case "closure": {
-						const parsed = closureStatement(value);
-						facts.closure.push(parsed?.closure ?? null);
-						if (parsed?.unavailablePlatform)
-							facts.unavailableProofPlatforms.push(parsed.unavailablePlatform);
-						break;
-					}
 					case "assurance": {
 						const parsed = assuranceValue(value);
 						facts.assurance.push(parsed?.conclusion ?? null);
@@ -513,27 +538,9 @@ export function currentHandoffFacts(
 							});
 						break;
 					}
-					case "progress": {
-						const parsed = progressValue(value);
-						facts.progress.push(parsed?.progress ?? null);
-						if (parsed) facts.auxiliaryCounts.push(...parsed.counts);
-						break;
-					}
 					default:
 						facts.authority.push(authorityValue(value));
 				}
-				continue;
-			}
-			if (/^(completed|complete|deferred|abandoned)$/i.test(claim)) {
-				facts.closure.push(closureValue(claim));
-				continue;
-			}
-			const closure =
-				/^(?:(?:(?:The |This )?(?:current )?(?:Flow )?(?:workflow|session) (?:is |was |has been )|(?:current )?closure (?:is |was ))(completed|complete|deferred|abandoned)(?: and archived)?|(completed|deferred|abandoned) and archived(?: the Flow session)?)$/i.exec(
-					claim,
-				);
-			if (closure) {
-				facts.closure.push(closureValue(closure[1] ?? closure[2] ?? ""));
 				continue;
 			}
 			if (/^completion /i.test(claim)) {
@@ -552,12 +559,6 @@ export function currentHandoffFacts(
 				)
 			) {
 				facts.assurance.push("completion-supported");
-				continue;
-			}
-			const progress = progressValue(claim.replace(/^Flow handoff:\s*/i, ""));
-			if (progress !== undefined) {
-				facts.progress.push(progress?.progress ?? null);
-				if (progress) facts.auxiliaryCounts.push(...progress.counts);
 				continue;
 			}
 			if (/^all \w+ assurance checks\b/i.test(claim)) {
@@ -598,7 +599,7 @@ export function currentHandoffFacts(
 			}
 			const critical =
 				commandStatusAssertion(claim) ||
-				/\b(?:ready to ship|(?:workflow|session) (?:is |was |has been )(?:completed|complete|deferred|abandoned)|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
+				/\b(?:Flow session|closure|progress|ready to ship|(?:workflow|session) (?:is |was |has been )(?:completed|complete|deferred|abandoned)|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
 					claim,
 				);
 			if (critical) facts.unsupported.push(claim);
