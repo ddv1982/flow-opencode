@@ -119,12 +119,15 @@ test("valid definite archive disclosure does not hide contradictory current clai
 		),
 	).toEqual([conflict]);
 });
-test("delivered guidance preserves each supplied limitation unchanged", () => {
-	const guidance = getFlowGuidance("flow-run").content.replace(/\s+/g, " ");
-	expect(guidance).toContain(
-		"Copy each supplied `workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.",
-	);
-	expect(guidance).toContain(
-		"For requested full detail or a missing summary, use the retained close response's `report`.",
-	);
-});
+for (const id of ["flow", "flow-plan", "flow-run"] as const) {
+	test(`delivered ${id} guidance preserves each supplied limitation unchanged`, () => {
+		const guidance = getFlowGuidance(id).content.replace(/\s+/g, " ");
+		expect(guidance).toContain(
+			"Copy each supplied `workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.",
+		);
+		expect(guidance).toContain("`workflowData.delivery.summary.lines`");
+		expect(guidance).toMatch(
+			/For requested full detail or a missing summary, (?:use|report) the retained close response's `report`\./,
+		);
+	});
+}
