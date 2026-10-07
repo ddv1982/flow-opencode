@@ -204,6 +204,11 @@ for (const wrapper of ["the Linux gate ", prefix]) {
 for (const wrapper of [
 	"The parser's implementation is retained, and the Linux gate ",
 	"The parsers' implementation is retained, and the Linux gate ",
+	"The parser2's implementation is retained, and the Linux gate ",
+	"The café's implementation is retained, and the Linux gate ",
+	"The cafe\u0301's implementation is retained, and the Linux gate ",
+	"The \u{10400}'s implementation is retained, and the Linux gate ",
+	"The parser_'s implementation is retained, and the Linux gate ",
 	"Implementation: retained, and the Linux gate ",
 ]) {
 	for (const exitCode of [0, 9]) {
