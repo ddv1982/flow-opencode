@@ -34,9 +34,10 @@ without rediscovering the goal.
   mixed continuation plus unrelated work, and a replacement goal as new-scope.
 - Delivery handoff: report `workflowData.delivery.summary.lines`.
   Keep the supplied Goal line unchanged. Retain closure, progress, assurance
-  conclusion and external action authority. Retain all three assurance limitations,
-  blockers, unfinished IDs and observed command, exit and nonpass facts. Concise formatting may not omit
-  them. For requested
+  conclusion and external action authority. Copy each supplied
+  `workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
+  Retain blockers, unfinished IDs and observed command, exit and nonpass facts.
+  Concise formatting may not omit them. For requested
   full detail or a missing summary, use the retained close response's `report`.
   Map IDs only from `outcomeSummary`/`terminalFindings`. Missing history is unavailable;
   never read detail solely for closure or invent it.
