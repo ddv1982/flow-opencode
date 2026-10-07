@@ -85,6 +85,50 @@ for (const matching of [true, false]) {
 			);
 	});
 }
+for (const [name, flags, completeness] of [
+	["explicit complete", { complete: true }, true],
+	["explicit untruncated", { truncated: false }, true],
+	["both complete signals", { truncated: false, complete: true }, true],
+	["truncated overrides complete", { truncated: true, complete: true }, false],
+	[
+		"incomplete overrides untruncated",
+		{ truncated: false, complete: false },
+		false,
+	],
+	["explicit truncated", { truncated: true }, false],
+	["explicit incomplete", { complete: false }, false],
+	["unknown signals", {}, null],
+] as const) {
+	for (const markerDigest of ["absent", "matching", "wrong"] as const) {
+		test(`captured completeness ${name} with ${markerDigest} full output digest`, () => {
+			const input = deferredCaptureOutcome(capturedOnly);
+			const bash = call(input, "bash");
+			const metadata = { exit: 0, ...flags };
+			const digest =
+				markerDigest === "matching"
+					? validation(input).outputDigest
+					: `sha256:${"b".repeat(64)}`;
+			const output =
+				markerDigest === "absent"
+					? bash.rawOutput
+					: bash.rawOutput.replace(
+							'"recordedRevision":4',
+							`"fullOutputDigest":${JSON.stringify(digest)},"recordedRevision":4`,
+						);
+			Object.assign(bash, { metadata, rawOutput: output, output });
+			const supported =
+				markerDigest !== "wrong" &&
+				(completeness === true ||
+					(completeness === false && markerDigest === "matching"));
+			const issues = deliveryIssues(input, expected);
+			if (supported) expect(issues).toEqual([]);
+			else
+				expect(issues).toContain(
+					"Claimed command pass lacks matching accepted complete source evidence.",
+				);
+		});
+	}
+}
 for (const [name, mutate] of [
 	[
 		"absent arm",
