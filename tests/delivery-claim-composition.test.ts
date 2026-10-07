@@ -383,3 +383,36 @@ for (const text of ["1/1 requirements verified.", "2/3 tests passed."]) {
 		);
 	});
 }
+
+for (const text of [
+	"Updated the progress renderer.",
+	"Added closure handling tests.",
+	"Closure formatting now uses a heading.",
+	"Implementation note: progress and closure are terms used in this report.",
+	"Documented the Flow session API.",
+	"Flow session API documentation describes the tool interface.",
+]) {
+	test(`ordinary implementation prose does not assert workflow state ${text}`, () => {
+		const facts = currentHandoffFacts(text);
+		expect(facts.closure).toEqual([]);
+		expect(facts.progress).toEqual([]);
+		expect(facts.unsupported).toEqual([]);
+	});
+	test(`ordinary implementation prose preserves a truthful whole handoff ${text}`, () => {
+		expect(deliveryIssues(fixture(`${actual}\n${text}`), expected)).toEqual([]);
+	});
+}
+for (const text of [
+	"However, Flow session not completed and archived.",
+	"However, Flow session will be completed and archived.",
+	"Implementation note: closure is deferred.",
+	"Implementation note: progress: 0/1 features complete.",
+])
+	for (const order of ["before", "after"])
+		test(`prefixed state claims cannot hide behind canonical facts ${order} ${text}`, () => {
+			const finalText =
+				order === "before" ? `${text}\n${actual}` : `${actual}\n${text}`;
+			expect(deliveryIssues(fixture(finalText), expected)).toContain(
+				"Unsupported or conflicting current handoff assertions.",
+			);
+		});
