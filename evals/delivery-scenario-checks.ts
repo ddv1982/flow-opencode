@@ -379,6 +379,8 @@ function attestedCapture(
 		marker.id !== validation.id ||
 		marker.recordedRevision !== validation.recordedRevision ||
 		marker.scope !== validation.scope ||
+		(marker.fullOutputDigest !== undefined &&
+			marker.fullOutputDigest !== validation.outputDigest) ||
 		canonicalJson(marker.assertions ?? []) !==
 			canonicalJson(validation.observedAssertions ?? [])
 	)
