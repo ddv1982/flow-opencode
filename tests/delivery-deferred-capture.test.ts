@@ -540,6 +540,107 @@ test("review no-findings qualifier cannot conceal a native accepted advisory", (
 		),
 	).not.toEqual([]);
 });
+test("cleared historical review findings do not contradict a current review with no findings", () => {
+	const input = autoQualifiedOutcome("single", {
+		goal: completed.goal,
+		featureId: completed.featureId,
+	});
+	const run = record((record(input.archives[0]).runs as unknown[])[0]);
+	const prior = structuredClone(run);
+	Object.assign(prior, { id: "prior-run", state: "superseded" });
+	const finding = {
+		findingId: "parser-null.prior-advisory",
+		severity: "advisory",
+		summary: "Earlier parser documentation suggestion.",
+	};
+	const priorReview = record((prior.reviews as unknown[])[0]);
+	Object.assign(priorReview, { id: "prior-review", runId: "prior-run" });
+	record(priorReview.result).findings = [finding];
+	const priorValidation = record((prior.validations as unknown[])[0]);
+	Object.assign(priorValidation, {
+		id: "prior-validation",
+		runId: "prior-run",
+	});
+	priorReview.validationIds = ["prior-validation"];
+	(record(input.archives[0]).runs as unknown[]).unshift(prior);
+	const delivery = structuredClone(completed.delivery);
+	Object.assign(delivery, { findingsDigest: [{ ...finding, live: false }] });
+	record(
+		record(call(input, "flow_session_close").output).workflowData,
+	).delivery = delivery;
+	expect(
+		deliveryIssues(
+			{ ...input, finalText: completed.answer },
+			completedExpected,
+		),
+	).toEqual([]);
+});
+test("two distinct attested passing captures support the same past-tense command outcome", () => {
+	const input = deferredCaptureOutcome(capturedOnly);
+	const second = {
+		...validation(input),
+		id: "second-passing-capture",
+		recordedRevision: 5,
+	};
+	const run = record((record(input.archives[0]).runs as unknown[])[0]);
+	(run.validations as unknown[]).unshift(second);
+	const arm = structuredClone(call(input, "flow_validation_start"));
+	record(arm.input.request).expectedRevision = 4;
+	record(record(record(arm.output).workflowData).capture).captureId = second.id;
+	Object.assign(arm, { rawOutput: JSON.stringify(arm.output) });
+	const bash = structuredClone(call(input, "bash"));
+	const output = bash.rawOutput
+		.replace("validation-0", second.id)
+		.replace('"recordedRevision":4', '"recordedRevision":5');
+	Object.assign(bash, { output, rawOutput: output });
+	const status = structuredClone(call(input, "flow_status"));
+	const projection = record(
+		record(record(status.output).workflowData).projection,
+	);
+	Object.assign(projection, {
+		revision: 5,
+		runs: [{ ...structuredClone(run), state: "active" }],
+	});
+	Object.assign(status, { rawOutput: JSON.stringify(status.output) });
+	for (const [index, next] of [arm, bash, status].entries()) {
+		if (next.native)
+			Object.assign(next.native, {
+				messageId: `msg_second${index}`,
+				partId: `prt_second${index}`,
+				callId: `call_second${index}`,
+				startedAt: 30 + index * 2,
+				completedAt: 31 + index * 2,
+			});
+	}
+	const close = call(input, "flow_session_close");
+	record(input.archives[0]).revision = 6;
+	record(record(input.archives[0]).closure).recordedRevision = 6;
+	record(close.input.request).expectedRevision = 5;
+	record(record(record(close.output).workflowData).operation).revision = 6;
+	const at = input.allCalls.indexOf(close);
+	const allCalls = [
+		...input.allCalls.slice(0, at),
+		arm,
+		bash,
+		status,
+		...input.allCalls.slice(at),
+	];
+	expect(
+		deliveryIssues(
+			{ ...input, allCalls, hostTrace: nativeTrace(allCalls) },
+			expected,
+		),
+	).toEqual([]);
+});
+for (const prefix of ["", "Required external evidence: "]) {
+	test(`qualified unavailable command is independent of heading ${prefix}`, () => {
+		const text = noOptionalClaims.replace(
+			"- **Progress:**",
+			`${prefix}${externalCommand} on macOS; unavailable on this Linux host.\n- **Progress:**`,
+		);
+		expect(deliveryIssues(deferredCaptureOutcome(text), expected)).toEqual([]);
+	});
+}
 for (const suffix of [
 	"on Windows; unavailable on this Linux host",
 	"on macOS; unavailable on this Windows host",

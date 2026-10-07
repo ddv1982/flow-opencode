@@ -48,6 +48,16 @@ type CurrentHandoffFacts = {
 	auxiliaryCounts: AuxiliaryCount[];
 	assuranceCheckClaims: { count: number; status: "satisfied" }[];
 	unavailableProofPlatforms: string[];
+	unavailableCommands: {
+		command: string;
+		targetPlatform: string;
+		hostPlatform: string;
+	}[];
+	independentReview: (
+		| { kind: "passed"; findings: "none" | "not-claimed" }
+		| { kind: "not-performed" }
+		| null
+	)[];
 	observations: CommandObservation[];
 	unsupported: string[];
 };
@@ -273,7 +283,7 @@ function closureStatement(
 	value: string,
 ): { closure: Closure; unavailablePlatform: string | null } | null {
 	const match =
-		/^(completed|complete|deferred|abandoned)(?: and archived(?: the Flow session)?)?(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
+		/^(completed|complete|deferred|abandoned)(?: and archived(?: (?:the |this )?(?:current )?(?:Flow )?(?:session|workflow))?)?(?: because (macOS|darwin|Linux|Windows) validation is unavailable)?$/i.exec(
 			value,
 		);
 	if (!match) return null;
@@ -294,6 +304,10 @@ function commandStatusAssertion(text: string): boolean {
 	return /^(?:(?:(?:the|this) )?(?:command|observation)|it)\b[^.!?]*\b(?:pass(?:ed)?|succeed(?:ed)?|fail(?:ed)?|exit(?:ed)?|unavailable)\b/i.test(
 		text,
 	);
+}
+function platformValue(value: string) {
+	const lower = value.toLowerCase();
+	return lower === "macos" ? "darwin" : lower === "windows" ? "win32" : lower;
 }
 function sentenceBoundary(text: string, start = 0) {
 	let quote: string | null = null;
@@ -334,6 +348,21 @@ function commandResultValue(line: string, commands: readonly string[]) {
 			.find((value) => value !== null);
 		if (!matched) continue;
 		const rawBody = matched[1] ?? "";
+		const availability =
+			/^ on (macOS|darwin|Linux|Windows); unavailable on this (macOS|darwin|Linux|Windows) host\.?$/i.exec(
+				rawBody,
+			);
+		if (availability)
+			return {
+				observation: null,
+				unavailable: {
+					command,
+					targetPlatform: platformValue(availability[1] ?? ""),
+					hostPlatform: platformValue(availability[2] ?? ""),
+				},
+				remainder: "",
+				source: line,
+			};
 		let boundary = sentenceBoundary(rawBody);
 		while (
 			boundary.end < rawBody.length &&
@@ -473,6 +502,8 @@ export function currentHandoffFacts(
 		auxiliaryCounts: [],
 		assuranceCheckClaims: [],
 		unavailableProofPlatforms: [],
+		unavailableCommands: [],
+		independentReview: [],
 		observations: [],
 		unsupported: [],
 	};
@@ -486,6 +517,8 @@ export function currentHandoffFacts(
 		}
 		const commandRecord = commandResultValue(line, observationCommands);
 		if (commandRecord) {
+			if ("unavailable" in commandRecord && commandRecord.unavailable)
+				facts.unavailableCommands.push(commandRecord.unavailable);
 			if (commandRecord.observation) {
 				facts.observations.push(commandRecord.observation);
 				if (commandRecord.observation.qualification === null)
@@ -507,9 +540,30 @@ export function currentHandoffFacts(
 		) {
 			facts.unsupported.push(line);
 		}
+		if (/^(?:[^:]+:\s*)?(?:node|bun) \S+.*\bunavailable\b/i.test(line))
+			facts.unsupported.push(line);
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
+			const review = /^Independent review(?::|\s)\s*(.*)$/i.exec(claim);
+			if (review) {
+				const value = review[1] ?? "";
+				facts.independentReview.push(
+					/^(?:was )?not performed$/i.test(value)
+						? { kind: "not-performed" }
+						: /^(?:has |was )?(?:passed|passed with no findings)$/i.test(value)
+							? {
+									kind: "passed",
+									findings: /with no findings$/i.test(value)
+										? "none"
+										: "not-claimed",
+								}
+							: null,
+				);
+				if (facts.independentReview.at(-1) === null)
+					facts.unsupported.push(claim);
+				continue;
+			}
 			const handoff = closureProgressValue(claim);
 			if (handoff) {
 				if ("closure" in handoff) facts.closure.push(handoff.closure ?? null);

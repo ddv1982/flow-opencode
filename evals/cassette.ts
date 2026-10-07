@@ -16,6 +16,7 @@
 // nothing that could be a credential is ever written into one, and the recording
 // host's absolute paths are replaced by a token rather than baked in.
 
+import { z } from "zod";
 import {
 	commandUsesManagedJUnitPath,
 	MANAGED_JUNIT_PATH,
@@ -275,6 +276,35 @@ export function capturedValidationIdentity(
 	)
 		return null;
 	return { id: marker.id, revision: marker.recordedRevision };
+}
+
+const CapturedResult = z
+	.object({
+		id: z.string().min(1).max(256),
+		scope: z.enum(["focused", "broad"]),
+		intent: z.literal("pass"),
+		passed: z.literal(true),
+		observed: z.literal(false),
+		recordedRevision: z.number().int().safe().positive(),
+		assertions: z
+			.array(
+				z
+					.object({ name: z.string().min(1), status: z.literal("passed") })
+					.strict(),
+			)
+			.optional(),
+		fullOutputDigest: z
+			.string()
+			.regex(/^sha256:[a-f0-9]{64}$/)
+			.optional(),
+	})
+	.strict();
+export function capturedValidationResult(
+	output: string,
+): z.infer<typeof CapturedResult> | null {
+	if (output.split("[flow-validation]").length !== 2) return null;
+	const parsed = CapturedResult.safeParse(validationMarker(output));
+	return parsed.success ? parsed.data : null;
 }
 
 function validationReport(output: string): string | null {

@@ -2,6 +2,7 @@ import { posix } from "node:path";
 import { z } from "zod";
 import { isArtifactPath } from "../src/domain/artifact.js";
 import { canonicalJson } from "./canonical-json.js";
+import { capturedValidationResult } from "./cassette.js";
 import {
 	currentHandoffFacts,
 	fullReportMatches,
@@ -245,6 +246,283 @@ function primary(
 	);
 }
 
+const Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const CapturedValidation = z.object({
+	id: Id,
+	featureId: Id,
+	runId: Id,
+	command: z.string(),
+	scope: z.enum(["focused", "broad"]),
+	intent: z.literal("pass"),
+	exitCode: z.literal(0),
+	outputComplete: z.literal(true),
+	sourceDigest: Digest,
+	outputDigest: Digest,
+	recordedRevision: z.number().int().safe().positive(),
+	hostPlatform: z.enum(["linux", "darwin", "win32", "other"]),
+	ineligibleReason: z.never().optional(),
+	resultsPath: z.string().optional(),
+	observedAssertions: z
+		.array(z.object({ name: Id, status: z.literal("passed") }).strict())
+		.optional(),
+});
+const CaptureArm = z.object({
+	status: z.literal("ok"),
+	workflowData: z.object({
+		capture: z.object({
+			captureId: Id,
+			expiresInMs: z.number().finite().positive(),
+		}),
+		command: z.string(),
+		scope: z.string(),
+		intent: z.literal("pass"),
+	}),
+});
+const ArmRequest = z.object({
+	featureId: Id,
+	command: z.string(),
+	scope: z.string(),
+	expectedRevision: z.number().int().safe().nonnegative(),
+	sessionId: Id.optional(),
+	intent: z.literal("pass").optional(),
+});
+function capturedDeferredPass(
+	input: ScenarioGradeInput,
+	archive: z.infer<typeof Archive>,
+	close: ScenarioGradeInput["allCalls"][number],
+	command: string,
+): { hostPlatform: string; status: Record<string, unknown> } | null {
+	if (archive.closure.kind !== "deferred") return null;
+	const candidates = archive.runs.flatMap((run) =>
+		run.validations
+			.filter((value) => value.command === command)
+			.map((value) => ({ run, value })),
+	);
+	for (const candidate of candidates) {
+		const parsed = CapturedValidation.safeParse(candidate.value);
+		if (!parsed.success) continue;
+		const proof = attestedCapture(
+			input,
+			archive,
+			close,
+			candidate.run,
+			parsed.data,
+		);
+		if (proof) return proof;
+	}
+	return null;
+}
+function attestedCapture(
+	input: ScenarioGradeInput,
+	archive: z.infer<typeof Archive>,
+	close: ScenarioGradeInput["allCalls"][number],
+	run: z.infer<typeof Archive>["runs"][number],
+	validation: z.infer<typeof CapturedValidation>,
+): { hostPlatform: string; status: Record<string, unknown> } | null {
+	const command = validation.command;
+	if (
+		run.id !== validation.runId ||
+		run.featureId !== validation.featureId ||
+		validation.recordedRevision > archive.closure.recordedRevision
+	)
+		return null;
+	if (
+		archive.runs
+			.flatMap((run) => run.validations)
+			.filter((value) => value.id === validation.id).length !== 1
+	)
+		return null;
+	const arms = input.allCalls.filter(
+		(call) =>
+			call.tool === "flow_validation_start" &&
+			CaptureArm.safeParse(call.output).success &&
+			CaptureArm.parse(call.output).workflowData.capture.captureId ===
+				validation.id,
+	);
+	if (arms.length !== 1) return null;
+	const arm = arms[0];
+	if (arm?.status !== "completed" || !primary(arm, input)) return null;
+	const request = ArmRequest.safeParse(arm.input.request);
+	const data = CaptureArm.parse(arm.output).workflowData;
+	if (
+		!request.success ||
+		request.data.featureId !== validation.featureId ||
+		request.data.command !== command ||
+		request.data.scope !== validation.scope ||
+		(request.data.sessionId !== undefined &&
+			request.data.sessionId !== archive.id) ||
+		request.data.expectedRevision + 1 !== validation.recordedRevision ||
+		data.command !== command ||
+		data.scope !== validation.scope
+	)
+		return null;
+	const armIndex = input.allCalls.indexOf(arm);
+	const next = input.allCalls
+		.slice(armIndex + 1)
+		.find(
+			(call) =>
+				call.native?.sessionId === arm.native?.sessionId &&
+				["bash", "flow_validation_start"].includes(call.tool),
+		);
+	if (
+		next?.tool !== "bash" ||
+		next.status !== "completed" ||
+		!primary(next, input) ||
+		next.input.command !== command ||
+		next.metadata.exit !== 0 ||
+		next.metadata.truncated !== false
+	)
+		return null;
+	const marker = capturedValidationResult(next.rawOutput);
+	if (
+		!marker ||
+		marker.id !== validation.id ||
+		marker.recordedRevision !== validation.recordedRevision ||
+		marker.scope !== validation.scope ||
+		canonicalJson(marker.assertions ?? []) !==
+			canonicalJson(validation.observedAssertions ?? [])
+	)
+		return null;
+	const armedAt = arm.native?.completedAt;
+	const beganAt = next.native?.startedAt;
+	const finishedAt = next.native?.completedAt;
+	const closedAt = close.native?.startedAt;
+	if (
+		armedAt == null ||
+		beganAt == null ||
+		finishedAt == null ||
+		closedAt == null ||
+		armedAt > beganAt ||
+		beganAt >= armedAt + data.capture.expiresInMs ||
+		finishedAt >= closedAt
+	)
+		return null;
+	const nativeIds = input.allCalls.flatMap((call) =>
+		call.native?.callId ? [call.native.callId] : [],
+	);
+	if (new Set(nativeIds).size !== nativeIds.length) return null;
+	const declared = (archive.plan.evidence ?? []).filter(
+		(entry) => entry.command === command,
+	);
+	const feature = archive.plan.features.find(
+		(value) => value.id === validation.featureId,
+	);
+	const checks = z
+		.array(
+			z
+				.object({
+					command: z.string(),
+					intent: z.string(),
+					platform: z.string().optional(),
+				})
+				.passthrough(),
+		)
+		.safeParse(feature?.checks ?? []);
+	if (
+		!checks.success ||
+		checks.data.some(
+			(check) =>
+				check.command === command &&
+				(check.intent !== "pass" ||
+					(check.platform !== undefined &&
+						check.platform !== validation.hostPlatform)),
+		)
+	)
+		return null;
+	if (
+		declared.some(
+			(entry) =>
+				entry.platform !== undefined &&
+				entry.platform !== validation.hostPlatform,
+		)
+	)
+		return null;
+	if (
+		[
+			...declared,
+			...checks.data.filter((check) => check.command === command),
+		].some(
+			(entry) =>
+				Array.isArray(entry.assertions) &&
+				entry.assertions.some(
+					(name) =>
+						typeof name !== "string" ||
+						!validation.observedAssertions?.some(
+							(assertion) => assertion.name === name,
+						),
+				),
+		)
+	)
+		return null;
+	let attestedStatus: Record<string, unknown> | null = null;
+	for (const call of input.allCalls.slice(
+		input.allCalls.indexOf(next) + 1,
+		input.allCalls.indexOf(close),
+	)) {
+		if (
+			call.tool !== "flow_status" ||
+			call.status !== "completed" ||
+			!primary(call, input) ||
+			!call.native ||
+			call.native.sessionId !== next.native?.sessionId ||
+			call.native.startedAt == null ||
+			call.native.completedAt == null ||
+			call.native.startedAt < finishedAt ||
+			call.native.completedAt >= closedAt
+		)
+			continue;
+		const status = z
+			.object({
+				status: z.literal("ok"),
+				workflowData: z.object({
+					projection: z
+						.object({
+							sessionId: Id,
+							runs: z.array(
+								z
+									.object({
+										id: Id,
+										featureId: Id,
+										validations: z.array(z.unknown()),
+									})
+									.passthrough(),
+							),
+						})
+						.passthrough(),
+				}),
+			})
+			.safeParse(call.output);
+		if (
+			!status.success ||
+			status.data.workflowData.projection.sessionId !== archive.id
+		)
+			continue;
+		const projection = status.data.workflowData.projection;
+		const observations = projection.runs.flatMap((run) =>
+			run.validations
+				.filter(
+					(value) =>
+						z.object({ id: Id }).safeParse(value).data?.id === validation.id,
+				)
+				.map((value) => ({ run, value })),
+		);
+		if (observations.length !== 1) return null;
+		const observation = observations[0];
+		const attested = CapturedValidation.safeParse(observation?.value);
+		if (
+			!attested.success ||
+			observation?.run.id !== validation.runId ||
+			observation.run.featureId !== validation.featureId ||
+			canonicalJson(attested.data) !== canonicalJson(validation)
+		)
+			return null;
+		attestedStatus = projection;
+	}
+	return attestedStatus
+		? { hostPlatform: validation.hostPlatform, status: attestedStatus }
+		: null;
+}
+
 export function deliveryIssues(
 	input: ScenarioGradeInput,
 	expected: DeliveryExpectation,
@@ -449,6 +727,97 @@ export function deliveryIssues(
 		]),
 	].sort((a, b) => b.length - a.length);
 	const facts = currentHandoffFacts(input.finalText, commands);
+	const findings =
+		close.data.workflowData.delivery.findingsDigest?.filter(
+			(finding) => finding.live,
+		) ??
+		archive.plan.features.flatMap(
+			(feature) =>
+				archive.runs
+					.filter(
+						(run) => run.featureId === feature.id && run.state !== "superseded",
+					)
+					.at(-1)
+					?.reviews.at(-1)?.result?.findings ?? [],
+		);
+	const acceptedReviews = archive.runs.flatMap((run) =>
+		run.reviews.filter(
+			(review) =>
+				review.result?.verdict === "passed" &&
+				run.validations.some(
+					(validation) =>
+						review.validationIds.includes(validation.id) &&
+						validation.outputComplete &&
+						validation.intent !== "observe" &&
+						validation.sourceDigest === review.sourceDigest,
+				),
+		),
+	);
+	const hasAcceptedReview = acceptedReviews.length > 0;
+	if (
+		facts.independentReview.some(
+			(value) =>
+				value === null ||
+				(value.kind === "passed"
+					? !hasAcceptedReview ||
+						checkReviewerEvidenceAccess(input, input.archives[0]).length > 0 ||
+						(value.findings === "none" && findings.length !== 0)
+					: hasAcceptedReview),
+		)
+	)
+		issues.push(
+			"Independent review claim contradicts accepted native review evidence.",
+		);
+	for (const claim of facts.unavailableCommands) {
+		const proof =
+			conclusion === "completion-not-claimed"
+				? capturedDeferredPass(input, archive, accepted, expected.gate)
+				: null;
+		const declared = (archive.plan.evidence ?? []).some(
+			(entry) =>
+				entry.command === claim.command &&
+				entry.scope === "extra" &&
+				entry.platform === claim.targetPlatform,
+		);
+		const nativePlan = z
+			.object({
+				evidence: z.array(
+					z
+						.object({
+							command: z.string(),
+							scope: z.string(),
+							platform: z.string().optional(),
+						})
+						.passthrough(),
+				),
+			})
+			.safeParse(proof?.status.plan);
+		const unmet =
+			nativePlan.success &&
+			nativePlan.data.evidence.some(
+				(entry) =>
+					entry.command === claim.command &&
+					entry.scope === "extra" &&
+					entry.platform === claim.targetPlatform,
+			);
+		if (
+			!proof ||
+			claim.command !== expected.missingEvidenceCommand ||
+			claim.targetPlatform === claim.hostPlatform ||
+			claim.hostPlatform !== proof.hostPlatform ||
+			!declared ||
+			!unmet ||
+			archive.runs.some((run) =>
+				run.validations.some(
+					(validation) =>
+						validation.command === claim.command && validation.exitCode === 0,
+				),
+			)
+		)
+			issues.push(
+				"Unavailable command claim contradicts declared unmet native platform proof.",
+			);
+	}
 	const nativeChecks =
 		close.data.workflowData.delivery.assurance.checks ??
 		close.data.workflowData.delivery.report.flatMap((line) => {
@@ -525,7 +894,12 @@ export function deliveryIssues(
 						),
 				),
 			);
-		if (!acceptedPass)
+		const capturedPass =
+			expected.closure === "deferred" &&
+			conclusion === "completion-not-claimed" &&
+			result.exitCode === 0 &&
+			capturedDeferredPass(input, archive, accepted, result.command) !== null;
+		if (!acceptedPass && !capturedPass)
 			issues.push(
 				"Claimed command pass lacks matching accepted complete source evidence.",
 			);
@@ -581,19 +955,6 @@ export function deliveryIssues(
 	)
 		issues.push(
 			"Recorded feature progress was omitted, changed, or contradicted.",
-		);
-	const findings =
-		close.data.workflowData.delivery.findingsDigest?.filter(
-			(finding) => finding.live,
-		) ??
-		archive.plan.features.flatMap(
-			(feature) =>
-				archive.runs
-					.filter(
-						(run) => run.featureId === feature.id && run.state !== "superseded",
-					)
-					.at(-1)
-					?.reviews.at(-1)?.result?.findings ?? [],
 		);
 	const blockedFeatures = archive.plan.features.filter(
 		(feature) =>

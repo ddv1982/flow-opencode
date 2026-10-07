@@ -336,7 +336,8 @@ test("superseded blocked run does not invalidate current zero blocked features",
 	expect(deliveryIssues(input, expected)).toEqual([]);
 });
 test("zero blocked feature claim is independent from a live blocking review finding", () => {
-	const input = fixture(actual);
+	const reviewPassed = actual.replace("passed with no findings", "passed");
+	const input = fixture(reviewPassed);
 	const close = input.allCalls.find(
 		(call) => call.tool === "flow_session_close",
 	);
@@ -347,7 +348,7 @@ test("zero blocked feature claim is independent from a live blocking review find
 	expect(deliveryIssues(input, expected)).toEqual([]);
 	expect(
 		deliveryIssues(
-			{ ...input, finalText: `${actual}\nNo blockers.` },
+			{ ...input, finalText: `${reviewPassed}\nNo blockers.` },
 			expected,
 		),
 	).toContain(countIssue);
