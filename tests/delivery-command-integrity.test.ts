@@ -26,11 +26,12 @@ function object(value: unknown): Record<string, unknown> {
 		throw new Error("Missing native fixture object.");
 	return value as Record<string, unknown>;
 }
-function fixture(finalText = answer, auditCase = false) {
+function fixture(finalText = answer, auditCase = false, gateCommand?: string) {
 	const auditSaved = confirmation.cases["delivery-summary-observed-failure"];
 	const input = autoQualifiedOutcome(auditCase ? "audit" : "single", {
 		goal: auditCase ? auditSaved.goal : goal,
 		featureId: saved.featureId,
+		...(gateCommand === undefined ? {} : { gateCommand }),
 	});
 	const close = input.allCalls.find(
 		(call) => call.tool === "flow_session_close",
@@ -262,3 +263,78 @@ test("script-only audit integrity cannot rewrite the native observed exit", () =
 		deliveryIssues(fixture(wrong, true), auditExpectation).length,
 	).toBeGreaterThan(0);
 });
+
+for (const [command, scriptPath] of [
+	["node scripts/verify.mjs src/parser.mjs", "scripts/verify.mjs"],
+	['node "scripts/verify.mjs" src/parser.mjs', "scripts/verify.mjs"],
+	["node ./scripts/verify.mjs src/parser.mjs", "scripts/verify.mjs"],
+	["bun scripts/verify.mjs src/parser.mjs", "scripts/verify.mjs"],
+	["node scripts/verify\\ name.mjs src/parser.mjs", "scripts/verify name.mjs"],
+] as const) {
+	test(`edited argv input is not the invoking script resource ${command}`, () => {
+		const text = answer.replace(
+			"`node scripts/verify.mjs` passed",
+			`\`${command}\` passed`,
+		);
+		const input = fixture(text, false, command);
+		const expected = { ...expectation, gate: command };
+		expect(
+			deliveryIssues(
+				{
+					...input,
+					finalText: text.replace("; its script remained unchanged", ""),
+				},
+				expected,
+			),
+		).toEqual([]);
+		expect(deliveryIssues(input, expected)).toEqual([]);
+	});
+	test(`actual invoking script changes refuse integrity independently of allowed paths ${command}`, () => {
+		const text = answer.replace(
+			"`node scripts/verify.mjs` passed",
+			`\`${command}\` passed`,
+		);
+		const input = {
+			...fixture(text, false, command),
+			workspaceChanges: {
+				kind: "observed" as const,
+				paths: [scriptPath],
+			},
+		};
+		expect(
+			deliveryIssues(input, {
+				...expectation,
+				gate: command,
+				allowedPaths: ["src/parser.mjs", scriptPath],
+			}),
+		).toContain("Unchanged script claim lacks immutable workspace evidence.");
+	});
+}
+
+for (const command of [
+	"env MODE=test node scripts/verify.mjs",
+	"node --eval 'process.exit(0)'",
+	"node scripts/verify.mjs && node scripts/other.mjs",
+	'node "$SCRIPT"',
+]) {
+	test(`ambiguous invoking script cannot gain immutable proof ${command}`, () => {
+		const text = answer.replace(
+			"`node scripts/verify.mjs` passed",
+			`\`${command}\` passed`,
+		);
+		const input = fixture(text, false, command);
+		const expected = { ...expectation, gate: command };
+		expect(
+			deliveryIssues(
+				{
+					...input,
+					finalText: text.replace("; its script remained unchanged", ""),
+				},
+				expected,
+			),
+		).toEqual([]);
+		expect(deliveryIssues(input, expected)).toContain(
+			"Unchanged script claim lacks immutable workspace evidence.",
+		);
+	});
+}

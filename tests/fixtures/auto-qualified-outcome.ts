@@ -6,9 +6,14 @@ import { collectReviewerPacketBytes } from "../../evals/reviewer-packet-bytes.js
 const digest = `sha256:${"a".repeat(64)}`;
 export function autoQualifiedOutcome(
 	kind: "two" | "prerequisite" | "audit" | "single",
-	options: Readonly<{ goal?: string; featureId?: string }> = {},
+	options: Readonly<{
+		goal?: string;
+		featureId?: string;
+		gateCommand?: string;
+	}> = {},
 ): ScenarioGradeInput {
 	const goal = options.goal ?? "Implement text behavior";
+	const gateCommand = options.gateCommand ?? "node scripts/verify.mjs";
 	const features =
 		kind === "two"
 			? [
@@ -25,7 +30,7 @@ export function autoQualifiedOutcome(
 						title: "Report",
 						summary: "Summarize",
 						targets: ["src/report.mjs"],
-						validation: ["node scripts/verify.mjs"],
+						validation: [gateCommand],
 						dependsOn: ["tokens"],
 					},
 				]
@@ -38,7 +43,7 @@ export function autoQualifiedOutcome(
 							kind === "prerequisite"
 								? ["src/parser.mjs", "runtime.json"]
 								: ["src/parser.mjs"],
-						validation: ["node scripts/verify.mjs"],
+						validation: [gateCommand],
 						dependsOn: [],
 						...(kind === "audit"
 							? {
@@ -49,7 +54,7 @@ export function autoQualifiedOutcome(
 											platform: "linux",
 										},
 										{
-											command: "node scripts/verify.mjs",
+											command: gateCommand,
 											intent: "pass",
 											platform: "linux",
 										},
@@ -67,7 +72,7 @@ export function autoQualifiedOutcome(
 		evidence: [
 			{
 				scope: "gate",
-				command: "node scripts/verify.mjs",
+				command: gateCommand,
 				platform: "linux",
 				requirement: "Required behavior",
 				environment: "Local",
