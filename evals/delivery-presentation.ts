@@ -186,6 +186,8 @@ type HandoffRecord = {
 	unavailablePlatform: string | null;
 	invalid: boolean;
 };
+const CLOSURE_SUBJECT =
+	/\b(?:(?:The |This )?(?:current )?(?:Flow )?(?:workflow|session)|(?:current )?closure)\s+(?=(?:(?:is|was|has(?: not)? been|isn['’]t|wasn['’]t|hasn['’]t been|(?:won|couldn|shouldn)['’]t be|(?:can|could|may|might|must|should|will|would)(?: not)?(?: have been| be))\s+)?(?:not\s+)?(?:completed|complete|deferred|abandoned)\b)/i;
 function closureProgressValue(claim: string): HandoffRecord | null {
 	const heading =
 		/^(?:(?:current|Flow)\s+)?(closure|flow|progress):\s*(.*)$/i.exec(claim);
@@ -204,10 +206,8 @@ function closureProgressValue(claim: string): HandoffRecord | null {
 			invalid: !parsed,
 		};
 	}
-	const subject =
-		/^(?:(?:The |This )?(?:current )?(?:Flow )?(?:workflow|session)|(?:current )?closure)\s+/i.exec(
-			body,
-		);
+	const candidateSubject = CLOSURE_SUBJECT.exec(body);
+	const subject = candidateSubject?.index === 0 ? candidateSubject : null;
 	const terminal =
 		/^(?:completed|complete|deferred|abandoned)(?:$| and archived\b)/i.test(
 			body,
@@ -599,7 +599,14 @@ export function currentHandoffFacts(
 			}
 			const critical =
 				commandStatusAssertion(claim) ||
-				/\b(?:Flow session|closure|progress|ready to ship|(?:workflow|session) (?:is |was |has been )(?:completed|complete|deferred|abandoned)|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
+				CLOSURE_SUBJECT.test(claim) ||
+				/\bprogress (?:is |was |has been )?(?:incomplete|unfinished|blocked|not complete)\b/i.test(
+					claim,
+				) ||
+				/\b(?:closure|progress):|\b\d+\s*(?:of|\/)\s*\d+\s+features\b/i.test(
+					claim,
+				) ||
+				/\b(?:ready to ship|(?:you may|authorized to) (?:deploy|publish|release)|current (?:workflow|session|closure|assurance|authority|progress|goal)|external[- ]action authority|completion (?:is|supported)|(?:macOS|darwin) (?:validation|proof|evidence) (?:is |was |has been )?(?:passed|verified|exit 0))\b/i.test(
 					claim,
 				);
 			if (critical) facts.unsupported.push(claim);
