@@ -142,3 +142,42 @@ test("Goal and registered command argument authority bytes remain opaque", () =>
 			.authority,
 	).toEqual([]);
 });
+
+for (const copula of ["is", "was", "has been"]) {
+	for (const subject of [
+		"external action authority",
+		"external-action authority",
+	]) {
+		test(`prefixed current granting assertion cannot hide behind a native denial ${subject} ${copula}`, () => {
+			const contradiction = `However, ${subject} ${copula} granted.`;
+			expect(
+				deliveryIssues(fixture(`${answer}\n${contradiction}`), expectation),
+			).toContain("Unsupported or conflicting current handoff assertions.");
+		});
+	}
+}
+
+test("historical prefixed grant remains outside current handoff authority", () => {
+	const history = "Earlier external action authority was granted.";
+	expect(currentHandoffFacts(history).authority).toEqual([]);
+	expect(currentHandoffFacts(history).unsupported).toEqual([]);
+	expect(deliveryIssues(fixture(`${answer}\n${history}`), expectation)).toEqual(
+		[],
+	);
+});
+
+test("Goal and registered command arguments cannot supply prefixed granting assertions", () => {
+	const contradiction = "However, external action authority was granted.";
+	const goalFacts = currentHandoffFacts(
+		`Goal: Preserve "${contradiction}" in labels.`,
+	);
+	expect(goalFacts.authority).toEqual([]);
+	expect(goalFacts.unsupported).toEqual([]);
+	const command = `node scripts/verify.mjs --label "${contradiction}"`;
+	const commandFacts = currentHandoffFacts(
+		`${command} passed with exit code 0.`,
+		[command],
+	);
+	expect(commandFacts.authority).toEqual([]);
+	expect(commandFacts.unsupported).toEqual([]);
+});
