@@ -286,6 +286,13 @@ const ArmRequest = z.object({
 	sessionId: Id.optional(),
 	intent: z.literal("pass").optional(),
 });
+function nativeOutputComplete(
+	metadata: Record<string, unknown>,
+): boolean | null {
+	if (metadata.truncated === true || metadata.complete === false) return false;
+	if (metadata.truncated === false || metadata.complete === true) return true;
+	return null;
+}
 function capturedDeferredPass(
 	input: ScenarioGradeInput,
 	archive: z.infer<typeof Archive>,
@@ -369,13 +376,16 @@ function attestedCapture(
 		next.status !== "completed" ||
 		!primary(next, input) ||
 		next.input.command !== command ||
-		next.metadata.exit !== 0 ||
-		next.metadata.truncated !== false
+		next.metadata.exit !== 0
 	)
 		return null;
 	const marker = capturedValidationResult(next.rawOutput);
+	const complete = nativeOutputComplete(next.metadata);
 	if (
 		!marker ||
+		complete === null ||
+		(complete === false &&
+			marker.fullOutputDigest !== validation.outputDigest) ||
 		marker.id !== validation.id ||
 		marker.recordedRevision !== validation.recordedRevision ||
 		marker.scope !== validation.scope ||
