@@ -405,6 +405,13 @@ function commandResultValue(line: string, commands: readonly string[]) {
 	}
 	return null;
 }
+function proseGateClause(line: string) {
+	const match = /^(?:(.+), and )?the Linux gate ((?:node|bun) .+)$/i.exec(line);
+	if (!match) return null;
+	const prefix = match[1] ?? null;
+	if (prefix && /[:"']/.test(prefix)) return null;
+	return { prefix, commandClause: match[2] ?? "" };
+}
 function parseCommandResult(
 	rawBody: string,
 	command: string,
@@ -530,6 +537,18 @@ export function currentHandoffFacts(
 				pending.splice(index + 1, 0, commandRecord.remainder);
 			continue;
 		}
+		const gate = proseGateClause(line);
+		if (gate) {
+			pending.splice(
+				index,
+				1,
+				...(gate.prefix
+					? [gate.prefix, gate.commandClause]
+					: [gate.commandClause]),
+			);
+			index--;
+			continue;
+		}
 		const boundary = sentenceBoundary(line);
 		if (boundary.end < line.length) {
 			pending.splice(index + 1, 0, line.slice(boundary.end).trim());
@@ -547,6 +566,10 @@ export function currentHandoffFacts(
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
+			if (/^No independent review or completion is claimed$/i.test(claim)) {
+				facts.assurance.push("completion-not-claimed");
+				continue;
+			}
 			const review = /^Independent review(?::|\s)\s*(.*)$/i.exec(claim);
 			if (review) {
 				const value = review[1] ?? "";
