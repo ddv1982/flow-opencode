@@ -5,11 +5,10 @@ import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 import confirmation from "./fixtures/delivery-confirmation-answers.json" with {
 	type: "json",
 };
-import saved from "./fixtures/delivery-flow-zero-count-answer.json" with {
+import definiteScript from "./fixtures/delivery-definite-script-answer.json" with {
 	type: "json",
 };
-
-import definiteScript from "./fixtures/delivery-definite-script-answer.json" with {
+import saved from "./fixtures/delivery-flow-zero-count-answer.json" with {
 	type: "json",
 };
 
