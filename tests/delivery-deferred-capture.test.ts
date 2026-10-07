@@ -66,6 +66,25 @@ test("native status digest need not hash portable redacted Bash output", () => {
 	});
 	expect(deliveryIssues(input, expected)).toEqual([]);
 });
+for (const matching of [true, false]) {
+	test(`optional terminal full output digest must match native attested capture ${matching}`, () => {
+		const input = deferredCaptureOutcome(capturedOnly);
+		const digest = matching
+			? validation(input).outputDigest
+			: `sha256:${"b".repeat(64)}`;
+		const output = call(input, "bash").rawOutput.replace(
+			'"recordedRevision":4',
+			`"fullOutputDigest":${JSON.stringify(digest)},"recordedRevision":4`,
+		);
+		Object.assign(call(input, "bash"), { rawOutput: output, output });
+		const issues = deliveryIssues(input, expected);
+		if (matching) expect(issues).toEqual([]);
+		else
+			expect(issues).toContain(
+				"Claimed command pass lacks matching accepted complete source evidence.",
+			);
+	});
+}
 for (const [name, mutate] of [
 	[
 		"absent arm",
