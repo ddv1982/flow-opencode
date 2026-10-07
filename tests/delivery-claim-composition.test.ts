@@ -416,3 +416,38 @@ for (const text of [
 				"Unsupported or conflicting current handoff assertions.",
 			);
 		});
+
+for (const predicate of [
+	"isn't completed",
+	"wasn't completed",
+	"hasn't been completed",
+	"won't be completed",
+	"couldn't be completed",
+	"shouldn't be completed",
+])
+	for (const apostrophe of ["'", "’"]) {
+		const clause = `Flow session ${predicate.replace("'", apostrophe)}.`;
+		test(`contracted negative is an invalid state claim ${clause}`, () => {
+			const facts = currentHandoffFacts(clause);
+			expect(facts.unsupported).toEqual([clause.slice(0, -1)]);
+			expect(facts.closure.filter((value) => value !== null)).toEqual([]);
+		});
+		for (const order of ["before", "after"])
+			test(`canonical handoff cannot hide contracted state denial ${order} ${clause}`, () => {
+				const denial = `However, ${clause}`;
+				const text =
+					order === "before" ? `${denial}\n${actual}` : `${actual}\n${denial}`;
+				expect(deliveryIssues(fixture(text), expected)).toContain(
+					"Unsupported or conflicting current handoff assertions.",
+				);
+			});
+	}
+for (const order of ["before", "after"])
+	test(`canonical handoff cannot hide a current incomplete progress claim ${order}`, () => {
+		const claim = "However, progress is incomplete.";
+		const text =
+			order === "before" ? `${claim}\n${actual}` : `${actual}\n${claim}`;
+		expect(deliveryIssues(fixture(text), expected)).toContain(
+			"Unsupported or conflicting current handoff assertions.",
+		);
+	});
