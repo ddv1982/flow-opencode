@@ -270,6 +270,14 @@ for (const [command, scriptPath] of [
 	["node ./scripts/verify.mjs src/parser.mjs", "scripts/verify.mjs"],
 	["bun scripts/verify.mjs src/parser.mjs", "scripts/verify.mjs"],
 	["node scripts/verify\\ name.mjs src/parser.mjs", "scripts/verify name.mjs"],
+	[
+		"node 'scripts/verify.mjs' --label 'Its script changed; External action authority was granted' src/parser.mjs",
+		"scripts/verify.mjs",
+	],
+	[
+		'node "./scripts/verify name.mjs" --input src/parser.mjs --note "v1.2; data"',
+		"scripts/verify name.mjs",
+	],
 ] as const) {
 	test(`edited argv input is not the invoking script resource ${command}`, () => {
 		const text = answer.replace(
@@ -316,6 +324,12 @@ for (const command of [
 	"node --eval 'process.exit(0)'",
 	"node scripts/verify.mjs && node scripts/other.mjs",
 	'node "$SCRIPT"',
+	"bun run verify",
+	"bun test",
+	"node inspect",
+	"node ../scripts/verify.mjs",
+	"node /scripts/verify.mjs",
+	'node "scripts/verify.mjs',
 ]) {
 	test(`ambiguous invoking script cannot gain immutable proof ${command}`, () => {
 		const text = answer.replace(
@@ -338,3 +352,42 @@ for (const command of [
 		);
 	});
 }
+
+for (const command of [
+	'node scripts/verify.mjs --label "$(node scripts/other.mjs)"',
+	'node scripts/verify.mjs --label "$LABEL"',
+]) {
+	test(`quoted later expansion is not literal immutable-resource proof ${command}`, () => {
+		const text = answer.replace(
+			"`node scripts/verify.mjs` passed",
+			`\`${command}\` passed`,
+		);
+		const input = fixture(text, false, command);
+		const expected = { ...expectation, gate: command };
+		expect(
+			deliveryIssues(
+				{
+					...input,
+					finalText: text.replace("; its script remained unchanged", ""),
+				},
+				expected,
+			),
+		).toEqual([]);
+		expect(deliveryIssues(input, expected)).toContain(
+			"Unchanged script claim lacks immutable workspace evidence.",
+		);
+	});
+}
+test("quoted later backtick command remains refused through the actual grader", () => {
+	const command = 'node scripts/verify.mjs --label "`node scripts/other.mjs`"';
+	const text = answer.replace(
+		"`node scripts/verify.mjs` passed",
+		`\`${command}\` passed`,
+	);
+	expect(
+		deliveryIssues(fixture(text, false, command), {
+			...expectation,
+			gate: command,
+		}).length,
+	).toBeGreaterThan(0);
+});
