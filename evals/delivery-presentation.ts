@@ -405,6 +405,42 @@ function commandResultValue(line: string, commands: readonly string[]) {
 	}
 	return null;
 }
+function proseGateClause(line: string) {
+	const leading = /^the Linux gate ((?:node|bun) .+)$/i.exec(line);
+	if (leading) return { prefix: null, commandClause: leading[1] ?? "" };
+	if (/^Example:/i.test(line)) return null;
+	let quote: string | null = null;
+	for (let index = 0; index < line.length; index++) {
+		const character = line[index];
+		if (character === "\\") {
+			index++;
+			continue;
+		}
+		if (quote) {
+			if (character === quote) quote = null;
+			continue;
+		}
+		if (character === '"' || character === "'") {
+			if (
+				character === "'" &&
+				/[\p{L}\p{N}\p{M}_]$/u.test(line.slice(0, index))
+			)
+				continue;
+			quote = character;
+			continue;
+		}
+		if (character !== ",") continue;
+		const conjunction = /^, and the Linux gate ((?:node|bun) .+)$/i.exec(
+			line.slice(index),
+		);
+		if (conjunction)
+			return {
+				prefix: line.slice(0, index).trim() || null,
+				commandClause: conjunction[1] ?? "",
+			};
+	}
+	return null;
+}
 function parseCommandResult(
 	rawBody: string,
 	command: string,
@@ -530,6 +566,18 @@ export function currentHandoffFacts(
 				pending.splice(index + 1, 0, commandRecord.remainder);
 			continue;
 		}
+		const gate = proseGateClause(line);
+		if (gate) {
+			pending.splice(
+				index,
+				1,
+				...(gate.prefix
+					? [gate.prefix, gate.commandClause]
+					: [gate.commandClause]),
+			);
+			index--;
+			continue;
+		}
 		const boundary = sentenceBoundary(line);
 		if (boundary.end < line.length) {
 			pending.splice(index + 1, 0, line.slice(boundary.end).trim());
@@ -547,6 +595,10 @@ export function currentHandoffFacts(
 		for (const segment of line.split(/;|\.\s+(?=[A-Z])/)) {
 			const claim = segment.trim().replace(/\.$/, "");
 			if (!claim) continue;
+			if (/^No independent review or completion is claimed$/i.test(claim)) {
+				facts.assurance.push("completion-not-claimed");
+				continue;
+			}
 			const review = /^Independent review(?::|\s)\s*(.*)$/i.exec(claim);
 			if (review) {
 				const value = review[1] ?? "";
