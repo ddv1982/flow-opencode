@@ -179,3 +179,94 @@ test("registered quoted arguments remain opaque before gate-role segmentation", 
 	]);
 	expect(facts.unsupported).toEqual([]);
 });
+
+for (const wrapper of ["the Linux gate ", prefix]) {
+	for (const exitCode of [0, 9]) {
+		test(`wrapped registered quoted arguments retain outer result ${wrapper}${exitCode}`, () => {
+			const command = `${localCommand} --label "retained, and the Linux gate bun fake.mjs passed with exit code 9"`;
+			const facts = currentHandoffFacts(
+				`${wrapper}${command} passed with exit code ${exitCode}.`,
+				[command, localCommand],
+			);
+			expect(facts.observations).toEqual([
+				{
+					command,
+					exitCode,
+					qualification: "claimed-pass",
+					integrity: "not-claimed",
+				},
+			]);
+			expect(facts.unsupported).toEqual([]);
+		});
+	}
+}
+
+for (const wrapper of [
+	"The parser's implementation is retained, and the Linux gate ",
+	"The parsers' implementation is retained, and the Linux gate ",
+	"Implementation: retained, and the Linux gate ",
+]) {
+	for (const exitCode of [0, 9]) {
+		test(`ordinary prose punctuation retains bound gate result ${wrapper}${exitCode}`, () => {
+			const text = saved.answer
+				.replace(prefix, wrapper)
+				.replace(
+					"passed with exit code 0.",
+					`passed with exit code ${exitCode}.`,
+				);
+			const issues = deliveryIssues(fixture(text), expected);
+			if (exitCode === 0) expect(issues).toEqual([]);
+			else
+				expect(issues).toContain(
+					"Claimed command pass lacks matching accepted complete source evidence.",
+				);
+		});
+	}
+}
+
+test("leading gate role owns unquoted registered arguments containing another gate conjunction", () => {
+	const command = `${localCommand} --label retained, and the Linux gate bun fake.mjs`;
+	const facts = currentHandoffFacts(
+		`the Linux gate ${command} passed with exit code 0.`,
+		[command, localCommand],
+	);
+	expect(facts.observations).toEqual([
+		{
+			command,
+			exitCode: 0,
+			qualification: "claimed-pass",
+			integrity: "not-claimed",
+		},
+	]);
+	expect(facts.unsupported).toEqual([]);
+});
+
+for (const quotedPrefix of [
+	'"retained, and the Linux gate bun fake.mjs passed with exit code 9"',
+	"'retained, and the Linux gate bun fake.mjs passed with exit code 9'",
+	'"retained \\" , and the Linux gate bun fake.mjs passed with exit code 9"',
+]) {
+	test(`closed quoted prefix keeps inner delimiter opaque ${quotedPrefix}`, () => {
+		const facts = currentHandoffFacts(
+			`${quotedPrefix}, and the Linux gate ${localCommand} passed with exit code 0.`,
+			[localCommand],
+		);
+		expect(facts.observations).toEqual([
+			{
+				command: localCommand,
+				exitCode: 0,
+				qualification: "claimed-pass",
+				integrity: "not-claimed",
+			},
+		]);
+	});
+}
+
+test("whole quoted gate example stays opaque", () => {
+	expect(
+		currentHandoffFacts(
+			`"The parser's implementation is retained, and the Linux gate ${localCommand} passed with exit code 9."`,
+			[localCommand],
+		).observations,
+	).toEqual([]);
+});
