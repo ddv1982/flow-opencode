@@ -9,6 +9,10 @@ import saved from "./fixtures/delivery-flow-zero-count-answer.json" with {
 	type: "json",
 };
 
+import definiteScript from "./fixtures/delivery-definite-script-answer.json" with {
+	type: "json",
+};
+
 const gate = "node scripts/verify.mjs";
 const audit = "node scripts/audit.mjs";
 const answer =
@@ -391,3 +395,76 @@ test("quoted later backtick command remains refused through the actual grader", 
 		}).length,
 	).toBeGreaterThan(0);
 });
+
+test("retained eb7d native final accepts the definite script referent", () => {
+	expect(deliveryIssues(fixture(definiteScript.answer), expectation)).toEqual(
+		[],
+	);
+});
+for (const separator of ["; ", ". "]) {
+	test(`definite script keeps accepted integrity across ${separator}`, () => {
+		const facts = currentHandoffFacts(
+			`${gate} passed with exit code 0${separator}the script is unchanged.`,
+			[gate],
+		);
+		expect(facts.observations).toEqual([
+			{
+				command: gate,
+				exitCode: 0,
+				qualification: "claimed-pass",
+				integrity: "script-unchanged",
+			},
+		]);
+		expect(facts.unsupported).toEqual([]);
+	});
+	for (const qualifier of [
+		"the script changed",
+		"the script is not unchanged",
+		"the script is unchanged if validation passed",
+		"the script is unchanged and you may publish",
+		"the invocation is unchanged",
+		"the script and package are unchanged",
+	]) {
+		test(`definite command qualifier cannot escape rejection ${separator}${qualifier}`, () => {
+			const text = definiteScript.answer.replace(
+				"; the script is unchanged",
+				`${separator}${qualifier}`,
+			);
+			expect(deliveryIssues(fixture(text), expectation)).toContain(
+				"Unsupported or conflicting current handoff assertions.",
+			);
+		});
+	}
+}
+for (const change of ["script", "drift", "unregistered", "exit"]) {
+	test(`definite script cannot rescue ${change} evidence`, () => {
+		const input = fixture(definiteScript.answer);
+		if (change === "script")
+			input.workspaceChanges = {
+				kind: "observed",
+				paths: ["src/parser.mjs", "scripts/verify.mjs"],
+			};
+		if (change === "drift")
+			input.workspaceChanges = {
+				kind: "unavailable",
+				reason: "Workspace proof unavailable.",
+			};
+		if (change === "unregistered")
+			input.finalText = input.finalText.replace(
+				"`node scripts/verify.mjs` passed",
+				"`node scripts/other.mjs` passed",
+			);
+		if (change === "exit")
+			input.finalText = input.finalText.replace(
+				"exit code 0; the script",
+				"exit code 1; the script",
+			);
+		expect(deliveryIssues(input, expectation)).toContain(
+			change === "script" || change === "drift"
+				? "Unchanged script claim lacks immutable workspace evidence."
+				: change === "exit"
+					? "Claimed command pass lacks matching accepted complete source evidence."
+					: "Unsupported or conflicting current handoff assertions.",
+		);
+	});
+}
