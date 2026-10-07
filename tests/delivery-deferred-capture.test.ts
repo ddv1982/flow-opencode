@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { deliveryIssues } from "../evals/delivery-scenario-checks.js";
 import type { ScenarioGradeInput } from "../evals/grader-input.js";
+import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 import {
 	deferredAnswer,
 	deferredCaptureOutcome,
@@ -10,6 +11,9 @@ import {
 	record,
 	validation,
 } from "./fixtures/deferred-capture-outcome.js";
+import completed from "./fixtures/delivery-flow-zero-count-answer.json" with {
+	type: "json",
+};
 
 const expected = {
 	closure: "deferred" as const,
@@ -128,7 +132,7 @@ for (const [name, mutate] of [
 			record(
 				record(record(call(g, "flow_validation_start").output).workflowData)
 					.capture,
-			).expiresInMs = 0;
+			).expiresInMs = 1;
 		},
 	],
 	[
@@ -352,6 +356,189 @@ test("command-scoped unavailable proof is a distinct truthful statement", () => 
 		`- Outstanding proof: ${externalCommand} on macOS; unavailable on this Linux host.\n- **Progress:**`,
 	);
 	expect(deliveryIssues(deferredCaptureOutcome(text), expected)).toEqual([]);
+});
+test("unregistered unavailable command cannot borrow the real missing platform obligation", () => {
+	const text = noOptionalClaims.replace(
+		"- **Progress:**",
+		"- Outstanding proof: node scripts/foreign.mjs on macOS; unavailable on this Linux host.\n- **Progress:**",
+	);
+	expect(deliveryIssues(deferredCaptureOutcome(text), expected)).toContain(
+		"Unsupported or conflicting current handoff assertions.",
+	);
+});
+test("typed feature check cannot label a Linux capture as passing Darwin proof", () => {
+	const input = deferredCaptureOutcome(capturedOnly);
+	const feature = record(
+		(record(record(input.archives[0]).plan).features as unknown[])[0],
+	);
+	feature.checks = [
+		{ command: localCommand, intent: "pass", platform: "darwin" },
+	];
+	expect(deliveryIssues(input, expected)).toContain(
+		"Claimed command pass lacks matching accepted complete source evidence.",
+	);
+});
+test("declared named assertions need passed native recorded assertion evidence", () => {
+	const input = deferredCaptureOutcome(capturedOnly);
+	const evidence = record(
+		(record(record(input.archives[0]).plan).evidence as unknown[])[0],
+	);
+	evidence.assertions = ["null-handling"];
+	expect(deliveryIssues(input, expected)).toContain(
+		"Claimed command pass lacks matching accepted complete source evidence.",
+	);
+});
+test("completed native independent review cannot be denied in the final summary", () => {
+	const input = autoQualifiedOutcome("single", {
+		goal: completed.goal,
+		featureId: completed.featureId,
+	});
+	record(
+		record(call(input, "flow_session_close").output).workflowData,
+	).delivery = structuredClone(completed.delivery);
+	const finalText = completed.answer.replace(
+		"passed with no findings",
+		"was not performed",
+	);
+	expect(
+		deliveryIssues(
+			{ ...input, finalText },
+			{
+				closure: "completed",
+				presentation: "summary",
+				gate: localCommand,
+				allowedPaths: ["src/parser.mjs"],
+			},
+		),
+	).toContain(
+		"Independent review claim contradicts accepted native review evidence.",
+	);
+});
+test("declared named assertion passes with matching native marker, status and archived assertion", () => {
+	const input = deferredCaptureOutcome(capturedOnly);
+	record(
+		(record(record(input.archives[0]).plan).evidence as unknown[])[0],
+	).assertions = ["null-handling"];
+	const assertions = [{ name: "null-handling", status: "passed" }];
+	validation(input).observedAssertions = assertions;
+	statusValidation(input).observedAssertions = structuredClone(assertions);
+	Object.assign(call(input, "bash"), {
+		rawOutput: call(input, "bash").rawOutput.replace(
+			'"recordedRevision":4',
+			`"assertions":${JSON.stringify(assertions)},"recordedRevision":4`,
+		),
+	});
+	expect(deliveryIssues(input, expected)).toEqual([]);
+});
+test("contradictory later native status cannot be rescued by an earlier matching snapshot", () => {
+	const input = deferredCaptureOutcome(capturedOnly);
+	const contradictory = structuredClone(call(input, "flow_status"));
+	if (contradictory.native)
+		Object.assign(contradictory.native, {
+			messageId: "msg_conflicting_status",
+			partId: "prt_conflicting_status",
+			callId: "call_conflicting_status",
+			startedAt: 26,
+			completedAt: 27,
+		});
+	const projection = record(
+		record(record(contradictory.output).workflowData).projection,
+	);
+	record(
+		(record((projection.runs as unknown[])[0]).validations as unknown[])[0],
+	).sourceDigest = `sha256:${"b".repeat(64)}`;
+	const at = input.allCalls.indexOf(call(input, "flow_session_close"));
+	const allCalls = [
+		...input.allCalls.slice(0, at),
+		contradictory,
+		...input.allCalls.slice(at),
+	];
+	expect(
+		deliveryIssues(
+			{ ...input, allCalls, hostTrace: nativeTrace(allCalls) },
+			expected,
+		),
+	).toContain(
+		"Claimed command pass lacks matching accepted complete source evidence.",
+	);
+});
+test("prior failed same-command validation does not erase a distinct attested passing capture", () => {
+	const input = deferredCaptureOutcome(capturedOnly);
+	const archiveRun = record((record(input.archives[0]).runs as unknown[])[0]);
+	const earlier = {
+		...validation(input),
+		id: "earlier-failed-capture",
+		exitCode: 1,
+		recordedRevision: 3,
+	};
+	archiveRun.startedRevision = 2;
+	(archiveRun.validations as unknown[]).push(earlier);
+	const projection = record(
+		record(record(call(input, "flow_status").output).workflowData).projection,
+	);
+	const nativeRun = record((projection.runs as unknown[])[0]);
+	nativeRun.startedRevision = 2;
+	(nativeRun.validations as unknown[]).push(structuredClone(earlier));
+	expect(deliveryIssues(input, expected)).toEqual([]);
+});
+test("unmet platform proof does not depend on the native route hint", () => {
+	const input = deferredCaptureOutcome();
+	record(
+		record(record(call(input, "flow_status").output).workflowData).projection,
+	).nextAction = "provide-required-evidence";
+	expect(deliveryIssues(input, expected)).toEqual([]);
+});
+function reviewedAdvisoryOutcome() {
+	const input = autoQualifiedOutcome("single", {
+		goal: completed.goal,
+		featureId: completed.featureId,
+	});
+	const run = record((record(input.archives[0]).runs as unknown[])[0]);
+	const findings = [
+		{
+			findingId: "parser-null.R5-01",
+			severity: "advisory",
+			summary: "Consider broader parser documentation.",
+		},
+	];
+	record(record((run.reviews as unknown[])[0]).result).findings = findings;
+	record(
+		record(call(input, "flow_feature_complete").input.request).result,
+	).findings = structuredClone(findings);
+	const delivery = structuredClone(completed.delivery);
+	Object.assign(delivery, { findingsDigest: [{ ...findings[0], live: true }] });
+	record(
+		record(call(input, "flow_session_close").output).workflowData,
+	).delivery = delivery;
+	return input;
+}
+const completedExpected = {
+	closure: "completed" as const,
+	presentation: "summary" as const,
+	gate: localCommand,
+	allowedPaths: ["src/parser.mjs"],
+};
+test("accepted independent review may pass with a nonblocking advisory", () => {
+	expect(
+		deliveryIssues(
+			{
+				...reviewedAdvisoryOutcome(),
+				finalText: completed.answer.replace(
+					"passed with no findings",
+					"passed",
+				),
+			},
+			completedExpected,
+		),
+	).toEqual([]);
+});
+test("review no-findings qualifier cannot conceal a native accepted advisory", () => {
+	expect(
+		deliveryIssues(
+			{ ...reviewedAdvisoryOutcome(), finalText: completed.answer },
+			completedExpected,
+		),
+	).not.toEqual([]);
 });
 for (const suffix of [
 	"on Windows; unavailable on this Linux host",
