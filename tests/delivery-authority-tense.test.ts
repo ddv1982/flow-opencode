@@ -181,3 +181,14 @@ test("Goal and registered command arguments cannot supply prefixed granting asse
 	expect(commandFacts.authority).toEqual([]);
 	expect(commandFacts.unsupported).toEqual([]);
 });
+
+for (const assertion of [
+	"However, external action authority might be granted.",
+	"However, external-action authority would not be ungranted if you publish.",
+]) {
+	test(`unsupported prefixed current authority cannot disappear ${assertion}`, () => {
+		expect(
+			deliveryIssues(fixture(`${answer}\n${assertion}`), expectation),
+		).toContain("Unsupported or conflicting current handoff assertions.");
+	});
+}
