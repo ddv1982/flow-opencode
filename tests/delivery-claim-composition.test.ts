@@ -370,3 +370,16 @@ for (const contradiction of [
 				"Unsupported or conflicting current handoff assertions.",
 			);
 		});
+
+for (const text of ["1/1 requirements verified.", "2/3 tests passed."]) {
+	test(`unrelated ratio is not a current feature progress assertion ${text}`, () => {
+		const facts = currentHandoffFacts(text);
+		expect(facts.progress).toEqual([]);
+		expect(facts.unsupported).toEqual([]);
+	});
+	test(`unrelated ratio cannot invalidate a truthful whole handoff ${text}`, () => {
+		expect(deliveryIssues(fixture(`${canonical}\n${text}`), expected)).toEqual(
+			[],
+		);
+	});
+}
