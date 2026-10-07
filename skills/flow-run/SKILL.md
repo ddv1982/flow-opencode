@@ -39,8 +39,10 @@ Work on exactly one approved feature.
 
 Delivery handoff: report `workflowData.delivery.summary.lines`.
 Keep the supplied Goal line unchanged. Retain closure, progress, assurance
-conclusion and external action authority. Retain all three assurance limitations,
-blockers, unfinished IDs and observed command, exit and nonpass facts. Concise formatting may not omit them.
+conclusion and external action authority. Copy each supplied
+`workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
+Retain blockers, unfinished IDs and observed command, exit and nonpass facts.
+Concise formatting may not omit them.
 For requested
 full detail or a missing summary, use the retained close response's `report`.
 Map IDs only

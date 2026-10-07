@@ -89,7 +89,6 @@ for (const invalid of [
 	});
 }
 for (const ignored of [
-	`> ${freshness}`,
 	`Example: "${freshness}"`,
 	`## Historical handoff\n${freshness}`,
 	`Goal: ${freshness}`,
@@ -97,9 +96,20 @@ for (const ignored of [
 	test(`freshness cannot be supplied in ignored scope ${ignored}`, () => {
 		expect(
 			missingAssuranceDisclosures(
-				actual.replace(partial, complete).replace(freshness, ignored),
+				actual.replace(partial, complete).replace(`- ${freshness}`, ignored),
 			),
 		).toContain(freshnessIssue);
+	});
+}
+for (const statement of [canonicalFreshness, freshness]) {
+	test(`Markdown blockquote formatting preserves visible disclosure ${statement}`, () => {
+		expect(
+			missingAssuranceDisclosures(
+				actual
+					.replace(partial, complete)
+					.replace(`- ${freshness}`, `> ${statement}`),
+			),
+		).toEqual([]);
 	});
 }
 test("valid definite archive disclosure does not hide contradictory current claim", () => {

@@ -704,7 +704,12 @@ export function missingAssuranceDisclosures(text: string): string[] {
 			.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 			.replace(/ /g, "\\s+");
 		const canonicalMatches = [
-			...body.matchAll(new RegExp(`(?:^|\\n)${words}(?=$|\\n)`, "g")),
+			...body.matchAll(
+				new RegExp(
+					`(?:^|\\n)${index === 2 ? words.replace("an\\s+archive", "(?:an|the)\\s+archive") : words}(?=$|\\n)`,
+					"g",
+				),
+			),
 		];
 		const canonical = canonicalMatches.length > 0;
 		const subjectWords = disclosure.subject
