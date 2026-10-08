@@ -142,6 +142,10 @@ test("bare command pass preserves quoted arguments as opaque command identity", 
 });
 for (const runtime of ["Node version 24", "Bun version 1.4"]) {
 	test(`runtime compatibility prose remains ordinary context for ${runtime}`, () => {
+		expect(
+			currentHandoffFacts(`${runtime} passed our compatibility tests.`, [gate])
+				.unsupported,
+		).toEqual([]);
 		const input = fixture();
 		input.finalText += `\n${runtime} passed our compatibility tests.`;
 		expect(scenario.check(input)).toEqual([]);

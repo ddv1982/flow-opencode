@@ -588,7 +588,10 @@ export function currentHandoffFacts(
 		}
 		if (
 			!/^Example:/i.test(line) &&
-			/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed\b/i.test(line)
+			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
+				line,
+			) ||
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?:[.;]|$)/i.test(line))
 		) {
 			facts.unsupported.push(line);
 		}
