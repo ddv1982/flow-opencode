@@ -151,7 +151,7 @@ test.skipIf(process.platform === "win32").each(["stdout", "stderr"] as const)(
 		const holder = join(fixture.directory, "holder.mjs");
 		await writeFile(
 			holder,
-			`import {existsSync,writeFileSync} from "node:fs";writeFileSync(process.env.HOLDER_PID,String(process.pid));writeFileSync(process.env.READY,"ready");setTimeout(()=>{writeFileSync(process.env.MARKER,JSON.stringify(existsSync(process.env.OPERANDS+"/before")&&existsSync(process.env.OPERANDS+"/after")));process.exit(0);},250);`,
+			`import {closeSync,existsSync,writeFileSync} from "node:fs";writeFileSync(process.env.HOLDER_PID,String(process.pid));writeFileSync(process.env.READY,"ready");setTimeout(()=>{writeFileSync(process.env.MARKER,JSON.stringify(existsSync(process.env.OPERANDS+"/before")&&existsSync(process.env.OPERANDS+"/after")));closeSync(1);closeSync(2);setInterval(()=>{},1000);},250);`,
 		);
 		const marker = join(fixture.directory, "marker");
 		const environment = {
