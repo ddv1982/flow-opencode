@@ -1,0 +1,118 @@
+{
+	"answer": "Updated `src/parser.mjs` with a minimal null guard:\n\n```js\nexport function parse(input) { return input === null ? '' : input.trim(); }\n```\n\nValidation: `node scripts/verify.mjs` passed. Independent review passed with no findings.\n\n```text\nHandoff format: 1\nExternal action authority: not-granted\nGoal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.\nClosure: completed\nProgress: 1 of 1 features complete\nUnfinished features: none\nNonblocking live findings: advisory 0. Historical findings: 0.\nAssurance: completion supported\nAssurance checks: 4 satisfied, 0 not applicable, 0 unsatisfied.\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.\nReported artifacts: 1 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.\nFull report is included in this close response.\n```",
+	"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+	"featureId": "parser-null",
+	"delivery": {
+		"assurance": {
+			"checks": [
+				{
+					"explanation": "1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+					"id": "recorded-completion",
+					"label": "Recorded completion",
+					"status": "satisfied",
+					"tier": "ts-enforced"
+				},
+				{
+					"explanation": "1/1 terminal runs have eligible host evidence accepted by review.",
+					"id": "accepted-validation",
+					"label": "Accepted validation",
+					"status": "satisfied",
+					"tier": "host-attested"
+				},
+				{
+					"explanation": "\"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+					"id": "canonical-gate",
+					"label": "Canonical gate",
+					"status": "satisfied",
+					"tier": "host-attested"
+				},
+				{
+					"explanation": "1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+					"id": "declared-evidence",
+					"label": "Declared evidence",
+					"status": "satisfied",
+					"tier": "host-attested"
+				}
+			],
+			"conclusion": "completion-supported",
+			"limitations": [
+				"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"Freshness holds when review is accepted; an archive does not attest the current workspace."
+			]
+		},
+		"closure": {
+			"kind": "completed",
+			"summary": "Implemented minimal null guard in src/parser.mjs; unchanged canonical gate passed and independent review passed without findings."
+		},
+		"features": [
+			{
+				"attempts": 1,
+				"id": "parser-null",
+				"latestState": "completed",
+				"outcomeSummary": "Verified parser-null and all three approved requirements: null returns ''; strings retain trim behavior; only src/parser.mjs changed, with the verification script and command unchanged. Inspected current parser, gate, README and package surface, all bounded evidence pages, and complete base diff; no deletion, rename, type/mode change or loss of pre-existing work. Source-bound node scripts/verify.mjs validation exited 0 with complete output and tests both outcomes. Other input behavior remains unchanged. No prior findings or remaining gaps.",
+				"terminalFindings": [],
+				"title": "Handle null in parse"
+			}
+		],
+		"findingsDigest": [],
+		"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+		"handoff": {
+			"externalActionAuthority": "not-granted",
+			"formatVersion": 1
+		},
+		"progress": {
+			"completed": 1,
+			"total": 1
+		},
+		"report": [
+			"Handoff format: 1",
+			"External action authority: not-granted",
+			"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+			"Closure: completed \u2014 Implemented minimal null guard in src/parser.mjs; unchanged canonical gate passed and independent review passed without findings.",
+			"Progress: 1 of 1 features complete",
+			"Features:",
+			"- parser-null \u2014 Handle null in parse",
+			"  attempts: 1; latest state: completed",
+			"  outcome: Verified parser-null and all three approved requirements: null returns ''; strings retain trim behavior; only src/parser.mjs changed, with the verification script and command unchanged. Inspected current parser, gate, README and package surface, all bounded evidence pages, and complete base diff; no deletion, rename, type/mode change or loss of pre-existing work. Source-bound node scripts/verify.mjs validation exited 0 with complete output and tests both outcomes. Other input behavior remains unchanged. No prior findings or remaining gaps.",
+			"  terminal findings: none",
+			"Findings digest: none",
+			"Assurance: completion supported",
+			"Assurance checks:",
+			"- satisfied [TS-enforced] Recorded completion: 1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+			"- satisfied [host-attested] Accepted validation: 1/1 terminal runs have eligible host evidence accepted by review.",
+			"- satisfied [host-attested] Canonical gate: \"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+			"- satisfied [host-attested] Declared evidence: 1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+			"Assurance limitations:",
+			"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+			"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+			"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+			"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+			"- latest attempts: src/parser.mjs",
+			"- superseded attempts only: none reported"
+		],
+		"reportedArtifacts": {
+			"latestAttempts": ["src/parser.mjs"],
+			"supersededAttemptsOnly": []
+		},
+		"summary": {
+			"fullReportAvailable": true,
+			"lines": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs and keeping node scripts/verify.mjs and its script unchanged.",
+				"Closure: completed",
+				"Progress: 1 of 1 features complete",
+				"Unfinished features: none",
+				"Nonblocking live findings: advisory 0. Historical findings: 0.",
+				"Assurance: completion supported",
+				"Assurance checks: 4 satisfied, 0 not applicable, 0 unsatisfied.",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Reported artifacts: 1 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.",
+				"Full report is included in this close response."
+			]
+		}
+	}
+}

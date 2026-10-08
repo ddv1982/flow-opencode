@@ -339,6 +339,7 @@ function sentenceBoundary(text: string, start = 0) {
 	return { end: text.length, unterminatedQuote: quote !== null };
 }
 function commandResultValue(line: string, commands: readonly string[]) {
+	if (/^Example:/i.test(line)) return null;
 	for (const command of [...commands].sort((a, b) => b.length - a.length)) {
 		const escaped = command.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 		const prefix = new RegExp(
@@ -464,8 +465,9 @@ function parseCommandResult(
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
 		);
-	if (!value) return invalid;
-	const rawExit = value[3] ?? "";
+	const barePass = /^passed$/i.test(status);
+	if (!value && !barePass) return invalid;
+	const rawExit = barePass ? "0" : (value?.[3] ?? "");
 	const exitCode =
 		rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
 	if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
@@ -475,7 +477,7 @@ function parseCommandResult(
 		qualification: null,
 		integrity: "not-claimed",
 	};
-	const metadata = value[4] ?? "";
+	const metadata = value?.[4] ?? "";
 	if (
 		metadata &&
 		!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
@@ -489,7 +491,8 @@ function parseCommandResult(
 		| "observation"
 		| "does-not-claim-pass"
 		| "claimed-pass"
-		| null = value[1] ? "claimed-pass" : value[2] ? "observation" : null;
+		| null =
+		barePass || value?.[1] ? "claimed-pass" : value?.[2] ? "observation" : null;
 	let integrity: CommandIntegrity = "not-claimed";
 	for (const qualifier of parts) {
 		if (
@@ -584,9 +587,11 @@ export function currentHandoffFacts(
 			line = line.slice(0, boundary.end);
 		}
 		if (
-			/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
+			!/^Example:/i.test(line) &&
+			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
-			)
+			) ||
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?:[.;]|$)/i.test(line))
 		) {
 			facts.unsupported.push(line);
 		}
