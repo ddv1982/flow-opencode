@@ -133,7 +133,7 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32").each(["stdout", "stderr"] as const)(
-	"%s overflow kills a TERM-ignoring child and waits for inherited pipes before cleanup",
+	"%s overflow kills a TERM-ignoring child and waits for pipe EOF while the holder remains alive",
 	async (channel) => {
 		const fixture = await fakeGit(`
 		import {spawn} from "node:child_process";
@@ -151,7 +151,7 @@ test.skipIf(process.platform === "win32").each(["stdout", "stderr"] as const)(
 		const holder = join(fixture.directory, "holder.mjs");
 		await writeFile(
 			holder,
-			`import {existsSync,writeFileSync} from "node:fs";writeFileSync(process.env.HOLDER_PID,String(process.pid));writeFileSync(process.env.READY,"ready");setTimeout(()=>{writeFileSync(process.env.MARKER,JSON.stringify(existsSync(process.env.OPERANDS+"/before")&&existsSync(process.env.OPERANDS+"/after")));process.exit(0);},250);`,
+			`import {closeSync,existsSync,writeFileSync} from "node:fs";writeFileSync(process.env.HOLDER_PID,String(process.pid));writeFileSync(process.env.READY,"ready");setTimeout(()=>{writeFileSync(process.env.MARKER,JSON.stringify(existsSync(process.env.OPERANDS+"/before")&&existsSync(process.env.OPERANDS+"/after")));closeSync(1);closeSync(2);setInterval(()=>{},1000);},250);`,
 		);
 		const marker = join(fixture.directory, "marker");
 		const environment = {
@@ -173,7 +173,7 @@ test.skipIf(process.platform === "win32").each(["stdout", "stderr"] as const)(
 		await expect(capture).rejects.toThrow(`${channel} exceeds its capacity`);
 		expect(
 			processGone(Number(await readFile(environment.HOLDER_PID, "utf8"))),
-		).toBe(true);
+		).toBe(false);
 	},
 );
 
