@@ -133,7 +133,7 @@ test.skipIf(process.platform === "win32")(
 );
 
 test.skipIf(process.platform === "win32").each(["stdout", "stderr"] as const)(
-	"%s overflow kills a TERM-ignoring child and waits for inherited pipes before cleanup",
+	"%s overflow kills a TERM-ignoring child and waits for pipe EOF while the holder remains alive",
 	async (channel) => {
 		const fixture = await fakeGit(`
 		import {spawn} from "node:child_process";
@@ -173,7 +173,7 @@ test.skipIf(process.platform === "win32").each(["stdout", "stderr"] as const)(
 		await expect(capture).rejects.toThrow(`${channel} exceeds its capacity`);
 		expect(
 			processGone(Number(await readFile(environment.HOLDER_PID, "utf8"))),
-		).toBe(true);
+		).toBe(false);
 	},
 );
 
