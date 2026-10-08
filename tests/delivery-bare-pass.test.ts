@@ -140,3 +140,25 @@ test("bare command pass preserves quoted arguments as opaque command identity", 
 	]);
 	expect(facts.unsupported).toEqual([]);
 });
+for (const runtime of ["Node version 24", "Bun version 1.4"]) {
+	test(`runtime compatibility prose remains ordinary context for ${runtime}`, () => {
+		const input = fixture();
+		input.finalText += `\n${runtime} passed our compatibility tests.`;
+		expect(scenario.check(input)).toEqual([]);
+	});
+}
+for (const suffix of [
+	"passed.",
+	"passed; its script remained unchanged.",
+	"passed; exited 1.",
+	"passed with exit code 0.",
+	"passed with exit code 0 and deployed.",
+]) {
+	test(`unregistered command still rejects status ${suffix}`, () => {
+		const input = fixture();
+		input.finalText += `\nValidation: node scripts/other.mjs ${suffix}`;
+		expect(scenario.check(input)).toContain(
+			"Unsupported or conflicting current handoff assertions.",
+		);
+	});
+}
