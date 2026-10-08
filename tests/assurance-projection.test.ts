@@ -521,7 +521,9 @@ describe("delivery summary", () => {
 			})),
 		};
 		const summary = deliveryProjection(session).summary.lines.join("\n");
-		expect(deliveryProjection(session).summary.lines).toContain("Closure: deferred");
+		expect(deliveryProjection(session).summary.lines).toContain(
+			"Closure: deferred",
+		);
 		expect(summary).toContain("Progress: 0 of 2 features complete");
 		expect(summary).toContain("Unfinished features: delivery, followup");
 		for (let index = 0; index < 12; index++)
@@ -595,20 +597,24 @@ for (const kind of ["completed", "deferred", "abandoned"] as const) {
 		expect(delivery.summary.lines[3]).toBe(`Closure: ${kind}`);
 		expect(delivery.summary.lines.join("\n")).not.toContain(narrative);
 		expect(delivery.report[3]).toBe(`Closure: ${kind} — ${narrative}`);
-		expect(delivery.summary.lines[1]).toBe("External action authority: not-granted");
+		expect(delivery.summary.lines[1]).toBe(
+			"External action authority: not-granted",
+		);
 	});
 }
 
 for (const platform of ["darwin", "other", undefined] as const) {
 	test(`canonical summary reports unfulfilled declared proof on ${platform ?? "unrecorded"} without claiming host availability`, () => {
 		const base = completedSession({
-			extraEvidence: [{
-				requirement: "Platform acceptance",
-				environment: "Declared runner",
-				command: "node scripts/platform-check.mjs",
-				...(platform === undefined ? {} : { platform }),
-				assertions: [],
-			}],
+			extraEvidence: [
+				{
+					requirement: "Platform acceptance",
+					environment: "Declared runner",
+					command: "node scripts/platform-check.mjs",
+					...(platform === undefined ? {} : { platform }),
+					assertions: [],
+				},
+			],
 		});
 		if (!base.closure) throw new Error("fixture requires closure");
 		const delivery = deliveryProjection({
@@ -616,7 +622,7 @@ for (const platform of ["darwin", "other", undefined] as const) {
 			closure: { ...base.closure, kind: "deferred", summary: "" },
 		});
 		expect(delivery.summary.lines).toContain(
-			`Unfulfilled evidence: "node scripts/platform-check.mjs"; required platform ${platform ?? "unrecorded"}`,
+			`Unfulfilled required evidence: platform ${platform ?? "unrecorded"}, command "node scripts/platform-check.mjs"`,
 		);
 		expect(delivery.summary.lines.join("\n")).not.toContain("unavailable");
 		expect(delivery.assurance.conclusion).toBe("completion-not-claimed");

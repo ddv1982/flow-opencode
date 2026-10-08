@@ -1,4 +1,5 @@
 import type {
+	EvidenceEntry,
 	FeatureRun,
 	ReviewFinding,
 	Session,
@@ -291,6 +292,7 @@ function formatReport(
 function formatSummary(
 	delivery: Omit<DeliveryProjection, "report" | "summary">,
 	unfinishedFeatureIds: readonly string[],
+	unfulfilledEvidence: readonly EvidenceEntry[],
 ): string[] {
 	const live = delivery.findingsDigest.filter((finding) => finding.live);
 	const checks = delivery.assurance.checks;
@@ -298,9 +300,13 @@ function formatSummary(
 		`Handoff format: ${delivery.handoff.formatVersion}`,
 		`External action authority: ${delivery.handoff.externalActionAuthority}`,
 		`Goal: ${delivery.goal}`,
-		`Closure: ${delivery.closure.kind}${delivery.closure.summary ? `. ${delivery.closure.summary}` : ""}`,
+		`Closure: ${delivery.closure.kind}`,
 		`Progress: ${delivery.progress.completed} of ${delivery.progress.total} features complete`,
 		`Unfinished features: ${unfinishedFeatureIds.join(", ") || "none"}`,
+		...unfulfilledEvidence.map(
+			(entry) =>
+				`Unfulfilled required evidence: platform ${entry.platform ?? "unrecorded"}, command ${JSON.stringify(entry.command)}`,
+		),
 		...live
 			.filter((finding) => finding.severity === "blocking")
 			.map(
@@ -399,6 +405,7 @@ export function deliveryProjection(session: Session): DeliveryProjection {
 				features
 					.filter((feature) => !isFeatureComplete(session, feature.id))
 					.map((feature) => feature.id),
+				unsatisfiedEvidence(session),
 			),
 			fullReportAvailable: true,
 		},
