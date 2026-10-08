@@ -230,11 +230,9 @@ manager contract.
   `handoff` declares `formatVersion: 1` and `externalActionAuthority: "not-granted"`.
   Delivery contains goal, closure, progress, each feature's attempts, outcome,
   terminal findings, reported artifact groups, and tiered assurance limits.
-  `summary.lines` is the default handoff, copied unchanged as one block.
-  Its closure row derives only from the recorded kind. Unfulfilled evidence rows
-  identify exact declared commands and platforms without claiming host availability.
-  Caller closure narrative remains in `closure.summary` and the full `report`.
-  Full detail remains in that same close response. Blocked `statusReport` stays unchanged.
+  Copy `summary.lines` unchanged. Closure kind, exact unmet commands and declared
+  platforms infer no availability. `closure.summary`, `report` and blocked
+  `statusReport` stay unchanged.
 - Delivery derives from the closed Session or archive. Session v5 and archive
   JSON store neither projection nor report. A report artifact needs a user request.
 - Source identity hashes sorted effective workspace path/type/content tuples;
