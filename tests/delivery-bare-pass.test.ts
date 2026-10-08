@@ -106,8 +106,37 @@ test("unknown command cannot borrow the registered gate's bare pass proof", () =
 for (const text of [
 	`Goal: Preserve '${gate} passed.'`,
 	`Historical handoff\n${gate} passed.`,
+	`Example: ${gate} passed.`,
+	`Example: ${gate} passed with exit code 0.`,
 ]) {
 	test(`scoped text cannot supply a bare current command pass ${text}`, () => {
 		expect(currentHandoffFacts(text, [gate]).observations).toEqual([]);
 	});
 }
+for (const qualifier of [
+	"its script remained unchanged",
+	"its script and invocation are unchanged",
+	"it passed",
+]) {
+	test(`bare pass retains the closed allowed qualifier ${qualifier}`, () => {
+		const input = fixture();
+		input.finalText = input.finalText.replace(
+			"`node scripts/verify.mjs` passed.",
+			`\`${gate}\` passed; ${qualifier}.`,
+		);
+		expect(scenario.check(input)).toEqual([]);
+	});
+}
+test("bare command pass preserves quoted arguments as opaque command identity", () => {
+	const command = `${gate} --label "retained, and the Linux gate bun fake.mjs passed with exit code 9"`;
+	const facts = currentHandoffFacts(`${command} passed.`, [command]);
+	expect(facts.observations).toEqual([
+		{
+			command,
+			exitCode: 0,
+			qualification: "claimed-pass",
+			integrity: "not-claimed",
+		},
+	]);
+	expect(facts.unsupported).toEqual([]);
+});
