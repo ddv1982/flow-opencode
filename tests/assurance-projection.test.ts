@@ -598,3 +598,27 @@ for (const kind of ["completed", "deferred", "abandoned"] as const) {
 		expect(delivery.summary.lines[1]).toBe("External action authority: not-granted");
 	});
 }
+
+for (const platform of ["darwin", "other", undefined] as const) {
+	test(`canonical summary reports unfulfilled declared proof on ${platform ?? "unrecorded"} without claiming host availability`, () => {
+		const base = completedSession({
+			extraEvidence: [{
+				requirement: "Platform acceptance",
+				environment: "Declared runner",
+				command: "node scripts/platform-check.mjs",
+				...(platform === undefined ? {} : { platform }),
+				assertions: [],
+			}],
+		});
+		if (!base.closure) throw new Error("fixture requires closure");
+		const delivery = deliveryProjection({
+			...base,
+			closure: { ...base.closure, kind: "deferred", summary: "" },
+		});
+		expect(delivery.summary.lines).toContain(
+			`Unfulfilled evidence: "node scripts/platform-check.mjs"; required platform ${platform ?? "unrecorded"}`,
+		);
+		expect(delivery.summary.lines.join("\n")).not.toContain("unavailable");
+		expect(delivery.assurance.conclusion).toBe("completion-not-claimed");
+	});
+}
