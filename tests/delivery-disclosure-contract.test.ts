@@ -131,3 +131,15 @@ for (const id of ["flow", "flow-plan", "flow-run"] as const) {
 		);
 	});
 }
+
+for (const id of ["flow", "flow-plan", "flow-run"] as const) {
+	test(`loaded ${id} guidance hands off the canonical summary without competing restatements`, () => {
+		const guidance = getFlowGuidance(id).content.replace(/\s+/g, " ");
+		expect(guidance).toContain(
+			"Copy `workflowData.delivery.summary.lines` unchanged as one block.",
+		);
+		expect(guidance).toContain(
+			"Implementation details may precede the block. Do not rewrite or restate its facts elsewhere.",
+		);
+	});
+}
