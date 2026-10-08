@@ -37,12 +37,10 @@ Work on exactly one approved feature.
    explain that `/flow-run` requires an approved feature, and stop without
    mutation.
 
-Delivery handoff: report `workflowData.delivery.summary.lines`.
-Keep the supplied Goal line unchanged. Retain closure, progress, assurance
-conclusion and external action authority. Copy each supplied
+Delivery handoff: Copy `workflowData.delivery.summary.lines` unchanged as one block.
+Implementation details may precede the block. Do not rewrite or restate its facts elsewhere.
+Keep the supplied Goal line unchanged. Copy each supplied
 `workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
-Retain blockers, unfinished IDs and observed command, exit and nonpass facts.
-Concise formatting may not omit them.
 For requested
 full detail or a missing summary, use the retained close response's `report`.
 Map IDs only
