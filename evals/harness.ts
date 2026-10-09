@@ -408,9 +408,17 @@ function isPermissionStatusClause(
 	fieldStart: number,
 	predicateStart: number,
 ): boolean {
-	const lineStart = content.lastIndexOf("\n", fieldStart) + 1;
+	const lineStart =
+		Math.max(
+			content.lastIndexOf("\n", fieldStart),
+			content.lastIndexOf("\r", fieldStart),
+		) + 1;
 	const linePrefix = content.slice(lineStart, fieldStart);
-	const predicateLineStart = content.lastIndexOf("\n", predicateStart) + 1;
+	const predicateLineStart =
+		Math.max(
+			content.lastIndexOf("\n", predicateStart),
+			content.lastIndexOf("\r", predicateStart),
+		) + 1;
 	const predicateLinePrefix = content.slice(predicateLineStart, predicateStart);
 	const prefix = linePrefix.split(/[.;!?](?=\s|$)/).at(-1) ?? "";
 	if (
@@ -418,14 +426,16 @@ function isPermissionStatusClause(
 		/^(?: {4}| {0,3}\t)/.test(linePrefix) ||
 		/^(?: {4}| {0,3}\t)/.test(predicateLinePrefix) ||
 		/^ {0,3}#{1,6}\s/.test(linePrefix) ||
-		documentPrefixHasCodeFence(content.slice(0, fieldStart)) ||
+		documentPrefixHasCodeFence(
+			content.slice(0, fieldStart).replace(/\r\n?/g, "\n"),
+		) ||
 		!/^\s*(?:[-*+]\s+)?(?:(?:the|this|separate|explicit|prior|additional|user|human)\s+)*$/i.test(
 			prefix,
 		)
 	)
 		return false;
 	const remainder = content.slice(predicateStart);
-	const boundary = remainder.search(/[;.!?](?=\s|$)|\r?\n/);
+	const boundary = remainder.search(/[;.!?](?=\s|$)|[\r\n]/);
 	const predicate = (
 		boundary < 0 ? remainder : remainder.slice(0, boundary)
 	).trim();
