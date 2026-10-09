@@ -641,40 +641,53 @@ function inspectionReportDisclosesAuditFailure(
 	const owned: string[] = [];
 	let excluded = false;
 	let quoted = false;
-	let fence: string | null = null;
-	let handoff = false;
-	let handoffFence = false;
-	let firstFencedLine = false;
-	for (const raw of text.split(/\r?\n/)) {
-		if (/^\s*>/.test(raw)) {
-			quoted = true;
-			continue;
-		}
-		if (!raw.trim()) quoted = false;
-		if (quoted || /^(?: {4}|\t)/.test(raw)) continue;
+	let fence: {
+		marker: string;
+		kind: "generic" | "pending-handoff" | "handoff";
+	} | null = null;
+	for (const raw of text.replace(/\r\n?/g, "\n").split("\n")) {
+		if (/^(?: {4}| {0,3}\t)/.test(raw)) continue;
 		const line = raw.trim().replace(/^#{1,6}\s+/, "");
-		const fenceMatch = /^(`{3,}|~{3,})(\w*)\s*$/.exec(line);
+		const fenceMatch = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(raw);
 		const delimiter = fenceMatch?.[1];
 		if (delimiter) {
 			if (fence === null) {
-				fence = delimiter;
-				handoffFence = /^(?:text)?$/.test(fenceMatch?.[2] ?? "");
-				handoff = false;
-				firstFencedLine = true;
+				fence = {
+					marker: delimiter,
+					kind: /^(?:text)?$/.test(fenceMatch?.[2]?.trim() ?? "")
+						? "pending-handoff"
+						: "generic",
+				};
+				quoted = false;
 			} else if (
-				delimiter[0] === fence[0] &&
-				delimiter.length >= fence.length
+				delimiter[0] === fence.marker[0] &&
+				delimiter.length >= fence.marker.length &&
+				!fenceMatch?.[2]?.trim()
 			) {
 				fence = null;
 			}
 			continue;
 		}
-		if (fence !== null) {
-			if (firstFencedLine && line) {
-				handoff = handoffFence && line === "Handoff format: 1";
-				firstFencedLine = false;
+		if (fence === null) {
+			const quote = /^ {0,3}(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:>[ \t]*)+/.exec(
+				raw,
+			);
+			if (quote) {
+				quoted = raw.slice(quote[0].length).trim() !== "";
+				continue;
 			}
-			if (!handoff || excluded) continue;
+			if (
+				!line ||
+				/^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|1[.)])[ \t]+\S)/.test(raw)
+			)
+				quoted = false;
+			if (quoted) continue;
+		}
+		if (fence !== null) {
+			if (fence.kind === "pending-handoff" && line) {
+				fence.kind = line === "Handoff format: 1" ? "handoff" : "generic";
+			}
+			if (fence.kind !== "handoff" || excluded) continue;
 		} else {
 			if (
 				/^(?:(?:for\s+)?example|historical|previous|prior|earlier|superseded)\b/i.test(
