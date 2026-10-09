@@ -10,6 +10,9 @@ type CommandIntegrity =
 	| "script-unchanged"
 	| "script-and-invocation-unchanged";
 type ClaimedHostPlatform = "linux" | "darwin" | "win32";
+type IndependentReviewClaim =
+	| { kind: "passed"; findings: "none" | "not-claimed" }
+	| { kind: "not-performed" };
 type CommandObservation = {
 	command: string;
 	exitCode: number | null;
@@ -57,11 +60,7 @@ type CurrentHandoffFacts = {
 		targetPlatform: string;
 		hostPlatform: string;
 	}[];
-	independentReview: (
-		| { kind: "passed"; findings: "none" | "not-claimed" }
-		| { kind: "not-performed" }
-		| null
-	)[];
+	independentReview: (IndependentReviewClaim | null)[];
 	observations: CommandObservation[];
 	unsupported: string[];
 };
@@ -309,6 +308,24 @@ function commandStatusAssertion(text: string): boolean {
 		text,
 	);
 }
+function commandContinuation(text: string): boolean {
+	return (
+		commandStatusAssertion(text) ||
+		/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its|the (?:script|invocation))\b/i.test(
+			text,
+		)
+	);
+}
+function independentReviewValue(value: string): IndependentReviewClaim | null {
+	return /^(?:was )?not performed$/i.test(value)
+		? { kind: "not-performed" }
+		: /^(?:has |was )?(?:passed|passed with no findings)$/i.test(value)
+			? {
+					kind: "passed",
+					findings: /with no findings$/i.test(value) ? "none" : "not-claimed",
+				}
+			: null;
+}
 function platformValue(value: string) {
 	const lower = value.toLowerCase();
 	return lower === "macos" ? "darwin" : lower === "windows" ? "win32" : lower;
@@ -386,22 +403,38 @@ function commandResultValue(line: string, commands: readonly string[]) {
 		let boundary = sentenceBoundary(rawBody, 0, true);
 		while (
 			boundary.end < rawBody.length &&
-			(commandStatusAssertion(rawBody.slice(boundary.end).trimStart()) ||
-				/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its|the (?:script|invocation))\b/i.test(
-					rawBody.slice(boundary.end).trimStart(),
-				))
+			commandContinuation(rawBody.slice(boundary.end).trimStart())
 		) {
 			boundary = sentenceBoundary(rawBody, boundary.end, true);
 		}
 		const remainderStart = boundary.end;
 		const record = rawBody.slice(0, remainderStart);
-		const remainder = rawBody.slice(boundary.next).trim();
+		let remainder = rawBody.slice(boundary.next).trim();
+		let sibling:
+			| { value: IndependentReviewClaim | null; source: string }
+			| undefined;
+		if (/^Independent review(?::|\s)/i.test(remainder)) {
+			const start = boundary.next + rawBody.slice(boundary.next).search(/\S/);
+			let reviewBoundary = sentenceBoundary(rawBody, start);
+			while (
+				reviewBoundary.end < rawBody.length &&
+				commandContinuation(rawBody.slice(reviewBoundary.end).trimStart())
+			)
+				reviewBoundary = sentenceBoundary(rawBody, reviewBoundary.end);
+			const source = rawBody.slice(start, reviewBoundary.end).trim();
+			const value = source
+				.replace(/^Independent review(?::|\s)\s*/i, "")
+				.replace(/\.$/, "");
+			sibling = { value: independentReviewValue(value), source };
+			remainder = rawBody.slice(reviewBoundary.next).trim();
+		}
 		if (
 			/^Outstanding proof:/i.test(line) &&
 			/^\s+on (?:macOS|darwin|Linux|Windows)\.?\s*$/i.test(record)
 		)
 			return {
 				observation: null,
+				...(sibling ? { sibling } : {}),
 				remainder,
 				source: line
 					.slice(0, line.length - rawBody.length + remainderStart)
@@ -415,6 +448,7 @@ function commandResultValue(line: string, commands: readonly string[]) {
 		);
 		return {
 			observation: parsed,
+			...(sibling ? { sibling } : {}),
 			remainder,
 			source: line
 				.slice(0, line.length - rawBody.length + remainderStart)
@@ -597,6 +631,11 @@ export function currentHandoffFacts(
 		}
 		const commandRecord = commandResultValue(line, observationCommands);
 		if (commandRecord) {
+			if ("sibling" in commandRecord && commandRecord.sibling) {
+				facts.independentReview.push(commandRecord.sibling.value);
+				if (commandRecord.sibling.value === null)
+					facts.unsupported.push(commandRecord.sibling.source);
+			}
 			if ("unavailable" in commandRecord && commandRecord.unavailable)
 				facts.unavailableCommands.push(commandRecord.unavailable);
 			if (commandRecord.observation) {
@@ -648,18 +687,7 @@ export function currentHandoffFacts(
 			const review = /^Independent review(?::|\s)\s*(.*)$/i.exec(claim);
 			if (review) {
 				const value = review[1] ?? "";
-				facts.independentReview.push(
-					/^(?:was )?not performed$/i.test(value)
-						? { kind: "not-performed" }
-						: /^(?:has |was )?(?:passed|passed with no findings)$/i.test(value)
-							? {
-									kind: "passed",
-									findings: /with no findings$/i.test(value)
-										? "none"
-										: "not-claimed",
-								}
-							: null,
-				);
+				facts.independentReview.push(independentReviewValue(value));
 				if (facts.independentReview.at(-1) === null)
 					facts.unsupported.push(claim);
 				continue;
@@ -753,9 +781,6 @@ export function currentHandoffFacts(
 			}
 			const critical =
 				commandStatusAssertion(claim) ||
-				/^(?:its (?:script|invocation|command)|the (?:script|invocation))\b.*\b(?:changed|unchanged|modified)\b/i.test(
-					claim,
-				) ||
 				CLOSURE_SUBJECT.test(claim) ||
 				/\bprogress (?:is |was |has been )?(?:incomplete|unfinished|blocked|not complete)\b/i.test(
 					claim,
