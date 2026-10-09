@@ -64,6 +64,7 @@ for (const content of [
 	"Repairs require separate authorization: this review changes no product files.\n",
 	"Deployment needs explicit authorization: the inspection only documents defects.\n",
 	"The team requires authorization: its review records the failed gate.\n",
+	"Repairs require authorization: request authorization before changing product files.\n",
 ]) {
 	test(`permission prose is retained ${content}`, async () => {
 		expect(await observe(content)).toEqual({
@@ -216,6 +217,8 @@ for (const suffix of [
 	"The audit has completed successfully.",
 	"The audit successfully completed.",
 	"The canonical gate completed successfully.",
+	"The audit was a success.",
+	"The audit result was successful.",
 	"The audit result was success.",
 	"The audit result was a success.",
 	"The audit outcome is success.",
