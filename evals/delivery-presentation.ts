@@ -552,7 +552,7 @@ function parseCommandResult(
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
 		);
-	const barePass = /^passed( unchanged)?(?: on ([A-Za-z]+))?$/i.exec(status);
+	const barePass = /^passed( unchanged)?(?: on ([A-Za-z0-9]+))?$/i.exec(status);
 	if (!value && !barePass) return invalid;
 	const rawExit = barePass ? "0" : (value?.[3] ?? "");
 	const exitCode =
@@ -720,7 +720,7 @@ export function currentHandoffFacts(
 			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
 			) ||
-				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z]+)?(?:[,.;]|$)/i.test(
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z0-9]+)?(?:[,.;]|$)/i.test(
 					line,
 				))
 		) {
