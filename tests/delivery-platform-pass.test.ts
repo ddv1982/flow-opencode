@@ -1,7 +1,14 @@
 import { expect, test } from "bun:test";
 import { currentHandoffFacts } from "../evals/delivery-presentation.js";
+import { deliveryIssues } from "../evals/delivery-scenario-checks.js";
 import { DELIVERY_SCENARIOS } from "../evals/delivery-scenarios.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
+import {
+	validation as capturedValidation,
+	deferredCaptureOutcome,
+	externalCommand,
+	localCommand,
+} from "./fixtures/deferred-capture-outcome.js";
 import saved from "./fixtures/delivery-platform-pass-answer.json" with {
 	type: "json",
 };
@@ -243,6 +250,52 @@ for (const metadata of [
 				fixture(`passed, exit 0, ${metadata}. Independent review passed.`),
 			),
 		).toEqual([]);
+	});
+}
+for (const host of ["Linux", "Windows"]) {
+	test(`nonpass observation host binds to genuine deferred capture ${host}`, () => {
+		const input = deferredCaptureOutcome();
+		const finalText = `${input.finalText}\nObserved "${localCommand}": exit 0, host ${host}; this does not claim the command passed.`;
+		const issues = deliveryIssues(
+			{ ...input, finalText },
+			{
+				closure: "deferred",
+				presentation: "summary",
+				gate: localCommand,
+				missingEvidenceCommand: externalCommand,
+				allowedPaths: ["src/parser.mjs"],
+			},
+		);
+		if (host === "Linux") expect(issues).toEqual([]);
+		else
+			expect(issues).toContain(
+				"Claimed command host lacks matching accepted complete source evidence.",
+			);
+	});
+}
+for (const change of ["nonzero", "incomplete", "source", "intent"]) {
+	test(`nonpass host cannot rescue corrupt deferred capture ${change}`, () => {
+		const input = deferredCaptureOutcome();
+		const value = capturedValidation(input);
+		if (change === "nonzero") value.exitCode = 1;
+		if (change === "incomplete") value.outputComplete = false;
+		if (change === "source") value.sourceDigest = `sha256:${"b".repeat(64)}`;
+		if (change === "intent") value.intent = "observe";
+		const finalText = `${input.finalText}\nObserved "${localCommand}": exit 0, host Linux; this does not claim the command passed.`;
+		expect(
+			deliveryIssues(
+				{ ...input, finalText },
+				{
+					closure: "deferred",
+					presentation: "summary",
+					gate: localCommand,
+					missingEvidenceCommand: externalCommand,
+					allowedPaths: ["src/parser.mjs"],
+				},
+			),
+		).toContain(
+			"Claimed command host lacks matching accepted complete source evidence.",
+		);
 	});
 }
 for (const metadata of [
