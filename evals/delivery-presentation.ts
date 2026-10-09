@@ -534,6 +534,21 @@ function proseGateClause(line: string) {
 	}
 	return null;
 }
+const BEHAVIOR_PROCESSING_HEADS: ReadonlySet<string> = new Set([
+	"handling",
+	"trimming",
+	"parsing",
+	"formatting",
+	"normalization",
+	"validation",
+]);
+function behaviorComplementValue(text: string): boolean {
+	return text.split(/\band\b/i).every((phrase) => {
+		const words = phrase.trim().split(/\s+/);
+		const head = words.at(-1)?.toLowerCase();
+		return head !== undefined && BEHAVIOR_PROCESSING_HEADS.has(head);
+	});
+}
 type CommandAdjunct =
 	| { kind: "explanation"; status: string; text: string }
 	| { kind: "qualifier"; text: string };
@@ -560,6 +575,7 @@ function commandAdjunctValue(text: string): CommandAdjunct {
 		if (!match) continue;
 		const complement = match[1] ?? "";
 		if (
+			!behaviorComplementValue(complement) ||
 			!/^[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*(?:\s+[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*)*$/u.test(
 				complement,
 			) ||
