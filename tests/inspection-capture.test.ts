@@ -239,6 +239,9 @@ for (const suffix of [
 	"The audit will complete only after its findings are repaired.",
 	'Do not claim "the audit completed successfully".',
 	'Never report "audit result was success".',
+	"Do not claim the audit completed successfully.",
+	"Do not report that the audit completed successfully.",
+	"If the audit completed successfully, then we could proceed.",
 ]) {
 	test(`negated conditional or warned audit success remains truthful ${suffix}`, () => {
 		expect(
