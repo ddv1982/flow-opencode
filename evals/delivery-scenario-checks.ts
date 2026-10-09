@@ -887,10 +887,13 @@ export function deliveryIssues(
 		);
 	issues.push(...missingAssuranceDisclosures(input.finalText));
 	for (const result of facts.observations.filter(
-		(record) => record.qualification === "claimed-pass",
+		(record) =>
+			record.qualification === "claimed-pass" ||
+			record.hostPlatform !== undefined,
 	)) {
-		const acceptedPass =
-			result.exitCode === 0 &&
+		const claimsPass = result.qualification === "claimed-pass";
+		const acceptedProof =
+			(!claimsPass || result.exitCode === 0) &&
 			archive.runs.some((run) =>
 				run.reviews.some(
 					(review) =>
@@ -903,7 +906,7 @@ export function deliveryIssues(
 									result.hostPlatform === validation.hostPlatform) &&
 								validation.exitCode === result.exitCode &&
 								validation.outputComplete &&
-								validation.intent !== "observe" &&
+								(!claimsPass || validation.intent !== "observe") &&
 								validation.sourceDigest === review.sourceDigest,
 						),
 				),
@@ -918,9 +921,11 @@ export function deliveryIssues(
 			captured !== null &&
 			(result.hostPlatform === undefined ||
 				result.hostPlatform === captured.hostPlatform);
-		if (!acceptedPass && !capturedPass)
+		if (!acceptedProof && !capturedPass)
 			issues.push(
-				"Claimed command pass lacks matching accepted complete source evidence.",
+				claimsPass
+					? "Claimed command pass lacks matching accepted complete source evidence."
+					: "Claimed command host lacks matching accepted complete source evidence.",
 			);
 	}
 	for (const result of facts.observations) {

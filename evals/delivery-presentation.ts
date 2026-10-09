@@ -316,6 +316,14 @@ function commandContinuation(text: string): boolean {
 		)
 	);
 }
+function commandQualifierAssertion(text: string): boolean {
+	return (
+		commandStatusAssertion(text) ||
+		/^(?:its (?:script|invocation|command)|the (?:script|invocation))\b[^.!?;]*\b(?:changed|unchanged|modified)\b/i.test(
+			text,
+		)
+	);
+}
 function independentReviewValue(value: string): IndependentReviewClaim | null {
 	return /^(?:was )?not performed$/i.test(value)
 		? { kind: "not-performed" }
@@ -440,7 +448,7 @@ function commandResultValue(line: string, commands: readonly string[]) {
 			const reviewEnd = reviewBoundary.end;
 			while (
 				reviewBoundary.end < rawBody.length &&
-				commandContinuation(rawBody.slice(reviewBoundary.end).trimStart())
+				commandQualifierAssertion(rawBody.slice(reviewBoundary.end).trimStart())
 			)
 				reviewBoundary = sentenceBoundary(
 					rawBody,
