@@ -254,7 +254,7 @@ for (const subject of [
 				`status=1 on ${host}`,
 			]) {
 				test(`shared audit subject ownership ${label}${subject} ${fields}`, () => {
-					const answer = `${label}${subject} failed ${fields}.`;
+					const answer = `${label}${subject} failed ${fields}. bun run verify ran.`;
 					for (const report of [answer, `${observed}\n${answer}`]) {
 						if (host.toLowerCase() === "linux")
 							expect(issues(report)).toEqual([]);

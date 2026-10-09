@@ -634,6 +634,35 @@ function inspectGoalIssues(outcome: ScenarioGradeInput): string[] {
 	return [];
 }
 
+type InspectionAuditStatement =
+	| { kind: "audit"; text: string; predicate: string }
+	| { kind: "observation"; text: string }
+	| { kind: "other"; text: string };
+
+function inspectionAuditStatement(text: string): InspectionAuditStatement {
+	const label = /^(audit|canonical gate):\s+(.+)$/i.exec(text);
+	if (label) {
+		const body = inspectionAuditStatement(label[2] ?? "");
+		if (body.kind !== "other") return body;
+		text = `${label[1]} ${label[2]}`;
+	}
+	if (/^Observed\s+["']?bun run verify["']?(?=[:\s]|$)/.test(text))
+		return { kind: "observation", text };
+	const subject =
+		/^(?:the\s+)?(bun run verify audit|bun run verify|frontend:audit|audit|canonical gate)\s+(.+)$/i.exec(
+			text,
+		);
+	if (!subject) return { kind: "other", text };
+	const name = subject[1]?.toLowerCase() ?? "";
+	const predicate = subject[2] ?? "";
+	if (
+		(name === "bun run verify" || name === "frontend:audit") &&
+		/^exited\b/i.test(predicate)
+	)
+		return { kind: "observation", text: `bun run verify ${predicate}` };
+	return { kind: "audit", text: `${name} ${predicate}`, predicate };
+}
+
 function inspectionReportDisclosesAuditFailure(
 	text: string,
 	failedAudit: Run["validations"][number] | null,
@@ -705,40 +734,24 @@ function inspectionReportDisclosesAuditFailure(
 				excluded = false;
 			if (excluded) continue;
 		}
-		const plain = line.replace(/^[-*+]\s+/, "").replace(/[`*_]/g, "");
-		const label = /^(audit|canonical gate):\s+(.+)$/i.exec(plain);
-		const body = label?.[2] ?? "";
-		owned.push(
-			label &&
-				/^(?:Observed\s+)?["']?bun run verify\b|^(?:the\s+)?audit\b/i.test(body)
-				? body
-				: label
-					? `${label[1]} ${body}`
-					: plain,
-		);
+		owned.push(line.replace(/^[-*+]\s+/, "").replace(/[`*_]/g, ""));
 	}
+	const statements = owned.map(inspectionAuditStatement);
 	const declaredExitValue =
 		/^(?:exit(?:ed|s)?(?=[\s:=])(?:\s+with)?\s*[:=]?\s*(?:(?:code|status)\s*[:=]?\s*)?|(?:code|status)(?=[\s:=])\s*[:=]?\s*)([+-]?\d+)(?=$|\s|[,;!?](?=\D|$)|\.(?=\s|$))/i;
-	for (const line of owned) {
-		if (
-			!/^(?:the\s+)?(?:bun run verify|frontend:audit|audit|canonical gate)\b/i.test(
-				line,
-			)
-		)
-			continue;
+	for (const statement of statements) {
+		if (statement.kind !== "audit") continue;
+		const line = statement.text;
 		const fields = [
 			...line.matchAll(
 				/\b(?:exit\w*|host\w*|on|code\w*|status\w*|platform)\b/gi,
 			),
 		];
-		const context: "audit-prose" | "named-command" | "command-metadata" =
-			/^(?:bun run verify|frontend:audit)\b/i.test(line)
-				? fields.some((field) =>
-						declaredExitValue.test(line.slice(field.index)),
-					)
-					? "command-metadata"
-					: "named-command"
-				: "audit-prose";
+		const context: "audit-prose" | "command-metadata" = fields.some((field) =>
+			declaredExitValue.test(line.slice(field.index)),
+		)
+			? "command-metadata"
+			: "audit-prose";
 		for (const field of fields) {
 			const tail = line.slice(field.index);
 			const exitField =
@@ -776,11 +789,9 @@ function inspectionReportDisclosesAuditFailure(
 		}
 	}
 
-	const commandLines = owned.filter((line) =>
-		/^(?:Observed\s+["']?bun run verify["']?(?=[:\s]|$)|bun run verify\s+exited\b)/.test(
-			line,
-		),
-	);
+	const commandLines = statements
+		.filter((statement) => statement.kind === "observation")
+		.map((statement) => statement.text);
 	if (commandLines.length > 0) {
 		if (!failedAudit) return false;
 		return commandLines.every((line) => {
@@ -806,15 +817,12 @@ function inspectionReportDisclosesAuditFailure(
 			);
 		});
 	}
-	return owned.some((line) =>
-		line.split(/(?<=[.!?])\s+/).some((clause) => {
+	return statements.some((statement) =>
+		statement.text.split(/(?<=[.!?])\s+/).some((clause) => {
 			if (/\?\s*$/.test(clause) || /["']/.test(clause)) return false;
-			const subject =
-				/^(?:the\s+)?(?:bun run verify audit|audit|canonical gate|bun run verify|frontend:audit)\s+(.+)$/i.exec(
-					clause,
-				);
-			if (!subject) return false;
-			const predicate = subject[1] ?? "";
+			const current = inspectionAuditStatement(clause);
+			if (current.kind !== "audit") return false;
+			const predicate = current.predicate;
 			if (
 				/^(?:(?:has|is|remains)\s+)?(?:failed|fails|blocked|unresolved|failure)\b/i.test(
 					predicate,
