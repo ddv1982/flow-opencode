@@ -8,6 +8,7 @@ import {
 	deferredCaptureOutcome,
 	externalCommand,
 	localCommand,
+	nativeTrace,
 } from "./fixtures/deferred-capture-outcome.js";
 import saved from "./fixtures/delivery-platform-pass-answer.json" with {
 	type: "json",
@@ -351,3 +352,136 @@ for (const metadata of [
 		).toBeGreaterThan(0);
 	});
 }
+function capturedHosts(first: string, second?: string, pinned = false) {
+	const input = deferredCaptureOutcome();
+	const archive = object(input.archives[0]);
+	const plan = object(archive.plan);
+	if (!pinned) {
+		if (!Array.isArray(plan.evidence))
+			throw new Error("Missing plan evidence.");
+		for (const entry of plan.evidence.map(object))
+			if (entry.command === localCommand) delete entry.platform;
+		if (!Array.isArray(plan.features))
+			throw new Error("Missing plan features.");
+		for (const feature of plan.features.map(object))
+			if (Array.isArray(feature.checks))
+				for (const check of feature.checks.map(object))
+					if (check.command === localCommand) delete check.platform;
+	}
+	capturedValidation(input).hostPlatform = first;
+	const calls = [...input.allCalls];
+	const arm = calls.find((call) => call.tool === "flow_validation_start");
+	const bash = calls.find((call) => call.tool === "bash");
+	const status = calls.find((call) => call.tool === "flow_status");
+	const close = calls.find((call) => call.tool === "flow_session_close");
+	if (!arm || !bash || !status || !close)
+		throw new Error("Missing capture calls.");
+	const firstProjection = object(
+		object(object(status.output).workflowData).projection,
+	);
+	firstProjection.plan = structuredClone(plan);
+	const firstRuns = firstProjection.runs;
+	if (!Array.isArray(firstRuns)) throw new Error("Missing status runs.");
+	const firstValidations = object(firstRuns[0]).validations;
+	if (!Array.isArray(firstValidations))
+		throw new Error("Missing status validation.");
+	object(firstValidations[0]).hostPlatform = first;
+	Object.assign(status, { rawOutput: JSON.stringify(status.output) });
+	if (second !== undefined) {
+		const next = {
+			...capturedValidation(input),
+			id: "capture-second",
+			recordedRevision: 5,
+			hostPlatform: second,
+		};
+		const archiveRuns = archive.runs;
+		if (!Array.isArray(archiveRuns)) throw new Error("Missing archive runs.");
+		const values = object(archiveRuns[0]).validations;
+		if (!Array.isArray(values)) throw new Error("Missing archive validations.");
+		values.push(next);
+		const secondArm = structuredClone(arm);
+		const secondBash = structuredClone(bash);
+		const secondStatus = structuredClone(status);
+		for (const [index, call] of [secondArm, secondBash, secondStatus].entries())
+			Object.assign(object(call.native), {
+				messageId: `msg_second${index}`,
+				partId: `prt_second${index}`,
+				callId: `call_second${index}`,
+				startedAt: 26 + index * 2,
+				completedAt: 27 + index * 2,
+			});
+		object(secondArm.input.request).expectedRevision = 4;
+		object(object(object(secondArm.output).workflowData).capture).captureId =
+			next.id;
+		Object.assign(secondArm, { rawOutput: JSON.stringify(secondArm.output) });
+		const marker = `[flow-validation] ${JSON.stringify({ id: next.id, scope: "broad", intent: "pass", passed: true, observed: false, recordedRevision: 5 })}`;
+		Object.assign(secondBash, {
+			output: `(no output)\n\n${marker}`,
+			rawOutput: `(no output)\n\n${marker}`,
+		});
+		const projection = object(
+			object(object(secondStatus.output).workflowData).projection,
+		);
+		projection.revision = 5;
+		projection.runs = [
+			{ ...structuredClone(object(archiveRuns[0])), state: "active" },
+		];
+		Object.assign(secondStatus, {
+			rawOutput: JSON.stringify(secondStatus.output),
+		});
+		archive.revision = 6;
+		object(archive.closure).recordedRevision = 6;
+		object(close.input.request).expectedRevision = 5;
+		object(object(object(close.output).workflowData).operation).revision = 6;
+		calls.splice(calls.indexOf(close), 0, secondArm, secondBash, secondStatus);
+	}
+	return {
+		...input,
+		allCalls: calls,
+		flowCalls: calls.filter((call) => call.tool.startsWith("flow_")),
+		hostTrace: nativeTrace(calls),
+	};
+}
+const deferredExpectation = {
+	closure: "deferred" as const,
+	presentation: "summary" as const,
+	gate: localCommand,
+	missingEvidenceCommand: externalCommand,
+	allowedPaths: ["src/parser.mjs"],
+};
+test("canonical other category is retained as a host claim", () => {
+	const expected = [
+		{
+			command: gate,
+			exitCode: 0,
+			qualification: "claimed-pass" as const,
+			integrity: "not-claimed" as const,
+			hostPlatform: "other" as const,
+		},
+	];
+	expect(
+		currentHandoffFacts(`${gate} passed on Other.`, [gate]).observations,
+	).toEqual(expected);
+});
+test("unconstrained genuinely captured Other supports an Other claim", () => {
+	const input = capturedHosts("other");
+	const finalText =
+		input.finalText
+			.replace(/^- \*\*Linux validation:\*\*.*\n/m, "")
+			.replace(/^- \*\*Outstanding proof:\*\*.*\n/m, "") +
+		`\n${localCommand} passed, exit 0, host other.`;
+	expect(deliveryIssues({ ...input, finalText }, deferredExpectation)).toEqual(
+		[],
+	);
+});
+test("other never infers an unknown Solaris category", () => {
+	const input = capturedHosts("other");
+	const finalText =
+		input.finalText
+			.replace(/^- \*\*Linux validation:\*\*.*\n/m, "")
+			.replace(/^- \*\*Outstanding proof:\*\*.*\n/m, "") +
+		`\n${localCommand} passed, exit 0, host Solaris.`;
+	expect(
+		deliveryIssues({ ...input, finalText }, deferredExpectation),
+	).toContain("Unsupported or conflicting current handoff assertions.");
+});
