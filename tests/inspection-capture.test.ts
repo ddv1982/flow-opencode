@@ -354,3 +354,29 @@ for (const content of [
 		});
 	});
 }
+
+for (const spaces of [0, 1, 2, 3]) {
+	for (const content of [
+		`${" ".repeat(spaces)}\tAuthorization is required before repairs.\n`,
+		`Authorization\n${" ".repeat(spaces)}\tis required before repairs.\n`,
+	]) {
+		test(`tab-indented permission context remains private ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		});
+	}
+	for (const content of [
+		`${" ".repeat(spaces)}Authorization is required before repairs.\n`,
+		`Authorization\n${" ".repeat(spaces)}is required before repairs.\n`,
+	]) {
+		test(`ordinary prose indentation retains permission context ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "observed",
+				content,
+				sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+			});
+		});
+	}
+}
