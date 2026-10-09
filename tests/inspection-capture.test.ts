@@ -179,3 +179,12 @@ test("quoted warning about success preserves truthful failure", () => {
 		),
 	).toEqual([]);
 });
+
+for (const directive of [
+	"Resolve audit provenance before remediation is selected.",
+	"Resolve audit findings once they are verified.",
+]) {
+	test(`Resolve imperative retains subordinate predicates ${directive}`, () => {
+		expect(issues(`${finding}${range}2. ${directive}\n`)).toEqual([]);
+	});
+}
