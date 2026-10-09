@@ -414,6 +414,7 @@ function documentPrefixHasBlockQuote(prefix: string): boolean {
 			quotedParagraph = line.slice(quote[0].length).trim() !== "";
 		} else if (
 			!line.trim() ||
+			/^ {0,3}(?:`{3,}|~{3,})/.test(line) ||
 			/^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|1[.)])[ \t]+\S)/.test(line)
 		) {
 			quotedParagraph = false;
