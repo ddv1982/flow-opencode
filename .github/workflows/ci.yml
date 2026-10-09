@@ -17,9 +17,29 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Lint workflow syntax
+      - name: Install workflow script linters
+        shell: bash
         run: |
-          docker run --rm -v "${{ github.workspace }}:/workspaces" -w /workspaces rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes shellcheck pyflakes3
+
+      - name: Lint workflow syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          actionlint_root="$(mktemp -d "$RUNNER_TEMP/actionlint.XXXXXX")"
+          trap 'rm -rf "$actionlint_root"' EXIT
+          curl --fail --silent --show-error --location \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            --output "$actionlint_root/actionlint.tar.gz"
+          printf '%s  %s\n' \
+            8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 \
+            "$actionlint_root/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$actionlint_root/actionlint.tar.gz" -C "$actionlint_root" actionlint
+          shellcheck_path="$(command -v shellcheck)"
+          pyflakes_path="$(command -v pyflakes3)"
+          "$actionlint_root/actionlint" -shellcheck "$shellcheck_path" -pyflakes "$pyflakes_path"
 
   dependency-audit:
     runs-on: ubuntu-latest
