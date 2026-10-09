@@ -193,6 +193,20 @@ for (const metadata of [
 		).toContain(missing);
 	});
 }
+for (const prose of [
+	"The audit reports 21 high advisories on direct dependencies and fails.",
+	"The audit reports 21 high advisories in application code and fails.",
+	"The audit failed due to application code vulnerabilities.",
+	"The audit failed on transitive dependencies.",
+	"The audit failed because the application status remains pending.",
+	"The audit failed because code quality remains poor.",
+	"The audit failed on Direct Dependencies.",
+]) {
+	test(`ordinary audit explanation is not command metadata ${prose}`, () => {
+		expect(issues(`${prose} bun run verify ran.`)).toEqual([]);
+		expect(issues(`${prose}\n${observed}`)).toEqual([]);
+	});
+}
 test("native failed audit remains required for a matching presentation", () => {
 	expect(
 		issues(observed, (archive) => {
