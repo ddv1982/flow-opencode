@@ -255,3 +255,39 @@ for (const suffix of [
 		).toEqual([]);
 	});
 }
+
+for (const suffix of [
+	"## Key findings\nThe parser has an off-by-one defect.\n",
+	"## Credential handling\nReview handling of credentials before deployment.\n",
+	"## Repair scope\nRequire separate authorization before repairs.\n",
+	"Further authorization will be requested before repair work.\n",
+]) {
+	const content = `Repairs require authorization: this review changes no files.\n\n${suffix}`;
+	test(`later review prose cannot become a permission value ${suffix}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "observed",
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		});
+	});
+}
+
+for (const suffix of [
+	"## Leak\ntoken is opaque-short.\n",
+	"## Leak\nAPI_KEY was opaque-short.\n",
+	"## Leak\nThe password is\nopaque-short.\n",
+	"## Leak\nIts access token equals opaque-short.\n",
+	"## Leak\nThe apiKey contains opaque-short.\n",
+	"## Leak\nSECRET=opaque-short\n",
+]) {
+	test(`actual disclosure anywhere remains private ${suffix}`, async () => {
+		expect(
+			await observe(
+				`Repairs require authorization: this review changes no files.\n\n${suffix}`,
+			),
+		).toEqual({
+			kind: "unavailable",
+			reason: "review-document-not-safe-to-retain",
+		});
+	});
+}
