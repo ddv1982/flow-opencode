@@ -212,6 +212,24 @@ for (const prose of [
 		expect(issues(`${prose}\n${observed}`)).toEqual([]);
 	});
 }
+for (const exit of ["exit 1", "exit code: 1", "status=1", "code: 1"]) {
+	for (const host of ["linux", "Linux", "beos", "BeOS", "unknown", "Windows"]) {
+		for (const fields of [
+			`on ${host} with ${exit}`,
+			`${exit} on ${host}`,
+			`on ${host}; ${exit}`,
+		]) {
+			test(`declared command metadata is independent of order ${fields}`, () => {
+				const answer = `Audit: bun run verify failed ${fields}.`;
+				for (const report of [answer, `${observed}\n${answer}`]) {
+					if (host.toLowerCase() === "linux")
+						expect(issues(report)).toEqual([]);
+					else expect(issues(report)).toContain(missing);
+				}
+			});
+		}
+	}
+}
 test("native failed audit remains required for a matching presentation", () => {
 	expect(
 		issues(observed, (archive) => {
