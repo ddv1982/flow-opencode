@@ -705,7 +705,36 @@ function inspectionReportDisclosesAuditFailure(
 				excluded = false;
 			if (excluded) continue;
 		}
-		owned.push(line.replace(/^[-*+]\s+/, "").replace(/[`*_]/g, ""));
+		const plain = line.replace(/^[-*+]\s+/, "").replace(/[`*_]/g, "");
+		const label = /^(audit|canonical gate):\s+(.+)$/i.exec(plain);
+		const body = label?.[2] ?? "";
+		owned.push(
+			label &&
+				/^(?:Observed\s+)?["']?bun run verify\b|^(?:the\s+)?audit\b/i.test(body)
+				? body
+				: label
+					? `${label[1]} ${body}`
+					: plain,
+		);
+	}
+	for (const line of owned) {
+		if (!/^(?:bun run verify|frontend:audit)\b/i.test(line)) continue;
+		const exits = [...line.matchAll(/\bexit(?: code)?\s+(-?\d+)\b/gi)];
+		const hosts = [
+			...line.matchAll(
+				/\b(?:on|host)\s+(Linux|Windows|macOS|darwin|win32)\b/gi,
+			),
+		];
+		if (
+			exits.some((exit) => Number(exit[1]) !== failedAudit?.exitCode) ||
+			hosts.some((host) => {
+				const name = host[1]?.toLowerCase();
+				const platform =
+					name === "macos" ? "darwin" : name === "windows" ? "win32" : name;
+				return platform !== failedAudit?.hostPlatform;
+			})
+		)
+			return false;
 	}
 	const commandLines = owned.filter((line) =>
 		/^(?:Observed\s+["']?bun run verify["']?(?=[:\s]|$)|bun run verify\s+exited\b)/.test(
