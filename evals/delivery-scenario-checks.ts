@@ -298,6 +298,7 @@ function capturedDeferredPass(
 	archive: z.infer<typeof Archive>,
 	close: ScenarioGradeInput["allCalls"][number],
 	command: string,
+	desiredHost?: string,
 ): { hostPlatform: string; status: Record<string, unknown> } | null {
 	if (archive.closure.kind !== "deferred") return null;
 	const candidates = archive.runs.flatMap((run) =>
@@ -315,7 +316,11 @@ function capturedDeferredPass(
 			candidate.run,
 			parsed.data,
 		);
-		if (proof) return proof;
+		if (
+			proof &&
+			(desiredHost === undefined || proof.hostPlatform === desiredHost)
+		)
+			return proof;
 	}
 	return null;
 }
@@ -783,7 +788,13 @@ export function deliveryIssues(
 	for (const claim of facts.unavailableCommands) {
 		const proof =
 			conclusion === "completion-not-claimed"
-				? capturedDeferredPass(input, archive, accepted, expected.gate)
+				? capturedDeferredPass(
+						input,
+						archive,
+						accepted,
+						expected.gate,
+						claim.hostPlatform,
+					)
 				: null;
 		const declared = (archive.plan.evidence ?? []).some(
 			(entry) =>
@@ -915,7 +926,13 @@ export function deliveryIssues(
 			expected.closure === "deferred" &&
 			conclusion === "completion-not-claimed" &&
 			result.exitCode === 0
-				? capturedDeferredPass(input, archive, accepted, result.command)
+				? capturedDeferredPass(
+						input,
+						archive,
+						accepted,
+						result.command,
+						result.hostPlatform,
+					)
 				: null;
 		const capturedPass =
 			captured !== null &&
