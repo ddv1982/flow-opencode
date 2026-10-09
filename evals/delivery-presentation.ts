@@ -363,6 +363,12 @@ function sentenceBoundary(text: string, start = 0, command = false) {
 					unterminatedQuote: false,
 				};
 		}
+		if (
+			command &&
+			character === ";" &&
+			commandContinuation(text.slice(index + 1).trimStart())
+		)
+			return { end: index + 1, next: index + 1, unterminatedQuote: false };
 		if (character === "." && /^\s+[A-Za-z0-9]/.test(text.slice(index + 1)))
 			return { end: index + 1, next: index + 1, unterminatedQuote: false };
 	}
@@ -408,24 +414,30 @@ function commandResultValue(line: string, commands: readonly string[]) {
 			boundary = sentenceBoundary(rawBody, boundary.end, true);
 		}
 		const remainderStart = boundary.end;
-		const record = rawBody.slice(0, remainderStart);
+		let record = rawBody.slice(0, remainderStart);
+		let sourceEnd = remainderStart;
 		let remainder = rawBody.slice(boundary.next).trim();
 		let sibling:
 			| { value: IndependentReviewClaim | null; source: string }
 			| undefined;
 		if (/^Independent review(?::|\s)/i.test(remainder)) {
 			const start = boundary.next + rawBody.slice(boundary.next).search(/\S/);
-			let reviewBoundary = sentenceBoundary(rawBody, start);
+			let reviewBoundary = sentenceBoundary(rawBody, start, true);
+			const reviewEnd = reviewBoundary.end;
 			while (
 				reviewBoundary.end < rawBody.length &&
 				commandContinuation(rawBody.slice(reviewBoundary.end).trimStart())
 			)
-				reviewBoundary = sentenceBoundary(rawBody, reviewBoundary.end);
-			const source = rawBody.slice(start, reviewBoundary.end).trim();
+				reviewBoundary = sentenceBoundary(rawBody, reviewBoundary.end, true);
+			const source = rawBody.slice(start, reviewEnd).trim();
 			const value = source
 				.replace(/^Independent review(?::|\s)\s*/i, "")
-				.replace(/\.$/, "");
+				.replace(/[.;]$/, "");
 			sibling = { value: independentReviewValue(value), source };
+			if (reviewBoundary.end > reviewEnd) {
+				record = `${record.replace(/[.;]$/, "")}; ${rawBody.slice(reviewEnd, reviewBoundary.end).trim()}`;
+				sourceEnd = reviewBoundary.end;
+			}
 			remainder = rawBody.slice(reviewBoundary.next).trim();
 		}
 		if (
@@ -450,9 +462,7 @@ function commandResultValue(line: string, commands: readonly string[]) {
 			observation: parsed,
 			...(sibling ? { sibling } : {}),
 			remainder,
-			source: line
-				.slice(0, line.length - rawBody.length + remainderStart)
-				.trim(),
+			source: line.slice(0, line.length - rawBody.length + sourceEnd).trim(),
 		};
 	}
 	return null;
