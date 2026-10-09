@@ -298,6 +298,7 @@ function capturedDeferredPass(
 	archive: z.infer<typeof Archive>,
 	close: ScenarioGradeInput["allCalls"][number],
 	command: string,
+	desiredHost?: string,
 ): { hostPlatform: string; status: Record<string, unknown> } | null {
 	if (archive.closure.kind !== "deferred") return null;
 	const candidates = archive.runs.flatMap((run) =>
@@ -315,7 +316,11 @@ function capturedDeferredPass(
 			candidate.run,
 			parsed.data,
 		);
-		if (proof) return proof;
+		if (
+			proof &&
+			(desiredHost === undefined || proof.hostPlatform === desiredHost)
+		)
+			return proof;
 	}
 	return null;
 }
@@ -783,7 +788,13 @@ export function deliveryIssues(
 	for (const claim of facts.unavailableCommands) {
 		const proof =
 			conclusion === "completion-not-claimed"
-				? capturedDeferredPass(input, archive, accepted, expected.gate)
+				? capturedDeferredPass(
+						input,
+						archive,
+						accepted,
+						expected.gate,
+						claim.hostPlatform,
+					)
 				: null;
 		const declared = (archive.plan.evidence ?? []).some(
 			(entry) =>
@@ -887,10 +898,13 @@ export function deliveryIssues(
 		);
 	issues.push(...missingAssuranceDisclosures(input.finalText));
 	for (const result of facts.observations.filter(
-		(record) => record.qualification === "claimed-pass",
+		(record) =>
+			record.qualification === "claimed-pass" ||
+			record.hostPlatform !== undefined,
 	)) {
-		const acceptedPass =
-			result.exitCode === 0 &&
+		const claimsPass = result.qualification === "claimed-pass";
+		const acceptedProof =
+			(!claimsPass || result.exitCode === 0) &&
 			archive.runs.some((run) =>
 				run.reviews.some(
 					(review) =>
@@ -899,21 +913,36 @@ export function deliveryIssues(
 							(validation) =>
 								review.validationIds.includes(validation.id) &&
 								validation.command === result.command &&
+								(result.hostPlatform === undefined ||
+									result.hostPlatform === validation.hostPlatform) &&
 								validation.exitCode === result.exitCode &&
 								validation.outputComplete &&
-								validation.intent !== "observe" &&
+								(!claimsPass || validation.intent !== "observe") &&
 								validation.sourceDigest === review.sourceDigest,
 						),
 				),
 			);
-		const capturedPass =
+		const captured =
 			expected.closure === "deferred" &&
 			conclusion === "completion-not-claimed" &&
-			result.exitCode === 0 &&
-			capturedDeferredPass(input, archive, accepted, result.command) !== null;
-		if (!acceptedPass && !capturedPass)
+			result.exitCode === 0
+				? capturedDeferredPass(
+						input,
+						archive,
+						accepted,
+						result.command,
+						result.hostPlatform,
+					)
+				: null;
+		const capturedPass =
+			captured !== null &&
+			(result.hostPlatform === undefined ||
+				result.hostPlatform === captured.hostPlatform);
+		if (!acceptedProof && !capturedPass)
 			issues.push(
-				"Claimed command pass lacks matching accepted complete source evidence.",
+				claimsPass
+					? "Claimed command pass lacks matching accepted complete source evidence."
+					: "Claimed command host lacks matching accepted complete source evidence.",
 			);
 	}
 	for (const result of facts.observations) {
@@ -1019,6 +1048,9 @@ export function deliveryIssues(
 
 	if (expected.observed) {
 		const observation = expected.observed;
+		const reported = facts.observations.filter(
+			(row) => row.command === observation.command,
+		);
 		if (
 			/audit (?:check )?(?:passed|succeeded)|all (?:checks|commands) passed/i.test(
 				text,
@@ -1034,6 +1066,11 @@ export function deliveryIssues(
 							(validation) =>
 								review.validationIds.includes(validation.id) &&
 								validation.command === observation.command &&
+								reported.every(
+									(row) =>
+										row.hostPlatform === undefined ||
+										row.hostPlatform === validation.hostPlatform,
+								) &&
 								validation.exitCode === observation.exitCode &&
 								validation.intent === "observe" &&
 								validation.outputComplete &&
@@ -1043,9 +1080,6 @@ export function deliveryIssues(
 			)
 		)
 			issues.push("Nonzero observation lacks accepted reviewed evidence.");
-		const reported = facts.observations.filter(
-			(row) => row.command === observation.command,
-		);
 		if (
 			!reported.length ||
 			reported.some(

@@ -1,3 +1,5 @@
+import type { EvidencePlatform } from "../src/domain/session.js";
+import { EVIDENCE_PLATFORMS } from "../src/domain/validation.js";
 import { canonicalJson } from "./canonical-json.js";
 
 type Closure = "completed" | "deferred" | "abandoned";
@@ -9,11 +11,15 @@ type CommandIntegrity =
 	| "not-claimed"
 	| "script-unchanged"
 	| "script-and-invocation-unchanged";
+type IndependentReviewClaim =
+	| { kind: "passed"; findings: "none" | "not-claimed" }
+	| { kind: "not-performed" };
 type CommandObservation = {
 	command: string;
 	exitCode: number | null;
 	integrity: CommandIntegrity;
 	qualification: "observation" | "does-not-claim-pass" | "claimed-pass" | null;
+	hostPlatform?: EvidencePlatform;
 };
 function commandIntegrityValue(
 	clause: string,
@@ -55,11 +61,7 @@ type CurrentHandoffFacts = {
 		targetPlatform: string;
 		hostPlatform: string;
 	}[];
-	independentReview: (
-		| { kind: "passed"; findings: "none" | "not-claimed" }
-		| { kind: "not-performed" }
-		| null
-	)[];
+	independentReview: (IndependentReviewClaim | null)[];
 	observations: CommandObservation[];
 	unsupported: string[];
 };
@@ -307,11 +309,45 @@ function commandStatusAssertion(text: string): boolean {
 		text,
 	);
 }
+function commandContinuation(text: string): boolean {
+	return (
+		commandStatusAssertion(text) ||
+		/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its|the (?:script|invocation))\b/i.test(
+			text,
+		)
+	);
+}
+function commandQualifierAssertion(text: string): boolean {
+	return (
+		commandStatusAssertion(text) ||
+		/^(?:its (?:script|invocation|command)|the (?:script|invocation))\b[^.!?;]*\b(?:changed|unchanged|modified)\b/i.test(
+			text,
+		)
+	);
+}
+function independentReviewValue(value: string): IndependentReviewClaim | null {
+	return /^(?:was )?not performed$/i.test(value)
+		? { kind: "not-performed" }
+		: /^(?:has |was )?(?:passed|passed with no findings)$/i.test(value)
+			? {
+					kind: "passed",
+					findings: /with no findings$/i.test(value) ? "none" : "not-claimed",
+				}
+			: null;
+}
 function platformValue(value: string) {
 	const lower = value.toLowerCase();
 	return lower === "macos" ? "darwin" : lower === "windows" ? "win32" : lower;
 }
-function sentenceBoundary(text: string, start = 0) {
+function claimedHostPlatform(value: string): EvidencePlatform | null {
+	const normalized = platformValue(value);
+	return EVIDENCE_PLATFORMS.find((platform) => platform === normalized) ?? null;
+}
+function sentenceBoundary(
+	text: string,
+	start = 0,
+	mode: "sentence" | "command" | "metadata" = "sentence",
+) {
 	let quote: string | null = null;
 	for (let index = start; index < text.length; index++) {
 		const character = text[index];
@@ -333,10 +369,41 @@ function sentenceBoundary(text: string, start = 0) {
 			quote = character;
 			continue;
 		}
-		if (character === "." && /^\s+[A-Za-z0-9]/.test(text.slice(index + 1)))
-			return { end: index + 1, unterminatedQuote: false };
+		if (
+			mode === "metadata" &&
+			character === "," &&
+			/^,\s*host\b/i.test(text.slice(index))
+		)
+			return { end: index, next: index, unterminatedQuote: false };
+		if (mode === "command" && character === ",") {
+			const sibling = /^,\s+and\s+(?=Independent review(?::|\s))/i.exec(
+				text.slice(index),
+			);
+			if (sibling)
+				return {
+					end: index,
+					next: index + sibling[0].length,
+					unterminatedQuote: false,
+				};
+		}
+		if (
+			mode === "command" &&
+			character === ";" &&
+			commandContinuation(text.slice(index + 1).trimStart())
+		)
+			return { end: index + 1, next: index + 1, unterminatedQuote: false };
+		if (
+			mode !== "metadata" &&
+			character === "." &&
+			/^\s+[A-Za-z0-9]/.test(text.slice(index + 1))
+		)
+			return { end: index + 1, next: index + 1, unterminatedQuote: false };
 	}
-	return { end: text.length, unterminatedQuote: quote !== null };
+	return {
+		end: text.length,
+		next: text.length,
+		unterminatedQuote: quote !== null,
+	};
 }
 function commandResultValue(line: string, commands: readonly string[]) {
 	if (/^Example:/i.test(line)) return null;
@@ -366,25 +433,51 @@ function commandResultValue(line: string, commands: readonly string[]) {
 				remainder: "",
 				source: line,
 			};
-		let boundary = sentenceBoundary(rawBody);
+		let boundary = sentenceBoundary(rawBody, 0, "command");
 		while (
 			boundary.end < rawBody.length &&
-			(commandStatusAssertion(rawBody.slice(boundary.end).trimStart()) ||
-				/^(?:this (?:(?:command|observation)|does not claim the command passed)|it|its|the (?:script|invocation))\b/i.test(
-					rawBody.slice(boundary.end).trimStart(),
-				))
+			commandContinuation(rawBody.slice(boundary.end).trimStart())
 		) {
-			boundary = sentenceBoundary(rawBody, boundary.end);
+			boundary = sentenceBoundary(rawBody, boundary.end, "command");
 		}
 		const remainderStart = boundary.end;
-		const record = rawBody.slice(0, remainderStart);
-		const remainder = rawBody.slice(remainderStart).trim();
+		let record = rawBody.slice(0, remainderStart);
+		let sourceEnd = remainderStart;
+		let remainder = rawBody.slice(boundary.next).trim();
+		let sibling:
+			| { value: IndependentReviewClaim | null; source: string }
+			| undefined;
+		if (/^Independent review(?::|\s)/i.test(remainder)) {
+			const start = boundary.next + rawBody.slice(boundary.next).search(/\S/);
+			let reviewBoundary = sentenceBoundary(rawBody, start, "command");
+			const reviewEnd = reviewBoundary.end;
+			while (
+				reviewBoundary.end < rawBody.length &&
+				commandQualifierAssertion(rawBody.slice(reviewBoundary.end).trimStart())
+			)
+				reviewBoundary = sentenceBoundary(
+					rawBody,
+					reviewBoundary.end,
+					"command",
+				);
+			const source = rawBody.slice(start, reviewEnd).trim();
+			const value = source
+				.replace(/^Independent review(?::|\s)\s*/i, "")
+				.replace(/[.;]$/, "");
+			sibling = { value: independentReviewValue(value), source };
+			if (reviewBoundary.end > reviewEnd) {
+				record = `${record.replace(/[.;]$/, "")}; ${rawBody.slice(reviewEnd, reviewBoundary.end).trim()}`;
+				sourceEnd = reviewBoundary.end;
+			}
+			remainder = rawBody.slice(reviewBoundary.next).trim();
+		}
 		if (
 			/^Outstanding proof:/i.test(line) &&
 			/^\s+on (?:macOS|darwin|Linux|Windows)\.?\s*$/i.test(record)
 		)
 			return {
 				observation: null,
+				...(sibling ? { sibling } : {}),
 				remainder,
 				source: line
 					.slice(0, line.length - rawBody.length + remainderStart)
@@ -398,10 +491,9 @@ function commandResultValue(line: string, commands: readonly string[]) {
 		);
 		return {
 			observation: parsed,
+			...(sibling ? { sibling } : {}),
 			remainder,
-			source: line
-				.slice(0, line.length - rawBody.length + remainderStart)
-				.trim(),
+			source: line.slice(0, line.length - rawBody.length + sourceEnd).trim(),
 		};
 	}
 	return null;
@@ -447,7 +539,7 @@ function parseCommandResult(
 	command: string,
 	commands: readonly string[],
 	unterminatedQuote: boolean,
-) {
+): CommandObservation {
 	const body = rawBody.trim().replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
 	const invalid: CommandObservation = {
 		command,
@@ -465,7 +557,7 @@ function parseCommandResult(
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
 		);
-	const barePass = /^passed( unchanged)?$/i.exec(status);
+	const barePass = /^passed( unchanged)?(?: on ([A-Za-z0-9]+))?$/i.exec(status);
 	if (!value && !barePass) return invalid;
 	const rawExit = barePass ? "0" : (value?.[3] ?? "");
 	const exitCode =
@@ -478,6 +570,27 @@ function parseCommandResult(
 		integrity: "not-claimed",
 	};
 	const metadata = value?.[4] ?? "";
+	const assertedHost = barePass?.[2];
+	let host: EvidencePlatform | undefined;
+	if (assertedHost !== undefined) {
+		const parsed = claimedHostPlatform(assertedHost);
+		if (parsed === null) return malformed;
+		host = parsed;
+	}
+	let metadataStart = 0;
+	while (metadataStart < metadata.length) {
+		const boundary = sentenceBoundary(metadata, metadataStart, "metadata");
+		if (boundary.end === metadata.length) break;
+		const field = /^,\s*host\s+([^,\s]+)\s*(?=,|$)/i.exec(
+			metadata.slice(boundary.end),
+		);
+		if (!field) return malformed;
+		const claimed = claimedHostPlatform(field[1] ?? "");
+		if (claimed === null || (host !== undefined && host !== claimed))
+			return malformed;
+		host = claimed;
+		metadataStart = boundary.end + field[0].length;
+	}
 	if (
 		metadata &&
 		!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
@@ -530,7 +643,13 @@ function parseCommandResult(
 				integrity = claim;
 		}
 	}
-	return { command, exitCode, qualification, integrity };
+	return {
+		command,
+		exitCode,
+		qualification,
+		integrity,
+		...(host !== undefined ? { hostPlatform: host } : {}),
+	};
 }
 export function currentHandoffFacts(
 	text: string,
@@ -560,6 +679,11 @@ export function currentHandoffFacts(
 		}
 		const commandRecord = commandResultValue(line, observationCommands);
 		if (commandRecord) {
+			if ("sibling" in commandRecord && commandRecord.sibling) {
+				facts.independentReview.push(commandRecord.sibling.value);
+				if (commandRecord.sibling.value === null)
+					facts.unsupported.push(commandRecord.sibling.source);
+			}
 			if ("unavailable" in commandRecord && commandRecord.unavailable)
 				facts.unavailableCommands.push(commandRecord.unavailable);
 			if (commandRecord.observation) {
@@ -593,7 +717,7 @@ export function currentHandoffFacts(
 			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
 			) ||
-				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?:[.;]|$)/i.test(
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z0-9]+)?(?:[,.;]|$)/i.test(
 					line,
 				))
 		) {
@@ -611,18 +735,7 @@ export function currentHandoffFacts(
 			const review = /^Independent review(?::|\s)\s*(.*)$/i.exec(claim);
 			if (review) {
 				const value = review[1] ?? "";
-				facts.independentReview.push(
-					/^(?:was )?not performed$/i.test(value)
-						? { kind: "not-performed" }
-						: /^(?:has |was )?(?:passed|passed with no findings)$/i.test(value)
-							? {
-									kind: "passed",
-									findings: /with no findings$/i.test(value)
-										? "none"
-										: "not-claimed",
-								}
-							: null,
-				);
+				facts.independentReview.push(independentReviewValue(value));
 				if (facts.independentReview.at(-1) === null)
 					facts.unsupported.push(claim);
 				continue;
