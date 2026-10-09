@@ -273,6 +273,15 @@ for (const host of ["Linux", "Windows"]) {
 			);
 	});
 }
+for (const prose of [
+	"It preserves trimming behavior.",
+	"Its implementation preserves trimmed string inputs.",
+	"The script handles null safely.",
+]) {
+	test(`ordinary post-review prose remains intact ${prose}`, () => {
+		expect(scenario.check(fixture(`${phrase} ${prose}`))).toEqual([]);
+	});
+}
 for (const change of ["nonzero", "incomplete", "source", "intent"]) {
 	test(`nonpass host cannot rescue corrupt deferred capture ${change}`, () => {
 		const input = deferredCaptureOutcome();
