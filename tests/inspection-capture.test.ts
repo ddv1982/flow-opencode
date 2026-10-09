@@ -291,3 +291,62 @@ for (const suffix of [
 		});
 	});
 }
+
+for (const content of [
+	"Separate authorization is required before product repairs.\n",
+	"Authorization is needed before changing product files.\n",
+	"Explicit authorization was requested before repair work.\n",
+	"Authorization is pending for repairs.\n",
+	"Authorization is granted for the repair task.\n",
+	"Authorization is denied for deployment.\n",
+	"Prior authorization was obtained to change product files.\n",
+	"The authorization is necessary before code modification.\n",
+	"Authorization is not required before this inspection.\n",
+	"Authorization was not granted for repairs.\n",
+	"- Separate authorization is required before product repairs.\n",
+	"## Repair scope\nSeparate authorization is required before product repairs.\n",
+	"Separate authorization is required before product repairs.\n\n## Key findings\nThe parser has a defect.\n",
+	"Separate authorization is required before repairs; authorization is needed to modify code.\n",
+]) {
+	test(`complete permission status is retained ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "observed",
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		});
+	});
+}
+
+for (const content of [
+	"Authorization is required.\n",
+	"Authorization is opaque-short.\n",
+	"Authorization is required opaque-short.\n",
+	"Authorization is required before repairs opaque-short.\n",
+	"Authorization is required before repairs.opaque-short\n",
+	"Authorization is required before\nopaque-short.\n",
+	"Authorization is required before repairs; the token is opaque-short.\n",
+	"Authorization is required before repairs. The authorization is required.\n",
+	"Authorization is required before repairs.\n\nThe authorization is opaque-short.\n",
+	"Authorization is required before repairs.\n\nThe token is opaque-short.\n",
+	"API_AUTHORIZATION is required before repairs.\n",
+	"authorizationToken is required before repairs.\n",
+	"The credential is required before repairs.\n",
+	'"authorization" is required before repairs.\n',
+	"`authorization` is required before repairs.\n",
+	"`Authorization is required before repairs.`\n",
+	"```text\nAuthorization is required before repairs.\n```\n",
+	"~~~text\nAuthorization is required before repairs.\n~~~\n",
+	"````text\n```\nAuthorization is required before repairs.\n````\n",
+	"    Authorization is required before repairs.\n",
+	"\tAuthorization is required before repairs.\n",
+	"## Authorization is required before repairs.\n",
+	"Authorization: is required before repairs.\n",
+	"Authorization=is required before repairs.\n",
+]) {
+	test(`ambiguous or encoded permission value remains private ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "unavailable",
+			reason: "review-document-not-safe-to-retain",
+		});
+	});
+}
