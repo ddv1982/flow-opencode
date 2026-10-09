@@ -9,11 +9,13 @@ type CommandIntegrity =
 	| "not-claimed"
 	| "script-unchanged"
 	| "script-and-invocation-unchanged";
+type ClaimedHostPlatform = "linux" | "darwin" | "win32";
 type CommandObservation = {
 	command: string;
 	exitCode: number | null;
 	integrity: CommandIntegrity;
 	qualification: "observation" | "does-not-claim-pass" | "claimed-pass" | null;
+	hostPlatform?: ClaimedHostPlatform;
 };
 function commandIntegrityValue(
 	clause: string,
@@ -311,7 +313,7 @@ function platformValue(value: string) {
 	const lower = value.toLowerCase();
 	return lower === "macos" ? "darwin" : lower === "windows" ? "win32" : lower;
 }
-function sentenceBoundary(text: string, start = 0) {
+function sentenceBoundary(text: string, start = 0, command = false) {
 	let quote: string | null = null;
 	for (let index = start; index < text.length; index++) {
 		const character = text[index];
@@ -333,10 +335,25 @@ function sentenceBoundary(text: string, start = 0) {
 			quote = character;
 			continue;
 		}
+		if (command && character === ",") {
+			const sibling = /^,\s+and\s+(?=Independent review(?::|\s))/i.exec(
+				text.slice(index),
+			);
+			if (sibling)
+				return {
+					end: index,
+					next: index + sibling[0].length,
+					unterminatedQuote: false,
+				};
+		}
 		if (character === "." && /^\s+[A-Za-z0-9]/.test(text.slice(index + 1)))
-			return { end: index + 1, unterminatedQuote: false };
+			return { end: index + 1, next: index + 1, unterminatedQuote: false };
 	}
-	return { end: text.length, unterminatedQuote: quote !== null };
+	return {
+		end: text.length,
+		next: text.length,
+		unterminatedQuote: quote !== null,
+	};
 }
 function commandResultValue(line: string, commands: readonly string[]) {
 	if (/^Example:/i.test(line)) return null;
@@ -366,7 +383,7 @@ function commandResultValue(line: string, commands: readonly string[]) {
 				remainder: "",
 				source: line,
 			};
-		let boundary = sentenceBoundary(rawBody);
+		let boundary = sentenceBoundary(rawBody, 0, true);
 		while (
 			boundary.end < rawBody.length &&
 			(commandStatusAssertion(rawBody.slice(boundary.end).trimStart()) ||
@@ -374,11 +391,11 @@ function commandResultValue(line: string, commands: readonly string[]) {
 					rawBody.slice(boundary.end).trimStart(),
 				))
 		) {
-			boundary = sentenceBoundary(rawBody, boundary.end);
+			boundary = sentenceBoundary(rawBody, boundary.end, true);
 		}
 		const remainderStart = boundary.end;
 		const record = rawBody.slice(0, remainderStart);
-		const remainder = rawBody.slice(remainderStart).trim();
+		const remainder = rawBody.slice(boundary.next).trim();
 		if (
 			/^Outstanding proof:/i.test(line) &&
 			/^\s+on (?:macOS|darwin|Linux|Windows)\.?\s*$/i.test(record)
@@ -447,7 +464,7 @@ function parseCommandResult(
 	command: string,
 	commands: readonly string[],
 	unterminatedQuote: boolean,
-) {
+): CommandObservation {
 	const body = rawBody.trim().replace(/^(?::\s*|[—–]\s*|-\s+)/, "");
 	const invalid: CommandObservation = {
 		command,
@@ -465,7 +482,7 @@ function parseCommandResult(
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
 		);
-	const barePass = /^passed( unchanged)?$/i.exec(status);
+	const barePass = /^passed( unchanged)?(?: on ([A-Za-z]+))?$/i.exec(status);
 	if (!value && !barePass) return invalid;
 	const rawExit = barePass ? "0" : (value?.[3] ?? "");
 	const exitCode =
@@ -478,6 +495,18 @@ function parseCommandResult(
 		integrity: "not-claimed",
 	};
 	const metadata = value?.[4] ?? "";
+	const hostMetadata = /^, host (\S+)$/i.exec(metadata);
+	const assertedHost = barePass?.[2] ?? hostMetadata?.[1];
+	const host =
+		assertedHost === undefined ? undefined : platformValue(assertedHost);
+	if (
+		(host !== undefined &&
+			host !== "linux" &&
+			host !== "darwin" &&
+			host !== "win32") ||
+		(/^, host\b/i.test(metadata) && !hostMetadata)
+	)
+		return malformed;
 	if (
 		metadata &&
 		!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
@@ -530,7 +559,15 @@ function parseCommandResult(
 				integrity = claim;
 		}
 	}
-	return { command, exitCode, qualification, integrity };
+	return {
+		command,
+		exitCode,
+		qualification,
+		integrity,
+		...(host === "linux" || host === "darwin" || host === "win32"
+			? { hostPlatform: host }
+			: {}),
+	};
 }
 export function currentHandoffFacts(
 	text: string,
@@ -593,7 +630,7 @@ export function currentHandoffFacts(
 			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
 			) ||
-				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?:[.;]|$)/i.test(
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z]+)?(?:[,.;]|$)/i.test(
 					line,
 				))
 		) {
@@ -716,6 +753,9 @@ export function currentHandoffFacts(
 			}
 			const critical =
 				commandStatusAssertion(claim) ||
+				/^(?:its (?:script|invocation|command)|the (?:script|invocation))\b.*\b(?:changed|unchanged|modified)\b/i.test(
+					claim,
+				) ||
 				CLOSURE_SUBJECT.test(claim) ||
 				/\bprogress (?:is |was |has been )?(?:incomplete|unfinished|blocked|not complete)\b/i.test(
 					claim,

@@ -899,6 +899,8 @@ export function deliveryIssues(
 							(validation) =>
 								review.validationIds.includes(validation.id) &&
 								validation.command === result.command &&
+								(result.hostPlatform === undefined ||
+									result.hostPlatform === validation.hostPlatform) &&
 								validation.exitCode === result.exitCode &&
 								validation.outputComplete &&
 								validation.intent !== "observe" &&
@@ -906,11 +908,16 @@ export function deliveryIssues(
 						),
 				),
 			);
-		const capturedPass =
+		const captured =
 			expected.closure === "deferred" &&
 			conclusion === "completion-not-claimed" &&
-			result.exitCode === 0 &&
-			capturedDeferredPass(input, archive, accepted, result.command) !== null;
+			result.exitCode === 0
+				? capturedDeferredPass(input, archive, accepted, result.command)
+				: null;
+		const capturedPass =
+			captured !== null &&
+			(result.hostPlatform === undefined ||
+				result.hostPlatform === captured.hostPlatform);
 		if (!acceptedPass && !capturedPass)
 			issues.push(
 				"Claimed command pass lacks matching accepted complete source evidence.",
@@ -1019,6 +1026,9 @@ export function deliveryIssues(
 
 	if (expected.observed) {
 		const observation = expected.observed;
+		const reported = facts.observations.filter(
+			(row) => row.command === observation.command,
+		);
 		if (
 			/audit (?:check )?(?:passed|succeeded)|all (?:checks|commands) passed/i.test(
 				text,
@@ -1034,6 +1044,11 @@ export function deliveryIssues(
 							(validation) =>
 								review.validationIds.includes(validation.id) &&
 								validation.command === observation.command &&
+								reported.every(
+									(row) =>
+										row.hostPlatform === undefined ||
+										row.hostPlatform === validation.hostPlatform,
+								) &&
 								validation.exitCode === observation.exitCode &&
 								validation.intent === "observe" &&
 								validation.outputComplete &&
@@ -1043,9 +1058,6 @@ export function deliveryIssues(
 			)
 		)
 			issues.push("Nonzero observation lacks accepted reviewed evidence.");
-		const reported = facts.observations.filter(
-			(row) => row.command === observation.command,
-		);
 		if (
 			!reported.length ||
 			reported.some(

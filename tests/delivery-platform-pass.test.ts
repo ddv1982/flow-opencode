@@ -78,10 +78,13 @@ for (const host of ["darwin", "win32", "other", null, "unknown"]) {
 		);
 	});
 }
-test("unclaimed native host metadata retains prior compatibility", () => {
+test("unclaimed native host metadata retains existing native protocol rejection", () => {
 	const input = fixture("passed. Independent review passed.");
 	validation(input).hostPlatform = "other";
-	expect(scenario.check(input)).toEqual([]);
+	expect(scenario.check(input)).toEqual([
+		"parser-null: Accepted current-source validation and submitted review are missing.",
+		"Independent review claim contradicts accepted native review evidence.",
+	]);
 });
 test("an unrelated matching host cannot rescue the bound validation", () => {
 	const input = fixture();
