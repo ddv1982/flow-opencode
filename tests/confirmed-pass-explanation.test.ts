@@ -180,3 +180,40 @@ test("nominal explanation supplies no accepted independent review", () => {
 	object(runs[0]).reviews = [];
 	expect(scenario.check(input).length).toBeGreaterThan(0);
 });
+
+for (const complement of [
+	"passing checks",
+	"failing checks",
+	"passes all checks",
+	"failures in checks",
+	"successful checks",
+	"succeeding checks",
+	"successes in checks",
+	"release approval",
+	"release approvals",
+	"approving release",
+	"authorizing release",
+	"release authorizations",
+	"release permissions",
+	"granting permission",
+	"changing verification",
+	"modifying verification",
+	"editing verification",
+]) {
+	test(`explanation rejects assertion morphology ${complement}`, () => {
+		expect(
+			scenario.check(fixture(`passed on Linux, confirming ${complement}.`)),
+		).toContain("Unsupported or conflicting current handoff assertions.");
+	});
+}
+for (const complement of [
+	"password handling",
+	"failureless parsing",
+	"passingword trimming",
+]) {
+	test(`reserved assertion morphology uses whole words ${complement}`, () => {
+		expect(
+			scenario.check(fixture(`passed on Linux, confirming ${complement}.`)),
+		).toEqual([]);
+	});
+}
