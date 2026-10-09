@@ -123,6 +123,8 @@ for (const answer of [
 	"Audit: bun run verify did not fail with 21 high advisories.",
 	"Audit: bun run verify failed with exit 0 on Linux, reporting 21 high advisories.",
 	"Audit: bun run verify failed with exit 2 on Linux, reporting 21 high advisories.",
+	"Audit: failed with exit status 2. bun run verify ran.",
+	"Canonical gate: failed with exit 1 host: Windows. bun run verify ran.",
 	"Audit: bun run verify failed with exit 1 on Windows, reporting 21 high advisories.",
 	`Audit: ${observed.replace("exit 1", "exit 2")}`,
 	`${observed}\nAudit: bun run verify failed with exit 2 on Linux.`,
@@ -141,6 +143,8 @@ for (const field of [
 	"exited with code 1",
 	"exited: 1",
 	"exit with status: 1",
+	"code: 1",
+	"status=1",
 ]) {
 	for (const host of ["on Linux", "host: Linux", "host=linux", "on: Linux"]) {
 		test(`matching owned command metadata ${field} ${host}`, () => {
@@ -173,6 +177,12 @@ for (const metadata of [
 	"exit 1 host: Linux; host: Windows",
 	"exit 1 on Linux; exit status pending",
 	"exit 1 on Linux; host: pending",
+	"exit 1 status: 2 on Linux",
+	"exit 1 code=2 on Linux",
+	"exit 1 on Linux; platform: Windows",
+	"exit 1 on Linux; code: unknown",
+	"exitCode=2 on Linux",
+	"hostPlatform=Windows",
 ]) {
 	test(`unsupported or contradictory owned metadata ${metadata}`, () => {
 		expect(issues(`Audit: bun run verify failed; ${metadata}.`)).toContain(
