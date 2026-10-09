@@ -563,7 +563,7 @@ function commandAdjunctValue(text: string): CommandAdjunct {
 			!/^[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*(?:\s+[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*)*$/u.test(
 				complement,
 			) ||
-			/\b(?:command|observation|script|invocation|host|platform|Linux|Windows|macOS|darwin|win32|output|source|report|review|authority|authorization|completion|complete|completed|assurance|proof|proven|validated|verified|met|approved|accepted|authorized|permission|ready|evidence|pass(?:ed|es)?|succeed(?:ed|s)?|success(?:ful(?:ly)?)?|fail(?:ed|ure|s)?|exit(?:ed|s)?|ran|finished|skipped|partial|truncated|unproven|unverified|unobserved|missing|rewritten|edited|replaced|bypassed|disabled|unavailable|incomplete|changed|unchanged|modified|granted|not|no|without|despite|but|if|unless|would|could|should|is|was|are|were|has|have|had|does|did)\b/i.test(
+			/\b(?:command|observation|script|invocation|host|platform|Linux|Windows|macOS|darwin|win32|output|source|report|review|authorit(?:y|ies)|authoriz(?:e(?:d|s)?|ations?|ing)|completion|complete|completed|assurance|proof|proven|validated|verified|met|approv(?:e(?:d|s)?|als?|ing)|accept(?:ed|s|ing)?|permissions?|ready|evidence|pass(?:ed|es|ing)?|succeed(?:ed|s|ing)?|success(?:es|ful(?:ly)?)?|fail(?:ed|s|ing|ures?)?|exit(?:ed|s)?|ran|finished|skipped|partial|truncated|unproven|unverified|unobserved|missing|rewritten|edit(?:ed|s|ing)?|replac(?:e(?:d|s)?|ing)|bypass(?:ed|es|ing)?|disabl(?:e(?:d|s)?|ing)|unavailable|incomplete|chang(?:e(?:d|s)?|ing)|unchanged|modif(?:y|ied|ies|ying)|grant(?:ed|s|ing)?|not|no|without|despite|but|if|unless|would|could|should|is|was|are|were|has|have|had|does|did)\b/i.test(
 				complement,
 			)
 		)
