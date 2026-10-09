@@ -219,3 +219,14 @@ for (const prefix of [
 		expect(scenario.check(input)).toEqual([]);
 	});
 }
+for (const separator of [". ", "; "]) {
+	for (const qualifier of [
+		"Its script was unchanged.",
+		"Its script and invocation were unchanged.",
+	]) {
+		test(`joined review keeps truthful command qualifier ${separator}${qualifier}`, () => {
+			const status = phrase.replace(/\.$/, `${separator}${qualifier}`);
+			expect(scenario.check(fixture(status))).toEqual([]);
+		});
+	}
+}
