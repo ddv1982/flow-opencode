@@ -197,6 +197,9 @@ for (const content of [
 	"Repairs require authorization: this review changes no files; the token is synthetic-value-123456.\n",
 	"Repairs require authorization: this review changes no files. API_KEY was synthetic-value-123456.\n",
 	"Repairs require authorization: obtain approval before repairs. The password is synthetic-value-123456.\n",
+	"Repairs require authorization: this review changes no files; its access token equals opaque-short.\n",
+	"Repairs require authorization: this review changes no files; the apiKey contains opaque-short.\n",
+	"Repairs require authorization: this review changes no files; the secret is\nopaque-short.\n",
 ]) {
 	test(`permission prose cannot retain copular credential disclosure ${content}`, async () => {
 		expect(await observe(content)).toEqual({
@@ -212,6 +215,7 @@ for (const suffix of [
 	"The audit finished successfully.",
 	"The audit has completed successfully.",
 	"The audit successfully completed.",
+	"The canonical gate completed successfully.",
 	"The audit result was success.",
 	"The audit result was a success.",
 	"The audit outcome is success.",
