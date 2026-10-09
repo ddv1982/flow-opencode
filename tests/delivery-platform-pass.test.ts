@@ -209,3 +209,13 @@ test("quoted command arguments cannot become review siblings", () => {
 	expect(facts.observations).toEqual(expected);
 	expect(facts.independentReview).toEqual([]);
 });
+for (const prefix of [
+	"Its script was modified to preserve trimming behavior.",
+	"The script was modified to handle null input.",
+]) {
+	test(`unowned implementation prose remains context ${prefix}`, () => {
+		const input = fixture();
+		input.finalText = `${prefix}\n${input.finalText}`;
+		expect(scenario.check(input)).toEqual([]);
+	});
+}
