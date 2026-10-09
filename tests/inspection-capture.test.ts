@@ -480,3 +480,27 @@ for (const lineEnding of ["\n", "\r\n", "\r"]) {
 		});
 	});
 }
+
+for (const lineEnding of ["\n", "\r\n", "\r"]) {
+	for (const fence of ["```", "~~~"]) {
+		const closed = `${fence}text${lineEnding}> shell output${lineEnding}${fence}${lineEnding}Authorization is required before repairs.${lineEnding}`;
+		test(`quote-like code cannot taint prose after its closed fence ${closed}`, async () => {
+			expect(await observe(closed)).toEqual({
+				kind: "observed",
+				content: closed,
+				sha256: `sha256:${createHash("sha256").update(closed).digest("hex")}`,
+			});
+		});
+		for (const content of [
+			`${fence}text${lineEnding}> shell output${lineEnding}Authorization is required before repairs.${lineEnding}`,
+			`> Status.${lineEnding}> ${fence}${lineEnding}Authorization is required before repairs.${lineEnding}`,
+		]) {
+			test(`active code or quoted fence content remains private ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				});
+			});
+		}
+	}
+}
