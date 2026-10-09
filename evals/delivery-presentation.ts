@@ -330,7 +330,11 @@ function platformValue(value: string) {
 	const lower = value.toLowerCase();
 	return lower === "macos" ? "darwin" : lower === "windows" ? "win32" : lower;
 }
-function sentenceBoundary(text: string, start = 0, command = false) {
+function sentenceBoundary(
+	text: string,
+	start = 0,
+	mode: "sentence" | "command" | "metadata" = "sentence",
+) {
 	let quote: string | null = null;
 	for (let index = start; index < text.length; index++) {
 		const character = text[index];
@@ -352,7 +356,13 @@ function sentenceBoundary(text: string, start = 0, command = false) {
 			quote = character;
 			continue;
 		}
-		if (command && character === ",") {
+		if (
+			mode === "metadata" &&
+			character === "," &&
+			/^,\s*host\b/i.test(text.slice(index))
+		)
+			return { end: index, next: index, unterminatedQuote: false };
+		if (mode === "command" && character === ",") {
 			const sibling = /^,\s+and\s+(?=Independent review(?::|\s))/i.exec(
 				text.slice(index),
 			);
@@ -364,12 +374,16 @@ function sentenceBoundary(text: string, start = 0, command = false) {
 				};
 		}
 		if (
-			command &&
+			mode === "command" &&
 			character === ";" &&
 			commandContinuation(text.slice(index + 1).trimStart())
 		)
 			return { end: index + 1, next: index + 1, unterminatedQuote: false };
-		if (character === "." && /^\s+[A-Za-z0-9]/.test(text.slice(index + 1)))
+		if (
+			mode !== "metadata" &&
+			character === "." &&
+			/^\s+[A-Za-z0-9]/.test(text.slice(index + 1))
+		)
 			return { end: index + 1, next: index + 1, unterminatedQuote: false };
 	}
 	return {
@@ -406,12 +420,12 @@ function commandResultValue(line: string, commands: readonly string[]) {
 				remainder: "",
 				source: line,
 			};
-		let boundary = sentenceBoundary(rawBody, 0, true);
+		let boundary = sentenceBoundary(rawBody, 0, "command");
 		while (
 			boundary.end < rawBody.length &&
 			commandContinuation(rawBody.slice(boundary.end).trimStart())
 		) {
-			boundary = sentenceBoundary(rawBody, boundary.end, true);
+			boundary = sentenceBoundary(rawBody, boundary.end, "command");
 		}
 		const remainderStart = boundary.end;
 		let record = rawBody.slice(0, remainderStart);
@@ -422,13 +436,17 @@ function commandResultValue(line: string, commands: readonly string[]) {
 			| undefined;
 		if (/^Independent review(?::|\s)/i.test(remainder)) {
 			const start = boundary.next + rawBody.slice(boundary.next).search(/\S/);
-			let reviewBoundary = sentenceBoundary(rawBody, start, true);
+			let reviewBoundary = sentenceBoundary(rawBody, start, "command");
 			const reviewEnd = reviewBoundary.end;
 			while (
 				reviewBoundary.end < rawBody.length &&
 				commandContinuation(rawBody.slice(reviewBoundary.end).trimStart())
 			)
-				reviewBoundary = sentenceBoundary(rawBody, reviewBoundary.end, true);
+				reviewBoundary = sentenceBoundary(
+					rawBody,
+					reviewBoundary.end,
+					"command",
+				);
 			const source = rawBody.slice(start, reviewEnd).trim();
 			const value = source
 				.replace(/^Independent review(?::|\s)\s*/i, "")
@@ -539,18 +557,33 @@ function parseCommandResult(
 		integrity: "not-claimed",
 	};
 	const metadata = value?.[4] ?? "";
-	const hostMetadata = /^, host (\S+)$/i.exec(metadata);
-	const assertedHost = barePass?.[2] ?? hostMetadata?.[1];
-	const host =
+	const assertedHost = barePass?.[2];
+	let host =
 		assertedHost === undefined ? undefined : platformValue(assertedHost);
 	if (
-		(host !== undefined &&
-			host !== "linux" &&
-			host !== "darwin" &&
-			host !== "win32") ||
-		(/^, host\b/i.test(metadata) && !hostMetadata)
+		host !== undefined &&
+		host !== "linux" &&
+		host !== "darwin" &&
+		host !== "win32"
 	)
 		return malformed;
+	let metadataStart = 0;
+	while (metadataStart < metadata.length) {
+		const boundary = sentenceBoundary(metadata, metadataStart, "metadata");
+		if (boundary.end === metadata.length) break;
+		const field = /^,\s*host\s+([^,\s]+)\s*(?=,|$)/i.exec(
+			metadata.slice(boundary.end),
+		);
+		if (!field) return malformed;
+		const claimed = platformValue(field[1] ?? "");
+		if (
+			(claimed !== "linux" && claimed !== "darwin" && claimed !== "win32") ||
+			(host !== undefined && host !== claimed)
+		)
+			return malformed;
+		host = claimed;
+		metadataStart = boundary.end + field[0].length;
+	}
 	if (
 		metadata &&
 		!/^(?:, (?:host|source|output|report) .+|, reporting \d+ [A-Za-z ]+)$/i.test(
