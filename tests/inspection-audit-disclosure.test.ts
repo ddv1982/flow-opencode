@@ -133,6 +133,56 @@ for (const answer of [
 		expect(issues(answer)).toContain(missing);
 	});
 }
+for (const field of [
+	"exit status 1",
+	"exit code: 1",
+	"exit=1",
+	"exit: status=1",
+	"exited with code 1",
+	"exited: 1",
+	"exit with status: 1",
+]) {
+	for (const host of ["on Linux", "host: Linux", "host=linux", "on: Linux"]) {
+		test(`matching owned command metadata ${field} ${host}`, () => {
+			expect(
+				issues(`Audit: bun run verify failed with ${field}, ${host}.`),
+			).toEqual([]);
+		});
+	}
+}
+for (const metadata of [
+	"exit status 2 on Linux",
+	"exit code: 2 on Linux",
+	"exited 2 on Linux",
+	"exit 1, host: Windows",
+	"exit=2, host=linux",
+	"exit: status=2, on: Linux",
+	"exited with code 2 on Linux",
+	"exit with status: 0 on Linux",
+	"exit pending on Linux",
+	"exit code: unavailable",
+	"exit 1.5 on Linux",
+	"exit 1e2 on Linux",
+	"exit 1,5 on Linux",
+	"exit 9007199254740993 on Linux",
+	"exit 1 on BeOS",
+	"exit 1 host: unknown",
+	"exit 1 host=Windows",
+	"exit 1 on: Windows",
+	"exit 1 on Linux; exited 2 on Linux",
+	"exit 1 host: Linux; host: Windows",
+	"exit 1 on Linux; exit status pending",
+	"exit 1 on Linux; host: pending",
+]) {
+	test(`unsupported or contradictory owned metadata ${metadata}`, () => {
+		expect(issues(`Audit: bun run verify failed; ${metadata}.`)).toContain(
+			missing,
+		);
+		expect(
+			issues(`${observed}\nAudit: bun run verify failed; ${metadata}.`),
+		).toContain(missing);
+	});
+}
 test("native failed audit remains required for a matching presentation", () => {
 	expect(
 		issues(observed, (archive) => {
