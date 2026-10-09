@@ -418,3 +418,65 @@ for (const lineEnding of ["\n", "\r\n", "\r"]) {
 		});
 	}
 }
+
+for (const lineEnding of ["\n", "\r\n", "\r"]) {
+	const markers = [
+		...([0, 1, 2, 3] as const).map((spaces) => `${" ".repeat(spaces)}> `),
+		">> ",
+		"> > ",
+		"- > ",
+		"1. > ",
+		"1. - > ",
+	];
+	for (const marker of markers) {
+		for (const content of [
+			`${marker}Status. Authorization is required before repairs.${lineEnding}`,
+			`${marker}Status.${lineEnding}Authorization is required before repairs.${lineEnding}`,
+		]) {
+			test(`quoted permission paragraph remains private ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				});
+			});
+		}
+	}
+	for (const separator of [
+		lineEnding,
+		`>${lineEnding}`,
+		`## Repair scope${lineEnding}`,
+	]) {
+		const content = `> Status.${lineEnding}${separator}Authorization is required before repairs.${lineEnding}`;
+		test(`permission prose outside a quoted paragraph is retained ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "observed",
+				content,
+				sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+			});
+		});
+	}
+	for (const spaces of [0, 1, 2, 3]) {
+		const content = `> Status.${lineEnding}${" ".repeat(spaces)}Authorization is required before repairs.${lineEnding}`;
+		test(`partial plain prefix remains in its lazy quote ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		});
+	}
+	const quoted = `> Authorization is required before repairs.${lineEnding}`;
+	test(`partial quote marker remains private ${quoted}`, async () => {
+		expect(await observe(quoted)).toEqual({
+			kind: "unavailable",
+			reason: "review-document-not-safe-to-retain",
+		});
+	});
+	const ordinary = `> Status.${lineEnding}- Authorization is required before repairs.${lineEnding}`;
+	test(`new list interrupts the quoted paragraph ${ordinary}`, async () => {
+		expect(await observe(ordinary)).toEqual({
+			kind: "observed",
+			content: ordinary,
+			sha256: `sha256:${createHash("sha256").update(ordinary).digest("hex")}`,
+		});
+	});
+}
