@@ -659,14 +659,15 @@ function inspectionReportDisclosesAuditFailure(text: string): boolean {
 function inspectionReportClaimsAuditSuccess(text: string): boolean {
 	const visible = text.replace(/[`*_]/g, "");
 	for (const match of visible.matchAll(
-		/\b(?:verify|audit)\s+(?:(?:has|is|was|remains)\s+)?(?:passed|green|succeeded|successful)\b/gi,
+		/\b(?:verify|audit|canonical gate)\s+(?:(?:result|outcome)\s+)?(?:(?:has|is|was|remains)\s+)?(?:passed|green|succeeded|successful|(?:a\s+)?success|(?:completed|ran|finished)\s+successfully|successfully\s+(?:completed|ran|finished))\b/gi,
 	)) {
 		const prefix = visible.slice(
 			visible.lastIndexOf("\n", match.index) + 1,
 			match.index,
 		);
+		if (/\b(?:if|unless)\s+(?:the\s+)?$/i.test(prefix)) continue;
 		if (
-			!/\b(?:do not|don't|never)\s+(?:claim|report|say|call)\s+["']?$/i.test(
+			!/\b(?:do not|don't|never)\s+(?:claim|report|say|call)\s+(?:that\s+)?["']?(?:the\s+)?$/i.test(
 				prefix,
 			)
 		)

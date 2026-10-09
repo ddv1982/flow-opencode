@@ -378,6 +378,10 @@ export type ReviewDocumentObservation =
 
 const SENSITIVE_DOCUMENT_ASSIGNMENT =
 	/(?:^|[\s"'`{,])((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization)[A-Za-z0-9_-]*)\s*["'`]?\s*(:|=)\s*(["'`]?[\S]+)/gim;
+const SENSITIVE_DOCUMENT_FIELD_NAME =
+	/\b(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\b/i;
+const SENSITIVE_DOCUMENT_DISCLOSURE =
+	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\s*["'`]?\s+(?:is|was|are|were)\s+["'`]?[\S]+/im;
 const SENSITIVE_INLINE_ASSIGNMENT =
 	/(?:token|password|passwd|secret|key|authorization)\s*=/i;
 
@@ -400,6 +404,7 @@ function documentPrefixHasCodeFence(prefix: string): boolean {
 }
 
 function hasSensitiveDocumentAssignment(content: string): boolean {
+	if (SENSITIVE_DOCUMENT_DISCLOSURE.test(content)) return true;
 	for (const match of content.matchAll(SENSITIVE_DOCUMENT_ASSIGNMENT)) {
 		const keyStart = match.index + match[0].indexOf(match[1] ?? "");
 		const prefix = content.slice(
@@ -407,17 +412,22 @@ function hasSensitiveDocumentAssignment(content: string): boolean {
 			keyStart,
 		);
 		const valueStart = match.index + match[0].lastIndexOf(match[3] ?? "");
-		const value = content.slice(valueStart).split("\n", 1)[0] ?? "";
+		const value = content.slice(valueStart);
+		const permissionBody = value.replace(
+			/^(?:obtain|request|seek)\s+(?:(?:explicit|separate|prior)\s+)?authorization\b/,
+			"permission",
+		);
 		const permissionClause =
 			match[1] === "authorization" &&
 			match[2] === ":" &&
+			!SENSITIVE_DOCUMENT_FIELD_NAME.test(permissionBody) &&
 			!/[`"']/.test(prefix) &&
 			!documentPrefixHasCodeFence(content.slice(0, keyStart)) &&
 			!/^(?: {4}|\t)/.test(prefix) &&
 			/\b(?:require[sd]?|need[sd]?|await[sd]?|awaiting|pending|subject to)\s+(?:(?:separate|explicit|prior|additional|user|human)\s+)*$/i.test(
 				prefix,
 			) &&
-			/^(?:(?:this|the|its|our|that)\s+[a-z]+(?:\s+(?:only|merely))?\s+(?:[a-z]+s|is|has|does)\b|(?:obtain|request|seek)\s+(?:(?:explicit|separate|prior)\s+)?(?:approval|permission|authorization)\b)/.test(
+			/^(?:(?:this|the|its|our|that)\s+(?:review|inspection|audit|roadmap|report|plan|document|task)(?:\s+(?:only|merely))?\s+(?:[a-z]+s|is|has|does)\b|(?:obtain|request|seek)\s+(?:(?:explicit|separate|prior)\s+)?(?:approval|permission|authorization)\b)/.test(
 				value,
 			);
 		if (!permissionClause) return true;
