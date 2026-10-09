@@ -217,3 +217,46 @@ for (const complement of [
 		).toEqual([]);
 	});
 }
+
+for (const role of [
+	"commands",
+	"observations",
+	"scripts",
+	"invocations",
+	"hosts",
+	"platforms",
+	"outputs",
+	"sources",
+	"reports",
+	"reviews",
+	"authorities",
+	"authorizations",
+	"completions",
+	"assurances",
+	"proofs",
+	"evidences",
+]) {
+	for (const complement of [
+		role,
+		`null handling and ${role}`,
+		`${role} and null handling`,
+	]) {
+		test(`nominal adjunct rejects plural reserved role ${complement}`, () => {
+			expect(
+				scenario.check(fixture(`passed on Linux, confirming ${complement}.`)),
+			).toContain("Unsupported or conflicting current handoff assertions.");
+		});
+	}
+}
+for (const complement of [
+	"commandscope handling",
+	"scriptlets parsing",
+	"proofread trimming",
+	"reviewable handling",
+]) {
+	test(`plural role grammar keeps unrelated whole words ${complement}`, () => {
+		expect(
+			scenario.check(fixture(`passed on Linux, confirming ${complement}.`)),
+		).toEqual([]);
+	});
+}
