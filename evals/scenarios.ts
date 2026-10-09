@@ -686,7 +686,7 @@ function inspectionDocumentHasPhases(content: string): boolean {
 				plain,
 			) &&
 			!/\?\s*(?:no|none|not necessary)\b/i.test(plain) &&
-			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|establish|fix|identify|investigate|make|measure|repair|reproduce|restore|resolve(?![^\n.!?]*\b(?:is|was|are|were)\b)|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
+			/(?:^|\n[ \t]*(?:(?:[-*+]|\d+[.)])[ \t]+)?|[.!?:][ \t]+|—[ \t]+)(?:(?:i|we|the team)\s+(?:will|should|must)\s+)?(?:add|address|assess|correct|define|determine|document|establish|fix|identify|investigate|make|measure|repair|reproduce|restore|resolve(?!(?:(?!\b(?:before|after|once|when|until|if|while|because|that|which|where)\b)[^\n.!?])*\b(?:is|was|are|were)\b)|review|run|stabilize|test|trace|triage|update|validate|verify)\b/i.test(
 				visible,
 			) &&
 			/\binclusiveRangeLength\b|\bcount\.ts\b|\boff[- ]by[- ]one\b|\b1\s*\.\.\s*3\b|\b(?:inclusive|closed)\s+(?:interval|range)\b|\baudit\b|\badvisor(?:y|ies)\b|\bdependenc(?:y|ies)\b|\bgate\b|\bverify\b/i.test(
