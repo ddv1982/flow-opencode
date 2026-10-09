@@ -725,10 +725,22 @@ function inspectionReportDisclosesAuditFailure(
 		)
 			continue;
 		for (const field of line.matchAll(
-			/\b(?:exit\w*|host\w*|on|code|status|platform)\b/gi,
+			/\b(?:exit\w*|host\w*|on|code\w*|status\w*|platform)\b/gi,
 		)) {
-			if (!failedAudit) return false;
 			const tail = line.slice(field.index);
+			const exitField =
+				/^exit\w*\b|^(?:code\w*|status\w*)\s*(?:[:=]|\s[+-]?\d)/i.test(tail);
+			const hostField =
+				/^(?:host\w*|platform)\b|^on(?:\s*[:=]|\s+host\b|\s+(?:Linux|Windows|macOS|darwin|win32)\b)/i.test(
+					tail,
+				) || /^on\s+[A-Z][A-Za-z0-9_-]*(?=\s*[,;.!?]|\s*$)/.test(tail);
+			const role: "exit" | "host" | "prose" = exitField
+				? "exit"
+				: hostField
+					? "host"
+					: "prose";
+			if (role === "prose") continue;
+			if (!failedAudit) return false;
 			const exit =
 				/^(?:exit(?:ed|s)?(?=[\s:=])(?:\s+with)?\s*[:=]?\s*(?:(?:code|status)\s*[:=]?\s*)?|(?:code|status)(?=[\s:=])\s*[:=]?\s*)([+-]?\d+)(?=$|\s|[,;!?](?=\D|$)|\.(?=\s|$))/i.exec(
 					tail,
@@ -737,7 +749,8 @@ function inspectionReportDisclosesAuditFailure(
 				/^(?:on(?:\s+host)?|host(?:\s+platform)?|platform)\s*[:=]?\s*([A-Za-z][A-Za-z0-9_-]*)(?=$|[\s,;.!?])/i.exec(
 					tail,
 				);
-			if (!exit && !host) return false;
+			if ((role === "exit" && !exit) || (role === "host" && !host))
+				return false;
 			const record = `Observed "bun run verify": exit ${exit ? Number(exit[1]) : failedAudit.exitCode}${host ? `, host ${host[1]}` : ""}; this does not claim the command passed.`;
 			const facts = currentHandoffFacts(record, ["bun run verify"]);
 			const observation = facts.observations[0];
