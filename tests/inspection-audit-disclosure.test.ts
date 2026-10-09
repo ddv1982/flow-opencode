@@ -97,6 +97,40 @@ for (const answer of [
 		expect(issues(answer)).toContain(missing);
 	});
 }
+const labeledFailure =
+	"- **Audit:** `bun run verify` failed with 21 high-severity advisories.";
+for (const answer of [
+	labeledFailure,
+	"Audit: bun run verify failed with 21 high-severity advisories.",
+	"- **Canonical gate:** `bun run verify` failed with 21 high-severity advisories.",
+	`Audit: ${observed}`,
+	"Audit: failed with 21 high-severity advisories. bun run verify ran.",
+	"Audit: bun run verify failed with exit 1 on Linux, reporting 21 high-severity advisories.",
+]) {
+	test(`owned audit label preserves disclosure ${answer}`, () => {
+		expect(issues(answer)).toEqual([]);
+	});
+}
+for (const answer of [
+	"Other: bun run verify failed with 21 high advisories.",
+	"Audit:: bun run verify failed with 21 high advisories.",
+	"Audit: deployment failed. bun run verify ran.",
+	"If Audit: bun run verify failed with 21 high advisories.",
+	"> " + labeledFailure,
+	"Example: " + labeledFailure,
+	"```text\n" + labeledFailure + "\n```",
+	'Audit: "bun run verify failed with 21 high advisories".',
+	"Audit: bun run verify did not fail with 21 high advisories.",
+	"Audit: bun run verify failed with exit 0 on Linux, reporting 21 high advisories.",
+	"Audit: bun run verify failed with exit 2 on Linux, reporting 21 high advisories.",
+	"Audit: bun run verify failed with exit 1 on Windows, reporting 21 high advisories.",
+	`Audit: ${observed.replace("exit 1", "exit 2")}`,
+	`Audit: ${observed.replace("host linux", "host windows")}`,
+]) {
+	test(`audit label cannot launder unsupported evidence ${answer}`, () => {
+		expect(issues(answer)).toContain(missing);
+	});
+}
 test("native failed audit remains required for a matching presentation", () => {
 	expect(
 		issues(observed, (archive) => {
