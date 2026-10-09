@@ -75,6 +75,9 @@ for (const content of [
 	"- authorization: synthetic-value-123456\n",
 	"The API authorization=synthetic-value-123456\n",
 	"The API_AUTHORIZATION: synthetic-value-123456\n",
+	"Repairs require authorization: x\n",
+	"Repairs require authorization: Bearer x\n",
+	"The authorization: x\n",
 	"The secret: synthetic-value-123456\n",
 	"The token: synthetic-value-123456\n",
 ]) {
@@ -89,6 +92,10 @@ for (const answer of [
 	"docs/codebase-review.md records 21 high-severity advisories. bun run verify ran. There is no audit failure.",
 	"docs/codebase-review.md records 21 high-severity advisories. bun run verify ran. Audit failure did not occur.",
 	"docs/codebase-review.md records 21 high-severity advisories. bun run verify ran without audit failure.",
+	"bun run verify audit has not failed. 21 high advisories. docs/codebase-review.md",
+	"bun run verify audit has no unresolved advisories. 21 high advisories. docs/codebase-review.md",
+	"bun run verify audit is green. 21 high advisories. Repair failed. docs/codebase-review.md",
+	"bun run verify reported 21 high advisories. Unrelated deployment failed. docs/codebase-review.md",
 ]) {
 	test(`negated failure is not disclosure ${answer}`, () => {
 		expect(issues(retained[0].document, answer)).toContain(
@@ -103,6 +110,7 @@ const range =
 for (const phase of [
 	"2. Do not resolve audit provenance or rerun bun run verify.\n",
 	"2. Audit provenance is resolved and the dependency gate is restored.\n",
+	"2. Resolve audit provenance is a title describing future discussion.\n",
 	"2. Resolving audit provenance is a future possibility for the dependency gate.\n",
 	"2. Resolve the inclusiveRangeLength defect in src/count.ts with regression tests.\n",
 	"2. Review inclusiveRangeLength in src/count.ts and add closed interval tests.\n3. Resolve audit provenance and rerun bun run verify.\n",
