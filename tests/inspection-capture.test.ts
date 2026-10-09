@@ -291,3 +291,216 @@ for (const suffix of [
 		});
 	});
 }
+
+for (const content of [
+	"Separate authorization is required before product repairs.\n",
+	"Authorization\nis required before repairs.\n",
+	"Authorization is needed before changing product files.\n",
+	"Explicit authorization was requested before repair work.\n",
+	"Authorization is pending for repairs.\n",
+	"Authorization is granted for the repair task.\n",
+	"Authorization is denied for deployment.\n",
+	"Prior authorization was obtained to change product files.\n",
+	"The authorization is necessary before code modification.\n",
+	"Authorization is not required before this inspection.\n",
+	"Authorization was not granted for repairs.\n",
+	"- Separate authorization is required before product repairs.\n",
+	"## Repair scope\nSeparate authorization is required before product repairs.\n",
+	"Separate authorization is required before product repairs.\n\n## Key findings\nThe parser has a defect.\n",
+	"Separate authorization is required before repairs; authorization is needed to modify code.\n",
+]) {
+	test(`complete permission status is retained ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "observed",
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		});
+	});
+}
+
+for (const content of [
+	"Authorization is required.\n",
+	"Authorization is opaque-short.\n",
+	"Authorization is required opaque-short.\n",
+	"Authorization is required before repairs opaque-short.\n",
+	"Authorization is required before repairs.opaque-short\n",
+	"Authorization is required before\nopaque-short.\n",
+	"Authorization is required before repairs; the token is opaque-short.\n",
+	"Authorization is required before repairs. The authorization is required.\n",
+	"Authorization is required before repairs.\n\nThe authorization is opaque-short.\n",
+	"Authorization is required before repairs.\n\nThe token is opaque-short.\n",
+	"API_AUTHORIZATION is required before repairs.\n",
+	"authorizationToken is required before repairs.\n",
+	"The credential is required before repairs.\n",
+	'"authorization" is required before repairs.\n',
+	"`authorization` is required before repairs.\n",
+	"`Authorization is required before repairs.`\n",
+	"```text\nAuthorization is required before repairs.\n```\n",
+	"~~~text\nAuthorization is required before repairs.\n~~~\n",
+	"````text\n```\nAuthorization is required before repairs.\n````\n",
+	"    Authorization is required before repairs.\n",
+	"\tAuthorization is required before repairs.\n",
+	"Authorization\n    is required before repairs.\n",
+	"Authorization\n\tis required before repairs.\n",
+	"## Authorization is required before repairs.\n",
+	"## Repair scope. Authorization is required before repairs.\n",
+	"Authorization: is required before repairs.\n",
+	"Authorization=is required before repairs.\n",
+]) {
+	test(`ambiguous or encoded permission value remains private ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "unavailable",
+			reason: "review-document-not-safe-to-retain",
+		});
+	});
+}
+
+for (const lineEnding of ["\n", "\r\n", "\r"]) {
+	for (const spaces of [0, 1, 2, 3]) {
+		for (const content of [
+			`Repair scope${lineEnding}${" ".repeat(spaces)}\tAuthorization is required before repairs.${lineEnding}`,
+			`Authorization${lineEnding}${" ".repeat(spaces)}\tis required before repairs.${lineEnding}`,
+		]) {
+			test(`tab-indented permission context remains private ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				});
+			});
+		}
+		for (const content of [
+			`Repair scope${lineEnding}${" ".repeat(spaces)}Authorization is required before repairs.${lineEnding}`,
+			`Authorization${lineEnding}${" ".repeat(spaces)}is required before repairs.${lineEnding}`,
+		]) {
+			test(`ordinary prose indentation retains permission context ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "observed",
+					content,
+					sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+				});
+			});
+		}
+	}
+	for (const fence of ["```", "~~~"]) {
+		const encoded = `${fence}text${lineEnding}Authorization is required before repairs.${lineEnding}${fence}${lineEnding}`;
+		test(`active fence permission remains private ${encoded}`, async () => {
+			expect(await observe(encoded)).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		});
+		const prose = `${fence}text${lineEnding}Ordinary example.${lineEnding}${fence}${lineEnding}Authorization is required before repairs.${lineEnding}`;
+		test(`closed fence permits ordinary permission prose ${prose}`, async () => {
+			expect(await observe(prose)).toEqual({
+				kind: "observed",
+				content: prose,
+				sha256: `sha256:${createHash("sha256").update(prose).digest("hex")}`,
+			});
+		});
+	}
+	const content = `Authorization is required before repairs${lineEnding}Next action.${lineEnding}`;
+	test(`physical line ends the permission predicate ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "observed",
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		});
+	});
+	for (const content of [
+		`Authorization${lineEnding}    is required before repairs.${lineEnding}`,
+		`Repair scope${lineEnding}    Authorization is required before repairs.${lineEnding}`,
+	]) {
+		test(`space-indented permission context remains private ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		});
+	}
+}
+
+for (const lineEnding of ["\n", "\r\n", "\r"]) {
+	const markers = [
+		...([0, 1, 2, 3] as const).map((spaces) => `${" ".repeat(spaces)}> `),
+		">> ",
+		"> > ",
+		"- > ",
+		"1. > ",
+		"1. - > ",
+	];
+	for (const marker of markers) {
+		for (const content of [
+			`${marker}Status. Authorization is required before repairs.${lineEnding}`,
+			`${marker}Status.${lineEnding}Authorization is required before repairs.${lineEnding}`,
+		]) {
+			test(`quoted permission paragraph remains private ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				});
+			});
+		}
+	}
+	for (const separator of [
+		lineEnding,
+		`>${lineEnding}`,
+		`## Repair scope${lineEnding}`,
+	]) {
+		const content = `> Status.${lineEnding}${separator}Authorization is required before repairs.${lineEnding}`;
+		test(`permission prose outside a quoted paragraph is retained ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "observed",
+				content,
+				sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+			});
+		});
+	}
+	for (const spaces of [0, 1, 2, 3]) {
+		const content = `> Status.${lineEnding}${" ".repeat(spaces)}Authorization is required before repairs.${lineEnding}`;
+		test(`partial plain prefix remains in its lazy quote ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
+			});
+		});
+	}
+	const quoted = `> Authorization is required before repairs.${lineEnding}`;
+	test(`partial quote marker remains private ${quoted}`, async () => {
+		expect(await observe(quoted)).toEqual({
+			kind: "unavailable",
+			reason: "review-document-not-safe-to-retain",
+		});
+	});
+	const ordinary = `> Status.${lineEnding}- Authorization is required before repairs.${lineEnding}`;
+	test(`new list interrupts the quoted paragraph ${ordinary}`, async () => {
+		expect(await observe(ordinary)).toEqual({
+			kind: "observed",
+			content: ordinary,
+			sha256: `sha256:${createHash("sha256").update(ordinary).digest("hex")}`,
+		});
+	});
+}
+
+for (const lineEnding of ["\n", "\r\n", "\r"]) {
+	for (const fence of ["```", "~~~"]) {
+		const closed = `${fence}text${lineEnding}> shell output${lineEnding}${fence}${lineEnding}Authorization is required before repairs.${lineEnding}`;
+		test(`quote-like code cannot taint prose after its closed fence ${closed}`, async () => {
+			expect(await observe(closed)).toEqual({
+				kind: "observed",
+				content: closed,
+				sha256: `sha256:${createHash("sha256").update(closed).digest("hex")}`,
+			});
+		});
+		for (const content of [
+			`${fence}text${lineEnding}> shell output${lineEnding}Authorization is required before repairs.${lineEnding}`,
+			`> Status.${lineEnding}> ${fence}${lineEnding}Authorization is required before repairs.${lineEnding}`,
+		]) {
+			test(`active code or quoted fence content remains private ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				});
+			});
+		}
+	}
+}
