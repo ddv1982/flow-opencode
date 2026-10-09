@@ -381,7 +381,7 @@ const SENSITIVE_DOCUMENT_ASSIGNMENT =
 const SENSITIVE_DOCUMENT_FIELD_NAME =
 	/\b(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\b/i;
 const SENSITIVE_DOCUMENT_DISCLOSURE =
-	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\s*["'`]?\s+(?:is|was|are|were|equals?|contains?)\s+["'`]?[\S]+/im;
+	/(?:^|[\s"'`{,])((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*)\s*["'`]?\s+((?:is|was|are|were|equals?|contains?)\s+["'`]?[\S]+)/gim;
 const SENSITIVE_INLINE_ASSIGNMENT =
 	/(?:token|password|passwd|secret|key|authorization)\s*=/i;
 
@@ -403,8 +403,44 @@ function documentPrefixHasCodeFence(prefix: string): boolean {
 	return fence !== null;
 }
 
+function isPermissionStatusClause(
+	content: string,
+	fieldStart: number,
+	predicateStart: number,
+): boolean {
+	const lineStart = content.lastIndexOf("\n", fieldStart) + 1;
+	const linePrefix = content.slice(lineStart, fieldStart);
+	const prefix = linePrefix.split(/[.;!?](?=\s|$)/).at(-1) ?? "";
+	if (
+		/[`"']/.test(linePrefix) ||
+		/^(?: {4}|\t)/.test(linePrefix) ||
+		/^ {0,3}#{1,6}\s/.test(linePrefix) ||
+		documentPrefixHasCodeFence(content.slice(0, fieldStart)) ||
+		!/^\s*(?:[-*+]\s+)?(?:(?:the|this|separate|explicit|prior|additional|user|human)\s+)*$/i.test(
+			prefix,
+		)
+	)
+		return false;
+	const remainder = content.slice(predicateStart);
+	const boundary = remainder.search(/[;.!?](?=\s|$)|\r?\n/);
+	const predicate = (
+		boundary < 0 ? remainder : remainder.slice(0, boundary)
+	).trim();
+	return /^(?:is|was|are|were)\s+(?:not\s+)?(?:required|needed|necessary|pending|requested|granted|denied|obtained)\s+(?:before|for|to)\s+(?:(?:(?:the|this|product|code|test|gate)\s+)*(?:repairs?|inspection|review|modification|deployment)(?:\s+(?:work|task))?|(?:repair(?:ing)?|inspect(?:ing)?|review(?:ing)?|modify|modifying|change|changing|deploy(?:ing)?)\s+(?:(?:the|this|product|code|test|gate)\s+)*(?:files|code|product|tests|gate))$/i.test(
+		predicate,
+	);
+}
+
 function hasSensitiveDocumentAssignment(content: string): boolean {
-	if (SENSITIVE_DOCUMENT_DISCLOSURE.test(content)) return true;
+	for (const match of content.matchAll(SENSITIVE_DOCUMENT_DISCLOSURE)) {
+		const fieldStart = match.index + match[0].indexOf(match[1] ?? "");
+		const predicateStart = match.index + match[0].lastIndexOf(match[2] ?? "");
+		if (
+			match[1]?.toLowerCase() !== "authorization" ||
+			!isPermissionStatusClause(content, fieldStart, predicateStart)
+		)
+			return true;
+	}
 	for (const match of content.matchAll(SENSITIVE_DOCUMENT_ASSIGNMENT)) {
 		const keyStart = match.index + match[0].indexOf(match[1] ?? "");
 		const prefix = content.slice(
