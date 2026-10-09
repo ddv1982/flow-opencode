@@ -465,7 +465,7 @@ function parseCommandResult(
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
 		);
-	const barePass = /^passed$/i.test(status);
+	const barePass = /^passed( unchanged)?$/i.exec(status);
 	if (!value && !barePass) return invalid;
 	const rawExit = barePass ? "0" : (value?.[3] ?? "");
 	const exitCode =
@@ -493,7 +493,9 @@ function parseCommandResult(
 		| "claimed-pass"
 		| null =
 		barePass || value?.[1] ? "claimed-pass" : value?.[2] ? "observation" : null;
-	let integrity: CommandIntegrity = "not-claimed";
+	let integrity: CommandIntegrity = barePass?.[1]
+		? "script-and-invocation-unchanged"
+		: "not-claimed";
 	for (const qualifier of parts) {
 		if (
 			/^(?:this observation does not claim a pass|this does not claim the command passed)$/i.test(
@@ -591,7 +593,9 @@ export function currentHandoffFacts(
 			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
 			) ||
-				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?:[.;]|$)/i.test(line))
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?:[.;]|$)/i.test(
+					line,
+				))
 		) {
 			facts.unsupported.push(line);
 		}
