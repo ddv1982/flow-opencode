@@ -381,7 +381,7 @@ const SENSITIVE_DOCUMENT_ASSIGNMENT =
 const SENSITIVE_DOCUMENT_FIELD_NAME =
 	/\b(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\b/i;
 const SENSITIVE_DOCUMENT_DISCLOSURE =
-	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\s*["'`]?\s+(?:is|was|are|were)\s+["'`]?[\S]+/im;
+	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\s*["'`]?\s+(?:is|was|are|were|equals?|contains?)\s+["'`]?[\S]+/im;
 const SENSITIVE_INLINE_ASSIGNMENT =
 	/(?:token|password|passwd|secret|key|authorization)\s*=/i;
 
@@ -412,7 +412,10 @@ function hasSensitiveDocumentAssignment(content: string): boolean {
 			keyStart,
 		);
 		const valueStart = match.index + match[0].lastIndexOf(match[3] ?? "");
-		const value = content.slice(valueStart);
+		const value =
+			content
+				.slice(valueStart)
+				.split(/\r?\n[ \t]*\r?\n|\r?\n(?= {0,3}#{1,6}[ \t])/, 1)[0] ?? "";
 		const permissionBody = value.replace(
 			/^(?:obtain|request|seek)\s+(?:(?:explicit|separate|prior)\s+)?authorization\b/,
 			"permission",
