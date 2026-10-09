@@ -192,6 +192,7 @@ for (const directive of [
 for (const content of [
 	"Repairs require authorization: this token is synthetic-value-123456.\n",
 	"Repairs require authorization: this key was synthetic-value-123456.\n",
+	"Repairs require authorization: our credential is opaque-short.\n",
 	"Repairs require authorization: this password is synthetic-value-123456.\n",
 	"Repairs require authorization: this review changes no files; the token is synthetic-value-123456.\n",
 	"Repairs require authorization: this review changes no files. API_KEY was synthetic-value-123456.\n",
@@ -210,6 +211,7 @@ for (const suffix of [
 	"The audit ran successfully.",
 	"The audit finished successfully.",
 	"The audit has completed successfully.",
+	"The audit successfully completed.",
 	"The audit result was success.",
 	"The audit result was a success.",
 	"The audit outcome is success.",
