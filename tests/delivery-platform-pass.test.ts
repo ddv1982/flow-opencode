@@ -282,6 +282,37 @@ for (const prose of [
 		expect(scenario.check(fixture(`${phrase} ${prose}`))).toEqual([]);
 	});
 }
+test("canonical win32 platform becomes a typed host claim", () => {
+	const expected = [
+		{
+			command: gate,
+			exitCode: 0,
+			qualification: "claimed-pass" as const,
+			integrity: "not-claimed" as const,
+			hostPlatform: "win32" as const,
+		},
+	];
+	expect(
+		currentHandoffFacts(`${gate} passed on win32.`, [gate]).observations,
+	).toEqual(expected);
+});
+test("unregistered win32 platform claim remains unsupported", () => {
+	const input = fixture();
+	input.finalText = input.finalText.replace(
+		`\`${gate}\` ${phrase}`,
+		"`node scripts/other.mjs` passed on win32. Independent review passed.",
+	);
+	expect(scenario.check(input)).toContain(
+		"Unsupported or conflicting current handoff assertions.",
+	);
+});
+test("recognized win32 claim still fails the Linux native witness", () => {
+	expect(
+		scenario.check(fixture("passed on win32. Independent review passed.")),
+	).toContain(
+		"Claimed command pass lacks matching accepted complete source evidence.",
+	);
+});
 for (const change of ["nonzero", "incomplete", "source", "intent"]) {
 	test(`nonpass host cannot rescue corrupt deferred capture ${change}`, () => {
 		const input = deferredCaptureOutcome();
