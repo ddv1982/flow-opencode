@@ -410,10 +410,13 @@ function isPermissionStatusClause(
 ): boolean {
 	const lineStart = content.lastIndexOf("\n", fieldStart) + 1;
 	const linePrefix = content.slice(lineStart, fieldStart);
+	const predicateLineStart = content.lastIndexOf("\n", predicateStart) + 1;
+	const predicateLinePrefix = content.slice(predicateLineStart, predicateStart);
 	const prefix = linePrefix.split(/[.;!?](?=\s|$)/).at(-1) ?? "";
 	if (
 		/[`"']/.test(linePrefix) ||
 		/^(?: {4}|\t)/.test(linePrefix) ||
+		/^(?: {4}|\t)/.test(predicateLinePrefix) ||
 		/^ {0,3}#{1,6}\s/.test(linePrefix) ||
 		documentPrefixHasCodeFence(content.slice(0, fieldStart)) ||
 		!/^\s*(?:[-*+]\s+)?(?:(?:the|this|separate|explicit|prior|additional|user|human)\s+)*$/i.test(
