@@ -724,6 +724,10 @@ function inspectionReportDisclosesAuditFailure(
 			)
 		)
 			continue;
+		let context: "audit-prose" | "named-command" | "command-metadata" =
+			/^(?:bun run verify|frontend:audit)\b/i.test(line)
+				? "named-command"
+				: "audit-prose";
 		for (const field of line.matchAll(
 			/\b(?:exit\w*|host\w*|on|code\w*|status\w*|platform)\b/gi,
 		)) {
@@ -733,7 +737,8 @@ function inspectionReportDisclosesAuditFailure(
 			const hostField =
 				/^(?:host\w*|platform)\b|^on(?:\s*[:=]|\s+host\b|\s+(?:Linux|Windows|macOS|darwin|win32)\b)/i.test(
 					tail,
-				) || /^on\s+[A-Z][A-Za-z0-9_-]*(?=\s*[,;.!?]|\s*$)/.test(tail);
+				) ||
+				(context === "command-metadata" && /^on\b/i.test(tail));
 			const role: "exit" | "host" | "prose" = exitField
 				? "exit"
 				: hostField
@@ -751,6 +756,7 @@ function inspectionReportDisclosesAuditFailure(
 				);
 			if ((role === "exit" && !exit) || (role === "host" && !host))
 				return false;
+			if (exit && context === "named-command") context = "command-metadata";
 			const record = `Observed "bun run verify": exit ${exit ? Number(exit[1]) : failedAudit.exitCode}${host ? `, host ${host[1]}` : ""}; this does not claim the command passed.`;
 			const facts = currentHandoffFacts(record, ["bun run verify"]);
 			const observation = facts.observations[0];
