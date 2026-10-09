@@ -476,3 +476,83 @@ test("other never infers an unknown Solaris category", () => {
 		deliveryIssues({ ...input, finalText }, deferredExpectation),
 	).toContain("Unsupported or conflicting current handoff assertions.");
 });
+for (const status of [
+	`${localCommand} passed on Linux.`,
+	`Observed "${localCommand}": exit 0, host Linux; this does not claim the command passed.`,
+]) {
+	test(`later fully attested Linux capture supports the requested host ${status}`, () => {
+		const input = capturedHosts("other", "linux");
+		expect(
+			deliveryIssues(
+				{ ...input, finalText: `${input.finalText}\n${status}` },
+				deferredExpectation,
+			),
+		).toEqual([]);
+	});
+}
+test("declared Linux platform still rejects a captured Other host", () => {
+	const input = capturedHosts("other", undefined, true);
+	const finalText = `${input.finalText}\nObserved "${localCommand}": exit 0, host Other; this does not claim the command passed.`;
+	expect(
+		deliveryIssues({ ...input, finalText }, deferredExpectation),
+	).toContain(
+		"Claimed command host lacks matching accepted complete source evidence.",
+	);
+});
+for (const corruption of [
+	"arm",
+	"marker",
+	"clock",
+	"status",
+	"source",
+	"intent",
+	"incomplete",
+]) {
+	test(`invalid later matching-host capture cannot rescue ${corruption}`, () => {
+		const input = capturedHosts("other", "linux");
+		const arm = input.allCalls.find(
+			(call) => call.native?.callId === "call_second0",
+		);
+		const bash = input.allCalls.find(
+			(call) => call.native?.callId === "call_second1",
+		);
+		const status = input.allCalls.find(
+			(call) => call.native?.callId === "call_second2",
+		);
+		if (!arm || !bash || !status)
+			throw new Error("Missing second capture calls.");
+		if (corruption === "arm") object(arm.input.request).expectedRevision = 3;
+		if (corruption === "marker")
+			Object.assign(bash, {
+				rawOutput: bash.rawOutput.replace("capture-second", "unmatched-marker"),
+				output: bash.rawOutput.replace("capture-second", "unmatched-marker"),
+			});
+		if (corruption === "clock") object(bash.native).startedAt = 18;
+		const runs = object(input.archives[0]).runs;
+		if (!Array.isArray(runs)) throw new Error("Missing archive runs.");
+		const values = object(runs[0]).validations;
+		if (!Array.isArray(values)) throw new Error("Missing archive validations.");
+		const capture = object(values[1]);
+		if (corruption === "source")
+			capture.sourceDigest = `sha256:${"b".repeat(64)}`;
+		if (corruption === "intent") capture.intent = "observe";
+		if (corruption === "incomplete") capture.outputComplete = false;
+		if (corruption === "status") {
+			const projectedRuns = object(
+				object(object(status.output).workflowData).projection,
+			).runs;
+			if (!Array.isArray(projectedRuns))
+				throw new Error("Missing status runs.");
+			const projected = object(projectedRuns[0]).validations;
+			if (!Array.isArray(projected))
+				throw new Error("Missing status validations.");
+			object(projected[1]).outputDigest = `sha256:${"b".repeat(64)}`;
+		}
+		const finalText = `${input.finalText}\n${localCommand} passed on Linux.`;
+		expect(
+			deliveryIssues({ ...input, finalText }, deferredExpectation),
+		).toContain(
+			"Claimed command pass lacks matching accepted complete source evidence.",
+		);
+	});
+}
