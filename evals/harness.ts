@@ -377,9 +377,66 @@ export type ReviewDocumentObservation =
 	| Readonly<{ kind: "unavailable"; reason: string }>;
 
 const SENSITIVE_DOCUMENT_ASSIGNMENT =
-	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization)[A-Za-z0-9_-]*\s*["'`]?\s*(?::|=)\s*["'`]?[\S]+/im;
+	/(?:^|[\s"'`{,])((?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization)[A-Za-z0-9_-]*)\s*["'`]?\s*(:|=)\s*(["'`]?[\S]+)/gim;
+const SENSITIVE_DOCUMENT_FIELD_NAME =
+	/\b(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\b/i;
+const SENSITIVE_DOCUMENT_DISCLOSURE =
+	/(?:^|[\s"'`{,])(?:[A-Za-z_][A-Za-z0-9_-]*?)?(?:token|password|passwd|secret|key|authorization|credential)[A-Za-z0-9_-]*\s*["'`]?\s+(?:is|was|are|were|equals?|contains?)\s+["'`]?[\S]+/im;
 const SENSITIVE_INLINE_ASSIGNMENT =
 	/(?:token|password|passwd|secret|key|authorization)\s*=/i;
+
+function documentPrefixHasCodeFence(prefix: string): boolean {
+	let fence: { marker: string; length: number } | null = null;
+	for (const line of prefix.split("\n")) {
+		const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(line);
+		if (!match?.[1]) continue;
+		if (!fence) {
+			fence = { marker: match[1][0] ?? "", length: match[1].length };
+		} else if (
+			match[1][0] === fence.marker &&
+			match[1].length >= fence.length &&
+			!match[2]?.trim()
+		) {
+			fence = null;
+		}
+	}
+	return fence !== null;
+}
+
+function hasSensitiveDocumentAssignment(content: string): boolean {
+	if (SENSITIVE_DOCUMENT_DISCLOSURE.test(content)) return true;
+	for (const match of content.matchAll(SENSITIVE_DOCUMENT_ASSIGNMENT)) {
+		const keyStart = match.index + match[0].indexOf(match[1] ?? "");
+		const prefix = content.slice(
+			content.lastIndexOf("\n", keyStart) + 1,
+			keyStart,
+		);
+		const valueStart = match.index + match[0].lastIndexOf(match[3] ?? "");
+		const value =
+			content
+				.slice(valueStart)
+				.split(/\r?\n[ \t]*\r?\n|\r?\n(?= {0,3}#{1,6}[ \t])/, 1)[0] ?? "";
+		const permissionBody = value.replace(
+			/^(?:obtain|request|seek)\s+(?:(?:explicit|separate|prior)\s+)?authorization\b/,
+			"permission",
+		);
+		const permissionClause =
+			match[1] === "authorization" &&
+			match[2] === ":" &&
+			!SENSITIVE_DOCUMENT_FIELD_NAME.test(permissionBody) &&
+			!/[`"']/.test(prefix) &&
+			!documentPrefixHasCodeFence(content.slice(0, keyStart)) &&
+			!/^(?: {4}|\t)/.test(prefix) &&
+			/\b(?:require[sd]?|need[sd]?|await[sd]?|awaiting|pending|subject to)\s+(?:(?:separate|explicit|prior|additional|user|human)\s+)*$/i.test(
+				prefix,
+			) &&
+			/^(?:(?:this|the|its|our|that)\s+(?:review|inspection|audit|roadmap|report|plan|document|task)(?:\s+(?:only|merely))?\s+(?:[a-z]+s|is|has|does)\b|(?:obtain|request|seek)\s+(?:(?:explicit|separate|prior)\s+)?(?:approval|permission|authorization)\b)/.test(
+				value,
+			);
+		if (!permissionClause) return true;
+	}
+	return false;
+}
 
 const HOST_INTERNAL_DIRS = new Set([
 	".git",
@@ -547,7 +604,7 @@ export async function observeReviewDocument(
 			const content = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 			if (
 				!Buffer.from(content, "utf8").equals(bytes) ||
-				SENSITIVE_DOCUMENT_ASSIGNMENT.test(content) ||
+				hasSensitiveDocumentAssignment(content) ||
 				SENSITIVE_INLINE_ASSIGNMENT.test(content) ||
 				pseudonymizeEvalIds(normalizeRecorded(content, project)) !== content
 			)
