@@ -29,7 +29,7 @@ for (const explanation of [
 	"confirming null handling and string trimming",
 	"verifying empty input normalization",
 	"demonstrating Unicode parsing",
-	"confirming correctness",
+	"confirming structured text formatting",
 ]) {
 	test(`behavior explanation preserves native pass ${explanation}`, () => {
 		const text = `${gate} passed on Linux, ${explanation}.`;
@@ -259,4 +259,51 @@ for (const complement of [
 			scenario.check(fixture(`passed on Linux, confirming ${complement}.`)),
 		).toEqual([]);
 	});
+}
+
+for (const complement of [
+	"release clearance",
+	"release readiness",
+	"release greenlight",
+	"release go-ahead",
+	"deployment consent",
+	"publication permit",
+	"correctness",
+	"quality",
+	"green checks",
+	"unknown behavior",
+	"banana dreams",
+]) {
+	for (const coordinated of [
+		complement,
+		`null handling and ${complement}`,
+		`${complement} and string trimming`,
+		`null handling and ${complement} and string trimming`,
+	]) {
+		test(`unknown adjunct head cannot assert neutral behavior ${coordinated}`, () => {
+			expect(
+				scenario.check(fixture(`passed on Linux, confirming ${coordinated}.`)),
+			).toContain("Unsupported or conflicting current handoff assertions.");
+		});
+	}
+}
+for (const head of [
+	"handling",
+	"trimming",
+	"parsing",
+	"formatting",
+	"normalization",
+	"validation",
+]) {
+	for (const complement of [
+		`arbitraryFeature ${head}`,
+		`Unicode text ${head} and arbitraryFeature parsing`,
+		`sand ${head}`,
+	]) {
+		test(`positive processing heads accept arbitrary safe feature modifiers ${complement}`, () => {
+			expect(
+				scenario.check(fixture(`passed on Linux, confirming ${complement}.`)),
+			).toEqual([]);
+		});
+	}
 }
