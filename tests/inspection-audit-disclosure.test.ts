@@ -10,8 +10,12 @@ const scenario = SCENARIOS.find(
 	(item) => item.id === "inspection-failed-audit-completes",
 );
 if (!scenario) throw new Error("Missing inspection scenario.");
-const fixture = retained[0];
-if (!fixture) throw new Error("Missing inspection fixture.");
+const check = scenario.check;
+const fixture =
+	retained[0] ??
+	(() => {
+		throw new Error("Missing inspection fixture.");
+	})();
 const missing = "final report did not disclose the failed 21-advisory audit";
 const context =
 	"docs/codebase-review.md records 21 high-severity advisories.\n";
@@ -23,7 +27,7 @@ function issues(
 ) {
 	const archive = structuredClone(fixture.archive);
 	mutate?.(archive);
-	return scenario.check({
+	return check({
 		...autoQualifiedOutcome("single"),
 		archives: [archive],
 		allCalls: [],
@@ -38,6 +42,7 @@ function issues(
 }
 for (const answer of [
 	observed,
+	`Historical report:\nOld details.\n\n### Flow handoff\n\`\`\`text\nHandoff format: 1\n${observed}\n\`\`\``,
 	`\`\`\`text\nHandoff format: 1\n${observed}\n\`\`\``,
 	observed.replace("exit 1", "exited 1"),
 	"The audit reports **21 high-severity advisories**, including `@tiptap/core`, and fails. bun run verify ran.",
@@ -61,6 +66,10 @@ for (const answer of [
 	),
 	`> ${observed}`,
 	`Example: ${observed}`,
+	`\`\`\`sh\nHandoff format: 1\n${observed}\n\`\`\``,
+	`\`\`\`json\nHandoff format: 1\n${observed}\n\`\`\``,
+	`> A quoted report.\n${observed}`,
+	`For example:\n\`\`\`text\nHandoff format: 1\n${observed}\n\`\`\``,
 	`The example says: ${observed}`,
 	`If ${observed}`,
 	`Historical report:\n${observed}`,
@@ -68,6 +77,7 @@ for (const answer of [
 	`Example:\n\`\`\`text\nHandoff format: 1\n${observed}\n\`\`\``,
 	`${observed}\n${observed.replace("exit 1", "exit 2")}`,
 	`${observed}\n${observed.replace("exit 1", "exit 0")}`,
+	`${observed.replace("exit 1", "exit 2")}\nThe audit failed. bun run verify ran.`,
 	"If the audit failed, then report 21 high advisories. bun run verify ran.",
 	'The example says "audit failed". bun run verify ran.',
 	"The audit reports 21 high advisories and does not fail. bun run verify ran.",
@@ -94,3 +104,40 @@ test("native failed audit remains required for a matching presentation", () => {
 		"no complete failed broad observation of bun run verify was recorded",
 	);
 });
+
+for (const [name, mutate] of [
+	[
+		"host",
+		(archive: typeof fixture.archive) => {
+			for (const run of archive.runs)
+				for (const validation of run.validations)
+					if (validation.command === "bun run verify")
+						validation.hostPlatform = "windows";
+		},
+	],
+	[
+		"source",
+		(archive: typeof fixture.archive) => {
+			for (const run of archive.runs)
+				for (const validation of run.validations)
+					if (validation.command === "bun run verify")
+						validation.sourceDigest = `sha256:${"0".repeat(64)}`;
+		},
+	],
+	[
+		"review",
+		(archive: typeof fixture.archive) => {
+			for (const run of archive.runs)
+				for (const review of run.reviews)
+					review.result.terminalDisposition = "unsubmitted";
+		},
+	],
+] as const) {
+	test(`native ${name} proof cannot be supplied by presentation`, () => {
+		expect(issues(observed, mutate)).toEqual([
+			name === "host"
+				? missing
+				: "no submitted passing independent final review covers the observed source",
+		]);
+	});
+}
