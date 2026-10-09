@@ -9,7 +9,8 @@ import saved from "./fixtures/delivery-platform-pass-answer.json" with {
 const gate = "node scripts/verify.mjs";
 const scenario = DELIVERY_SCENARIOS.find(
 	(item) => item.id === "delivery-summary-observed-failure",
-)!;
+);
+if (!scenario) throw new Error("Missing observed-failure scenario.");
 const phrase = "passed on Linux, and independent review passed.";
 function fixture(status: string) {
 	const input = autoQualifiedOutcome("audit", {
@@ -18,7 +19,8 @@ function fixture(status: string) {
 	});
 	const close = input.allCalls.find(
 		(call) => call.tool === "flow_session_close",
-	)!;
+	);
+	if (!close) throw new Error("Missing native close response.");
 	const output = close.output as { workflowData: { delivery: unknown } };
 	output.workflowData.delivery = structuredClone(saved.delivery);
 	return { ...input, finalText: saved.answer.replace(phrase, status) };
@@ -48,6 +50,10 @@ for (const explanation of [
 }
 for (const tail of [
 	"confirming the command failed",
+	"confirming successful execution",
+	"confirming skipped tests",
+	"confirming partial observations",
+	"confirming rewritten verification",
 	"confirming incomplete output",
 	"confirming its script was modified",
 	"confirming authority was granted",
@@ -98,4 +104,79 @@ test("opaque report metadata retains quoted explanation text", () => {
 		},
 	]);
 	expect(facts.unsupported).toEqual([]);
+});
+
+for (const status of [
+	"passed",
+	"passed with exit code 0",
+	"passed, exit 0, host Linux",
+]) {
+	test(`existing status production accepts nominal adjunct ${status}`, () => {
+		const facts = currentHandoffFacts(
+			`${gate} ${status}, confirming range validation.`,
+			[gate],
+		);
+		expect(facts.observations[0]?.qualification).toBe("claimed-pass");
+		expect(facts.observations[0]?.exitCode).toBe(0);
+		expect(facts.observations[0]?.integrity).toBe("not-claimed");
+		expect(facts.unsupported).toEqual([]);
+	});
+}
+test("explanation preserves explicit supported integrity qualifier", () => {
+	expect(
+		currentHandoffFacts(
+			`${gate} passed on Linux, confirming null handling; its script was unchanged.`,
+			[gate],
+		).observations,
+	).toEqual([
+		{
+			command: gate,
+			exitCode: 0,
+			qualification: "claimed-pass",
+			integrity: "script-unchanged",
+			hostPlatform: "linux",
+		},
+	]);
+});
+for (const status of [
+	"passed on Linux, confirming null handling; its invocation was modified, and independent review passed.",
+	"passed on Linux, confirming null handling, and independent review passed; its script was changed.",
+	"passed on Linux, confirming null handling; its script remains unchanged if deployed.",
+	"passed on Linux, confirming null handling, then failed.",
+]) {
+	test(`adjunct retains attached qualifier scope ${status}`, () => {
+		expect(
+			currentHandoffFacts(`${gate} ${status}`, [gate]).unsupported.length,
+		).toBeGreaterThan(0);
+	});
+}
+function object(value: unknown): Record<string, unknown> {
+	if (!value || typeof value !== "object" || Array.isArray(value))
+		throw new Error("Missing native fixture object.");
+	return value as Record<string, unknown>;
+}
+for (const [field, value] of [
+	["hostPlatform", "win32"],
+	["outputComplete", false],
+	["sourceDigest", `sha256:${"f".repeat(64)}`],
+	["intent", "observe"],
+	["exitCode", 1],
+] as const) {
+	test(`nominal explanation supplies no native ${field} proof`, () => {
+		const input = fixture("passed on Linux, confirming null handling.");
+		const runs = object(input.archives[0]).runs as unknown[];
+		const validations = object(runs[0]).validations as unknown[];
+		const validation = validations
+			.map(object)
+			.find((item) => item.command === gate);
+		if (!validation) throw new Error("Missing native gate validation.");
+		validation[field] = value;
+		expect(scenario.check(input).length).toBeGreaterThan(0);
+	});
+}
+test("nominal explanation supplies no accepted independent review", () => {
+	const input = fixture("passed on Linux, confirming null handling.");
+	const runs = object(input.archives[0]).runs as unknown[];
+	object(runs[0]).reviews = [];
+	expect(scenario.check(input).length).toBeGreaterThan(0);
 });

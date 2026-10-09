@@ -534,6 +534,48 @@ function proseGateClause(line: string) {
 	}
 	return null;
 }
+type CommandAdjunct =
+	| { kind: "explanation"; status: string; text: string }
+	| { kind: "qualifier"; text: string };
+function commandAdjunctValue(text: string): CommandAdjunct {
+	let quote: string | null = null;
+	for (let index = 0; index < text.length; index++) {
+		const character = text[index];
+		if (character === "\\") {
+			index++;
+			continue;
+		}
+		if (quote) {
+			if (character === quote) quote = null;
+			continue;
+		}
+		if (character === '"' || character === "'") {
+			quote = character;
+			continue;
+		}
+		if (character !== ",") continue;
+		const match = /^,\s+(?:confirming|verifying|demonstrating)\s+(.+)$/i.exec(
+			text.slice(index),
+		);
+		if (!match) continue;
+		const complement = match[1] ?? "";
+		if (
+			!/^[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*(?:\s+[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*)*$/u.test(
+				complement,
+			) ||
+			/\b(?:command|observation|script|invocation|host|platform|Linux|Windows|macOS|darwin|win32|output|source|report|review|authority|authorization|completion|complete|completed|assurance|proof|proven|validated|verified|met|approved|accepted|authorized|permission|ready|evidence|pass(?:ed|es)?|succeed(?:ed|s)?|success(?:ful(?:ly)?)?|fail(?:ed|ure|s)?|exit(?:ed|s)?|ran|finished|skipped|partial|truncated|unproven|unverified|unobserved|missing|rewritten|edited|replaced|bypassed|disabled|unavailable|incomplete|changed|unchanged|modified|granted|not|no|without|despite|but|if|unless|would|could|should|is|was|are|were|has|have|had|does|did)\b/i.test(
+				complement,
+			)
+		)
+			return { kind: "qualifier", text };
+		return {
+			kind: "explanation",
+			status: text.slice(0, index).trim(),
+			text: complement,
+		};
+	}
+	return { kind: "qualifier", text };
+}
 function parseCommandResult(
 	rawBody: string,
 	command: string,
@@ -552,7 +594,8 @@ function parseCommandResult(
 	const parts = body
 		.split(/;|\.\s+(?=[A-Za-z])/)
 		.map((part) => part.trim().replace(/\.$/, ""));
-	const status = parts.shift() ?? "";
+	const adjunct = commandAdjunctValue(parts.shift() ?? "");
+	const status = adjunct.kind === "explanation" ? adjunct.status : adjunct.text;
 	const value =
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
