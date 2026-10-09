@@ -534,6 +534,64 @@ function proseGateClause(line: string) {
 	}
 	return null;
 }
+const BEHAVIOR_PROCESSING_HEADS: ReadonlySet<string> = new Set([
+	"handling",
+	"trimming",
+	"parsing",
+	"formatting",
+	"normalization",
+	"validation",
+]);
+function behaviorComplementValue(text: string): boolean {
+	return text.split(/\band\b/i).every((phrase) => {
+		const words = phrase.trim().split(/\s+/);
+		const head = words.at(-1)?.toLowerCase();
+		return head !== undefined && BEHAVIOR_PROCESSING_HEADS.has(head);
+	});
+}
+type CommandAdjunct =
+	| { kind: "explanation"; status: string; text: string }
+	| { kind: "qualifier"; text: string };
+function commandAdjunctValue(text: string): CommandAdjunct {
+	let quote: string | null = null;
+	for (let index = 0; index < text.length; index++) {
+		const character = text[index];
+		if (character === "\\") {
+			index++;
+			continue;
+		}
+		if (quote) {
+			if (character === quote) quote = null;
+			continue;
+		}
+		if (character === '"' || character === "'") {
+			quote = character;
+			continue;
+		}
+		if (character !== ",") continue;
+		const match = /^,\s+(?:confirming|verifying|demonstrating)\s+(.+)$/i.exec(
+			text.slice(index),
+		);
+		if (!match) continue;
+		const complement = match[1] ?? "";
+		if (
+			!behaviorComplementValue(complement) ||
+			!/^[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*(?:\s+[\p{L}\p{N}]+(?:[-'][\p{L}\p{N}]+)*)*$/u.test(
+				complement,
+			) ||
+			/\b(?:commands?|observations?|scripts?|invocations?|hosts?|platforms?|Linux|Windows|macOS|darwin|win32|outputs?|sources?|reports?|reviews?|authorit(?:y|ies)|authoriz(?:e(?:d|s)?|ations?|ing)|completions?|complete|completed|assurances?|proofs?|proven|validated|verified|met|approv(?:e(?:d|s)?|als?|ing)|accept(?:ed|s|ing)?|permissions?|ready|evidences?|pass(?:ed|es|ing)?|succeed(?:ed|s|ing)?|success(?:es|ful(?:ly)?)?|fail(?:ed|s|ing|ures?)?|exit(?:ed|s)?|ran|finished|skipped|partial|truncated|unproven|unverified|unobserved|missing|rewritten|edit(?:ed|s|ing)?|replac(?:e(?:d|s)?|ing)|bypass(?:ed|es|ing)?|disabl(?:e(?:d|s)?|ing)|unavailable|incomplete|chang(?:e(?:d|s)?|ing)|unchanged|modif(?:y|ied|ies|ying)|grant(?:ed|s|ing)?|not|no|without|despite|but|if|unless|would|could|should|is|was|are|were|has|have|had|does|did)\b/i.test(
+				complement,
+			)
+		)
+			return { kind: "qualifier", text };
+		return {
+			kind: "explanation",
+			status: text.slice(0, index).trim(),
+			text: complement,
+		};
+	}
+	return { kind: "qualifier", text };
+}
 function parseCommandResult(
 	rawBody: string,
 	command: string,
@@ -552,7 +610,8 @@ function parseCommandResult(
 	const parts = body
 		.split(/;|\.\s+(?=[A-Za-z])/)
 		.map((part) => part.trim().replace(/\.$/, ""));
-	const status = parts.shift() ?? "";
+	const adjunct = commandAdjunctValue(parts.shift() ?? "");
+	const status = adjunct.kind === "explanation" ? adjunct.status : adjunct.text;
 	const value =
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,

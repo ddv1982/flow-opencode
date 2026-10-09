@@ -94,6 +94,7 @@ import {
 	inspectArtifact,
 	instructionDelivery,
 	normalizeRequestedModel,
+	type PackedArtifactIdentity,
 	redactTranscript,
 	tarballSha256,
 } from "./provenance.js";
@@ -556,9 +557,15 @@ type Recorded = {
 	readonly cassette: Cassette | null;
 };
 
+type ExpectedArtifactIdentity = Pick<
+	PackedArtifactIdentity,
+	"tarballSha256" | "unpackedManifestSha256"
+>;
+
 function parseArgs(argv: string[]) {
 	const models: string[] = [];
 	const scenarios: string[] = [];
+	const expectedHashes: Partial<ExpectedArtifactIdentity> = {};
 	let repeat = 1;
 	const release = argv.includes("--release");
 	let concurrency = 0;
@@ -578,6 +585,35 @@ function parseArgs(argv: string[]) {
 	for (let index = 0; index < argv.length; index += 1) {
 		const flag = argv[index] ?? "";
 		const value = argv[index + 1];
+		const expectedFlag = flag.split("=", 1)[0];
+		if (
+			expectedFlag === "--expected-tarball-sha256" ||
+			expectedFlag === "--expected-manifest-sha256"
+		) {
+			const inline = flag.includes("=");
+			const digest = inline ? flag.slice(expectedFlag.length + 1) : value;
+			if (!digest || digest.startsWith("--")) {
+				console.error(`${expectedFlag} requires a value.`);
+				process.exit(2);
+			}
+			const key =
+				expectedFlag === "--expected-tarball-sha256"
+					? "tarballSha256"
+					: "unpackedManifestSha256";
+			if (expectedHashes[key] !== undefined) {
+				console.error(`${expectedFlag} may only be supplied once.`);
+				process.exit(2);
+			}
+			if (digest.length !== 71 || !/^sha256:[a-f0-9]{64}$/.test(digest)) {
+				console.error(
+					`${expectedFlag} requires a lowercase SHA-256 in sha256:<64 hex digits> form.`,
+				);
+				process.exit(2);
+			}
+			expectedHashes[key] = digest;
+			if (!inline) index += 1;
+			continue;
+		}
 		if (
 			["--model", "--scenario", "--repeat", "--concurrency"].includes(flag) &&
 			(!value || value.startsWith("--"))
@@ -599,11 +635,25 @@ function parseArgs(argv: string[]) {
 			index += 1;
 		} else if (flag === "--help" || flag === "-h") {
 			console.log(
-				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id> --repeat <n> | --release] [--concurrency <n>]",
+				"usage: bun run eval -- --model <provider/model> [--model ...] [--scenario <id> --repeat <n> | --release] [--concurrency <n>] [--expected-tarball-sha256 <sha256:hex> --expected-manifest-sha256 <sha256:hex>]",
 			);
 			process.exit(0);
 		}
 	}
+	const { tarballSha256, unpackedManifestSha256 } = expectedHashes;
+	if (
+		(tarballSha256 === undefined) !==
+		(unpackedManifestSha256 === undefined)
+	) {
+		console.error(
+			"--expected-tarball-sha256 and --expected-manifest-sha256 must be supplied together.",
+		);
+		process.exit(2);
+	}
+	const expectedArtifact: ExpectedArtifactIdentity | null =
+		tarballSha256 !== undefined && unpackedManifestSha256 !== undefined
+			? { tarballSha256, unpackedManifestSha256 }
+			: null;
 	if (models.length === 0) {
 		const fromEnv = process.env.FLOW_EVAL_MODEL?.trim();
 		if (fromEnv)
@@ -664,7 +714,13 @@ function parseArgs(argv: string[]) {
 	const sampling: EvalSampling = release
 		? { kind: "release" }
 		: { kind: "ordinary", repeat };
-	return { models, scenarios, sampling, concurrency: workers };
+	return {
+		models,
+		scenarios,
+		sampling,
+		concurrency: workers,
+		expectedArtifact,
+	};
 }
 
 /** Bytes of prompt text this build ships, per surface and in total. */
@@ -816,7 +872,8 @@ export async function runCampaign(
 	repositoryRoot = join(import.meta.dir, ".."),
 	beginFinalization: () => void = () => {},
 ): Promise<number> {
-	const { models, scenarios, sampling, concurrency } = parseArgs(args);
+	const { models, scenarios, sampling, concurrency, expectedArtifact } =
+		parseArgs(args);
 	if (import.meta.main) await requirePaidAuthorization();
 	const selected =
 		sampling.kind === "release"
@@ -905,6 +962,16 @@ export async function runCampaign(
 			repositoryRoot,
 			tarballPath: tarball,
 		});
+		if (
+			expectedArtifact &&
+			(artifact.tarballSha256 !== expectedArtifact.tarballSha256 ||
+				artifact.unpackedManifestSha256 !==
+					expectedArtifact.unpackedManifestSha256)
+		) {
+			throw new Error(
+				`Artifact identity mismatch. Expected tarball ${expectedArtifact.tarballSha256} and manifest ${expectedArtifact.unpackedManifestSha256}; observed tarball ${artifact.tarballSha256} and manifest ${artifact.unpackedManifestSha256}. No model probe or workflow was started.`,
+			);
+		}
 		await persistEvaluation("artifact", () =>
 			reportStore.writeArtifact(tarball),
 		);
