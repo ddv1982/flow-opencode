@@ -230,6 +230,41 @@ for (const exit of ["exit 1", "exit code: 1", "status=1", "code: 1"]) {
 		}
 	}
 }
+for (const subject of [
+	"bun run verify",
+	"The bun run verify",
+	"frontend:audit",
+	"The frontend:audit",
+	"Audit",
+	"The audit",
+	"Canonical gate",
+	"The canonical gate",
+]) {
+	for (const label of ["", "Audit: ", "Canonical gate: "]) {
+		for (const host of [
+			"linux",
+			"Linux",
+			"beos",
+			"BeOS",
+			"unknown",
+			"Windows",
+		]) {
+			for (const fields of [
+				`on ${host} with exit code: 1`,
+				`status=1 on ${host}`,
+			]) {
+				test(`shared audit subject ownership ${label}${subject} ${fields}`, () => {
+					const answer = `${label}${subject} failed ${fields}.`;
+					for (const report of [answer, `${observed}\n${answer}`]) {
+						if (host.toLowerCase() === "linux")
+							expect(issues(report)).toEqual([]);
+						else expect(issues(report)).toContain(missing);
+					}
+				});
+			}
+		}
+	}
+}
 test("native failed audit remains required for a matching presentation", () => {
 	expect(
 		issues(observed, (archive) => {
