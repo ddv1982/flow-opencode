@@ -294,6 +294,7 @@ for (const suffix of [
 
 for (const content of [
 	"Separate authorization is required before product repairs.\n",
+	"Authorization\nis required before repairs.\n",
 	"Authorization is needed before changing product files.\n",
 	"Explicit authorization was requested before repair work.\n",
 	"Authorization is pending for repairs.\n",
@@ -339,6 +340,8 @@ for (const content of [
 	"````text\n```\nAuthorization is required before repairs.\n````\n",
 	"    Authorization is required before repairs.\n",
 	"\tAuthorization is required before repairs.\n",
+	"Authorization\n    is required before repairs.\n",
+	"Authorization\n\tis required before repairs.\n",
 	"## Authorization is required before repairs.\n",
 	"## Repair scope. Authorization is required before repairs.\n",
 	"Authorization: is required before repairs.\n",
