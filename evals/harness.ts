@@ -403,6 +403,29 @@ function documentPrefixHasCodeFence(prefix: string): boolean {
 	return fence !== null;
 }
 
+function documentPrefixHasBlockQuote(prefix: string): boolean {
+	const lines = prefix.split(/\r\n?|\n/);
+	const current = lines.pop() ?? "";
+	const quotePrefix = /^ {0,3}(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)*(?:>[ \t]*)+/;
+	let quotedParagraph = false;
+	for (const line of lines) {
+		const quote = quotePrefix.exec(line);
+		if (quote) {
+			quotedParagraph = line.slice(quote[0].length).trim() !== "";
+		} else if (
+			!line.trim() ||
+			/^ {0,3}(?:#{1,6}(?:[ \t]|$)|(?:[-*+]|1[.)])[ \t]+\S)/.test(line)
+		) {
+			quotedParagraph = false;
+		}
+	}
+	if (quotePrefix.test(current)) return true;
+	return (
+		quotedParagraph &&
+		!/^ {0,3}(?:#{1,6}[ \t]|(?:[-*+]|1[.)])[ \t]+)/.test(current)
+	);
+}
+
 function isPermissionStatusClause(
 	content: string,
 	fieldStart: number,
@@ -422,6 +445,7 @@ function isPermissionStatusClause(
 	const predicateLinePrefix = content.slice(predicateLineStart, predicateStart);
 	const prefix = linePrefix.split(/[.;!?](?=\s|$)/).at(-1) ?? "";
 	if (
+		documentPrefixHasBlockQuote(content.slice(0, fieldStart)) ||
 		/[`"']/.test(linePrefix) ||
 		/^(?: {4}| {0,3}\t)/.test(linePrefix) ||
 		/^(?: {4}| {0,3}\t)/.test(predicateLinePrefix) ||
