@@ -415,8 +415,8 @@ function isPermissionStatusClause(
 	const prefix = linePrefix.split(/[.;!?](?=\s|$)/).at(-1) ?? "";
 	if (
 		/[`"']/.test(linePrefix) ||
-		/^(?: {4}|\t)/.test(linePrefix) ||
-		/^(?: {4}|\t)/.test(predicateLinePrefix) ||
+		/^(?: {4}| {0,3}\t)/.test(linePrefix) ||
+		/^(?: {4}| {0,3}\t)/.test(predicateLinePrefix) ||
 		/^ {0,3}#{1,6}\s/.test(linePrefix) ||
 		documentPrefixHasCodeFence(content.slice(0, fieldStart)) ||
 		!/^\s*(?:[-*+]\s+)?(?:(?:the|this|separate|explicit|prior|additional|user|human)\s+)*$/i.test(
