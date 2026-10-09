@@ -22,6 +22,20 @@ bun run eval -- --model openai/gpt-5.6-sol --model opencode/claude-opus-5
 bun run eval -- --scenario happy-path --repeat 3
 ```
 
+To bind a campaign to a reviewed package, supply both
+`--expected-tarball-sha256 sha256:<64 lowercase hex digits>` and
+`--expected-manifest-sha256 sha256:<64 lowercase hex digits>`. The runner compares
+these values against its actual packed archive before cache installation,
+credential copying, model probes or workflow dispatches. A raw archive mismatch
+fails even when the complete unpacked content manifest matches. Missing, repeated,
+malformed or unpaired hash options fail before building. Both options also accept
+`--option=value` syntax. Runs without either option retain their existing behavior.
+
+For a paid release qualification, use the reviewed raw archive and full manifest
+hashes in the launch command. Keep the build process's reviewed file mask. Protect
+private logs through individual exclusive files with mode `0600`, rather than
+changing the process file mask for both logging and package creation.
+
 Ids are `providerID/modelID` as the host resolves them, which depends on which
 providers you have authenticated — Opus 5 may be `opencode/claude-opus-5` rather
 than `anthropic/claude-opus-5`. Only the first slash separates the two halves, so
