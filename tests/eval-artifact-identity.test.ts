@@ -186,6 +186,16 @@ describe("actual campaign artifact admission before provider access", () => {
 		expect(result.stderr).toContain("Artifact identity mismatch");
 	});
 
+	test("enforces hash expectations supplied with equals syntax", async () => {
+		const result = await runOffline(approved, [
+			`${tarballFlag}=sha256:${"0".repeat(64)}`,
+			`${manifestFlag}=${expectedManifest}`,
+		]);
+		noDispatch(result);
+		expect(result.events).toEqual(["pack"]);
+		expect(result.stderr).toContain("Artifact identity mismatch");
+	});
+
 	for (const flag of [tarballFlag, manifestFlag]) {
 		test(`rejects an unpaired ${flag} before build`, async () => {
 			const result = await runOffline(approved, [flag, expectedTarball]);
@@ -213,13 +223,39 @@ describe("actual campaign artifact admission before provider access", () => {
 		}
 	}
 
-	for (const expectation of ["matching", "absent"]) {
+	for (const flag of [tarballFlag, manifestFlag]) {
+		test(`rejects missing ${flag} value before build`, async () => {
+			const result = await runOffline(approved, [flag]);
+			noDispatch(result);
+			expect(result.events).toEqual([]);
+			expect(result.stderr).toContain("requires a value");
+		});
+		test(`rejects repeated ${flag} before build`, async () => {
+			const result = await runOffline(approved, [
+				tarballFlag,
+				expectedTarball,
+				manifestFlag,
+				expectedManifest,
+				flag,
+				expectedTarball,
+			]);
+			noDispatch(result);
+			expect(result.events).toEqual([]);
+			expect(result.stderr).toContain("may only be supplied once");
+		});
+	}
+	for (const expectation of ["matching", "equals", "absent"]) {
 		test(`${expectation} expectation reaches only the fake paid probe boundary`, async () => {
 			const result = await runOffline(
 				approved,
 				expectation === "matching"
 					? [tarballFlag, expectedTarball, manifestFlag, expectedManifest]
-					: [],
+					: expectation === "equals"
+						? [
+								`${tarballFlag}=${expectedTarball}`,
+								`${manifestFlag}=${expectedManifest}`,
+							]
+						: [],
 			);
 			expect(result.events).toEqual([
 				"pack",
