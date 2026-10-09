@@ -188,3 +188,58 @@ for (const directive of [
 		expect(issues(`${finding}${range}2. ${directive}\n`)).toEqual([]);
 	});
 }
+
+for (const content of [
+	"Repairs require authorization: this token is synthetic-value-123456.\n",
+	"Repairs require authorization: this key was synthetic-value-123456.\n",
+	"Repairs require authorization: this password is synthetic-value-123456.\n",
+	"Repairs require authorization: this review changes no files; the token is synthetic-value-123456.\n",
+	"Repairs require authorization: this review changes no files. API_KEY was synthetic-value-123456.\n",
+	"Repairs require authorization: obtain approval before repairs. The password is synthetic-value-123456.\n",
+]) {
+	test(`permission prose cannot retain copular credential disclosure ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "unavailable",
+			reason: "review-document-not-safe-to-retain",
+		});
+	});
+}
+
+for (const suffix of [
+	"The audit completed successfully.",
+	"The audit ran successfully.",
+	"The audit finished successfully.",
+	"The audit has completed successfully.",
+	"The audit result was success.",
+	"The audit result was a success.",
+	"The audit outcome is success.",
+]) {
+	test(`completed success contradicts failed audit disclosure ${suffix}`, () => {
+		expect(
+			issues(
+				first.document,
+				`bun run verify audit failed with 21 high advisories. docs/codebase-review.md. ${suffix}`,
+			),
+		).toContain("final report falsely claimed the audit passed");
+	});
+}
+
+for (const suffix of [
+	"The audit did not complete successfully.",
+	"The audit has not completed successfully.",
+	"The audit did not run successfully.",
+	"The audit never finished successfully.",
+	"The audit will complete successfully only after the findings are repaired.",
+	"The audit will complete only after its findings are repaired.",
+	'Do not claim "the audit completed successfully".',
+	'Never report "audit result was success".',
+]) {
+	test(`negated conditional or warned audit success remains truthful ${suffix}`, () => {
+		expect(
+			issues(
+				first.document,
+				`bun run verify audit failed with 21 high advisories. docs/codebase-review.md. ${suffix}`,
+			),
+		).toEqual([]);
+	});
+}
