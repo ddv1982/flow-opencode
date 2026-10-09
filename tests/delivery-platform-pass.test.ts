@@ -230,3 +230,31 @@ for (const separator of [". ", "; "]) {
 		});
 	}
 }
+for (const metadata of [
+	"host Linux, source current",
+	"host Linux, report retained",
+	"host Linux, output recorded",
+	"host Linux, source current, report retained",
+	'host Linux, report "retained, host Windows"',
+]) {
+	test(`numeric host preserves supported metadata ${metadata}`, () => {
+		expect(
+			scenario.check(
+				fixture(`passed, exit 0, ${metadata}. Independent review passed.`),
+			),
+		).toEqual([]);
+	});
+}
+for (const metadata of [
+	"host Windows, source current",
+	"host Solaris, source current",
+	"host Linux, host Windows",
+]) {
+	test(`numeric metadata cannot hide conflicting host ${metadata}`, () => {
+		expect(
+			scenario.check(
+				fixture(`passed, exit 0, ${metadata}. Independent review passed.`),
+			).length,
+		).toBeGreaterThan(0);
+	});
+}
