@@ -42,6 +42,11 @@ function issues(
 }
 for (const answer of [
 	observed,
+	`> Quoted old text.\n### Current report\n${observed}`,
+	`> Quoted old text.\n- ${observed}`,
+	`\`\`\`text\rHandoff format: 1\r${observed}\r\`\`\``,
+	`\`\`\`text\r\nHandoff format: 1\r\n${observed}\r\n\`\`\``,
+	`\`\`\`js\n> example\n\`\`\`\n${observed}`,
 	`Historical report:\nOld details.\n\n### Flow handoff\n\`\`\`text\nHandoff format: 1\n${observed}\n\`\`\``,
 	`\`\`\`text\nHandoff format: 1\n${observed}\n\`\`\``,
 	observed.replace("exit 1", "exited 1"),
