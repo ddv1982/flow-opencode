@@ -1,3 +1,5 @@
+import type { EvidencePlatform } from "../src/domain/session.js";
+import { EVIDENCE_PLATFORMS } from "../src/domain/validation.js";
 import { canonicalJson } from "./canonical-json.js";
 
 type Closure = "completed" | "deferred" | "abandoned";
@@ -9,7 +11,6 @@ type CommandIntegrity =
 	| "not-claimed"
 	| "script-unchanged"
 	| "script-and-invocation-unchanged";
-type ClaimedHostPlatform = "linux" | "darwin" | "win32";
 type IndependentReviewClaim =
 	| { kind: "passed"; findings: "none" | "not-claimed" }
 	| { kind: "not-performed" };
@@ -18,7 +19,7 @@ type CommandObservation = {
 	exitCode: number | null;
 	integrity: CommandIntegrity;
 	qualification: "observation" | "does-not-claim-pass" | "claimed-pass" | null;
-	hostPlatform?: ClaimedHostPlatform;
+	hostPlatform?: EvidencePlatform;
 };
 function commandIntegrityValue(
 	clause: string,
@@ -338,6 +339,10 @@ function platformValue(value: string) {
 	const lower = value.toLowerCase();
 	return lower === "macos" ? "darwin" : lower === "windows" ? "win32" : lower;
 }
+function claimedHostPlatform(value: string): EvidencePlatform | null {
+	const normalized = platformValue(value);
+	return EVIDENCE_PLATFORMS.find((platform) => platform === normalized) ?? null;
+}
 function sentenceBoundary(
 	text: string,
 	start = 0,
@@ -566,15 +571,12 @@ function parseCommandResult(
 	};
 	const metadata = value?.[4] ?? "";
 	const assertedHost = barePass?.[2];
-	let host =
-		assertedHost === undefined ? undefined : platformValue(assertedHost);
-	if (
-		host !== undefined &&
-		host !== "linux" &&
-		host !== "darwin" &&
-		host !== "win32"
-	)
-		return malformed;
+	let host: EvidencePlatform | undefined;
+	if (assertedHost !== undefined) {
+		const parsed = claimedHostPlatform(assertedHost);
+		if (parsed === null) return malformed;
+		host = parsed;
+	}
 	let metadataStart = 0;
 	while (metadataStart < metadata.length) {
 		const boundary = sentenceBoundary(metadata, metadataStart, "metadata");
@@ -583,11 +585,8 @@ function parseCommandResult(
 			metadata.slice(boundary.end),
 		);
 		if (!field) return malformed;
-		const claimed = platformValue(field[1] ?? "");
-		if (
-			(claimed !== "linux" && claimed !== "darwin" && claimed !== "win32") ||
-			(host !== undefined && host !== claimed)
-		)
+		const claimed = claimedHostPlatform(field[1] ?? "");
+		if (claimed === null || (host !== undefined && host !== claimed))
 			return malformed;
 		host = claimed;
 		metadataStart = boundary.end + field[0].length;
@@ -649,9 +648,7 @@ function parseCommandResult(
 		exitCode,
 		qualification,
 		integrity,
-		...(host === "linux" || host === "darwin" || host === "win32"
-			? { hostPlatform: host }
-			: {}),
+		...(host !== undefined ? { hostPlatform: host } : {}),
 	};
 }
 export function currentHandoffFacts(
