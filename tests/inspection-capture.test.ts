@@ -355,27 +355,65 @@ for (const content of [
 	});
 }
 
-for (const spaces of [0, 1, 2, 3]) {
-	for (const content of [
-		`${" ".repeat(spaces)}\tAuthorization is required before repairs.\n`,
-		`Authorization\n${" ".repeat(spaces)}\tis required before repairs.\n`,
-	]) {
-		test(`tab-indented permission context remains private ${content}`, async () => {
-			expect(await observe(content)).toEqual({
+for (const lineEnding of ["\n", "\r\n", "\r"]) {
+	for (const spaces of [0, 1, 2, 3]) {
+		for (const content of [
+			`Repair scope${lineEnding}${" ".repeat(spaces)}\tAuthorization is required before repairs.${lineEnding}`,
+			`Authorization${lineEnding}${" ".repeat(spaces)}\tis required before repairs.${lineEnding}`,
+		]) {
+			test(`tab-indented permission context remains private ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "unavailable",
+					reason: "review-document-not-safe-to-retain",
+				});
+			});
+		}
+		for (const content of [
+			`Repair scope${lineEnding}${" ".repeat(spaces)}Authorization is required before repairs.${lineEnding}`,
+			`Authorization${lineEnding}${" ".repeat(spaces)}is required before repairs.${lineEnding}`,
+		]) {
+			test(`ordinary prose indentation retains permission context ${content}`, async () => {
+				expect(await observe(content)).toEqual({
+					kind: "observed",
+					content,
+					sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+				});
+			});
+		}
+	}
+	for (const fence of ["```", "~~~"]) {
+		const encoded = `${fence}text${lineEnding}Authorization is required before repairs.${lineEnding}${fence}${lineEnding}`;
+		test(`active fence permission remains private ${encoded}`, async () => {
+			expect(await observe(encoded)).toEqual({
 				kind: "unavailable",
 				reason: "review-document-not-safe-to-retain",
 			});
 		});
-	}
-	for (const content of [
-		`${" ".repeat(spaces)}Authorization is required before repairs.\n`,
-		`Authorization\n${" ".repeat(spaces)}is required before repairs.\n`,
-	]) {
-		test(`ordinary prose indentation retains permission context ${content}`, async () => {
-			expect(await observe(content)).toEqual({
+		const prose = `${fence}text${lineEnding}Ordinary example.${lineEnding}${fence}${lineEnding}Authorization is required before repairs.${lineEnding}`;
+		test(`closed fence permits ordinary permission prose ${prose}`, async () => {
+			expect(await observe(prose)).toEqual({
 				kind: "observed",
-				content,
-				sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+				content: prose,
+				sha256: `sha256:${createHash("sha256").update(prose).digest("hex")}`,
+			});
+		});
+	}
+	const content = `Authorization is required before repairs${lineEnding}Next action.${lineEnding}`;
+	test(`physical line ends the permission predicate ${content}`, async () => {
+		expect(await observe(content)).toEqual({
+			kind: "observed",
+			content,
+			sha256: `sha256:${createHash("sha256").update(content).digest("hex")}`,
+		});
+	});
+	for (const content of [
+		`Authorization${lineEnding}    is required before repairs.${lineEnding}`,
+		`Repair scope${lineEnding}    Authorization is required before repairs.${lineEnding}`,
+	]) {
+		test(`space-indented permission context remains private ${content}`, async () => {
+			expect(await observe(content)).toEqual({
+				kind: "unavailable",
+				reason: "review-document-not-safe-to-retain",
 			});
 		});
 	}
