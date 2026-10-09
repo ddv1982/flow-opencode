@@ -340,6 +340,7 @@ for (const content of [
 	"    Authorization is required before repairs.\n",
 	"\tAuthorization is required before repairs.\n",
 	"## Authorization is required before repairs.\n",
+	"## Repair scope. Authorization is required before repairs.\n",
 	"Authorization: is required before repairs.\n",
 	"Authorization=is required before repairs.\n",
 ]) {
