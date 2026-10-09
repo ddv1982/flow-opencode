@@ -61,7 +61,7 @@ test("host and joined review remain separate typed facts", () => {
 			exitCode: 0,
 			qualification: "claimed-pass" as const,
 			integrity: "not-claimed" as const,
-			hostPlatform: "linux",
+			hostPlatform: "linux" as const,
 		},
 	];
 	expect(facts.observations).toEqual(expected);
@@ -80,7 +80,7 @@ for (const host of ["darwin", "win32", "other", null, "unknown"]) {
 }
 test("unclaimed native host metadata retains prior compatibility", () => {
 	const input = fixture("passed. Independent review passed.");
-	validation(input).hostPlatform = { opaque: "historical metadata" };
+	validation(input).hostPlatform = "other";
 	expect(scenario.check(input)).toEqual([]);
 });
 test("an unrelated matching host cannot rescue the bound validation", () => {
@@ -91,7 +91,7 @@ test("an unrelated matching host cannot rescue the bound validation", () => {
 	validations.push({
 		...validation(input),
 		id: "unaccepted-host-witness",
-		hostPlatform: "linux",
+		hostPlatform: "linux" as const,
 	});
 	expect(scenario.check(input)).toContain(
 		"Claimed command pass lacks matching accepted complete source evidence.",
@@ -125,10 +125,37 @@ for (const tail of [
 	"This command failed.",
 	"This observation does not claim a pass.",
 	"Its script changed.",
-	"and deployed.",
 ]) {
 	test(`joined sibling preserves conflicting tail ${tail}`, () => {
 		expect(scenario.check(fixture(`${phrase} ${tail}`))).toContain(
+			"Unsupported or conflicting current handoff assertions.",
+		);
+	});
+}
+for (const change of ["native-host", "reported-host"]) {
+	test(`numeric audit host binds to its own reviewed witness ${change}`, () => {
+		const input = fixture("passed. Independent review passed.");
+		if (change === "native-host") {
+			const values = run(input).validations;
+			if (!Array.isArray(values)) throw new Error("Missing validations.");
+			const audit = values
+				.map(object)
+				.find((value) => value.command === "node scripts/audit.mjs");
+			if (!audit) throw new Error("Missing audit validation.");
+			audit.hostPlatform = "win32";
+		} else
+			input.finalText = input.finalText.replace(
+				"exit 12, host linux",
+				"exit 12, host Windows",
+			);
+		expect(scenario.check(input)).toContain(
+			"Nonzero observation lacks accepted reviewed evidence.",
+		);
+	});
+}
+for (const tail of ["; its script changed.", "; this command exited 1."]) {
+	test(`semicolon sibling tail remains checked ${tail}`, () => {
+		expect(scenario.check(fixture(phrase.replace(/\.$/, tail)))).toContain(
 			"Unsupported or conflicting current handoff assertions.",
 		);
 	});
@@ -173,7 +200,7 @@ test("quoted command arguments cannot become review siblings", () => {
 			exitCode: 0,
 			qualification: "claimed-pass" as const,
 			integrity: "not-claimed" as const,
-			hostPlatform: "linux",
+			hostPlatform: "linux" as const,
 		},
 	];
 	expect(facts.observations).toEqual(expected);
