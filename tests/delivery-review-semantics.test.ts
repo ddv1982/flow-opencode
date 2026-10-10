@@ -321,3 +321,23 @@ for (const tail of [
 		});
 	}
 }
+for (const head of [
+	"passed unchanged on Linux with exit 0",
+	"passed on Linux with exit code 0",
+	"passed on Linux with exited 0",
+	"passed on Linux with exit unavailable",
+	"PASSED ON Windows WITH EXIT 0",
+	"passed on macOS with exit 0",
+	"passed on Other with exit 0",
+]) {
+	test(`unregistered accepted head cannot lose hostile suffix ${head}`, () => {
+		const input = fixture();
+		input.finalText = input.finalText.replace(
+			`\`${gate}\` ${status}.`,
+			`node scripts/unregistered.mjs ${head} and deployment consent granted.`,
+		);
+		expect(scenario.check(input)).toContain(
+			"Unsupported or conflicting current handoff assertions.",
+		);
+	});
+}
