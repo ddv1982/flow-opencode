@@ -39,6 +39,10 @@ Work on exactly one approved feature.
 
 Delivery handoff: Copy `workflowData.delivery.summary.lines` unchanged as one block.
 Implementation details may precede the block. Do not rewrite or restate its facts elsewhere.
+Before the block, include task-required result details absent from the summary,
+such as captured diagnostic counts or outstanding observations. Use already
+captured evidence or retained delivery details. Do not infer details from exit
+codes or read history solely for closure.
 Keep the supplied Goal line unchanged. Copy each supplied
 `workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
 For requested
