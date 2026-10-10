@@ -780,10 +780,10 @@ export function currentHandoffFacts(
 		}
 		if (
 			!/^Example:/i.test(line) &&
-			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
+			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?: unchanged)?(?: on [A-Za-z0-9]+)?(?:,\s*| with )(?:exited|exit(?: code)?)\s+-?\d+\b/i.test(
 				line,
 			) ||
-				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z0-9]+(?: with (?:exited|exit(?: code)?)\s+(?:-?\d+|unavailable))?)?(?:[,.;]|$)/i.test(
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z0-9]+)?(?:[,.;]|$)/i.test(
 					line,
 				))
 		) {
