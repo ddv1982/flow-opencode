@@ -299,3 +299,25 @@ test("unregistered command cannot borrow accepted verification", () => {
 		"Unsupported or conflicting current handoff assertions.",
 	);
 });
+for (const tail of [
+	" and source verified",
+	" and its script changed",
+	" with verifier unchanged",
+	" and deployment consent granted",
+]) {
+	for (const position of ["replacement", "before", "after"]) {
+		test(`unregistered numeric pass retains coordinated tail ${position}${tail}`, () => {
+			const input = fixture();
+			const claim = `node scripts/unregistered.mjs ${status}${tail}.`;
+			input.finalText =
+				position === "replacement"
+					? input.finalText.replace(`\`${gate}\` ${status}.`, claim)
+					: position === "before"
+						? `${claim}\n${input.finalText}`
+						: `${input.finalText}\n${claim}`;
+			expect(scenario.check(input)).toContain(
+				"Unsupported or conflicting current handoff assertions.",
+			);
+		});
+	}
+}
