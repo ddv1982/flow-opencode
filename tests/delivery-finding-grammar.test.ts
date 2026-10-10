@@ -98,10 +98,13 @@ for (const absence of [
 				"Independent review claim contradicts accepted native review evidence.",
 			);
 			const input = fixture(review);
-			delivery(input).findingsDigest = [];
-			expect(scenario.check(input)).not.toContain(
-				"Independent review claim contradicts accepted native review evidence.",
-			);
+			const report = delivery(input);
+			report.findingsDigest = [];
+			for (const feature of report.features) feature.terminalFindings = [];
+			for (const native of run(input).reviews as unknown[])
+				object(object(native).result).findings = [];
+			input.finalText = input.finalText.replace("advisory 1", "advisory 0");
+			expect(scenario.check(input)).toEqual([]);
 		});
 	}
 }
@@ -174,10 +177,9 @@ for (const prefix of ["Goal: ", "Historical handoff\n", "Example: "]) {
 }
 test("zero blocking review works as command sibling without swallowing changed script", () => {
 	const input = fixture();
-	input.finalText = input.finalText.replace(
-		"passed.\n- Independent review",
-		"passed, and independent review",
-	);
+	input.finalText = input.finalText
+		.replace("Required Linux check ", "")
+		.replace("passed.\n- Independent review", "passed, and independent review");
 	expect(scenario.check(input)).toEqual([]);
 	input.finalText = input.finalText.replace(
 		"with no blockers.",
@@ -209,7 +211,7 @@ for (const [text, counts] of [
 	["no findings", []],
 ] as const) {
 	test(`literal auxiliary migration control ${text}`, () => {
-		expect(currentHandoffFacts(text + ".").auxiliaryCounts).toEqual([
+		expect(currentHandoffFacts(`${text}.`).auxiliaryCounts).toEqual([
 			...counts,
 		]);
 	});
@@ -235,4 +237,27 @@ test("feature zero blocked shorthand keeps feature context", () => {
 		currentHandoffFacts("Progress: 1 of 1 features complete, one blocked.")
 			.progress,
 	).toEqual([null]);
+});
+
+test("historical blocking finding cannot contradict the current zero review", () => {
+	const input = fixture();
+	const finding = delivery(input).findingsDigest[0];
+	if (!finding) throw new Error("Missing finding.");
+	delivery(input).findingsDigest.push({
+		...finding,
+		findingId: "old-blocker",
+		severity: "blocking",
+		live: false,
+	});
+	expect(scenario.check(input)).toEqual([]);
+});
+test("historical no blockers cannot replace a current unsupported review", () => {
+	const input = fixture(
+		"Historical handoff\n" +
+			phrase +
+			"\nCurrent handoff\nIndependent review passed with no blockers from an unavailable source.",
+	);
+	expect(scenario.check(input)).toContain(
+		"Unsupported or conflicting current handoff assertions.",
+	);
 });
