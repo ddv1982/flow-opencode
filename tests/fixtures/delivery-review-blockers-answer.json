@@ -1,0 +1,154 @@
+{
+	"answer": "Updated `src/parser.mjs` so `parse(null)` returns `''` and string inputs retain trimming. Both scripts and advisory data remain unchanged.\n\n- Required Linux check `node scripts/verify.mjs` passed.\n- Independent review passed with no blockers.\n- Audit recorded **12 outstanding advisory items**, preserved unchanged.\n\n```text\nHandoff format: 1\nExternal action authority: not-granted\nGoal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs.\nClosure: completed\nProgress: 1 of 1 features complete\nUnfinished features: none\nNonblocking live findings: advisory 1. Historical findings: 0.\nObserved \"node scripts/audit.mjs\": exit 12, host linux; this does not claim the command passed.\nAssurance: completion supported\nAssurance checks: 4 satisfied, 0 not applicable, 0 unsatisfied.\n- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.\n- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.\n- Freshness holds when review is accepted; an archive does not attest the current workspace.\nReported artifacts: 1 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.\nFull report is included in this close response.\n```",
+	"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs.",
+	"featureId": "parser-null",
+	"delivery": {
+		"assurance": {
+			"checks": [
+				{
+					"explanation": "1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+					"id": "recorded-completion",
+					"label": "Recorded completion",
+					"status": "satisfied",
+					"tier": "ts-enforced"
+				},
+				{
+					"explanation": "1/1 terminal runs have eligible host evidence accepted by review.",
+					"id": "accepted-validation",
+					"label": "Accepted validation",
+					"status": "satisfied",
+					"tier": "host-attested"
+				},
+				{
+					"explanation": "\"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+					"id": "canonical-gate",
+					"label": "Canonical gate",
+					"status": "satisfied",
+					"tier": "host-attested"
+				},
+				{
+					"explanation": "1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+					"id": "declared-evidence",
+					"label": "Declared evidence",
+					"status": "satisfied",
+					"tier": "host-attested"
+				}
+			],
+			"conclusion": "completion-supported",
+			"limitations": [
+				"Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"Freshness holds when review is accepted; an archive does not attest the current workspace."
+			]
+		},
+		"closure": {
+			"kind": "completed",
+			"summary": "Null guard implemented only in src/parser.mjs. Linux required verify passed; audit observation recorded 12 outstanding advisory items, preserved unchanged. Independent review passed with advisory finding and no blockers."
+		},
+		"features": [
+			{
+				"attempts": 1,
+				"id": "parser-null",
+				"latestState": "completed",
+				"outcomeSummary": "Verified parser-null and all four approved requirements: null returns empty string; strings preserve trim behavior; only src/parser.mjs changed with unchanged regular-file mode, scripts/advisory data and preexisting opencode.json preserved; Linux observe audit exited 12 separately from the required broad verify exit 0. Inspected source, both scripts, README, package surface and complete base diff. No prior findings or blocking gaps; audit remains advisory, with no repair authorization.",
+				"terminalFindings": [
+					{
+						"severity": "advisory",
+						"summary": "Linux audit observation records 12 outstanding advisory items; repairs are outside this approved implementation scope."
+					}
+				],
+				"title": "Null-safe string parser"
+			}
+		],
+		"findingsDigest": [
+			{
+				"attempt": 1,
+				"evidence": "Current-source validation f589a6bc-7b1b-4f0e-9c4d-a4f811186873: node scripts/audit.mjs, observe intent, Linux, exit 12, complete output. scripts/audit.mjs:1 explicitly reports 12 items and no change authorization; advisories.json:1 retains outstanding:12. Separate current-source broad validation 53a49434-6722-4b8d-9d13-dd0282b700e8 runs node scripts/verify.mjs on Linux with pass intent, exit 0 and complete output; verify.mjs:1 asserts null and padded-string outcomes. Audit is not the repository passing gate.",
+				"featureId": "parser-null",
+				"findingId": "parser-null.R6-01",
+				"live": true,
+				"severity": "advisory",
+				"summary": "Linux audit observation records 12 outstanding advisory items; repairs are outside this approved implementation scope.",
+				"verdict": "passed"
+			}
+		],
+		"goal": "Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs.",
+		"handoff": {
+			"externalActionAuthority": "not-granted",
+			"formatVersion": 1
+		},
+		"observations": [
+			{
+				"command": "node scripts/audit.mjs",
+				"exitCode": 12,
+				"featureId": "parser-null",
+				"hostPlatform": "linux",
+				"id": "f589a6bc-7b1b-4f0e-9c4d-a4f811186873",
+				"intent": "observe",
+				"outputComplete": true,
+				"outputDigest": "sha256:c6793caf5f3c67b895af8671e9d3705639e0d1e4590377e84b77db953ebe017d",
+				"recordedRevision": 4,
+				"runId": "run:8252c7dc-c6a7-4d24-9bf7-a5a0bec24e49",
+				"scope": "focused",
+				"sourceDigest": "sha256:0c341eab346e3a201294327b2e2b5d500aa42cd700425dc491bdc64965a6ee0e"
+			}
+		],
+		"progress": {
+			"completed": 1,
+			"total": 1
+		},
+		"report": [
+			"Handoff format: 1",
+			"External action authority: not-granted",
+			"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs.",
+			"Closure: completed \u2014 Null guard implemented only in src/parser.mjs. Linux required verify passed; audit observation recorded 12 outstanding advisory items, preserved unchanged. Independent review passed with advisory finding and no blockers.",
+			"Progress: 1 of 1 features complete",
+			"Features:",
+			"- parser-null \u2014 Null-safe string parser",
+			"  attempts: 1; latest state: completed",
+			"  outcome: Verified parser-null and all four approved requirements: null returns empty string; strings preserve trim behavior; only src/parser.mjs changed with unchanged regular-file mode, scripts/advisory data and preexisting opencode.json preserved; Linux observe audit exited 12 separately from the required broad verify exit 0. Inspected source, both scripts, README, package surface and complete base diff. No prior findings or blocking gaps; audit remains advisory, with no repair authorization.",
+			"  terminal findings:",
+			"  - advisory: Linux audit observation records 12 outstanding advisory items; repairs are outside this approved implementation scope.",
+			"Findings digest:",
+			"- live parser-null parser-null.R6-01 advisory: Linux audit observation records 12 outstanding advisory items; repairs are outside this approved implementation scope.",
+			"Observed \"node scripts/audit.mjs\": exit 12, host linux, source sha256:0c341eab346e3a201294327b2e2b5d500aa42cd700425dc491bdc64965a6ee0e, output sha256:c6793caf5f3c67b895af8671e9d3705639e0d1e4590377e84b77db953ebe017d; this does not claim the command passed.",
+			"Assurance: completion supported",
+			"Assurance checks:",
+			"- satisfied [TS-enforced] Recorded completion: 1/1 features and 1/1 independent reviews pass, including a final review with no terminal blocker.",
+			"- satisfied [host-attested] Accepted validation: 1/1 terminal runs have eligible host evidence accepted by review.",
+			"- satisfied [host-attested] Canonical gate: \"node scripts/verify.mjs\" must have passing broad evidence accepted by review.",
+			"- satisfied [host-attested] Declared evidence: 1/1 declared obligations have accepted evidence on their declared host; observed gates do not claim a pass.",
+			"Assurance limitations:",
+			"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+			"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+			"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+			"Artifacts as reported by Flow from caller declarations, not an exact or exhaustive Git delta:",
+			"- latest attempts: src/parser.mjs",
+			"- superseded attempts only: none reported"
+		],
+		"reportedArtifacts": {
+			"latestAttempts": ["src/parser.mjs"],
+			"supersededAttemptsOnly": []
+		},
+		"summary": {
+			"fullReportAvailable": true,
+			"lines": [
+				"Handoff format: 1",
+				"External action authority: not-granted",
+				"Goal: Make parse(input) safely handle null and preserve trimmed strings, changing only src/parser.mjs.",
+				"Closure: completed",
+				"Progress: 1 of 1 features complete",
+				"Unfinished features: none",
+				"Nonblocking live findings: advisory 1. Historical findings: 0.",
+				"Observed \"node scripts/audit.mjs\": exit 12, host linux; this does not claim the command passed.",
+				"Assurance: completion supported",
+				"Assurance checks: 4 satisfied, 0 not applicable, 0 unsatisfied.",
+				"- Artifact paths and the canonical gate are caller declarations; Flow validates binding, not completeness or fitness.",
+				"- Goal alignment, scope discipline, evidence completeness, requirement coverage, test adequacy, and review substance remain model judgments.",
+				"- Freshness holds when review is accepted; an archive does not attest the current workspace.",
+				"Reported artifacts: 1 latest, 0 superseded only. Caller declarations, not an exact or exhaustive Git delta.",
+				"Full report is included in this close response."
+			]
+		}
+	}
+}

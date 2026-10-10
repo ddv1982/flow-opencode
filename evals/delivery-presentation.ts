@@ -146,10 +146,27 @@ type AuxiliaryCount = {
 	kind: "unfinished" | "blocked-feature" | "blocking" | "advisory";
 	count: number;
 };
-function auxiliaryCounts(
+type CountedNoun = {
+	kind: AuxiliaryCount["kind"] | "all-findings";
+	count: number;
+};
+const COUNTED_NOUN_KINDS: ReadonlyMap<string, CountedNoun["kind"]> = new Map([
+	["unfinished", "unfinished"],
+	["unfinished features", "unfinished"],
+	["blocked features", "blocked-feature"],
+	["blocker", "blocking"],
+	["blockers", "blocking"],
+	["blocking finding", "blocking"],
+	["blocking findings", "blocking"],
+	["advisory finding", "advisory"],
+	["advisory findings", "advisory"],
+	["finding", "all-findings"],
+	["findings", "all-findings"],
+]);
+function countedNouns(
 	value: string,
-	featureScope = false,
-): AuxiliaryCount[] | null {
+	context: "auxiliary" | "feature" | "review",
+): CountedNoun[] | null {
 	const match = /^(none|no|zero|one|two|three|four|five|six|\d+) (.+)$/i.exec(
 		value,
 	);
@@ -160,19 +177,33 @@ function auxiliaryCounts(
 	if (count === null) return null;
 	const nouns = (match[2] ?? "").toLowerCase().split(/ (?:and|or) /);
 	if (nouns.length > 1 && count !== 0) return null;
-	const kinds = new Map<string, AuxiliaryCount["kind"]>([
-		["unfinished", "unfinished"],
-		["unfinished features", "unfinished"],
-		["blocked features", "blocked-feature"],
-		["blockers", "blocking"],
-		["advisory findings", "advisory"],
-	]);
-	if (featureScope && count === 0) kinds.set("blocked", "blocked-feature");
-	const claims = nouns.map((noun) => {
-		const kind = kinds.get(noun);
-		return kind ? { kind, count } : null;
+	const claims = nouns.map((noun): CountedNoun | null => {
+		const kind =
+			context === "feature" && count === 0 && noun === "blocked"
+				? "blocked-feature"
+				: COUNTED_NOUN_KINDS.get(noun);
+		if (
+			!kind ||
+			(context === "review" &&
+				kind !== "blocking" &&
+				kind !== "all-findings") ||
+			(context !== "review" && kind === "all-findings")
+		)
+			return null;
+		return { kind, count };
 	});
 	return claims.every((claim) => claim !== null) ? claims : null;
+}
+function auxiliaryCounts(
+	value: string,
+	featureScope = false,
+): AuxiliaryCount[] | null {
+	const parsed = countedNouns(value, featureScope ? "feature" : "auxiliary");
+	if (!parsed) return null;
+	const counts = parsed.map(({ kind, count }) =>
+		kind === "all-findings" ? null : { kind, count },
+	);
+	return counts.every((claim) => claim !== null) ? counts : null;
 }
 function progressValue(value: string) {
 	const match = /^(\d+)\s*(?:of|\/)\s*(\d+) features complete(.*)$/i.exec(
@@ -326,18 +357,24 @@ function commandQualifierAssertion(text: string): boolean {
 	);
 }
 function independentReviewValue(value: string): IndependentReviewClaim | null {
-	return /^(?:was )?not performed$/i.test(value)
-		? { kind: "not-performed" }
-		: /^(?:has |was )?passed(?: with no(?: blocking)? findings)?$/i.test(value)
-			? {
-					kind: "passed",
-					findings: /with no blocking findings$/i.test(value)
-						? "no-blocking"
-						: /with no findings$/i.test(value)
-							? "none"
-							: "not-claimed",
-				}
+	if (/^(?:was )?not performed$/i.test(value)) return { kind: "not-performed" };
+	const status = /^(?:has |was )?passed(?: (.+))?$/i.exec(value);
+	if (!status) return null;
+	const suffix = status[1];
+	if (!suffix) return { kind: "passed", findings: "not-claimed" };
+	const withCount = /^with (.+)$/i.exec(suffix);
+	const without = /^without (?:any )?(.+)$/i.exec(suffix);
+	const parsed = withCount
+		? countedNouns(withCount[1] ?? "", "review")
+		: without
+			? countedNouns(`no ${without[1] ?? ""}`, "review")
 			: null;
+	const claim = parsed?.length === 1 ? parsed[0] : null;
+	if (claim?.count !== 0) return null;
+	return {
+		kind: "passed",
+		findings: claim.kind === "blocking" ? "no-blocking" : "none",
+	};
 }
 function platformValue(value: string) {
 	const lower = value.toLowerCase();
