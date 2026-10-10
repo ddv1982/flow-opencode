@@ -12,7 +12,7 @@ type CommandIntegrity =
 	| "script-unchanged"
 	| "script-and-invocation-unchanged";
 type IndependentReviewClaim =
-	| { kind: "passed"; findings: "none" | "not-claimed" }
+	| { kind: "passed"; findings: "none" | "no-blocking" | "not-claimed" }
 	| { kind: "not-performed" };
 type CommandObservation = {
 	command: string;
@@ -328,10 +328,14 @@ function commandQualifierAssertion(text: string): boolean {
 function independentReviewValue(value: string): IndependentReviewClaim | null {
 	return /^(?:was )?not performed$/i.test(value)
 		? { kind: "not-performed" }
-		: /^(?:has |was )?(?:passed|passed with no findings)$/i.test(value)
+		: /^(?:has |was )?passed(?: with no(?: blocking)? findings)?$/i.test(value)
 			? {
 					kind: "passed",
-					findings: /with no findings$/i.test(value) ? "none" : "not-claimed",
+					findings: /with no blocking findings$/i.test(value)
+						? "no-blocking"
+						: /with no findings$/i.test(value)
+							? "none"
+							: "not-claimed",
 				}
 			: null;
 }
@@ -616,9 +620,12 @@ function parseCommandResult(
 		/^(?:(passed)(?:,\s*| with )|(recorded as an observation),\s*)?(?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*)$/i.exec(
 			status,
 		);
-	const barePass = /^passed( unchanged)?(?: on ([A-Za-z0-9]+))?$/i.exec(status);
+	const barePass =
+		/^passed( unchanged)?(?: on ([A-Za-z0-9]+)(?: with (?:exited|exit(?: code)?)\s+(-?\d+|unavailable)(.*))?)?$/i.exec(
+			status,
+		);
 	if (!value && !barePass) return invalid;
-	const rawExit = barePass ? "0" : (value?.[3] ?? "");
+	const rawExit = barePass ? (barePass[3] ?? "0") : (value?.[3] ?? "");
 	const exitCode =
 		rawExit.toLowerCase() === "unavailable" ? null : Number(rawExit);
 	if (exitCode !== null && !Number.isSafeInteger(exitCode)) return invalid;
@@ -628,7 +635,7 @@ function parseCommandResult(
 		qualification: null,
 		integrity: "not-claimed",
 	};
-	const metadata = value?.[4] ?? "";
+	const metadata = value?.[4] ?? barePass?.[4] ?? "";
 	const assertedHost = barePass?.[2];
 	let host: EvidencePlatform | undefined;
 	if (assertedHost !== undefined) {
@@ -776,7 +783,7 @@ export function currentHandoffFacts(
 			(/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\bpassed(?:,\s*| with )exit(?: code)? -?\d+\b/i.test(
 				line,
 			) ||
-				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z0-9]+)?(?:[,.;]|$)/i.test(
+				/^(?:[^:]+:\s*)?(?:node|bun) \S+[^;]*\s+passed(?: unchanged)?(?: on [A-Za-z0-9]+(?: with (?:exited|exit(?: code)?)\s+(?:-?\d+|unavailable))?)?(?:[,.;]|$)/i.test(
 					line,
 				))
 		) {

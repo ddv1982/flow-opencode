@@ -778,7 +778,9 @@ export function deliveryIssues(
 				(value.kind === "passed"
 					? !hasAcceptedReview ||
 						checkReviewerEvidenceAccess(input, input.archives[0]).length > 0 ||
-						(value.findings === "none" && findings.length !== 0)
+						(value.findings === "none" && findings.length !== 0) ||
+						(value.findings === "no-blocking" &&
+							findings.some((finding) => finding.severity === "blocking"))
 					: hasAcceptedReview),
 		)
 	)
