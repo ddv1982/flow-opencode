@@ -82,6 +82,9 @@ case "$1" in
     cat "$output"
     ;;
   scripts/materialize-qualification.ts)
+    if [[ "$FLOW_TEST_VERSION" == 9.6.0 ]]; then
+      [[ "$2" == --descriptor && "$3" == evals/qualification/archives/9.6.0.json && "$4" == --out && "$5" == "$RUNNER_TEMP/flow-qualified-960" ]]
+    fi
     printf '%s/qualified-bundle' "$RUNNER_TEMP"
     ;;
   scripts/restore-exact-release-artifact.ts)

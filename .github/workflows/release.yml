@@ -119,7 +119,8 @@ jobs:
                   digest="sha256:03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd"
                   ;;
                 v9.6.0)
-                  sealed="evals/qualification/bundles/qb1-13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29/objects/sha256-71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
+                  qualified="$(bun scripts/materialize-qualification.ts --descriptor evals/qualification/archives/9.6.0.json --out "${RUNNER_TEMP}/flow-qualified-960")"
+                  sealed="${qualified}/objects/sha256-71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
                   digest="sha256:71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
                   ;;
                 *) exit 1 ;;
@@ -227,7 +228,8 @@ jobs:
                   digest="sha256:03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd"
                   ;;
                 v9.6.0)
-                  sealed="evals/qualification/bundles/qb1-13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29/objects/sha256-71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
+                  qualified="$(bun scripts/materialize-qualification.ts --descriptor evals/qualification/archives/9.6.0.json --out "${RUNNER_TEMP}/flow-qualified-960")"
+                  sealed="${qualified}/objects/sha256-71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
                   digest="sha256:71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
                   ;;
                 *) exit 1 ;;
