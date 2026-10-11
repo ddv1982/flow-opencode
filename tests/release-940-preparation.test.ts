@@ -89,6 +89,7 @@ case "$1" in
       sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b) printf qualified-9.2.0 > "$2" ;;
       sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f) printf qualified-9.3.0 > "$2" ;;
       sha256:03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd) printf qualified-9.5.0 > "$2" ;;
+      sha256:71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec) printf qualified-9.6.0 > "$2" ;;
       *) exit 80 ;;
     esac
     ;;
@@ -141,6 +142,7 @@ for (const [job, name] of [
 	for (const [version, recovery, expected] of [
 		["9.4.0", "", "qualified-9.4.0"],
 		["9.5.0", "", "qualified-9.5.0"],
+		["9.6.0", "", "qualified-9.6.0"],
 		["9.5.0", "v9.5.0", "qualified-9.5.0"],
 		["9.2.0", "v9.2.0", "qualified-9.2.0"],
 		["9.3.0", "v9.3.0", "qualified-9.3.0"],

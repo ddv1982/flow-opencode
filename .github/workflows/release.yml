@@ -103,7 +103,7 @@ jobs:
             bun run scripts/prepare-qualified-release-940.ts --out "opencode-plugin-flow-${version}.tgz"
           else
             bun pm pack --destination .
-            if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" || "$version" == "9.5.0" ]]; then
+            if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" || "$version" == "9.5.0" || "$version" == "9.6.0" ]]; then
               case "${FLOW_RELEASE_RECOVERY_TAG:-v${version}}" in
                 v9.2.0)
                   sealed="evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
@@ -117,6 +117,10 @@ jobs:
                   qualified="$(bun scripts/materialize-qualification.ts --descriptor evals/qualification/archives/9.5.0.json --out "${RUNNER_TEMP}/flow-qualified-950")"
                   sealed="${qualified}/objects/sha256-03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd"
                   digest="sha256:03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd"
+                  ;;
+                v9.6.0)
+                  sealed="evals/qualification/bundles/qb1-13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29/objects/sha256-71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
+                  digest="sha256:71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
                   ;;
                 *) exit 1 ;;
               esac
@@ -207,7 +211,7 @@ jobs:
             bun run scripts/prepare-qualified-release-940.ts --out "opencode-plugin-flow-${version}.tgz"
           else
             bun pm pack --destination .
-            if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" || "$version" == "9.5.0" ]]; then
+            if [[ -n "${FLOW_RELEASE_RECOVERY_TAG}" || "$version" == "9.5.0" || "$version" == "9.6.0" ]]; then
               case "${FLOW_RELEASE_RECOVERY_TAG:-v${version}}" in
                 v9.2.0)
                   sealed="evals/qualification/bundles/qb1-d281a9952f3267c9dad8071bb2add667679bf741f2d1357e7b18d2e325e75349/objects/sha256-0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b"
@@ -221,6 +225,10 @@ jobs:
                   qualified="$(bun scripts/materialize-qualification.ts --descriptor evals/qualification/archives/9.5.0.json --out "${RUNNER_TEMP}/flow-qualified-950")"
                   sealed="${qualified}/objects/sha256-03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd"
                   digest="sha256:03970e413588b9b32fb2c38ab859352c8c56c8a1937c64c6ca5d440cc96371cd"
+                  ;;
+                v9.6.0)
+                  sealed="evals/qualification/bundles/qb1-13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29/objects/sha256-71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
+                  digest="sha256:71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec"
                   ;;
                 *) exit 1 ;;
               esac
