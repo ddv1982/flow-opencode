@@ -1,8 +1,8 @@
 {
-  "schemaVersion": 1,
-  "packageVersion": "9.6.0",
-  "archive": "9.6.0.tar.gz",
-  "archiveSha256": "sha256:7faded24bf59e57700ca4cef337fd4bf1be4ccca10758fef607884d39820151c",
-  "bundleId": "qb1-13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29",
-  "bundleSha256": "sha256:13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29"
+	"schemaVersion": 1,
+	"packageVersion": "9.6.0",
+	"archive": "9.6.0.tar.gz",
+	"archiveSha256": "sha256:7faded24bf59e57700ca4cef337fd4bf1be4ccca10758fef607884d39820151c",
+	"bundleId": "qb1-13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29",
+	"bundleSha256": "sha256:13d20cb2ee53dcbd63005bc3b1e022f461ca0bf6738cc6678eeaa58a0313cf29"
 }
