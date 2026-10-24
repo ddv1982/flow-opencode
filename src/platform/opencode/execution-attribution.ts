@@ -25,18 +25,41 @@ export type InputOrigin = Readonly<{
 		| Readonly<{ automatic: false; authority: AutoDriveAuthority | null }>
 	);
 
-type FrozenPrimary = {
+type Snapshot = Readonly<{
+	inputs: readonly string[];
+	previousAssistants: ReadonlySet<string>;
+	previousTerminals: ReadonlySet<string>;
+	previousRetries: ReadonlySet<string>;
+}>;
+type HttpResource =
+	| Readonly<{ phase: "context"; requestSeen: false }>
+	| Readonly<{ phase: "ended"; requestSeen: false }>
+	| Readonly<{
+			phase: "request" | "streaming" | "ended";
+			requestSeen: true;
+	  }>;
+type Lifetime =
+	| Readonly<{ kind: "current"; snapshot: Snapshot }>
+	| Readonly<{ kind: "retired" }>;
+type PrimaryOwner = {
 	readonly sessionID: string;
 	readonly agent: string;
 	readonly model: SessionContext["model"];
-	readonly inputs: readonly string[];
-	readonly previousAssistants: ReadonlySet<string>;
-	readonly previousTerminals: ReadonlySet<string>;
-	readonly previousRetries: ReadonlySet<string>;
 	readonly origin: InputOrigin;
-	phase: "context" | "request" | "streaming" | "ended";
-	request: Request | null;
+	http: HttpResource;
+	lifetime: Lifetime;
 };
+type Binding = Readonly<{ primary: PrimaryOwner; tool: string }>;
+type AssistantRecord =
+	| Readonly<{ kind: "bound"; primary: PrimaryOwner }>
+	| Readonly<{ kind: "historical" }>;
+type SessionRecord = {
+	current: PrimaryOwner;
+	assistants: Map<string, AssistantRecord>;
+	bindings: Map<string, Binding>;
+};
+const retired: Lifetime = Object.freeze({ kind: "retired" });
+const historical: AssistantRecord = Object.freeze({ kind: "historical" });
 const same = isDeepStrictEqual;
 function retryIdentity(
 	message: Extract<SessionMessageInfo, { type: "assistant" }>,
@@ -129,49 +152,57 @@ function canonical(path: string): string {
 	}
 }
 export class ExecutionAttribution {
-	readonly #primary = new Map<string, FrozenPrimary>();
-	readonly #requests = new WeakMap<Request, FrozenPrimary>();
-	readonly #retries = new WeakSet<FrozenPrimary>();
-	readonly #assistants = new Map<string, FrozenPrimary>();
-	readonly #bindings = new Map<
-		string,
-		Readonly<{ primary: FrozenPrimary; tool: string }>
-	>();
+	readonly #sessions = new Map<string, SessionRecord | null>();
+	readonly #requests = new WeakMap<Request, PrimaryOwner>();
+	readonly #retries = new WeakSet<PrimaryOwner>();
 	readonly #assertLive: (origin: InputOrigin) => void;
 	#closed = false;
 	constructor(assertLive: (origin: InputOrigin) => void) {
 		this.#assertLive = assertLive;
 	}
-	#key(session: string, id: string): string {
-		return JSON.stringify([session, id]);
+	#session(sessionID: string): SessionRecord | undefined {
+		const record = this.#sessions.get(sessionID);
+		if (record === null) throw new Error("Flow execution session was deleted.");
+		return record;
 	}
-	requestOwner(request: Request): FrozenPrimary | undefined {
+	#evidence(primary: PrimaryOwner): Snapshot {
+		if (
+			this.current(primary.sessionID) !== primary ||
+			primary.lifetime.kind !== "current"
+		)
+			throw new Error("Flow primary ownership was superseded.");
+		return primary.lifetime.snapshot;
+	}
+	requestOwner(request: Request): PrimaryOwner | undefined {
 		return this.#requests.get(request);
 	}
-	executionOwner(execution: NativeExecution): FrozenPrimary | undefined {
-		const binding = this.#bindings.get(
-			JSON.stringify([execution.sessionID, execution.messageID, execution.id]),
+	executionOwner(execution: NativeExecution): PrimaryOwner | undefined {
+		const record = this.#session(execution.sessionID);
+		if (!record) return undefined;
+		const binding = record.bindings.get(
+			JSON.stringify([execution.messageID, execution.id]),
 		);
-		const primary =
-			binding?.primary ??
-			this.#assistants.get(this.#key(execution.sessionID, execution.messageID));
-		if (primary) return primary;
-		const current = this.#primary.get(execution.sessionID);
-		return current?.previousAssistants.has(execution.messageID)
+		if (binding) return binding.primary;
+		const assistant = record.assistants.get(execution.messageID);
+		if (assistant?.kind === "bound") return assistant.primary;
+		if (assistant?.kind === "historical") return undefined;
+		const primary = record.current;
+		return this.#evidence(primary).previousAssistants.has(execution.messageID)
 			? undefined
-			: current;
+			: primary;
 	}
-	current(sessionID: string): FrozenPrimary | undefined {
-		return this.#primary.get(sessionID);
+	current(sessionID: string): PrimaryOwner | undefined {
+		return this.#sessions.get(sessionID)?.current;
 	}
 	freeze(
 		input: SessionContext,
 		native: readonly SessionMessageInfo[],
 		origin: InputOrigin,
-	): FrozenPrimary {
+	): PrimaryOwner {
 		if (this.#closed) throw new Error("Flow lifecycle is closed.");
-		const prior = this.#primary.get(input.sessionID);
-		if (prior && prior.phase !== "ended")
+		const record = this.#session(input.sessionID);
+		const prior = record?.current;
+		if (prior && prior.http.phase !== "ended")
 			throw new Error("Flow primary contexts or streams overlap.");
 		this.#assertLive(origin);
 		const inputs = modelInputIDs(input);
@@ -184,26 +215,24 @@ export class ExecutionAttribution {
 			throw new Error(
 				"Flow admitted agent or model differs from its primary request.",
 			);
+		const previous = prior && this.#evidence(prior);
 		const retry =
 			prior &&
 			this.#retries.delete(prior) &&
 			prior.origin === origin &&
-			same(prior.inputs, inputs) &&
+			same(previous?.inputs, inputs) &&
 			prior.agent === input.agent &&
 			sameModel(prior.model, input.model);
-		const primary: FrozenPrimary = {
-			sessionID: input.sessionID,
-			agent: input.agent,
-			model: Object.freeze({ ...input.model }),
+		const snapshot: Snapshot = Object.freeze({
 			inputs: Object.freeze(inputs),
-			previousAssistants: retry
-				? prior.previousAssistants
-				: new Set(
-						native
-							.filter((message) => message.type === "assistant")
-							.map((message) => message.id),
-					),
-			origin,
+			previousAssistants:
+				retry && previous
+					? previous.previousAssistants
+					: new Set(
+							native
+								.filter((message) => message.type === "assistant")
+								.map((message) => message.id),
+						),
 			previousRetries: new Set(
 				native.flatMap((message) =>
 					message.type === "assistant" && message.retry !== undefined
@@ -216,17 +245,32 @@ export class ExecutionAttribution {
 					.filter((message) => message.type === "idle")
 					.map((message) => message.id),
 			),
-			phase: "context",
-			request: null,
+		});
+		const primary: PrimaryOwner = {
+			sessionID: input.sessionID,
+			agent: input.agent,
+			model: Object.freeze({ ...input.model }),
+			origin,
+			http: { phase: "context", requestSeen: false },
+			lifetime: { kind: "current", snapshot },
 		};
-		this.#primary.set(input.sessionID, primary);
+		const next = record ?? {
+			current: primary,
+			assistants: new Map<string, AssistantRecord>(),
+			bindings: new Map<string, Binding>(),
+		};
+		if (prior) prior.lifetime = retired;
+		next.current = primary;
+		this.#sessions.set(input.sessionID, next);
+		for (const id of snapshot.previousAssistants)
+			if (!next.assistants.has(id)) next.assistants.set(id, historical);
 		return primary;
 	}
 	request(input: SessionHttpRequest): void {
 		if (input.kind !== "primary") return;
-		const primary = this.#primary.get(input.sessionID);
+		const primary = this.#session(input.sessionID)?.current;
 		if (
-			primary?.phase !== "context" ||
+			primary?.http.phase !== "context" ||
 			primary.agent !== input.agent ||
 			!sameModel(primary.model, input.model) ||
 			this.#requests.has(input.request)
@@ -235,30 +279,28 @@ export class ExecutionAttribution {
 				"Flow primary HTTP request has no unique frozen context.",
 			);
 		this.#assertLive(primary.origin);
-		primary.request = input.request;
-		primary.phase = "request";
+		primary.http = { phase: "request", requestSeen: true };
 		this.#requests.set(input.request, primary);
 	}
 	hasFailedTerminal(
-		primary: FrozenPrimary,
+		primary: PrimaryOwner,
 		native: readonly SessionMessageInfo[],
 	): boolean {
+		const snapshot = this.#evidence(primary);
 		return native.some(
 			(message, position) =>
 				message.type === "idle" &&
 				message.outcome !== "succeeded" &&
-				!primary.previousTerminals.has(message.id) &&
-				same(nativeInputIDs(native.slice(0, position)), primary.inputs),
+				!snapshot.previousTerminals.has(message.id) &&
+				same(nativeInputIDs(native.slice(0, position)), snapshot.inputs),
 		);
 	}
-	retry(
-		primary: FrozenPrimary,
-		native: readonly SessionMessageInfo[],
-	): boolean {
+	retry(primary: PrimaryOwner, native: readonly SessionMessageInfo[]): boolean {
+		const snapshot = this.#evidence(primary);
+		const record = this.#session(primary.sessionID);
 		if (
-			this.#primary.get(primary.sessionID) !== primary ||
-			primary.phase !== "request" ||
-			!same(nativeInputIDs(native), primary.inputs)
+			primary.http.phase !== "request" ||
+			!same(nativeInputIDs(native), snapshot.inputs)
 		)
 			return false;
 		const candidates = native.filter(
@@ -271,38 +313,39 @@ export class ExecutionAttribution {
 				message.content.length === 0 &&
 				message.agent === primary.agent &&
 				sameModel(message.model, primary.model) &&
-				!primary.previousAssistants.has(message.id) &&
-				!primary.previousRetries.has(retryIdentity(message)) &&
-				!this.#assistants.has(this.#key(primary.sessionID, message.id)) &&
-				same(nativeInputIDs(native.slice(0, position)), primary.inputs),
+				!snapshot.previousAssistants.has(message.id) &&
+				!snapshot.previousRetries.has(retryIdentity(message)) &&
+				!record?.assistants.has(message.id) &&
+				same(nativeInputIDs(native.slice(0, position)), snapshot.inputs),
 		);
 		if (candidates.length !== 1) return false;
 		this.#retries.add(primary);
 		this.end(primary);
 		return true;
 	}
-	end(primary: FrozenPrimary): boolean {
-		const active = primary.phase !== "ended";
-		primary.phase = "ended";
-		return active && this.#primary.get(primary.sessionID) === primary;
+	end(primary: PrimaryOwner): boolean {
+		const active = primary.http.phase !== "ended";
+		primary.http = { phase: "ended", requestSeen: primary.http.requestSeen };
+		return active && this.current(primary.sessionID) === primary;
 	}
 	response(
 		input: SessionHttpResponse,
 		failed: (sessionID: string) => void,
 	): void {
 		if (input.kind !== "primary") return;
+		this.#session(input.sessionID);
 		const primary = this.#requests.get(input.request);
 		if (
 			!primary ||
-			primary !== this.#primary.get(input.sessionID) ||
-			primary.phase !== "request" ||
+			primary !== this.current(input.sessionID) ||
+			primary.http.phase !== "request" ||
 			primary.agent !== input.agent ||
 			!sameModel(primary.model, input.model)
 		) {
 			if (primary) {
 				if (this.end(primary)) failed(primary.sessionID);
 			} else {
-				const current = this.#primary.get(input.sessionID);
+				const current = this.current(input.sessionID);
 				if (current) this.end(current);
 				failed(input.sessionID);
 			}
@@ -323,7 +366,7 @@ export class ExecutionAttribution {
 			if (!input.response.body)
 				throw new Error("Flow primary response has no successful stream.");
 			const reader = input.response.body.getReader();
-			primary.phase = "streaming";
+			primary.http = { phase: "streaming", requestSeen: true };
 			const response = input.response;
 			input.response = new Response(
 				new ReadableStream({
@@ -361,7 +404,7 @@ export class ExecutionAttribution {
 		session: SessionInfo,
 		workspace: string,
 		tool?: string,
-	): Readonly<{ primary: FrozenPrimary; tool: string }> {
+	): Readonly<{ primary: PrimaryOwner; tool: string }> {
 		if (
 			this.#closed ||
 			session.id !== execution.sessionID ||
@@ -371,13 +414,15 @@ export class ExecutionAttribution {
 			throw new Error(
 				"Flow native execution session or workspace identity changed.",
 			);
-		const primary = this.#primary.get(execution.sessionID);
+		const record = this.#session(execution.sessionID);
+		const primary = record?.current;
 		if (
-			!primary?.request ||
-			primary.phase === "context" ||
+			!record ||
+			!primary?.http.requestSeen ||
 			primary.agent !== execution.agent
 		)
 			throw new Error("Flow tool has no attributable primary request.");
+		const snapshot = this.#evidence(primary);
 		const position = native.findIndex(
 			(message) => message.id === execution.messageID,
 		);
@@ -386,8 +431,8 @@ export class ExecutionAttribution {
 			assistant?.type !== "assistant" ||
 			assistant.agent !== execution.agent ||
 			!sameModel(assistant.model, primary.model) ||
-			primary.previousAssistants.has(assistant.id) ||
-			!same(nativeInputIDs(native.slice(0, position)), primary.inputs)
+			snapshot.previousAssistants.has(assistant.id) ||
+			!same(nativeInputIDs(native.slice(0, position)), snapshot.inputs)
 		)
 			throw new Error(
 				"Flow exact assistant identity or frozen input prefix did not match.",
@@ -401,31 +446,35 @@ export class ExecutionAttribution {
 			(tool !== undefined && call.name !== tool)
 		)
 			throw new Error("Flow exact native running tool call did not match.");
-		const assistantKey = this.#key(execution.sessionID, execution.messageID);
-		const prior = this.#assistants.get(assistantKey);
-		if (prior && prior !== primary)
+		const prior = record.assistants.get(execution.messageID);
+		if (prior && (prior.kind === "historical" || prior.primary !== primary))
 			throw new Error("Flow assistant cannot be rebound to another request.");
-		const key = JSON.stringify([
-			execution.sessionID,
-			execution.messageID,
-			execution.id,
-		]);
-		const binding = this.#bindings.get(key);
+		const key = JSON.stringify([execution.messageID, execution.id]);
+		const binding = record.bindings.get(key);
 		if (binding && (binding.primary !== primary || binding.tool !== call.name))
 			throw new Error(
 				"Flow execution identity conflicts with an immutable binding.",
 			);
 		this.#assertLive(primary.origin);
-		this.#assistants.set(assistantKey, primary);
+		if (!prior)
+			record.assistants.set(
+				execution.messageID,
+				Object.freeze({ kind: "bound", primary }),
+			);
 		const verified = binding ?? Object.freeze({ primary, tool: call.name });
-		this.#bindings.set(key, verified);
+		if (!binding) record.bindings.set(key, verified);
 		return verified;
+	}
+	deleteSession(sessionID: string): void {
+		const record = this.#sessions.get(sessionID);
+		if (record) record.current.lifetime = retired;
+		this.#sessions.set(sessionID, null);
 	}
 	clear(): void {
 		this.#closed = true;
-		this.#primary.clear();
-		this.#assistants.clear();
-		this.#bindings.clear();
+		for (const record of this.#sessions.values())
+			if (record) record.current.lifetime = retired;
+		this.#sessions.clear();
 	}
 }
 

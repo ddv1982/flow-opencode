@@ -346,7 +346,7 @@ export async function registerFlowLifecycle(
 		failure: sourceFailure,
 		hasActivePrimary: (host) => {
 			const current = attribution.current(host);
-			return current !== undefined && current.phase !== "ended";
+			return current !== undefined && current.http.phase !== "ended";
 		},
 		guidance: (host) => autoDrive.compactionContext(host),
 		observe: (host, origin, source, id) => {
@@ -546,7 +546,7 @@ export async function registerFlowLifecycle(
 					);
 					if (
 						prior &&
-						prior.phase !== "ended" &&
+						prior.http.phase !== "ended" &&
 						!attribution.retry(prior, native)
 					)
 						throw new Error("Flow primary contexts or streams overlap.");
@@ -687,6 +687,7 @@ export async function registerFlowLifecycle(
 					const host = event.data.sessionID;
 					if (event.type === "session.deleted") {
 						revoke(host);
+						attribution.deleteSession(host);
 						codingModels.delete(host);
 					} else {
 						const primary = attribution.current(host);

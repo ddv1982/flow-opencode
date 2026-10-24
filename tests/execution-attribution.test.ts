@@ -509,7 +509,7 @@ test("consumer cancellation ends its captured resource without revoking the exac
 	});
 	if (!input.response.body) throw new Error("Missing wrapped body.");
 	await input.response.body.cancel("protocol consumer stopped");
-	expect(f.primary.phase).toBe("ended");
+	expect(f.primary.http.phase).toBe("ended");
 	expect(f.primary.origin).toBe(origin);
 	expect(
 		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
@@ -536,7 +536,9 @@ test("consumer cancellation ends its captured resource without revoking the exac
 			"shell",
 		).primary.origin,
 	).toBe(origin);
-	expect(f.attribution.current(sid)?.request).toBe(nextRequest);
+	expect(f.attribution.requestOwner(nextRequest)).toBe(
+		f.attribution.current(sid),
+	);
 	expect(failures).toBe(0);
 });
 
@@ -565,7 +567,7 @@ test("consumer cancellation awaits cleanup rejection without declaring an epoch 
 	});
 	await Promise.resolve();
 	expect(settled).toBe(false);
-	expect(f.primary.phase).toBe("ended");
+	expect(f.primary.http.phase).toBe("ended");
 	expect(
 		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
 			.primary.origin.id,
@@ -629,7 +631,7 @@ for (const kind of ["compaction", "title", "generate"] as const)
 		});
 		expect(input.response).toBe(response);
 		expect(await input.response.text()).toBe("auxiliary");
-		expect(f.primary.phase).toBe("request");
+		expect(f.primary.http.phase).toBe("request");
 		expect(f.attribution.requestOwner(input.request)).toBeUndefined();
 		expect(failures).toBe(0);
 		const primary = {
@@ -760,7 +762,16 @@ test("64 held owners retain one current payload with 63 historical assistant IDs
 			}),
 		).toBe(owner);
 	}
-
+	attribution.deleteSession(sid);
+	expect(owners.flatMap((owner) => retainedSnapshot(owner) ?? []).length).toBe(
+		0,
+	);
+	expect(attribution.current(sid)).toBeUndefined();
+	for (const [index, owner] of owners.entries()) {
+		const request = requests[index];
+		if (!request) throw new Error("Missing retained request.");
+		expect(attribution.requestOwner(request)).toBe(owner);
+	}
 });
 
 test("clear retires evidence even when callers hold owners and Request keys", () => {
@@ -770,4 +781,276 @@ test("clear retires evidence even when callers hold owners and Request keys", ()
 	expect(retainedSnapshot(f.primary)).toBeUndefined();
 	expect(f.attribution.requestOwner(f.request)).toBe(f.primary);
 	expect(() => f.attribution.freeze(context, [user], origin)).toThrow("closed");
+});
+
+test("end before request admission cannot prove a running tool", () => {
+	const attribution = new ExecutionAttribution(() => {});
+	const primary = attribution.freeze(context, [user], origin);
+	attribution.end(primary);
+	expect(() =>
+		attribution.verify(execution, [user, assistant], session, "/tmp", "shell"),
+	).toThrow("primary request");
+});
+
+test("invalid replacement preserves the exact prior current payload and tool", () => {
+	const f = fixture();
+	f.attribution.end(f.primary);
+	for (const input of [
+		{ ...context, messages: [] },
+		{ ...context, agent: Agent.ID.make("other") },
+		{
+			...context,
+			model: { ...model, variant: Model.VariantID.make("changed") },
+		},
+	])
+		expect(() => f.attribution.freeze(input, [user], origin)).toThrow();
+	expect(f.attribution.current(sid)).toBe(f.primary);
+	expect(retainedSnapshot(f.primary)?.previousAssistants.size).toBe(0);
+	expect(
+		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
+			.primary,
+	).toBe(f.primary);
+});
+
+test("permitted retry shares exclusions and admits the retry assistant's first tool", () => {
+	const attribution = new ExecutionAttribution(() => {});
+	const excluded = { ...assistant, id: "msg_excluded" };
+	const first = attribution.freeze(context, [user, excluded], origin);
+	attribution.request({
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary",
+		request: new Request("http://localhost/retry-1"),
+	});
+	const retry: SessionMessageInfo = {
+		...assistant,
+		content: [],
+		retry: {
+			attempt: 1,
+			at: 2,
+			error: { type: "provider.transport", message: "Retry" },
+		},
+	};
+	const exclusions = retainedSnapshot(first)?.previousAssistants;
+	expect(attribution.retry(first, [user, excluded, retry])).toBe(true);
+	const next = attribution.freeze(context, [user, excluded, retry], origin);
+	expect(retainedSnapshot(next)?.previousAssistants).toBe(exclusions);
+	expect(retainedSnapshot(first)).toBeUndefined();
+	attribution.request({
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary",
+		request: new Request("http://localhost/retry-2"),
+	});
+	attribution.end(next);
+	expect(attribution.executionOwner(execution)).toBe(next);
+	expect(
+		attribution.verify(
+			execution,
+			[user, excluded, assistant],
+			session,
+			"/tmp",
+			"shell",
+		).primary,
+	).toBe(next);
+	expect(
+		attribution.executionOwner({
+			...execution,
+			messageID: SessionMessage.ID.make("msg_excluded"),
+		}),
+	).toBeUndefined();
+	expect(() => attribution.retry(first, [user, retry])).toThrow("superseded");
+	expect(() => attribution.hasFailedTerminal(first, [user])).toThrow(
+		"superseded",
+	);
+});
+
+test("known bound and excluded assistants preserve identity after a shorter prefix", () => {
+	const f = fixture();
+	f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell");
+	f.attribution.end(f.primary);
+	const historical = { ...assistant, id: "msg_excluded_unbound" };
+	const middle = f.attribution.freeze(
+		context,
+		[user, assistant, historical],
+		origin,
+	);
+	f.attribution.end(middle);
+	const next = f.attribution.freeze(context, [user], origin);
+	f.attribution.request({
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary",
+		request: new Request("http://localhost/shorter"),
+	});
+	expect(f.attribution.executionOwner(execution)).toBe(f.primary);
+	expect(
+		f.attribution.executionOwner({ ...execution, id: CallID.make("new-call") }),
+	).toBe(f.primary);
+	expect(
+		f.attribution.executionOwner({
+			...execution,
+			messageID: SessionMessage.ID.make(historical.id),
+		}),
+	).toBeUndefined();
+	expect(
+		f.attribution.executionOwner({
+			...execution,
+			messageID: SessionMessage.ID.make("msg_never_stored"),
+		}),
+	).toBe(next);
+	expect(() =>
+		f.attribution.verify(
+			execution,
+			[user, assistant],
+			session,
+			"/tmp",
+			"shell",
+		),
+	).toThrow("rebound");
+	const fresh = { ...assistant, id: "msg_fresh" };
+	expect(
+		f.attribution.verify(
+			{ ...execution, messageID: SessionMessage.ID.make(fresh.id) },
+			[user, fresh],
+			session,
+			"/tmp",
+			"shell",
+		).primary,
+	).toBe(next);
+});
+
+test("deletion keeps exact Request ownership, rejects replay, and leaves another session usable", () => {
+	const f = fixture();
+	f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell");
+	const otherID = Session.ID.make("session-other");
+	const other = f.attribution.freeze(
+		{ ...context, sessionID: otherID },
+		[user],
+		origin,
+	);
+	f.attribution.request({
+		sessionID: otherID,
+		agent,
+		model,
+		kind: "primary",
+		request: new Request("http://localhost/other"),
+	});
+	for (let repeat = 0; repeat < 2; repeat++) {
+		f.attribution.deleteSession(sid);
+		expect(retainedSnapshot(f.primary)).toBeUndefined();
+		expect(f.attribution.requestOwner(f.request)).toBe(f.primary);
+		expect(() => f.attribution.executionOwner(execution)).toThrow(
+			"session was deleted",
+		);
+		expect(() => f.attribution.freeze(context, [user], origin)).toThrow(
+			"session was deleted",
+		);
+		expect(() =>
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			),
+		).toThrow("session was deleted");
+		let failures = 0;
+		expect(() =>
+			f.attribution.response(
+				{
+					sessionID: sid,
+					agent,
+					model,
+					kind: "primary",
+					request: f.request,
+					response: new Response("late"),
+				},
+				() => {
+					failures++;
+				},
+			),
+		).toThrow();
+		expect(failures).toBe(0);
+		expect(f.attribution.current(sid)).toBeUndefined();
+		expect(
+			f.attribution.verify(
+				{ ...execution, sessionID: otherID },
+				[user, assistant],
+				{ ...session, id: otherID },
+				"/tmp",
+				"shell",
+			).primary,
+		).toBe(other);
+	}
+});
+
+for (const mismatch of ["provider", "model", "variant", "agent"] as const)
+	test(`exact assistant ${mismatch} remains immutable after HTTP end`, () => {
+		const f = fixture();
+		f.attribution.end(f.primary);
+		const changed: SessionMessageInfo = {
+			...assistant,
+			agent: mismatch === "agent" ? Agent.ID.make("other") : agent,
+			model: {
+				...model,
+				...(mismatch === "provider"
+					? { providerID: Provider.ID.make("other") }
+					: {}),
+				...(mismatch === "model" ? { id: Model.ID.make("other") } : {}),
+				...(mismatch === "variant"
+					? { variant: Model.VariantID.make("other") }
+					: {}),
+			},
+		};
+		expect(() =>
+			f.attribution.verify(
+				execution,
+				[user, changed],
+				session,
+				"/tmp",
+				"shell",
+			),
+		).toThrow("exact assistant");
+		expect(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).toBe(f.primary);
+	});
+
+test("one native call cannot change tool names after its immutable binding", () => {
+	const f = fixture();
+	const binding = f.attribution.verify(
+		execution,
+		[user, assistant],
+		session,
+		"/tmp",
+		"shell",
+	);
+	const changed: SessionMessageInfo = {
+		...assistant,
+		content: assistant.content.map((part) =>
+			part.type === "tool" ? { ...part, name: "read" } : part,
+		),
+	};
+	expect(() =>
+		f.attribution.verify(execution, [user, changed], session, "/tmp"),
+	).toThrow("immutable binding");
+	expect(
+		f.attribution.verify(
+			execution,
+			[user, assistant],
+			session,
+			"/tmp",
+			"shell",
+		),
+	).toBe(binding);
 });

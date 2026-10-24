@@ -26,6 +26,8 @@ import {
 } from "../src/platform/opencode/auto-drive.js";
 import { ExecutionAttribution } from "../src/platform/opencode/execution-attribution.js";
 import { registerFlowLifecycle } from "../src/platform/opencode/lifecycle.js";
+import type { NativeToolDefinition } from "../src/platform/opencode/sdk.js";
+import { registerFlowTools } from "../src/platform/opencode/tools.js";
 import {
 	deterministicEnvironment,
 	MemorySessionRepository,
@@ -105,6 +107,7 @@ async function fixture(selectedAgent = agent) {
 	let lost = false;
 	let pushEvent: ((event: OpenCodeEvent | null) => void) | null = null;
 	const queuedEvents: OpenCodeEvent[] = [];
+	const eventHandled = new Map<string, () => void>();
 	async function waitAdmission(signal?: AbortSignal) {
 		if (!admissionGate) return;
 		if (!signal) return admissionGate;
@@ -307,7 +310,11 @@ async function fixture(selectedAgent = agent) {
 								once: true,
 							});
 						}));
-					if (event) yield event;
+					if (event) {
+						yield event;
+						eventHandled.get(event.id)?.();
+						eventHandled.delete(event.id);
+					}
 					if (event === null) break;
 				}
 			},
@@ -438,6 +445,16 @@ async function fixture(selectedAgent = agent) {
 		loseStream() {
 			lost = true;
 			pushEvent?.(null);
+		},
+		async sendEventAndWait(event: OpenCodeEvent) {
+			const handled = Promise.withResolvers<void>();
+			eventHandled.set(event.id, handled.resolve);
+			if (pushEvent) {
+				const push = pushEvent;
+				pushEvent = null;
+				push(event);
+			} else queuedEvents.push(event);
+			await handled.promise;
 		},
 		sendEvent(event: OpenCodeEvent) {
 			if (pushEvent) {
@@ -3666,6 +3683,276 @@ for (const outcome of ["failed", "interrupted"] as const)
 			expect(oldEffects).toBe(0);
 			expect(f.repository.saveCount).toBe(0);
 		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+async function effectTool(f: OwnershipFixture, effects: string[]) {
+	const registered = new Map<string, NativeToolDefinition>();
+	await registerFlowTools(
+		{
+			location: { directory },
+			permission: { assert: async () => {} },
+			tool: {
+				transform: async (apply) => {
+					apply({
+						list: () => [...registered].map(([id, tool]) => ({ id, ...tool })),
+						get: (id) => {
+							const tool = registered.get(id);
+							return tool ? { id, ...tool } : undefined;
+						},
+						namespace() {},
+						add: (tool) => {
+							registered.set(tool.name, tool);
+						},
+						update: (id, update) => {
+							const tool = registered.get(id);
+							if (tool) update(tool);
+						},
+						remove: (id) => {
+							registered.delete(id);
+						},
+					});
+					return {
+						dispose: async () => {
+							registered.clear();
+						},
+					};
+				},
+			},
+		},
+		{
+			flow_status: {
+				description: "Observe execution effect",
+				input: { type: "object" },
+				execute: async () => {
+					effects.push("effect");
+					return "applied";
+				},
+			},
+		},
+		f.lifecycle.beforeTool,
+	);
+	const tool = registered.get("flow_status");
+	if (!tool) throw new Error("Missing registered effect tool.");
+	return tool;
+}
+
+for (const reject of [false, true])
+	for (const successor of ["same-epoch", "new-epoch"] as const)
+		test(`captured tool read ${reject} preserves ${successor} successor effects`, async () => {
+			const f = await fixture();
+			try {
+				await initialOwnershipWork(f);
+				const old = ownershipNativeCall(f);
+				f.blockNextContextRead();
+				if (reject) f.rejectNextContextRead();
+				const effects: string[] = [];
+				const tool = await effectTool(f, effects);
+				const pending = tool.execute({}, old);
+				const caught = pending.then(
+					() => null,
+					(error) => String(error),
+				);
+				await f.waitContextRead();
+				if (successor === "new-epoch") await freshOwnershipWork(f);
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+				const fresh = ownershipNativeCall(f);
+				const authority = f.autoDrive.captureAuthority(sessionID);
+				expect(authority).not.toBeNull();
+				f.releaseContextRead();
+				expect(await caught).toBe(
+					reject
+						? "Error: Native context snapshot failed."
+						: "Error: Flow execution epoch was revoked.",
+				);
+				expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+				await tool.execute({}, fresh);
+				expect(effects).toEqual(["effect"]);
+			} finally {
+				f.releaseContextRead();
+				await f.lifecycle.dispose();
+			}
+		});
+
+for (const known of ["bound", "historical"] as const)
+	for (const boundary of ["flow", "shell"] as const)
+		test(`${known} ${boundary} identity stays stale through compaction-truncated history`, async () => {
+			const f = await fixture();
+			try {
+				await initialOwnershipWork(f);
+				const old = ownershipNativeCall(
+					f,
+					boundary === "shell" ? "shell" : "flow_status",
+				);
+				if (known === "bound") await f.lifecycle.beforeTool(old);
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+				const control = automaticControl("msg_retention_compaction");
+				f.native.push(control);
+				await f.emit("compaction", f.context());
+				f.native.splice(0, f.native.length, {
+					...control,
+					status: "completed",
+				});
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+				const authority = f.autoDrive.captureAuthority(sessionID);
+				expect(authority).not.toBeNull();
+				const effects: string[] = [];
+				const tool = await effectTool(f, effects);
+				for (const id of [old.id, CallID.make("new-call-on-old-assistant")]) {
+					const replay = async () => {
+						if (boundary === "flow")
+							await f.lifecycle.beforeTool({ ...old, id });
+						else
+							for (const callback of f.toolCallbacks["execute.before"])
+								await callback({
+									sessionID,
+									agent,
+									messageID: old.messageID,
+									id,
+									tool: "shell",
+									input: {},
+								});
+						effects.push("old");
+					};
+					await expect(replay()).rejects.toThrow();
+					expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+				}
+				await tool.execute({}, ownershipNativeCall(f));
+				expect(effects).toEqual(["effect"]);
+			} finally {
+				await f.lifecycle.dispose();
+			}
+		});
+
+test("session.deleted public barrier retires held owners and isolates another session", async () => {
+	const f = await fixture();
+	const freeze = spyOn(ExecutionAttribution.prototype, "freeze");
+	try {
+		await f.command("flow-auto", "Inspect original");
+		const oldRequest = await startOwnedRequest(f);
+		await finishOwnedResponse(f, oldRequest);
+		const oldCall = ownershipNativeCall(f);
+		await f.lifecycle.beforeTool(oldCall);
+		const oldOwner = freeze.mock.results.at(-1)?.value;
+		if (!oldOwner) throw new Error("Missing captured primary.");
+		const otherID = Session.ID.make("session-retention-other");
+		f.children.push({ ...f.session, id: otherID });
+		f.native.splice(0);
+		const command = f.commands.get("flow-auto");
+		if (!command) throw new Error("Missing automatic command.");
+		await command.execute({
+			sessionID: otherID,
+			prompt: { text: "Inspect other session" },
+			delivery: "queue",
+		});
+		await f.emit("context", { ...f.context(), sessionID: otherID });
+		const otherRequest = new Request("http://localhost/other-session");
+		await f.emit("http.request", {
+			sessionID: otherID,
+			agent,
+			model,
+			kind: "primary",
+			request: otherRequest,
+		});
+		const response = {
+			sessionID: otherID,
+			agent,
+			model,
+			kind: "primary" as const,
+			request: otherRequest,
+			response: new Response("other"),
+		};
+		await f.emit("http.response", response);
+		expect(await response.response.text()).toBe("other");
+		const otherCall = { ...ownershipNativeCall(f), sessionID: otherID };
+		const authority = f.autoDrive.captureAuthority(otherID);
+		expect(authority).not.toBeNull();
+		const effects: string[] = [];
+		const tool = await effectTool(f, effects);
+		for (let repeat = 0; repeat < 2; repeat++) {
+			await f.sendEventAndWait({
+				id: `evt_retention_deleted_${repeat}`,
+				created: 5,
+				type: "session.deleted",
+				durable: { aggregateID: sessionID, seq: repeat + 1, version: 2 },
+				data: { sessionID },
+			});
+			expect(f.codingModels.has(sessionID)).toBe(false);
+			expect(Reflect.get(oldOwner, "lifetime")?.kind ?? "current").toBe(
+				"retired",
+			);
+			await expect(tool.execute({}, oldCall)).rejects.toThrow(
+				"session was deleted",
+			);
+			for (const callback of f.toolCallbacks["execute.before"])
+				await expect(
+					Promise.resolve().then(() =>
+						callback({
+							sessionID,
+							agent,
+							messageID: oldCall.messageID,
+							id: oldCall.id,
+							tool: "shell",
+							input: {},
+						}),
+					),
+				).rejects.toThrow("session was deleted");
+			await expect(
+				f.emit("http.request", {
+					sessionID,
+					agent,
+					model,
+					kind: "primary",
+					request: oldRequest,
+				}),
+			).rejects.toThrow();
+			await expect(
+				f.emit("http.response", {
+					sessionID,
+					agent,
+					model,
+					kind: "primary",
+					request: oldRequest,
+					response: new Response("late"),
+				}),
+			).rejects.toThrow();
+			await tool.execute({}, otherCall);
+			expect(f.autoDrive.captureAuthority(otherID)).toEqual(authority);
+		}
+		expect(effects).toEqual(["effect", "effect"]);
+	} finally {
+		freeze.mockRestore();
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const when of ["before", "during-read"] as const)
+	test(`native ToolContext abort ${when} blocks the registered tool effect`, async () => {
+		const f = await fixture();
+		try {
+			await initialOwnershipWork(f);
+			const effects: string[] = [];
+			const tool = await effectTool(f, effects);
+			const controller = new AbortController();
+			const call = { ...ownershipNativeCall(f), signal: controller.signal };
+			if (when === "before") controller.abort();
+			else f.blockNextContextRead();
+			const pending = tool.execute({}, call);
+			const caught = pending.then(
+				() => null,
+				(error) => String(error),
+			);
+			if (when === "during-read") {
+				await f.waitContextRead();
+				controller.abort();
+				f.releaseContextRead();
+			}
+			expect(await caught).toBe("Error: Flow tool execution was cancelled.");
+			expect(effects).toEqual([]);
+			expect(f.autoDrive.captureAuthority(sessionID)).not.toBeNull();
+		} finally {
+			f.releaseContextRead();
 			await f.lifecycle.dispose();
 		}
 	});
