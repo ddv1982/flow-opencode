@@ -770,17 +770,18 @@ export async function createNativeFlowHost(
 		) {
 			const session = ensureSession(host);
 			const completedAt = stamp();
+			const eventID = `evt_${stamp()}`;
 			session.time.idle = completedAt;
 			session.outcome = outcome;
 			history(host).push({
-				id: SessionMessage.ID.create(),
+				id: SessionMessage.ID.fromEvent(eventID),
 				type: "idle",
 				outcome,
 				time: { created: completedAt },
 			});
 			await events.emit({
-				id: `evt_${stamp()}`,
-				created: stamp(),
+				id: eventID,
+				created: completedAt,
 				durable: { aggregateID: host, seq: stamp(), version: 1 },
 				...(outcome === "succeeded"
 					? {
