@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import type {
 	ObservedValidation,
 	PreparedValidation,
@@ -26,8 +26,26 @@ import {
 	ValidationCaptureCoordinator,
 } from "../src/platform/opencode/validation-capture.js";
 
-const workspace = await mkdtemp(join(tmpdir(), "flow-native-validation-"));
-afterAll(() => rm(workspace, { recursive: true, force: true }));
+const temporaryRoot = await mkdtemp(join(tmpdir(), "flow-native-validation-"));
+const workspace = join(
+	temporaryRoot,
+	...Array<string>(process.cwd().split(/[\\/]/).length).fill("workspace"),
+);
+await mkdir(workspace, { recursive: true });
+afterAll(() => rm(temporaryRoot, { recursive: true, force: true }));
+await mkdir(join(workspace, "workdir-child"));
+if (process.platform !== "win32") {
+	await symlink(tmpdir(), join(workspace, "workdir-outside"), "dir");
+	for (const name of [" ", "\n", "native-alias ", "native-alias\n"])
+		await symlink(tmpdir(), join(workspace, name), "dir");
+	for (const name of [
+		"native-alias",
+		"  ",
+		"workspace-alias\n",
+		"workspace-alias ",
+	])
+		await symlink(workspace, join(workspace, name), "dir");
+}
 const SOURCE: SourceDigest = `sha256:${"a".repeat(64)}`;
 const prepared: PreparedValidation = {
 	featureId: "runtime",
@@ -113,32 +131,134 @@ function digest(text: string): `sha256:${string}` {
 	return `sha256:${createHash("sha256").update(text).digest("hex")}`;
 }
 
-test("persists the exact source-bound native shell observation and appends a receipt", async () => {
-	const { capture, observations } = fixture();
-	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before());
-	const completed = after();
-	const result = await capture.observeToolAfter(completed);
-	expect(observations).toEqual([
-		{
-			...prepared,
-			captureId: "capture-1",
-			exitCode: 0,
-			outputComplete: true,
-			outputDigest: digest("passed"),
+test.each([
+	["omitted", undefined, undefined],
+	["empty", "", ""],
+	["absolute", workspace, workspace],
+	["dot before", ".", workspace],
+	["dot after", workspace, "."],
+	["dot in both hooks", ".", "."],
+	["relative before", `../${basename(workspace)}/.`, workspace],
+	["relative after", workspace, `../${basename(workspace)}/.`],
+	[
+		"relative in both hooks",
+		`../${basename(workspace)}/.`,
+		`../${basename(workspace)}/.`,
+	],
+	...(process.platform === "win32"
+		? []
+		: ([
+				["spaces alias before", "  ", workspace],
+				["spaces alias after", workspace, "  "],
+				["newline alias before", "workspace-alias\n", workspace],
+				["newline alias after", workspace, "workspace-alias\n"],
+				["trailing-space alias before", "workspace-alias ", workspace],
+				["trailing-space alias after", workspace, "workspace-alias "],
+			] as const)),
+] as const)(
+	"%s workdir preserves exact source-bound evidence and receipt",
+	async (_name, beforeWorkdir, afterWorkdir) => {
+		const { capture, observations } = fixture();
+		expect(resolve(workspace)).not.toBe(process.cwd());
+		capture.arm("ses_host", workspace, prepared);
+		await capture.observeToolBefore(
+			before({
+				input: {
+					command: prepared.command,
+					...(beforeWorkdir === undefined ? {} : { workdir: beforeWorkdir }),
+				},
+			}),
+		);
+		const completed = after(
+			undefined,
+			{},
+			{
+				input: {
+					command: prepared.command,
+					...(afterWorkdir === undefined ? {} : { workdir: afterWorkdir }),
+				},
+			},
+		);
+		const result = await capture.observeToolAfter(completed);
+		expect(observations).toEqual([
+			{
+				...prepared,
+				captureId: "capture-1",
+				exitCode: 0,
+				outputComplete: true,
+				outputDigest: digest("passed"),
+			},
+		]);
+		const observation = observations[0];
+		if (!observation) throw new Error("Observation was not persisted.");
+		expect(result).toEqual(persisted(observation));
+		expect(
+			completed.status === "completed" && completed.result.content,
+		).toEqual([
+			{
+				type: "text",
+				text: 'passed\n\n[flow-validation] {"id":"capture-1","scope":"focused","intent":"pass","passed":true,"observed":false,"recordedRevision":4}',
+			},
+		]);
+		expect(capture.pendingCount()).toBe(0);
+	},
+);
+const processCwdWorkdir = relative(process.cwd(), workspace);
+for (const phase of ["before", "after"] as const) {
+	test.each([
+		...(isAbsolute(processCwdWorkdir)
+			? []
+			: ([["process-cwd-relative", processCwdWorkdir]] as const)),
+		["escaping", ".."],
+		["subdirectory", "./workdir-child"],
+		["absolute outside", tmpdir()],
+		...(process.platform === "win32"
+			? []
+			: ([
+					["symlink-outside", "./workdir-outside"],
+					["space-only outside", " "],
+					["dot-space outside", "./ "],
+					["newline-only outside", "\n"],
+					["relative trailing-space outside", "./native-alias "],
+					["absolute trailing-space outside", join(workspace, "native-alias ")],
+					["relative newline outside", "./native-alias\n"],
+					["absolute space-only outside", join(workspace, " ")],
+					["absolute newline outside", join(workspace, "\n")],
+					["padded absolute", ` ${workspace} `],
+					["nonexistent whitespace name", "./missing "],
+				] as const)),
+	] as const)(
+		`${phase} rejects %s workdir without a receipt`,
+		async (name, workdir) => {
+			const { capture, observations } = fixture();
+			if (name === "process-cwd-relative") {
+				expect(resolve(workdir)).toBe(resolve(workspace));
+				expect(resolve(workspace, workdir)).not.toBe(resolve(workspace));
+			}
+			capture.arm("ses_host", workspace, prepared);
+			const input = { command: prepared.command, workdir };
+			const completed = after(undefined, {}, { input });
+			if (phase === "before") {
+				await expect(
+					capture.observeToolBefore(before({ input })),
+				).rejects.toThrow("capture was cancelled");
+				expect(await capture.observeToolAfter(completed)).toBeNull();
+			} else {
+				await capture.observeToolBefore(
+					before({
+						input: { command: prepared.command, workdir: workspace },
+					}),
+				);
+				await expect(capture.observeToolAfter(completed)).rejects.toThrow();
+			}
+			expect(observations).toEqual([]);
+			expect(capture.pendingCount()).toBe(0);
+			expect(
+				completed.status === "completed" && completed.result.content,
+			).toEqual([{ type: "text", text: "passed" }]);
 		},
-	]);
-	const observation = observations[0];
-	if (!observation) throw new Error("Observation was not persisted.");
-	expect(result).toEqual(persisted(observation));
-	expect(completed.status === "completed" && completed.result.content).toEqual([
-		{
-			type: "text",
-			text: 'passed\n\n[flow-validation] {"id":"capture-1","scope":"focused","intent":"pass","passed":true,"observed":false,"recordedRevision":4}',
-		},
-	]);
-	expect(capture.pendingCount()).toBe(0);
-});
+	);
+}
 test.each([
 	[
 		"nonzero-completed",
