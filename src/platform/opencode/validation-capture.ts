@@ -1,8 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants } from "node:fs";
+import { constants, realpathSync } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { z } from "zod";
 import type {
 	ObservedValidation,
@@ -420,8 +420,9 @@ export class ValidationCaptureCoordinator {
 				) ||
 				assertMutableWorkspaceRoot(identity.location.directory) !==
 					capture.workspace ||
-				(args.data.workdir &&
-					assertMutableWorkspaceRoot(args.data.workdir) !== capture.workspace)
+				realpathSync(
+					resolve(identity.location.directory, args.data.workdir ?? ""),
+				) !== capture.workspace
 			)
 				throw new Error(
 					"The shell identity, workspace, or command did not match the armed validation.",
@@ -469,8 +470,9 @@ export class ValidationCaptureCoordinator {
 			identity.parentID !== undefined ||
 			assertMutableWorkspaceRoot(identity.location.directory) !==
 				capture.workspace ||
-			(args.data.workdir &&
-				assertMutableWorkspaceRoot(args.data.workdir) !== capture.workspace)
+			realpathSync(
+				resolve(identity.location.directory, args.data.workdir ?? ""),
+			) !== capture.workspace
 		)
 			throw new ValidationCaptureError(
 				"The executed shell command or workspace changed after Flow armed it.",
