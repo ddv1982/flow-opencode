@@ -11,45 +11,46 @@ cadence. There is no bridge release or dual runtime. Session v5 is unchanged.
 
 ## Host boundary
 
-Native v2 definitions register roles, commands, and tools. Application schemas
-produce JSON Schema. Structured tool results retain Flow envelopes and guidance.
+Native definitions register roles, commands, and tools. Application schemas
+supply JSON Schema. Results retain Flow envelopes and guidance.
+Frozen inputs bind each primary to its native session, agent, model, assistant,
+call, and workspace. Flow selects HTTP for providers, models, and variants.
+Prompt hooks and event arrival order grant no authority.
 
-Each primary request freezes consumed inputs and assistant bindings within a
-live epoch. The prompt hook grants no authority. A tool must match the native session, assistant, agent, call,
-workspace, and consumed-input snapshot. Asynchronous event arrival order does
-not establish authority. Flow selects HTTP in provider, model, and variant
-settings so each request stays observable.
+Unregistered native user and synthetic turns may use ordinary tools. They gain
+no Flow-tool access, validation, recovery intent, or automatic lease. A fresh
+observed prompt or Flow command establishes Flow provenance. Retired request
+owners retain no transcript snapshots.
 
-HTTP consumer cancellation ends the captured request, as EOF does. It proves
-neither success nor user interruption. Tool guards retain exact input identity
-and the native abort signal. Read and status failures retain owned revocation.
+EOF and consumer cancellation close only the captured HTTP request. Protected
+calls retain exact input identity and the native abort signal. Only a proved
+owner can revoke. Terminal read failures before proof grant nothing.
 
-Automatic compaction can precede the first primary request. It preserves the
-epoch of an accepted input only through the exact checked native control.
-Its user-role checkpoint grants no approval. The input ledger owns reservations,
-readiness, lifetime, and history; request attribution owns primary and tool
-bindings. Readiness waits precede authority checks. Interrupted ordinary history
-may summarize without an execution origin. Known automatic history cannot take
-that fallback. Live ordinary continuations retain their checked origin.
-Matched source failures revoke that source; stale unmatched callbacks cannot
-revoke a fresh one. Authority never comes from summary text or survives restart.
+The input ledger owns reservations, readiness, lifetime, and history. Request
+attribution owns primary and tool bindings. Readiness precedes authority checks.
+Checked native controls preserve accepted epochs through automatic compaction,
+including before the first primary. Checkpoints grant no approval. Matched source
+failure revokes only that source. Stale callbacks cannot revoke a fresh source.
+Summary text and restart never supply authority.
 
-The model picker loads with the server package. Server-owned global preferences
-are separate from native configuration; project plugin options override them.
-Role updates check revision, catalog, project, and activity. Transforms refresh
-loaded instances. Explicit selection clears the role's reasoning variant; reset
-restores its base. The coding model stays under native selection.
+Ordinary history may summarize without an origin. Summary-only execution and
+unknown-history automatic compaction remain refused. Accepted ordinary
+continuations retain their checked origin. Known automatic history cannot become
+unowned summary history.
+
+The model picker loads with the server. Server storage owns global preferences.
+Project options override them. Role updates check revision, catalog, project,
+and activity, then refresh transforms. Selection clears the role's reasoning
+variant. Reset restores its base. Native selection owns the coding model.
 
 ## Qualification
 
-Qualification retains all 17 cases on two provider routes.
-Manager and reviewer use the same approved model within each cell. Recovery is
-off. Candidate, canary, and publication retain the exact archive and unpacked
-manifest identities.
+Qualification retains 17 cases on two provider routes, with the same approved
+manager and reviewer model per cell and recovery off. Candidate, canary, and
+publication bind the exact archive and unpacked manifest.
 
-Historical 9.x pins, digests, transcripts, and qualification bundles remain
-verifiable without an active OpenCode 1 implementation. Publication retains
-existing approval gates.
+Historical 9.x pins, digests, transcripts, and bundles remain verifiable without
+an OpenCode 1 runtime. Publication approval gates remain.
 
 See [release qualification](../release-qualification.md) for the executable gates
 and [automatic continuation](../automatic-continuation.md) for operator behavior.

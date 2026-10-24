@@ -2147,7 +2147,7 @@ describe("authenticated validation continuation", () => {
 				command,
 				validationOrigin.assistantId,
 			);
-			await capture.observeToolBefore(execution);
+			await capture.observeToolBefore(execution, () => {});
 			await capture.observeToolAfter({
 				...execution,
 				status: "completed",
@@ -2736,7 +2736,7 @@ describe("authenticated validation continuation", () => {
 			"check",
 			validationOrigin.assistantId,
 		);
-		await capture.observeToolBefore(execution);
+		await capture.observeToolBefore(execution, () => {});
 		const completing = capture.observeToolAfter({
 			...execution,
 			status: "completed",

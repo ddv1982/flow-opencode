@@ -43,6 +43,8 @@ type PendingCapture = PreparedValidation &
 			messageID: string;
 			agent: string;
 			startedAt: number;
+			assertCurrent(): void;
+			phase: "running" | "recording";
 		} | null;
 		priorReport: { digest: string; modifiedMs: number } | null;
 	};
@@ -52,6 +54,7 @@ type ValidationCaptureOptions = Readonly<{
 	persistObservation: (
 		workspace: string,
 		observation: ObservedValidation,
+		assertAuthorized: () => void,
 	) => Promise<ValidationObservation>;
 	readReport?:
 		| ((
@@ -393,22 +396,41 @@ export class ValidationCaptureCoordinator {
 		this.#shellRecords.clear();
 	}
 
-	async observeToolBefore(input: NativeToolBefore): Promise<void> {
+	#assertCurrent(capture: PendingCapture): void {
+		if (this.#pending.get(capture.sessionID) !== capture || !capture.execution)
+			throw new ValidationCaptureError(
+				"Flow validation capture was superseded.",
+			);
+		capture.execution.assertCurrent();
+	}
+	#remove(capture: PendingCapture): void {
+		if (this.#pending.get(capture.sessionID) === capture)
+			this.#pending.delete(capture.sessionID);
+	}
+
+	async observeToolBefore(
+		input: NativeToolBefore,
+		assertCurrent: () => void,
+	): Promise<void> {
 		this.#prune();
 		if (input.tool !== "shell") return;
 		const capture = this.#pending.get(input.sessionID);
 		if (!capture || capture.execution) return;
+		assertCurrent();
 		const args = ShellInput.safeParse(input.input);
 		capture.execution = {
 			id: input.id,
 			messageID: input.messageID,
 			agent: input.agent,
 			startedAt: this.#now(),
+			assertCurrent,
+			phase: "running",
 		};
 		try {
 			const identity = SessionIdentity.parse(
 				await this.#readSession(input.sessionID),
 			);
+			this.#assertCurrent(capture);
 			if (
 				!args.success ||
 				args.data.command !== capture.command ||
@@ -428,17 +450,26 @@ export class ValidationCaptureCoordinator {
 					"The shell identity, workspace, or command did not match the armed validation.",
 				);
 		} catch (error) {
-			this.#pending.delete(input.sessionID);
+			this.#remove(capture);
 			throw new ValidationCaptureError(
 				"The next shell command did not match the armed validation; capture was cancelled.",
 				{ cause: error },
 			);
 		}
-		if (capture.resultsPath && capture.assertions.length > 0) {
-			const report = await this.#report(capture.workspace, capture.resultsPath);
-			capture.priorReport = report
-				? { digest: digest(report.text), modifiedMs: report.modifiedMs }
-				: null;
+		try {
+			if (capture.resultsPath && capture.assertions.length > 0) {
+				const report = await this.#report(
+					capture.workspace,
+					capture.resultsPath,
+				);
+				this.#assertCurrent(capture);
+				capture.priorReport = report
+					? { digest: digest(report.text), modifiedMs: report.modifiedMs }
+					: null;
+			}
+		} catch (error) {
+			this.#remove(capture);
+			throw error;
 		}
 	}
 
@@ -452,104 +483,126 @@ export class ValidationCaptureCoordinator {
 		if (
 			!capture ||
 			!execution ||
+			execution.phase !== "running" ||
 			execution.id !== input.id ||
 			execution.messageID !== input.messageID ||
 			execution.agent !== input.agent
 		)
 			return null;
-		this.#pending.delete(input.sessionID);
-		const args = ShellInput.safeParse(input.input);
-		const identity = SessionIdentity.parse(
-			await this.#readSession(input.sessionID),
-		);
-		if (
-			!args.success ||
-			args.data.command !== capture.command ||
-			identity.id !== input.sessionID ||
-			identity.agent !== input.agent ||
-			identity.parentID !== undefined ||
-			assertMutableWorkspaceRoot(identity.location.directory) !==
-				capture.workspace ||
-			realpathSync(
-				resolve(identity.location.directory, args.data.workdir ?? ""),
-			) !== capture.workspace
-		)
-			throw new ValidationCaptureError(
-				"The executed shell command or workspace changed after Flow armed it.",
+		execution.phase = "recording";
+		try {
+			this.#assertCurrent(capture);
+			const args = ShellInput.safeParse(input.input);
+			const identity = SessionIdentity.parse(
+				await this.#readSession(input.sessionID),
 			);
-		const observed = observeShell(input);
-		const observedExit = observed.kind === "exited" ? observed.exit : null;
-		const observedComplete =
-			observed.kind === "exited" ? observed.complete : null;
-		const fullOutput = await this.#completeSpilledOutput(
-			capture,
-			input,
-			observed,
-		);
-		const outputComplete = observedComplete === true || fullOutput !== null;
-		const hostGap: ValidationIneligibleReason | null =
-			observedExit === null
-				? "exit-code-unavailable"
-				: observedComplete === null
-					? "output-completeness-unknown"
-					: null;
+			this.#assertCurrent(capture);
+			if (
+				!args.success ||
+				args.data.command !== capture.command ||
+				identity.id !== input.sessionID ||
+				identity.agent !== input.agent ||
+				identity.parentID !== undefined ||
+				assertMutableWorkspaceRoot(identity.location.directory) !==
+					capture.workspace ||
+				realpathSync(
+					resolve(identity.location.directory, args.data.workdir ?? ""),
+				) !== capture.workspace
+			)
+				throw new ValidationCaptureError(
+					"The executed shell command or workspace changed after Flow armed it.",
+				);
+			const observed = observeShell(input);
+			const observedExit = observed.kind === "exited" ? observed.exit : null;
+			const observedComplete =
+				observed.kind === "exited" ? observed.complete : null;
+			const fullOutput = await this.#completeSpilledOutput(
+				capture,
+				input,
+				observed,
+			);
+			this.#assertCurrent(capture);
+			const outputComplete = observedComplete === true || fullOutput !== null;
+			const hostGap: ValidationIneligibleReason | null =
+				observedExit === null
+					? "exit-code-unavailable"
+					: observedComplete === null
+						? "output-completeness-unknown"
+						: null;
 
-		const observedAssertions = await this.#observeAssertions(
-			capture,
-			this.#now(),
-		);
-		const observation = await this.#persist(capture.workspace, {
-			featureId: capture.featureId,
-			runId: capture.runId,
-			command: capture.command,
-			scope: capture.scope,
-			sourceDigest: capture.sourceDigest,
-			hostPlatform: capture.hostPlatform,
-			intent: capture.intent,
-			assertions: capture.assertions,
-			resultsPath: capture.resultsPath,
-			...(observedAssertions.length > 0 ? { observedAssertions } : {}),
-			captureId: capture.captureId,
-			exitCode: observedExit,
-			outputDigest: digest(fullOutput ?? observed.text),
-			outputComplete,
-			...(hostGap ? { ineligibleReason: hostGap } : {}),
-		});
-		const outcome = validationContinuationOutcome(capture, observation);
-		const receipt = `\n\n[flow-validation] ${JSON.stringify({
-			id: observation.id,
-			scope: observation.scope,
-			intent: observation.intent ?? capture.intent,
-			passed: outcome === "passed",
-			observed: outcome === "observed",
-			recordedRevision: observation.recordedRevision,
-			...(observation.observedAssertions
-				? { assertions: observation.observedAssertions }
-				: {}),
-			...(observation.ineligibleReason
-				? { ineligibleReason: observation.ineligibleReason }
-				: {}),
-			...(fullOutput ? { fullOutputDigest: observation.outputDigest } : {}),
-		})}`;
-		if (input.status === "completed")
-			input.result = {
-				...input.result,
-				content: [{ type: "text", text: textContent(input) + receipt }],
-			};
-		if (capture.origin) {
-			try {
-				this.#onRecorded?.({
-					origin: capture.origin,
+			const observedAssertions = await this.#observeAssertions(
+				capture,
+				this.#now(),
+			);
+			this.#assertCurrent(capture);
+			const observation = await this.#persist(
+				capture.workspace,
+				{
+					featureId: capture.featureId,
+					runId: capture.runId,
+					command: capture.command,
+					scope: capture.scope,
+					sourceDigest: capture.sourceDigest,
+					hostPlatform: capture.hostPlatform,
+					intent: capture.intent,
+					assertions: capture.assertions,
+					resultsPath: capture.resultsPath,
+					...(observedAssertions.length > 0 ? { observedAssertions } : {}),
 					captureId: capture.captureId,
-					observation,
-				});
-			} catch (error) {
+					exitCode: observedExit,
+					outputDigest: digest(fullOutput ?? observed.text),
+					outputComplete,
+					...(hostGap ? { ineligibleReason: hostGap } : {}),
+				},
+				() => this.#assertCurrent(capture),
+			);
+			this.#assertCurrent(capture);
+			const outcome = validationContinuationOutcome(capture, observation);
+			const receipt = `\n\n[flow-validation] ${JSON.stringify({
+				id: observation.id,
+				scope: observation.scope,
+				intent: observation.intent ?? capture.intent,
+				passed: outcome === "passed",
+				observed: outcome === "observed",
+				recordedRevision: observation.recordedRevision,
+				...(observation.observedAssertions
+					? { assertions: observation.observedAssertions }
+					: {}),
+				...(observation.ineligibleReason
+					? { ineligibleReason: observation.ineligibleReason }
+					: {}),
+				...(fullOutput ? { fullOutputDigest: observation.outputDigest } : {}),
+			})}`;
+			if (input.status === "completed")
+				input.result = {
+					...input.result,
+					content: [{ type: "text", text: textContent(input) + receipt }],
+				};
+			if (capture.origin) {
 				try {
-					this.#onReceiptError?.(error);
-				} catch {}
+					this.#onRecorded?.({
+						origin: capture.origin,
+						captureId: capture.captureId,
+						observation,
+					});
+				} catch (error) {
+					try {
+						this.#onReceiptError?.(error);
+					} catch {}
+				}
 			}
+			return observation;
+		} catch (error) {
+			try {
+				this.#assertCurrent(capture);
+			} catch {
+				return null;
+			}
+
+			throw error;
+		} finally {
+			this.#remove(capture);
 		}
-		return observation;
 	}
 
 	pendingCount(): number {

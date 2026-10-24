@@ -423,10 +423,70 @@ for (const aliasDepth of [0, 2])
 			const scope = inputs.capture(input);
 			expect(inputs.positive(scope)).toBeUndefined();
 			expect(await inputs.evidence(scope, native, delivery)).toEqual({
-				kind: "retired-automatic",
+				kind: "unregistered",
+				lineage: "retired-automatic",
 			});
 			scope.release();
 		} finally {
 			inputs.clear();
+		}
+	});
+
+for (const state of ["pending", "rejected", "accepted"] as const)
+	test(`missing native input preserves ${state} frontier lineage without creating an origin`, async () => {
+		const f = fixture();
+		try {
+			if (state === "accepted")
+				await f.inputs.accept(f.admission, f.receipt, async () => f.origin());
+			if (state === "rejected")
+				f.inputs.reject(f.admission, new Error("rejected receipt"));
+			const input = {
+				...context("foreign"),
+				messages: [
+					...context("user-1").messages,
+					...context("foreign").messages,
+				],
+			};
+			const scope = f.inputs.capture(input);
+			expect(
+				await f.inputs.evidence(
+					scope,
+					[
+						{
+							type: "synthetic",
+							id: "foreign",
+							text: "external",
+							time: { created: 1 },
+						},
+					],
+					delivery,
+				),
+			).toEqual({
+				kind: "unregistered",
+				lineage: state === "accepted" ? "retired-ordinary" : "rejected",
+			});
+			expect(f.inputs.positive(scope)).toBeUndefined();
+			scope.release();
+			const old = f.inputs.capture(context("user-1"));
+			if (state === "accepted")
+				expect(
+					(
+						await f.inputs.evidence(
+							old,
+							[
+								{
+									type: "user",
+									id: "user-1",
+									text: "Approved task",
+									time: { created: 0 },
+								},
+							],
+							delivery,
+						)
+					).kind,
+				).toBe("live");
+			old.release();
+		} finally {
+			f.close();
 		}
 	});

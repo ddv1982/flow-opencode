@@ -32,6 +32,7 @@ import {
 	type NativeExecution,
 	nativeDelivery,
 	nativeInputIDs,
+	type Participation,
 	rememberCodingModel,
 	sameDelivery,
 } from "./execution-attribution.js";
@@ -55,6 +56,7 @@ type LifecycleOptions = Readonly<{
 	recovery: RecoveryController;
 	flow: FlowService;
 	runtimeGuard: FlowLeadershipHandle;
+	onFlowTerminal?: ((host: string) => void) | undefined;
 	defaultRecovery?: (() => RecoverySettings | null) | undefined;
 	log(
 		level: "info" | "warn" | "error",
@@ -63,8 +65,15 @@ type LifecycleOptions = Readonly<{
 	): void;
 	codingModels: Map<string, FlowCodingModel>;
 }>;
+type ToolAccess =
+	| Readonly<{ kind: "flow"; assertCurrent(): void }>
+	| Readonly<{ kind: "native-only" | "untracked" }>;
 type FlowLifecycle = Readonly<{
-	beforeTool(nativeToolContext: ToolContext): Promise<void>;
+	verifyTool(
+		execution: NativeExecution | ToolContext,
+		use: "native" | "flow",
+		tool?: string,
+	): Promise<ToolAccess>;
 	prompt(
 		sessionID: string,
 		prompt: string,
@@ -114,9 +123,12 @@ export async function registerFlowLifecycle(
 	});
 	const assertLive = (origin: InputOrigin) => inputs.assertLive(origin);
 	const attribution = new ExecutionAttribution(assertLive);
-	const revoke = (host: string, deactivate = true) => {
-		const prior = attribution.current(host);
-		if (prior) attribution.end(prior);
+	const revoke = (
+		host: string,
+		deactivate = true,
+		captured = attribution.current(host) ?? null,
+	) => {
+		if (captured) attribution.end(captured);
 		inputs.invalidate(host);
 		autoDrive.revokeExecutions(host);
 		recovery.invalidateOrigins(host);
@@ -128,8 +140,10 @@ export async function registerFlowLifecycle(
 	const captureOwner = (
 		host: string,
 		kind: CallbackOwner["kind"] = "attempt",
-		primary = attribution.current(host),
-		expectedEpoch = epoch(host),
+		primary: ReturnType<ExecutionAttribution["current"]> = undefined,
+		expectedEpoch = kind === "attempt" && primary?.participation.kind === "flow"
+			? primary.participation.origin.epoch
+			: epoch(host),
 		input?: InputOrigin,
 		source = input?.id,
 	): CallbackOwner =>
@@ -143,13 +157,16 @@ export async function registerFlowLifecycle(
 		});
 	const owns = (owner: CallbackOwner, primary = owner.primary) => {
 		const origin =
-			owner.input ?? (owner.kind === "attempt" ? primary?.origin : undefined);
+			owner.input ??
+			(owner.kind === "attempt" && primary?.participation.kind === "flow"
+				? primary.participation.origin
+				: undefined);
 		return (
 			!closed &&
 			!streamLost &&
 			epoch(owner.host) === owner.epoch &&
 			(owner.kind === "admission" ||
-				attribution.current(owner.host) === primary) &&
+				(primary !== undefined && attribution.isCurrent(primary))) &&
 			(!origin || inputs.isLive(origin))
 		);
 	};
@@ -160,12 +177,20 @@ export async function registerFlowLifecycle(
 	};
 	const failOwned = (owner: CallbackOwner, primary = owner.primary) => {
 		if (
-			primary?.origin.epoch === owner.epoch &&
-			(!owner.input || primary.origin === owner.input) &&
+			owner.kind === "attempt" &&
+			primary?.participation.kind === "native-only"
+		) {
+			attribution.retire(primary);
+			return;
+		}
+		if (
+			primary?.participation.kind === "flow" &&
+			primary.participation.origin.epoch === owner.epoch &&
+			(!owner.input || primary.participation.origin === owner.input) &&
 			(!owner.source || owns(owner, primary))
 		)
 			attribution.end(primary);
-		if (owns(owner, primary)) revoke(owner.host);
+		if (owns(owner, primary)) revoke(owner.host, true, primary ?? null);
 	};
 	const failReservation = (
 		reservation: Parameters<InputAdmissions["assertReservation"]>[0],
@@ -204,17 +229,19 @@ export async function registerFlowLifecycle(
 			result === "accepted-continuation",
 		);
 	};
-	const verify = async (execution: NativeExecution, tool?: string) => {
+	const verifyTool = async (
+		execution: NativeExecution,
+		use: "native" | "flow",
+		tool?: string,
+	): Promise<ToolAccess> => {
 		assertOpen();
 		const primary = attribution.executionOwner(execution);
-		if (!primary)
+		if (!primary) {
+			if (use === "native" && !attribution.current(execution.sessionID))
+				return { kind: "untracked" };
 			throw new Error("Flow tool has no attributable primary request.");
-		const owner = captureOwner(
-			execution.sessionID,
-			"attempt",
-			primary,
-			primary.origin.epoch,
-		);
+		}
+		const owner = captureOwner(execution.sessionID, "attempt", primary);
 		try {
 			if (
 				epoch(owner.host) === owner.epoch &&
@@ -222,34 +249,46 @@ export async function registerFlowLifecycle(
 			)
 				throw new Error("Flow assistant cannot be rebound to another request.");
 			assertOwned(owner);
-			assertLive(primary.origin);
+			attribution.assertCurrent(primary);
 			const [native, session] = await Promise.all([
 				ctx.session.context({ sessionID: execution.sessionID }),
 				ctx.session.get({ sessionID: execution.sessionID }),
 			]);
 			assertOwned(owner);
-			const verified = attribution.verify(
+			attribution.verify(
 				execution,
 				native,
 				session,
 				ctx.location.directory,
 				tool,
 			);
-			assertLive(verified.primary.origin);
-			autoDrive.observeAssistant(
-				execution.sessionID,
-				execution.messageID,
-				verified.primary.origin.id,
-			);
-			recovery.observeAssistant(
-				execution.sessionID,
-				execution.messageID,
-				verified.primary.origin.id,
-			);
 		} catch (error) {
 			failOwned(owner);
 			throw error;
 		}
+		if (primary.participation.kind === "native-only") {
+			if (use === "flow")
+				throw new Error("Flow tool requires a live admitted input origin.");
+			return { kind: "native-only" };
+		}
+		const origin = primary.participation.origin;
+		autoDrive.observeAssistant(
+			execution.sessionID,
+			execution.messageID,
+			origin.id,
+		);
+		recovery.observeAssistant(
+			execution.sessionID,
+			execution.messageID,
+			origin.id,
+		);
+		return {
+			kind: "flow",
+			assertCurrent: () => {
+				assertOpen();
+				attribution.assertCurrent(primary);
+			},
+		};
 	};
 	const commandAccepted = createCommandHook({
 		...options,
@@ -272,7 +311,12 @@ export async function registerFlowLifecycle(
 		const id = SessionMessage.ID.create();
 		const reservation = inputs.reserve(host, id);
 		const expectedEpoch = reservation.epoch;
-		const owner = captureOwner(host, "admission");
+		const owner = captureOwner(
+			host,
+			"admission",
+			attribution.current(host),
+			expectedEpoch,
+		);
 		const authority = autoDrive.captureAuthority(host, token);
 		if (!authority) throw new Error("Flow synthetic authority expired.");
 		const assertCurrent = () => {
@@ -326,14 +370,17 @@ export async function registerFlowLifecycle(
 			throw error;
 		}
 	};
-	const sourceFailure = (scope: InputScope) => {
+	const sourceFailure = (
+		scope: InputScope,
+		primary?: ReturnType<ExecutionAttribution["current"]>,
+	) => {
 		const origin = inputs.positive(scope);
 		if (origin)
 			failOwned(
 				captureOwner(
 					scope.host,
 					"admission",
-					attribution.current(scope.host),
+					primary,
 					origin.epoch,
 					origin,
 					origin.id,
@@ -363,24 +410,32 @@ export async function registerFlowLifecycle(
 			if (!origin.authority) recovery.observeMessage(host, id, true, true);
 		},
 	});
-	const resolveOrigin = async (
+	const resolveParticipation = async (
 		input: SessionContext,
 		native: readonly SessionMessageInfo[],
 		scope: InputScope,
-	): Promise<InputOrigin> => {
+	): Promise<Participation> => {
 		const completed = compactions.completed(input, native);
-		if (completed) return completed;
+		if (completed) return { kind: "flow", origin: completed };
 		const evidence = await inputs.evidence(
 			scope,
 			native,
 			nativeDelivery(input),
 		);
-		if (evidence.kind !== "live")
-			throw new Error(
-				"Flow context has an unknown, synthetic, or stale real input.",
-			);
-		assertLive(evidence.origin);
-		return evidence.origin;
+		if (evidence.kind === "live") {
+			assertLive(evidence.origin);
+			return { kind: "flow", origin: evidence.origin };
+		}
+		const source = native.find((message) => message.id === scope.source);
+		if (
+			(source?.type === "user" || source?.type === "synthetic") &&
+			(evidence.kind === "retired-ordinary" ||
+				(evidence.kind === "unregistered" && evidence.lineage !== "rejected"))
+		)
+			return { kind: "native-only" };
+		throw new Error(
+			"Flow context has an unknown, synthetic, or stale real input.",
+		);
 	};
 	try {
 		registrations.push(
@@ -410,7 +465,12 @@ export async function registerFlowLifecycle(
 							const id = SessionMessage.ID.create();
 							const reservation = inputs.reserve(input.sessionID, id);
 							const expectedEpoch = reservation.epoch;
-							const owner = captureOwner(input.sessionID, "admission");
+							const owner = captureOwner(
+								input.sessionID,
+								"admission",
+								attribution.current(input.sessionID),
+								expectedEpoch,
+							);
 							const assertCurrent = () => {
 								inputs.assertReservation(reservation);
 								if (epoch(input.sessionID) !== expectedEpoch)
@@ -537,15 +597,14 @@ export async function registerFlowLifecycle(
 				contextPending.set(input.sessionID, scope);
 				const prior = attribution.current(input.sessionID);
 				let frozen: ReturnType<ExecutionAttribution["freeze"]> | undefined;
-				let origin = inputs.positive(scope);
 				try {
 					await scope.ready();
-					origin = inputs.positive(scope);
 					const native = await scope.wait(
 						ctx.session.context({ sessionID: input.sessionID }),
 					);
 					if (
 						prior &&
+						attribution.isCurrent(prior) &&
 						prior.http.phase !== "ended" &&
 						!attribution.retry(prior, native)
 					)
@@ -554,28 +613,31 @@ export async function registerFlowLifecycle(
 						throw new Error(
 							"Flow native inputs differ from the model-visible prefix.",
 						);
-					origin = await resolveOrigin(input, native, scope);
+					const participation = await resolveParticipation(
+						input,
+						native,
+						scope,
+					);
 					scope.assertCurrent();
-					frozen = attribution.freeze(input, native, origin);
 					const session = await scope.wait(
 						ctx.session.get({ sessionID: input.sessionID }),
 					);
-					assertLive(origin);
+					if (
+						participation.kind === "native-only" &&
+						(session.id !== input.sessionID ||
+							!sameDelivery(nativeDelivery(session), nativeDelivery(input)))
+					)
+						throw new Error(
+							"Flow native selected session agent or model changed.",
+						);
+					scope.assertCurrent();
+					frozen = attribution.freeze(input, native, participation, scope);
+					attribution.assertCurrent(frozen);
 					rememberCodingModel(codingModels, input, session, specialists);
 				} catch (error) {
-					if (frozen) attribution.end(frozen);
-					if (origin && scope.current())
-						failOwned(
-							captureOwner(
-								input.sessionID,
-								"attempt",
-								frozen ?? prior,
-								origin.epoch,
-								origin,
-								origin.id,
-							),
-							frozen ?? prior,
-						);
+					if (frozen)
+						failOwned(captureOwner(input.sessionID, "attempt", frozen));
+					else sourceFailure(scope, prior);
 					throw error;
 				} finally {
 					if (contextPending.get(input.sessionID) === scope)
@@ -595,35 +657,21 @@ export async function registerFlowLifecycle(
 		);
 		registrations.push(
 			await ctx.session.hook("http.request", (input) => {
-				const primary =
-					attribution.requestOwner(input.request) ??
-					attribution.current(input.sessionID);
-				const owner = captureOwner(
-					input.sessionID,
-					"attempt",
-					primary,
-					primary?.origin.epoch ?? epoch(input.sessionID),
-				);
+				const primary = attribution.requestOwner(input.request);
 				try {
 					attribution.request(input);
 				} catch (error) {
-					failOwned(owner);
+					if (primary)
+						failOwned(captureOwner(primary.sessionID, "attempt", primary));
 					throw error;
 				}
 			}),
 		);
 		registrations.push(
 			await ctx.session.hook("http.response", (input) => {
-				const primary =
-					attribution.requestOwner(input.request) ??
-					attribution.current(input.sessionID);
-				const owner = captureOwner(
-					input.sessionID,
-					"attempt",
-					primary,
-					primary?.origin.epoch ?? epoch(input.sessionID),
+				attribution.response(input, (primary) =>
+					failOwned(captureOwner(primary.sessionID, "attempt", primary)),
 				);
-				attribution.response(input, () => failOwned(owner));
 			}),
 		);
 		registrations.push(
@@ -635,7 +683,9 @@ export async function registerFlowLifecycle(
 						input.sessionID,
 						"attempt",
 						primary,
-						primary?.origin.epoch ?? epoch(input.sessionID),
+						primary?.participation.kind === "flow"
+							? primary.participation.origin.epoch
+							: epoch(input.sessionID),
 					),
 				);
 				throw new Error(
@@ -650,15 +700,24 @@ export async function registerFlowLifecycle(
 				const staleAssistant =
 					current !== undefined && executionOwner === undefined;
 				const protectedAutomatic = Boolean(
-					current?.origin.authority || executionOwner?.origin.authority,
+					(current?.participation.kind === "flow" &&
+						current.participation.origin.authority) ||
+						(executionOwner?.participation.kind === "flow" &&
+							executionOwner.participation.origin.authority),
 				);
 				if (
 					!input.tool.startsWith("flow_") &&
 					!protectedAutomatic &&
+					current?.participation.kind !== "native-only" &&
+					executionOwner?.participation.kind !== "native-only" &&
 					!staleAssistant
 				)
 					return;
-				await verify(input, input.tool);
+				await verifyTool(
+					input,
+					input.tool.startsWith("flow_") ? "flow" : "native",
+					input.tool,
+				);
 			}),
 		);
 	} catch (error) {
@@ -677,75 +736,81 @@ export async function registerFlowLifecycle(
 				signal: controller.signal,
 			})) {
 				if (closed) break;
-				if (
-					event.type === "session.execution.failed" ||
-					event.type === "session.execution.interrupted" ||
-					event.type === "session.deleted"
-				) {
+				if (event.type === "session.deleted") {
 					if (outcomes.has(event.id)) continue;
 					outcomes.add(event.id);
 					const host = event.data.sessionID;
-					if (event.type === "session.deleted") {
-						revoke(host);
-						attribution.deleteSession(host);
-						codingModels.delete(host);
-					} else {
-						const primary = attribution.current(host);
-						if (!primary) continue;
-						const owner = captureOwner(
-							host,
-							"attempt",
-							primary,
-							primary.origin.epoch,
-						);
-						try {
-							const native = await ctx.session.context({ sessionID: host });
-							if (owns(owner) && attribution.hasFailedTerminal(primary, native))
-								failOwned(owner);
-						} catch (error) {
-							failOwned(owner);
-							log("warn", "Flow terminal observation failed.", {
-								host,
-								message: errorOf(error).message,
-							});
-						}
-					}
+					revoke(host);
+					attribution.deleteSession(host);
+					codingModels.delete(host);
 					continue;
 				}
 				if (
+					event.type !== "session.execution.failed" &&
+					event.type !== "session.execution.interrupted" &&
 					event.type !== "session.execution.succeeded" &&
 					event.type !== "session.idle"
 				)
 					continue;
+				if (outcomes.has(event.id)) continue;
 				const host = event.data.sessionID;
 				const primary = attribution.current(host);
 				if (!primary) continue;
-				const owner = captureOwner(
-					host,
-					"attempt",
-					primary,
-					primary.origin.epoch,
-				);
+				const owner = captureOwner(host, "attempt", primary);
+				let proved = false;
 				try {
+					const native = await ctx.session.context({ sessionID: host });
+					if (!owns(owner)) continue;
+					const terminal = attribution.terminal(
+						primary,
+						native,
+						event.type === "session.idle"
+							? undefined
+							: SessionMessage.ID.fromEvent(event.id),
+					);
+					if (
+						!terminal ||
+						(event.type === "session.execution.failed" &&
+							terminal.outcome !== "failed") ||
+						(event.type === "session.execution.interrupted" &&
+							terminal.outcome !== "interrupted") ||
+						(event.type === "session.execution.succeeded" &&
+							terminal.outcome !== "succeeded")
+					)
+						continue;
+					proved = true;
+					outcomes.add(event.id);
+					if (primary.participation.kind === "native-only") {
+						attribution.retire(primary);
+						continue;
+					}
+					if (terminal.outcome !== "succeeded") {
+						options.onFlowTerminal?.(host);
+						failOwned(owner);
+						continue;
+					}
 					const session = await ctx.session.get({ sessionID: host });
 					if (!owns(owner)) continue;
 					if (session.id !== host)
 						throw new Error("Flow native terminal session identity changed.");
 					if (session.time.idle === undefined || session.outcome === undefined)
 						continue;
+					if (
+						session.outcome !== terminal.outcome ||
+						session.time.idle !== terminal.time.created
+					)
+						continue;
 					const watermark = String(session.time.idle);
 					if (idle.get(host) === watermark) continue;
 					idle.set(host, watermark);
-					if (
-						session.outcome !== "succeeded" ||
-						!runtimeGuard.query().operational
-					) {
+					options.onFlowTerminal?.(host);
+					if (!runtimeGuard.query().operational) {
 						failOwned(owner);
 						continue;
 					}
 					await autoDrive.onIdle(host);
 				} catch (error) {
-					failOwned(owner);
+					if (proved && owns(owner)) failOwned(owner);
 					log("warn", "Flow terminal observation failed.", {
 						host,
 						message: errorOf(error).message,
@@ -767,7 +832,7 @@ export async function registerFlowLifecycle(
 		}
 	})();
 	return {
-		beforeTool: (context) => verify(context),
+		verifyTool,
 		prompt: synthetic,
 		dispose: () => {
 			disposal ??= (async () => {

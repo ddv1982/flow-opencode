@@ -79,12 +79,25 @@ const execution = {
 	messageID: SessionMessage.ID.make("msg_assistant1"),
 	id: CallID.make("call-1"),
 };
+const clock = { current: () => true, assertCurrent: () => {} };
+function flowOrigin(
+	primary: ReturnType<ExecutionAttribution["freeze"]>,
+): InputOrigin {
+	if (primary.participation.kind !== "flow")
+		throw new Error("Expected Flow participation.");
+	return primary.participation.origin;
+}
 function fixture() {
 	let live = true;
 	const attribution = new ExecutionAttribution(() => {
 		if (!live) throw new Error("revoked epoch");
 	});
-	const primary = attribution.freeze(context, [user], origin);
+	const primary = attribution.freeze(
+		context,
+		[user],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	const request = new Request("http://localhost/primary");
 	attribution.request({
 		sessionID: sid,
@@ -105,8 +118,15 @@ function fixture() {
 test("native exact execution binds once and a revoked epoch vetoes its second boundary", () => {
 	const f = fixture();
 	expect(
-		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
-			.primary.origin.id,
+		flowOrigin(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).id,
 	).toBe("user-1");
 	f.revoke();
 	expect(() =>
@@ -143,9 +163,14 @@ test("native full prefix, exact call, agent, and workspace are required", () => 
 });
 test("overlapping primary context is refused", () => {
 	const f = fixture();
-	expect(() => f.attribution.freeze(context, [user], origin)).toThrow(
-		"overlap",
-	);
+	expect(() =>
+		f.attribution.freeze(
+			context,
+			[user],
+			{ kind: "flow", origin: origin },
+			clock,
+		),
+	).toThrow("overlap");
 });
 test("response must join the same Request object", () => {
 	const f = fixture();
@@ -176,7 +201,12 @@ test("an old assistant is rejected after a later context", async () => {
 	};
 	f.attribution.response(response, () => {});
 	expect(await response.response.text()).toBe("data");
-	f.attribution.freeze(context, [user, assistant], origin);
+	f.attribution.freeze(
+		context,
+		[user, assistant],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	f.attribution.request({
 		sessionID: sid,
 		agent,
@@ -244,7 +274,7 @@ test("a failed HTTP response does not leave the next fresh request overlapping",
 	const attribution = new ExecutionAttribution((candidate) => {
 		if (candidate.id !== current) throw new Error("revoked origin");
 	});
-	attribution.freeze(context, [user], origin);
+	attribution.freeze(context, [user], { kind: "flow", origin: origin }, clock);
 	const request = new Request("http://localhost/failed");
 	attribution.request({
 		sessionID: sid,
@@ -286,7 +316,12 @@ test("a failed HTTP response does not leave the next fresh request overlapping",
 		],
 	};
 	const nextOrigin: InputOrigin = { ...origin, id: "user-2" };
-	attribution.freeze(nextContext, [user, nextUser], nextOrigin);
+	attribution.freeze(
+		nextContext,
+		[user, nextUser],
+		{ kind: "flow", origin: nextOrigin },
+		clock,
+	);
 	attribution.request({
 		sessionID: sid,
 		agent,
@@ -295,13 +330,15 @@ test("a failed HTTP response does not leave the next fresh request overlapping",
 		request: new Request("http://localhost/fresh"),
 	});
 	expect(
-		attribution.verify(
-			execution,
-			[user, nextUser, assistant],
-			session,
-			"/tmp",
-			"shell",
-		).primary.origin.id,
+		flowOrigin(
+			attribution.verify(
+				execution,
+				[user, nextUser, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).id,
 	).toBe("user-2");
 });
 
@@ -311,7 +348,7 @@ function failedStreamFixture() {
 	const attribution = new ExecutionAttribution((candidate) => {
 		if (candidate.id !== direction) throw new Error("revoked stream origin");
 	});
-	attribution.freeze(context, [user], origin);
+	attribution.freeze(context, [user], { kind: "flow", origin: origin }, clock);
 	const request = new Request("http://localhost/stream");
 	attribution.request({
 		sessionID: sid,
@@ -324,8 +361,8 @@ function failedStreamFixture() {
 		attribution,
 		request,
 		failures,
-		fail(host: string) {
-			failures.push(host);
+		fail(primary: ReturnType<ExecutionAttribution["freeze"]>) {
+			failures.push(primary.sessionID);
 			direction = "user-2";
 		},
 		steer() {
@@ -360,7 +397,12 @@ function failedStreamFixture() {
 			};
 			const nextOrigin: InputOrigin = { ...origin, id: nextUser.id };
 			const native: SessionMessageInfo[] = [user, oldAssistant, nextUser];
-			attribution.freeze(nextContext, native, nextOrigin);
+			attribution.freeze(
+				nextContext,
+				native,
+				{ kind: "flow", origin: nextOrigin },
+				clock,
+			);
 			attribution.request({
 				sessionID: sid,
 				agent,
@@ -371,13 +413,15 @@ function failedStreamFixture() {
 			const freshID = SessionMessage.ID.make("msg_fresh");
 			const freshAssistant: SessionMessageInfo = { ...assistant, id: freshID };
 			return () =>
-				attribution.verify(
-					{ ...execution, messageID: freshID },
-					[...native, freshAssistant],
-					session,
-					"/tmp",
-					"shell",
-				).primary.origin.id;
+				flowOrigin(
+					attribution.verify(
+						{ ...execution, messageID: freshID },
+						[...native, freshAssistant],
+						session,
+						"/tmp",
+						"shell",
+					).primary,
+				).id;
 		},
 	};
 }
@@ -510,13 +554,25 @@ test("consumer cancellation ends its captured resource without revoking the exac
 	if (!input.response.body) throw new Error("Missing wrapped body.");
 	await input.response.body.cancel("protocol consumer stopped");
 	expect(f.primary.http.phase).toBe("ended");
-	expect(f.primary.origin).toBe(origin);
+	expect(flowOrigin(f.primary)).toBe(origin);
 	expect(
-		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
-			.primary.origin.id,
+		flowOrigin(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).id,
 	).toBe("user-1");
 	expect(failures).toBe(0);
-	f.attribution.freeze(context, [user, assistant], origin);
+	f.attribution.freeze(
+		context,
+		[user, assistant],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	const nextRequest = new Request("http://localhost/next-same-origin");
 	f.attribution.request({
 		sessionID: sid,
@@ -528,13 +584,15 @@ test("consumer cancellation ends its captured resource without revoking the exac
 	const nextID = SessionMessage.ID.make("msg_second");
 	const nextAssistant: SessionMessageInfo = { ...assistant, id: nextID };
 	expect(
-		f.attribution.verify(
-			{ ...execution, messageID: nextID },
-			[user, assistant, nextAssistant],
-			session,
-			"/tmp",
-			"shell",
-		).primary.origin,
+		flowOrigin(
+			f.attribution.verify(
+				{ ...execution, messageID: nextID },
+				[user, assistant, nextAssistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		),
 	).toBe(origin);
 	expect(f.attribution.requestOwner(nextRequest)).toBe(
 		f.attribution.current(sid),
@@ -569,15 +627,29 @@ test("consumer cancellation awaits cleanup rejection without declaring an epoch 
 	expect(settled).toBe(false);
 	expect(f.primary.http.phase).toBe("ended");
 	expect(
-		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
-			.primary.origin.id,
+		flowOrigin(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).id,
 	).toBe("user-1");
 	cleanup.reject(new Error("native cancel cleanup failed"));
 	await expect(cancel).rejects.toThrow("native cancel cleanup failed");
 	expect(failures).toBe(0);
 	expect(
-		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
-			.primary.origin.id,
+		flowOrigin(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).id,
 	).toBe("user-1");
 });
 test("a late captured EOF cannot retire a separately steered fresh primary", async () => {
@@ -647,13 +719,15 @@ for (const kind of ["compaction", "title", "generate"] as const)
 		if (!primary.response.body) throw new Error("Missing primary body");
 		await primary.response.body.cancel();
 		expect(
-			f.attribution.verify(
-				execution,
-				[user, assistant],
-				session,
-				"/tmp",
-				"shell",
-			).primary.origin.id,
+			flowOrigin(
+				f.attribution.verify(
+					execution,
+					[user, assistant],
+					session,
+					"/tmp",
+					"shell",
+				).primary,
+			).id,
 		).toBe("user-1");
 		expect(failures).toBe(0);
 	});
@@ -696,23 +770,20 @@ test("resource end grants no same-origin retry and cannot revive an explicitly r
 		),
 	).toThrow("revoked epoch");
 	expect(() =>
-		f.attribution.freeze(context, [user, assistant], origin),
+		f.attribution.freeze(
+			context,
+			[user, assistant],
+			{ kind: "flow", origin: origin },
+			clock,
+		),
 	).toThrow("revoked epoch");
 	expect(failures).toBe(0);
 });
 
-function retainedSnapshot(primary: {
-	previousAssistants?: ReadonlySet<string>;
-	lifetime?: {
-		kind: string;
-		snapshot?: { previousAssistants: ReadonlySet<string> };
-	};
-}) {
-	return primary.lifetime?.kind === "current"
+function retainedSnapshot(primary: ReturnType<ExecutionAttribution["freeze"]>) {
+	return primary.lifetime.kind === "current"
 		? primary.lifetime.snapshot
-		: primary.previousAssistants
-			? { previousAssistants: primary.previousAssistants }
-			: undefined;
+		: undefined;
 }
 
 test("64 held owners retain one current payload with 63 historical assistant IDs", () => {
@@ -721,7 +792,12 @@ test("64 held owners retain one current payload with 63 historical assistant IDs
 	const owners: ReturnType<ExecutionAttribution["freeze"]>[] = [];
 	const requests: Request[] = [];
 	for (let index = 0; index < 64; index++) {
-		const primary = attribution.freeze(context, native, origin);
+		const primary = attribution.freeze(
+			context,
+			native,
+			{ kind: "flow", origin: origin },
+			clock,
+		);
 		const request = new Request("http://localhost/retention");
 		attribution.request({
 			sessionID: sid,
@@ -780,12 +856,24 @@ test("clear retires evidence even when callers hold owners and Request keys", ()
 	f.attribution.clear();
 	expect(retainedSnapshot(f.primary)).toBeUndefined();
 	expect(f.attribution.requestOwner(f.request)).toBe(f.primary);
-	expect(() => f.attribution.freeze(context, [user], origin)).toThrow("closed");
+	expect(() =>
+		f.attribution.freeze(
+			context,
+			[user],
+			{ kind: "flow", origin: origin },
+			clock,
+		),
+	).toThrow("closed");
 });
 
 test("end before request admission cannot prove a running tool", () => {
 	const attribution = new ExecutionAttribution(() => {});
-	const primary = attribution.freeze(context, [user], origin);
+	const primary = attribution.freeze(
+		context,
+		[user],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	attribution.end(primary);
 	expect(() =>
 		attribution.verify(execution, [user, assistant], session, "/tmp", "shell"),
@@ -803,7 +891,14 @@ test("invalid replacement preserves the exact prior current payload and tool", (
 			model: { ...model, variant: Model.VariantID.make("changed") },
 		},
 	])
-		expect(() => f.attribution.freeze(input, [user], origin)).toThrow();
+		expect(() =>
+			f.attribution.freeze(
+				input,
+				[user],
+				{ kind: "flow", origin: origin },
+				clock,
+			),
+		).toThrow();
 	expect(f.attribution.current(sid)).toBe(f.primary);
 	expect(retainedSnapshot(f.primary)?.previousAssistants.size).toBe(0);
 	expect(
@@ -815,7 +910,12 @@ test("invalid replacement preserves the exact prior current payload and tool", (
 test("permitted retry shares exclusions and admits the retry assistant's first tool", () => {
 	const attribution = new ExecutionAttribution(() => {});
 	const excluded = { ...assistant, id: "msg_excluded" };
-	const first = attribution.freeze(context, [user, excluded], origin);
+	const first = attribution.freeze(
+		context,
+		[user, excluded],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	attribution.request({
 		sessionID: sid,
 		agent,
@@ -834,7 +934,12 @@ test("permitted retry shares exclusions and admits the retry assistant's first t
 	};
 	const exclusions = retainedSnapshot(first)?.previousAssistants;
 	expect(attribution.retry(first, [user, excluded, retry])).toBe(true);
-	const next = attribution.freeze(context, [user, excluded, retry], origin);
+	const next = attribution.freeze(
+		context,
+		[user, excluded, retry],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	expect(retainedSnapshot(next)?.previousAssistants).toBe(exclusions);
 	expect(retainedSnapshot(first)).toBeUndefined();
 	attribution.request({
@@ -862,9 +967,7 @@ test("permitted retry shares exclusions and admits the retry assistant's first t
 		}),
 	).toBeUndefined();
 	expect(() => attribution.retry(first, [user, retry])).toThrow("superseded");
-	expect(() => attribution.hasFailedTerminal(first, [user])).toThrow(
-		"superseded",
-	);
+	expect(() => attribution.terminal(first, [user])).toThrow("superseded");
 });
 
 test("known bound and excluded assistants preserve identity after a shorter prefix", () => {
@@ -875,10 +978,16 @@ test("known bound and excluded assistants preserve identity after a shorter pref
 	const middle = f.attribution.freeze(
 		context,
 		[user, assistant, historical],
-		origin,
+		{ kind: "flow", origin: origin },
+		clock,
 	);
 	f.attribution.end(middle);
-	const next = f.attribution.freeze(context, [user], origin);
+	const next = f.attribution.freeze(
+		context,
+		[user],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	f.attribution.request({
 		sessionID: sid,
 		agent,
@@ -930,7 +1039,8 @@ test("deletion keeps exact Request ownership, rejects replay, and leaves another
 	const other = f.attribution.freeze(
 		{ ...context, sessionID: otherID },
 		[user],
-		origin,
+		{ kind: "flow", origin: origin },
+		clock,
 	);
 	f.attribution.request({
 		sessionID: otherID,
@@ -946,9 +1056,14 @@ test("deletion keeps exact Request ownership, rejects replay, and leaves another
 		expect(() => f.attribution.executionOwner(execution)).toThrow(
 			"session was deleted",
 		);
-		expect(() => f.attribution.freeze(context, [user], origin)).toThrow(
-			"session was deleted",
-		);
+		expect(() =>
+			f.attribution.freeze(
+				context,
+				[user],
+				{ kind: "flow", origin: origin },
+				clock,
+			),
+		).toThrow("session was deleted");
 		expect(() =>
 			f.attribution.verify(
 				execution,
@@ -1054,3 +1169,115 @@ test("one native call cannot change tool names after its immutable binding", () 
 		),
 	).toBe(binding);
 });
+
+test("an unknown response cannot end or fail the current Request owner", async () => {
+	const f = fixture();
+	const failures: unknown[] = [];
+	expect(() =>
+		f.attribution.response(
+			{
+				sessionID: sid,
+				agent,
+				model,
+				kind: "primary",
+				request: new Request("http://localhost/unknown"),
+				response: new Response("unbound"),
+			},
+			(owner) => failures.push(owner),
+		),
+	).toThrow("Request identity");
+	expect(failures).toEqual([]);
+	expect(f.primary.http.phase).toBe("request");
+	const response = {
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary" as const,
+		request: f.request,
+		response: new Response("still healthy"),
+	};
+	f.attribution.response(response, (owner) => failures.push(owner));
+	expect(await response.response.text()).toBe("still healthy");
+	expect(failures).toEqual([]);
+});
+
+for (const barrier of ["delete", "clear"] as const)
+	test(`growing native-only user prefixes detach from held Request keys on ${barrier}`, () => {
+		const attribution = new ExecutionAttribution(() => {
+			throw new Error("Foreign input must never assert an origin.");
+		});
+		const native: SessionMessageInfo[] = [];
+		const messages: SessionContext["messages"] = [];
+		const requests: Request[] = [];
+		const owners: ReturnType<ExecutionAttribution["freeze"]>[] = [];
+		for (let index = 0; index < 64; index++) {
+			const id = `user-growing-${index}`;
+			native.push({
+				type: "user",
+				id,
+				text: `Ordinary ${index}`,
+				time: { created: index },
+			});
+			messages.push({
+				role: "user",
+				id,
+				content: [{ type: "text", text: `Ordinary ${index}` }],
+			});
+			const owner = attribution.freeze(
+				{ ...context, messages },
+				native,
+				{ kind: "native-only" },
+				clock,
+			);
+			const request = new Request(`http://localhost/growing/${index}`);
+			attribution.request({
+				sessionID: sid,
+				agent,
+				model,
+				kind: "primary",
+				request,
+			});
+			const message = { ...assistant, id: `msg_growing_${index}` };
+			native.push(message);
+			expect(
+				attribution.verify(
+					{ ...execution, messageID: SessionMessage.ID.make(message.id) },
+					native,
+					session,
+					"/tmp",
+					"shell",
+				).primary,
+			).toBe(owner);
+			attribution.end(owner);
+			owners.push(owner);
+			requests.push(request);
+		}
+		const snapshots = owners.flatMap((owner) => retainedSnapshot(owner) ?? []);
+		expect(snapshots.length).toBe(1);
+		expect(snapshots[0]?.inputs.length).toBe(64);
+		expect(snapshots[0]?.previousAssistants.size).toBe(63);
+		for (const [index, owner] of owners.entries()) {
+			const request = requests[index];
+			if (!request) throw new Error("Expected held Request.");
+			expect(attribution.requestOwner(request)).toBe(owner);
+			expect(owner.participation).toEqual({ kind: "native-only" });
+			expect(Object.keys(owner).sort()).toEqual([
+				"agent",
+				"http",
+				"lifetime",
+				"model",
+				"participation",
+				"sessionID",
+			]);
+			if (index !== 63) expect(owner.lifetime).toEqual({ kind: "retired" });
+		}
+		if (barrier === "delete") attribution.deleteSession(sid);
+		else attribution.clear();
+		expect(owners.flatMap((owner) => retainedSnapshot(owner) ?? [])).toEqual(
+			[],
+		);
+		for (const request of requests)
+			expect(attribution.requestOwner(request)?.lifetime).toEqual({
+				kind: "retired",
+			});
+	});

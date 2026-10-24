@@ -17,6 +17,10 @@ import { AbsolutePath } from "@opencode/schema/schema";
 import { Session } from "@opencode/schema/session";
 import { SessionMessage } from "@opencode/schema/session-message";
 import { createFlowService } from "../src/application/flow-service.js";
+import type {
+	ObservedValidation,
+	PreparedValidation,
+} from "../src/application/prepare-validation.js";
 import { RecoveryController } from "../src/application/recovery-policy.js";
 import type { FlowCodingModel } from "../src/config-shared.js";
 import {
@@ -26,8 +30,13 @@ import {
 } from "../src/platform/opencode/auto-drive.js";
 import { ExecutionAttribution } from "../src/platform/opencode/execution-attribution.js";
 import { registerFlowLifecycle } from "../src/platform/opencode/lifecycle.js";
-import type { NativeToolDefinition } from "../src/platform/opencode/sdk.js";
+import type {
+	NativeToolAfter,
+	NativeToolBefore,
+	NativeToolDefinition,
+} from "../src/platform/opencode/sdk.js";
 import { registerFlowTools } from "../src/platform/opencode/tools.js";
+import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
 import {
 	deterministicEnvironment,
 	MemorySessionRepository,
@@ -62,7 +71,10 @@ function hookSets(): HookSets<SessionHooks> {
 		retry: new Set(),
 	};
 }
-async function fixture(selectedAgent = agent) {
+async function fixture(
+	selectedAgent = agent,
+	onFlowTerminal?: (host: string) => void,
+) {
 	const hooks = hookSets();
 	const commands = new Map<string, CommandDefinition>();
 	const registrations: string[] = [];
@@ -85,6 +97,7 @@ async function fixture(selectedAgent = agent) {
 		nextAction: "flow_plan_approve",
 	};
 	const logs: string[] = [];
+	const flowTerminals: string[] = [];
 	const codingModels = new Map<string, FlowCodingModel>();
 	const repository = new MemorySessionRepository();
 	const flow = createFlowService(repository, deterministicEnvironment());
@@ -333,6 +346,10 @@ async function fixture(selectedAgent = agent) {
 		recovery,
 		flow,
 		codingModels,
+		onFlowTerminal: (host) => {
+			flowTerminals.push(host);
+			onFlowTerminal?.(host);
+		},
 		runtimeGuard: {
 			query: () => ({
 				operational: true,
@@ -379,6 +396,7 @@ async function fixture(selectedAgent = agent) {
 		hooks,
 		commands,
 		logs,
+		flowTerminals,
 		native,
 		session,
 		children,
@@ -584,14 +602,16 @@ test("new real input vetoes an old automatic context and a stale native shell", 
 			signal: new AbortController().signal,
 			progress: async () => {},
 		};
-		await f.lifecycle.beforeTool(execution);
+		await f.lifecycle.verifyTool(execution, "flow");
 		await f.emit("prompt", {
 			sessionID,
 			messageID: SessionMessage.ID.make("msg_stop"),
 			prompt: { text: "Stop and change direction" },
 			delivery: "steer",
 		});
-		await expect(f.lifecycle.beforeTool(execution)).rejects.toThrow("epoch");
+		await expect(f.lifecycle.verifyTool(execution, "flow")).rejects.toThrow(
+			"epoch",
+		);
 		await expect(f.emit("context", f.context())).rejects.toThrow();
 	} finally {
 		await f.lifecycle.dispose();
@@ -804,7 +824,7 @@ test("an unmatched control callback rejects without owning the stored checkpoint
 		expect(f.repository.saveCount).toBe(writes);
 		f.native.splice(0, f.native.length, ...valid);
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(freeze).toHaveBeenCalledTimes(1);
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 	} finally {
@@ -872,14 +892,17 @@ test("real-input revocation invalidates an already acquired recovery guard witho
 				},
 			],
 		});
-		await f.lifecycle.beforeTool({
-			sessionID,
-			agent,
-			messageID,
-			id,
-			signal: new AbortController().signal,
-			progress: async () => {},
-		});
+		await f.lifecycle.verifyTool(
+			{
+				sessionID,
+				agent,
+				messageID,
+				id,
+				signal: new AbortController().signal,
+				progress: async () => {},
+			},
+			"flow",
+		);
 		const guard = f.recovery.guard({
 			hostSessionId: sessionID,
 			messageId: messageID,
@@ -930,6 +953,12 @@ test("duplicate succeeded idle notifications dispatch only one continuation", as
 		});
 		f.session.outcome = "succeeded";
 		f.session.time.idle = 3;
+		f.native.push({
+			type: "idle",
+			id: "msg_idle",
+			outcome: "succeeded",
+			time: { created: 3 },
+		});
 		const event: OpenCodeEvent = {
 			id: "evt_idle",
 			created: 3,
@@ -958,7 +987,7 @@ test.each(["failed", "interrupted"] as const)(
 			await f.command("flow-auto", "Inspect this project and create a plan");
 			await f.emit("context", f.context());
 			f.native.push({
-				id: "msg_terminal",
+				id: SessionMessage.ID.fromEvent(`evt_${outcome}`),
 				type: "idle",
 				time: { created: 1 },
 				outcome,
@@ -1018,6 +1047,12 @@ test("unload aborts an idle-triggered native admission and waits for subscriptio
 	f.blockAdmission();
 	f.session.outcome = "succeeded";
 	f.session.time.idle = 3;
+	f.native.push({
+		type: "idle",
+		id: "msg_idle",
+		outcome: "succeeded",
+		time: { created: 3 },
+	});
 	f.sendEvent({
 		id: "evt_idle",
 		created: 3,
@@ -1034,7 +1069,7 @@ test("unload aborts an idle-triggered native admission and waits for subscriptio
 	f.releaseAdmission();
 });
 
-test("native execution success dispatches from the session watermark without an idle context record", async () => {
+test("native execution success waits for exact terminal proof before dispatching once", async () => {
 	const f = await fixture();
 	try {
 		await f.command("flow-auto", "Implement the approved change");
@@ -1061,6 +1096,18 @@ test("native execution success dispatches from the session watermark without an 
 		};
 		f.sendEvent(event);
 		await f.flush();
+		expect(f.native.filter((message) => message.type === "synthetic")).toEqual(
+			[],
+		);
+		expect(f.native.some((message) => message.type === "idle")).toBe(false);
+		f.native.push({
+			type: "idle",
+			id: SessionMessage.ID.fromEvent(event.id),
+			outcome: "succeeded",
+			time: { created: 3 },
+		});
+		f.sendEvent(event);
+		await f.flush();
 		expect(
 			f.native
 				.filter((message) => message.type === "synthetic")
@@ -1073,7 +1120,6 @@ test("native execution success dispatches from the session watermark without an 
 				.filter((message) => message.type === "synthetic")
 				.map((message) => message.type),
 		).toEqual(["synthetic"]);
-		expect(f.native.some((message) => message.type === "idle")).toBe(false);
 	} finally {
 		await f.lifecycle.dispose();
 	}
@@ -1359,6 +1405,12 @@ test("a delayed terminal session read cannot revoke a replacement primary", asyn
 		await finishPrimary(f);
 		f.session.outcome = "failed";
 		f.session.time.idle = 1;
+		f.native.push({
+			type: "idle",
+			id: SessionMessage.ID.fromEvent("evt_old_success_notification"),
+			outcome: "succeeded",
+			time: { created: 1 },
+		});
 		f.blockNextSessionRead();
 		f.sendEvent({
 			id: "evt_old_success_notification",
@@ -1476,14 +1528,17 @@ test("native retry keeps its unfinished assistant and late old responses cannot 
 		};
 		await f.emit("http.response", response);
 		expect(await response.response.text()).toBe("retried tool call");
-		await f.lifecycle.beforeTool({
-			sessionID,
-			agent,
-			messageID: assistantID,
-			id: callID,
-			signal: new AbortController().signal,
-			progress: async () => {},
-		});
+		await f.lifecycle.verifyTool(
+			{
+				sessionID,
+				agent,
+				messageID: assistantID,
+				id: callID,
+				signal: new AbortController().signal,
+				progress: async () => {},
+			},
+			"flow",
+		);
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 	} finally {
 		await f.lifecycle.dispose();
@@ -1729,14 +1784,17 @@ for (const kind of ["real", "synthetic", "compaction"] as const)
 								metadata: {},
 							},
 						});
-						await f.lifecycle.beforeTool({
-							sessionID,
-							agent,
-							messageID: assistantID,
-							id: callID,
-							signal: new AbortController().signal,
-							progress: async () => {},
-						});
+						await f.lifecycle.verifyTool(
+							{
+								sessionID,
+								agent,
+								messageID: assistantID,
+								id: callID,
+								signal: new AbortController().signal,
+								progress: async () => {},
+							},
+							"flow",
+						);
 						expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 					} finally {
 						await f.lifecycle.dispose();
@@ -1919,7 +1977,7 @@ async function freshOwnershipWork(f: OwnershipFixture) {
 		async verify() {
 			await finishOwnedResponse(f, await startOwnedRequest(f));
 			const call = ownershipNativeCall(f);
-			await f.lifecycle.beforeTool(call);
+			await f.lifecycle.verifyTool(call, "flow");
 			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 		},
 	};
@@ -1975,7 +2033,7 @@ for (const actor of ["context", "compaction"] as const)
 						if (control) f.native.splice(f.native.indexOf(control), 1);
 						if (request) {
 							await finishOwnedResponse(f, request);
-							await f.lifecycle.beforeTool(ownershipNativeCall(f));
+							await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 							expect(f.autoDrive.captureAuthority(sessionID)).toEqual(
 								next.authority,
 							);
@@ -2007,7 +2065,7 @@ for (const boundary of ["flow-wrapper", "global-shell"] as const)
 						if (reject) f.rejectNextContextRead();
 						const pending =
 							boundary === "flow-wrapper"
-								? f.lifecycle.beforeTool(call)
+								? f.lifecycle.verifyTool(call, "flow")
 								: (async () => {
 										for (const callback of f.toolCallbacks["execute.before"])
 											await callback({
@@ -2033,7 +2091,7 @@ for (const boundary of ["flow-wrapper", "global-shell"] as const)
 						);
 						if (request) {
 							await finishOwnedResponse(f, request);
-							await f.lifecycle.beforeTool(ownershipNativeCall(f));
+							await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 							expect(f.autoDrive.captureAuthority(sessionID)).toEqual(
 								next.authority,
 							);
@@ -2138,6 +2196,12 @@ for (const outcome of ["failed", "succeeded"] as const)
 					f.blockNextContextRead();
 					f.rejectNextContextRead();
 				} else {
+					f.native.push({
+						type: "idle",
+						id: SessionMessage.ID.fromEvent("evt_succeeded"),
+						outcome,
+						time: { created: 4 },
+					});
 					f.blockNextSessionRead();
 					f.rejectNextSessionRead();
 				}
@@ -2202,7 +2266,7 @@ test("stale accepted-message observation cannot overwrite replacement recovery d
 		gate.resolve();
 		expect(await caught).toBe("Error: Flow execution epoch was revoked.");
 		await finishOwnedResponse(f, request);
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(next.authority);
 	} finally {
 		gate.resolve();
@@ -2215,13 +2279,13 @@ test("old bound call cannot revoke a later request in the same epoch", async () 
 	try {
 		await initialOwnershipWork(f);
 		const call = ownershipNativeCall(f);
-		await f.lifecycle.beforeTool(call);
+		await f.lifecycle.verifyTool(call, "flow");
 		const authority = f.autoDrive.captureAuthority(sessionID);
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await expect(f.lifecycle.beforeTool(call)).rejects.toThrow(
+		await expect(f.lifecycle.verifyTool(call, "flow")).rejects.toThrow(
 			"Flow assistant cannot be rebound to another request.",
 		);
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 	} finally {
 		await f.lifecycle.dispose();
@@ -2253,7 +2317,7 @@ test("late duplicate request hook cannot end its replacement", async () => {
 			request,
 		});
 		await finishOwnedResponse(f, request);
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(next.authority);
 	} finally {
 		await f.lifecycle.dispose();
@@ -2314,7 +2378,7 @@ test("stale automatic shell remains vetoed after a manual replacement context", 
 		})();
 		await expect(pending).rejects.toThrow("epoch was revoked");
 		expect(effects).toBe(0);
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 	} finally {
 		await f.lifecycle.dispose();
 	}
@@ -2340,7 +2404,7 @@ test("an old success notification cannot advance a newly admitted command before
 		);
 		expect(f.repository.saveCount).toBe(0);
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 	} finally {
 		await f.lifecycle.dispose();
@@ -2392,7 +2456,7 @@ for (const prior of ["none", "manual", "automatic"] as const)
 						status: "completed",
 					});
 					await finishOwnedResponse(f, await startOwnedRequest(f));
-					await f.lifecycle.beforeTool(ownershipNativeCall(f));
+					await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 					expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 					expect(f.repository.saveCount).toBe(0);
 				} finally {
@@ -2454,7 +2518,7 @@ for (const successor of ["command", "synthetic"] as const)
 				}
 				f.native.splice(f.native.indexOf(control), 1);
 				await finishOwnedResponse(f, request);
-				await f.lifecycle.beforeTool(ownershipNativeCall(f));
+				await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 				expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 				expect(f.repository.saveCount).toBe(0);
 			} finally {
@@ -2549,7 +2613,7 @@ test("pre-primary compaction joins pending receipt without granting early author
 		await pending;
 		f.native.splice(0, f.native.length, { ...control, status: "completed" });
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)?.token).toBe("local-token");
 	} finally {
 		f.releaseAdmission();
@@ -2576,7 +2640,7 @@ test("automatic compaction owns the accepted input during its existing primary",
 		await finishOwnedResponse(f, request);
 		f.native.splice(0, f.native.length, { ...control, status: "completed" });
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)?.token).toBe("local-token");
 		expect(f.repository.saveCount).toBe(0);
 	} finally {
@@ -2600,7 +2664,7 @@ test("another automatic control can precede the first checkpoint primary", async
 		await f.emit("compaction", compact);
 		f.native.splice(0, f.native.length, { ...control, status: "completed" });
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)?.token).toBe("local-token");
 	} finally {
 		await f.lifecycle.dispose();
@@ -2640,7 +2704,7 @@ test("real steer before compaction applies existing cancellation policy", async 
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		f.native.splice(0, f.native.length, { ...control, status: "completed" });
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		expect(f.repository.saveCount).toBe(0);
 	} finally {
@@ -2673,21 +2737,30 @@ test("unknown synthetic callbacks cannot borrow or deactivate the exact accepted
 			"epoch was revoked",
 		);
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
-		await expect(f.emit("context", compact)).rejects.toThrow(
-			"unknown, synthetic, or stale real input",
-		);
+		await f.emit("context", compact);
+		const request = new Request("http://localhost/foreign-native");
+		await f.emit("http.request", {
+			sessionID,
+			agent,
+			model,
+			kind: "primary",
+			request,
+		});
+		await finishOwnedResponse(f, request);
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 		const foreignCall = ownershipNativeCall(f);
-		await expect(f.lifecycle.beforeTool(foreignCall)).rejects.toThrow();
+		await expect(f.lifecycle.verifyTool(foreignCall, "flow")).rejects.toThrow(
+			"live admitted input origin",
+		);
 		expect(f.repository.saveCount).toBe(0);
 		await f.command("flow-auto", "Inspect separately accepted fresh source");
 		const fresh = await startOwnedRequest(f);
 		await finishOwnedResponse(f, fresh);
-		await expect(f.lifecycle.beforeTool(foreignCall)).rejects.toThrow(
-			"primary request",
+		await expect(f.lifecycle.verifyTool(foreignCall, "flow")).rejects.toThrow(
+			"cannot be rebound",
 		);
 		const call = ownershipNativeCall(f);
-		await f.lifecycle.beforeTool(call);
+		await f.lifecycle.verifyTool(call, "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)?.token).toBe("local-token");
 		expect(f.repository.saveCount).toBe(0);
 	} finally {
@@ -2714,7 +2787,7 @@ for (const successor of ["command", "synthetic"] as const)
 			const request = await startOwnedRequest(f);
 			await expect(f.emit("context", old)).rejects.toThrow();
 			await finishOwnedResponse(f, request);
-			await f.lifecycle.beforeTool(ownershipNativeCall(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 		} finally {
 			await f.lifecycle.dispose();
@@ -2772,7 +2845,7 @@ for (const prior of ["none", "ended-manual"] as const)
 				await compactCurrentInput(f, "msg_grantless_checkpoint");
 				await prepareContinuationRetry(f, attempt);
 				await finishOwnedResponse(f, await startOwnedRequest(f));
-				await f.lifecycle.beforeTool(ownershipNativeCall(f));
+				await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 				expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 				expect(f.repository.saveCount).toBe(0);
 				expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
@@ -2787,7 +2860,7 @@ test("grantless Flow plan input retains protected execution after compaction", a
 		await f.command("flow-plan", "Ordinary manual plan");
 		await compactCurrentInput(f, "msg_plan_checkpoint");
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		expect(f.repository.saveCount).toBe(0);
 	} finally {
@@ -2830,7 +2903,7 @@ test("grantless reviewer input keeps its exact selected role through compaction"
 		if (message?.type !== "assistant")
 			throw new Error("Missing native reviewer assistant");
 		message.agent = reviewer;
-		await f.lifecycle.beforeTool({ ...call, agent: reviewer });
+		await f.lifecycle.verifyTool({ ...call, agent: reviewer }, "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		expect(f.repository.saveCount).toBe(0);
 	} finally {
@@ -2866,7 +2939,7 @@ for (const reject of [false, true])
 					);
 				}
 				await finishOwnedResponse(f, await startOwnedRequest(f));
-				await f.lifecycle.beforeTool(ownershipNativeCall(f));
+				await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 				if (!oldSettlesFirst) {
 					releaseOld();
 					expect(await pending).toBe(
@@ -3036,7 +3109,7 @@ for (const reason of ["auto", "manual"] as const)
 			await compactCurrentInput(f, "msg_manual_recovery_checkpoint", reason);
 			await finishOwnedResponse(f, await startOwnedRequest(f));
 			const call = ownershipNativeCall(f);
-			await f.lifecycle.beforeTool(call);
+			await f.lifecycle.verifyTool(call, "flow");
 			const guard = f.recovery.guard({
 				hostSessionId: sessionID,
 				messageId: call.messageID,
@@ -3080,7 +3153,7 @@ for (const attempt of ["first", "retry"] as const)
 			await compactCurrentInput(f, "msg_manual_known_control", "manual");
 			await prepareContinuationRetry(f, attempt);
 			await finishOwnedResponse(f, await startOwnedRequest(f));
-			await f.lifecycle.beforeTool(ownershipNativeCall(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 			expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
 			expect(f.repository.saveCount).toBe(0);
@@ -3109,7 +3182,7 @@ test("unattributed manual summary creates no checkpoint grant and permits a late
 			"Fresh ordinary input",
 		);
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		expect(f.repository.saveCount).toBe(0);
 	} finally {
@@ -3165,7 +3238,7 @@ for (const stale of ["marked", "synthetic", "prefix"] as const)
 					"unknown, synthetic, or stale real input",
 				);
 				await expect(
-					f.lifecycle.beforeTool(ownershipNativeCall(f)),
+					f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
 				).rejects.toThrow("primary request");
 			}
 			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
@@ -3213,7 +3286,7 @@ for (const fresh of ["automatic", "ordinary"] as const)
 				expect(await old).toBe("Error: Flow execution epoch was revoked.");
 				f.native.splice(f.native.indexOf(control), 1);
 				await finishOwnedResponse(f, request);
-				await f.lifecycle.beforeTool(ownershipNativeCall(f));
+				await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 				expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 				expect(f.repository.saveCount).toBe(0);
 			} finally {
@@ -3337,7 +3410,7 @@ for (const fresh of ["automatic", "ordinary"] as const)
 			await expect(f.emit("compaction", old)).rejects.toThrow();
 			f.native.splice(f.native.indexOf(control), 1);
 			await finishOwnedResponse(f, request);
-			await f.lifecycle.beforeTool(ownershipNativeCall(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
 			expect(f.repository.saveCount).toBe(0);
 		} finally {
@@ -3375,7 +3448,7 @@ for (const actor of ["command", "synthetic"] as const)
 			f.releaseSessionRead();
 			await pending;
 			await finishOwnedResponse(f, await startOwnedRequest(f));
-			await f.lifecycle.beforeTool(ownershipNativeCall(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 			expect(f.autoDrive.captureAuthority(sessionID)).not.toBeNull();
 		} finally {
 			f.releaseSessionRead();
@@ -3416,7 +3489,7 @@ test("accepted activation readiness blocks freeze and tools until exact source b
 		expect(freeze).toHaveBeenCalledTimes(0);
 		expect(f.repository.saveCount).toBe(0);
 		await expect(
-			f.lifecycle.beforeTool(ownershipNativeCall(f)),
+			f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
 		).rejects.toThrow("primary request");
 		expect(freeze).toHaveBeenCalledTimes(0);
 		release.resolve();
@@ -3432,7 +3505,7 @@ test("accepted activation readiness blocks freeze and tools until exact source b
 			request,
 		});
 		await finishOwnedResponse(f, request);
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 	} finally {
 		release.resolve();
 		freeze.mockRestore();
@@ -3480,7 +3553,7 @@ test("interrupted ordinary manual summaries retain lineage without an execution 
 			},
 			{
 				type: "idle",
-				id: "msg_interrupted_idle",
+				id: SessionMessage.ID.fromEvent(terminal("interrupted").id),
 				outcome: "interrupted",
 				time: { created: 4 },
 			},
@@ -3499,14 +3572,14 @@ test("interrupted ordinary manual summaries retain lineage without an execution 
 				"unknown, synthetic, or stale real input",
 			);
 			await expect(
-				f.lifecycle.beforeTool(ownershipNativeCall(f)),
+				f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
 			).rejects.toThrow();
 			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 			expect(f.repository.saveCount).toBe(0);
 		}
 		await admitOrdinaryInput(f, "msg_separate_fresh", "Fresh ordinary request");
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
 		expect(f.repository.saveCount).toBe(0);
@@ -3575,12 +3648,12 @@ test("a cancelled same-epoch context releases only its own pre-dispatch frozen p
 		expect(authority).not.toBeNull();
 		await finishOwnedResponse(f, await startOwnedRequest(f));
 		const call = ownershipNativeCall(f);
-		await f.lifecycle.beforeTool(call);
+		await f.lifecycle.verifyTool(call, "flow");
 		f.releaseSessionRead();
 		await f.flush();
 		expect(f.autoDrive.captureAuthority(sessionID)).not.toBeNull();
 		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
-		await f.lifecycle.beforeTool(call);
+		await f.lifecycle.verifyTool(call, "flow");
 	} finally {
 		f.releaseSessionRead();
 		await f.lifecycle.dispose();
@@ -3609,7 +3682,7 @@ test("a source accepted while context waits owns a later native-read failure", a
 		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		await f.command("flow-auto", "Fresh source after matched read failure");
 		await finishOwnedResponse(f, await startOwnedRequest(f));
-		await f.lifecycle.beforeTool(ownershipNativeCall(f));
+		await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
 		expect(f.autoDrive.captureAuthority(sessionID)).not.toBeNull();
 	} finally {
 		f.releaseAdmission();
@@ -3651,7 +3724,7 @@ for (const outcome of ["failed", "interrupted"] as const)
 			message.time.completed = 5;
 			f.native.push({
 				type: "idle",
-				id: "msg_owned_terminal",
+				id: SessionMessage.ID.fromEvent(terminal(outcome).id),
 				outcome,
 				time: { created: 6 },
 			});
@@ -3662,7 +3735,7 @@ for (const outcome of ["failed", "interrupted"] as const)
 			let oldEffects = 0;
 			await expect(
 				(async () => {
-					await f.lifecycle.beforeTool(call);
+					await f.lifecycle.verifyTool(call, "flow");
 					oldEffects++;
 				})(),
 			).rejects.toThrow("epoch was revoked");
@@ -3673,11 +3746,11 @@ for (const outcome of ["failed", "interrupted"] as const)
 			expect(fresh).not.toBeNull();
 			await finishOwnedResponse(f, await startOwnedRequest(f));
 			const freshCall = ownershipNativeCall(f);
-			await f.lifecycle.beforeTool(freshCall);
+			await f.lifecycle.verifyTool(freshCall, "flow");
 			f.sendEvent(event);
 			await f.flush();
-			await expect(f.lifecycle.beforeTool(call)).rejects.toThrow();
-			await f.lifecycle.beforeTool(freshCall);
+			await expect(f.lifecycle.verifyTool(call, "flow")).rejects.toThrow();
+			await f.lifecycle.verifyTool(freshCall, "flow");
 			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(fresh);
 			expect(f.autoDrive.captureAuthority(sessionID)).not.toBeNull();
 			expect(oldEffects).toBe(0);
@@ -3687,7 +3760,11 @@ for (const outcome of ["failed", "interrupted"] as const)
 		}
 	});
 
-async function effectTool(f: OwnershipFixture, effects: string[]) {
+async function effectTool(
+	f: OwnershipFixture,
+	effects: string[],
+	onEffect?: () => void,
+) {
 	const registered = new Map<string, NativeToolDefinition>();
 	await registerFlowTools(
 		{
@@ -3727,11 +3804,14 @@ async function effectTool(f: OwnershipFixture, effects: string[]) {
 				input: { type: "object" },
 				execute: async () => {
 					effects.push("effect");
+					onEffect?.();
 					return "applied";
 				},
 			},
 		},
-		f.lifecycle.beforeTool,
+		async (context) => {
+			await f.lifecycle.verifyTool(context, "flow");
+		},
 	);
 	const tool = registered.get("flow_status");
 	if (!tool) throw new Error("Missing registered effect tool.");
@@ -3785,7 +3865,7 @@ for (const known of ["bound", "historical"] as const)
 					f,
 					boundary === "shell" ? "shell" : "flow_status",
 				);
-				if (known === "bound") await f.lifecycle.beforeTool(old);
+				if (known === "bound") await f.lifecycle.verifyTool(old, "flow");
 				await finishOwnedResponse(f, await startOwnedRequest(f));
 				const control = automaticControl("msg_retention_compaction");
 				f.native.push(control);
@@ -3802,7 +3882,7 @@ for (const known of ["bound", "historical"] as const)
 				for (const id of [old.id, CallID.make("new-call-on-old-assistant")]) {
 					const replay = async () => {
 						if (boundary === "flow")
-							await f.lifecycle.beforeTool({ ...old, id });
+							await f.lifecycle.verifyTool({ ...old, id }, "flow");
 						else
 							for (const callback of f.toolCallbacks["execute.before"])
 								await callback({
@@ -3833,7 +3913,7 @@ test("session.deleted public barrier retires held owners and isolates another se
 		const oldRequest = await startOwnedRequest(f);
 		await finishOwnedResponse(f, oldRequest);
 		const oldCall = ownershipNativeCall(f);
-		await f.lifecycle.beforeTool(oldCall);
+		await f.lifecycle.verifyTool(oldCall, "flow");
 		const oldOwner = freeze.mock.results.at(-1)?.value;
 		if (!oldOwner) throw new Error("Missing captured primary.");
 		const otherID = Session.ID.make("session-retention-other");
@@ -4057,7 +4137,9 @@ test("unregistered native regression: external synthetic in empty ledger runs or
 			{
 				role: "user",
 				id: "msg_external_synthetic",
-				content: [{ type: "text", text: "Ordinary external synthetic request" }],
+				content: [
+					{ type: "text", text: "Ordinary external synthetic request" },
+				],
 			},
 		]);
 	} finally {
@@ -4101,14 +4183,20 @@ test("unregistered native regression: external synthetic after ordinary prompt i
 				role: "user",
 				id: "msg_prior_ordinary",
 				content: [
-					{ type: "text", text: "Ordinary prompt before external notification" },
+					{
+						type: "text",
+						text: "Ordinary prompt before external notification",
+					},
 				],
 			},
 			{
 				role: "user",
 				id: "msg_external_after_ordinary",
 				content: [
-					{ type: "text", text: "External ordinary notification after prior prompt" },
+					{
+						type: "text",
+						text: "External ordinary notification after prior prompt",
+					},
 				],
 			},
 		]);
@@ -4116,3 +4204,683 @@ test("unregistered native regression: external synthetic after ordinary prompt i
 		await f.lifecycle.dispose();
 	}
 });
+
+async function unregisteredFixture() {
+	const f = await fixture();
+	f.native.push({
+		type: "synthetic",
+		id: "msg_foreign",
+		text: "External request",
+		time: { created: 0 },
+	});
+	return f;
+}
+
+for (const replacement of ["new-epoch", "same-epoch"] as const)
+	for (const boundary of ["request", "response", "shell"] as const)
+		test(`native-only ${boundary} rejects ${replacement} clock replacement before successor freeze`, async () => {
+			const f = await unregisteredFixture();
+			try {
+				if (replacement === "same-epoch") {
+					await f.command("flow-auto", "Establish the same-epoch lease");
+					f.native.push({
+						type: "synthetic",
+						id: "msg_foreign_same_epoch",
+						text: "Foreign above Flow",
+						time: { created: 1 },
+					});
+				}
+				await f.emit("context", f.context());
+				const request = new Request("http://localhost/old-native");
+				const http = {
+					sessionID,
+					agent,
+					model,
+					kind: "primary" as const,
+					request,
+				};
+				if (boundary !== "request") await f.emit("http.request", http);
+				const call =
+					boundary === "shell" ? ownershipNativeCall(f, "shell") : undefined;
+				if (replacement === "new-epoch")
+					await f.command("flow-auto", "Fresh observed authority");
+				else
+					await f.lifecycle.prompt(
+						sessionID,
+						"Private frontier replacement",
+						delivery,
+						{ [FLOW_AUTO_METADATA_KEY]: "local-token" },
+					);
+				const authority = f.autoDrive.captureAuthority(sessionID);
+				if (boundary === "request")
+					await expect(f.emit("http.request", http)).rejects.toThrow();
+				if (boundary === "response")
+					await expect(
+						f.emit("http.response", {
+							...http,
+							response: new Response("obsolete"),
+						}),
+					).rejects.toThrow();
+				if (call)
+					await expect(
+						f.lifecycle.verifyTool(call, "native", "shell"),
+					).rejects.toThrow();
+				expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+				expect(f.repository.saveCount).toBe(0);
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+				await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+				expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			} finally {
+				await f.lifecycle.dispose();
+			}
+		});
+
+test("native-only protected denial during streaming keeps the HTTP overlap barrier", async () => {
+	const f = await unregisteredFixture();
+	try {
+		const request = await startOwnedRequest(f);
+		const frame = {
+			sessionID,
+			agent,
+			model,
+			kind: "primary" as const,
+			request,
+			response: new Response(
+				new ReadableStream({
+					start(controller) {
+						controller.enqueue(new TextEncoder().encode("healthy"));
+					},
+				}),
+			),
+		};
+		await f.emit("http.response", frame);
+		const effects: string[] = [];
+		const tool = await effectTool(f, effects);
+		await expect(tool.execute({}, ownershipNativeCall(f))).rejects.toThrow(
+			"live admitted input origin",
+		);
+		expect(effects).toEqual([]);
+		await expect(f.emit("context", f.context())).rejects.toThrow("overlap");
+		if (!frame.response.body) throw new Error("Expected stream.");
+		const reader = frame.response.body.getReader();
+		expect(new TextDecoder().decode((await reader.read()).value)).toBe(
+			"healthy",
+		);
+		await reader.cancel();
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const outcome of ["failed", "succeeded", "interrupted"] as const)
+	test(`native-only ${outcome} terminal cannot invoke Flow terminal effects`, async () => {
+		const f = await fixture();
+		try {
+			await f.command("flow-auto", "Unrelated exact lease");
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			f.native.push({
+				type: "synthetic",
+				id: "msg_foreign_terminal",
+				text: "Foreign request",
+				time: { created: 1 },
+			});
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			const event: OpenCodeEvent =
+				outcome === "succeeded"
+					? {
+							id: "evt_foreign_terminal",
+							type: "session.execution.succeeded",
+							created: 3,
+							durable: { aggregateID: sessionID, seq: 3, version: 1 },
+							data: { sessionID },
+						}
+					: terminal(outcome, "evt_foreign_terminal");
+			f.native.push({
+				type: "idle",
+				id: SessionMessage.ID.fromEvent(event.id),
+				outcome,
+				time: { created: 3 },
+			});
+			f.session.outcome = outcome;
+			f.session.time.idle = 3;
+			await f.sendEventAndWait(event);
+			expect(f.flowTerminals).toEqual([]);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			expect(f.repository.saveCount).toBe(0);
+			expect(
+				f.native
+					.filter((message) => message.type === "synthetic")
+					.map((message) => message.id),
+			).toEqual(["msg_foreign_terminal"]);
+			await f.command("flow-auto", "Fresh Flow after foreign terminal");
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const read of ["context", "status"] as const)
+	test(`old terminal entering after fresh freeze cannot revoke on ${read} failure`, async () => {
+		const f = await fixture();
+		try {
+			await initialOwnershipWork(f);
+			const old = terminal("failed", "evt_before_new_freeze");
+			f.native.push({
+				type: "idle",
+				id: SessionMessage.ID.fromEvent(old.id),
+				outcome: "failed",
+				time: { created: 1 },
+			});
+			await f.command("flow-auto", "Fresh source and primary");
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			const request = await startOwnedRequest(f);
+			if (read === "context") f.rejectNextContextRead();
+			else f.rejectNextSessionRead();
+			await f.sendEventAndWait(old);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			expect(f.flowTerminals).toEqual([]);
+			await finishOwnedResponse(f, request);
+			if (read === "status") {
+				await expect(
+					f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
+				).rejects.toThrow("Native session snapshot failed");
+				await f.command(
+					"flow-auto",
+					"Fresh after exact tool observation failure",
+				);
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+			}
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+			expect(f.logs.includes("Flow event stream failed closed.")).toBe(false);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const command of ["bun test", "printf foreign"])
+	test(`foreign shell ${command} preserves armed Flow capture over a populated frontier`, async () => {
+		let capture: ValidationCaptureCoordinator;
+		const f = await fixture(agent, (host) => {
+			capture.cancel(host);
+		});
+		const observations: ObservedValidation[] = [];
+		const prepared: PreparedValidation = {
+			featureId: "feature",
+			runId: "run",
+			command: "bun test",
+			scope: "focused",
+			sourceDigest: `sha256:${"a".repeat(64)}`,
+			hostPlatform: "linux",
+			intent: "pass",
+			assertions: [],
+			resultsPath: undefined,
+		};
+		let serial = 0;
+		capture = new ValidationCaptureCoordinator({
+			readSession: async () => f.session,
+			randomId: () => `capture-${++serial}`,
+			persistObservation: async (_workspace, value, assertAuthorized) => {
+				assertAuthorized();
+				observations.push(value);
+				return { ...value, id: value.captureId, recordedRevision: 4 };
+			},
+		});
+		try {
+			await admitOrdinaryInput(
+				f,
+				"msg_capture_flow",
+				"Observed ordinary Flow direction",
+			);
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			const effects: string[] = [];
+			const tool = await effectTool(f, effects, () => {
+				capture.arm(sessionID, directory, prepared);
+			});
+			await tool.execute({}, ownershipNativeCall(f));
+			expect(capture.pendingCount()).toBe(1);
+			f.native.push({
+				type: "synthetic",
+				id: "msg_foreign_capture",
+				text: "External native shell",
+				time: { created: 1 },
+			});
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			const foreign = ownershipNativeCall(f, "shell");
+			const before: NativeToolBefore = {
+				sessionID,
+				agent,
+				id: foreign.id,
+				messageID: foreign.messageID,
+				tool: "shell",
+				input: { command },
+			};
+			for (const callback of f.toolCallbacks["execute.before"])
+				await callback(before);
+			const access = await f.lifecycle.verifyTool(before, "native", "shell");
+			if (access.kind === "flow")
+				await capture.observeToolBefore(before, access.assertCurrent);
+			const after: NativeToolAfter = {
+				...before,
+				status: "completed",
+				result: {
+					content: "literal native shell result",
+					output: {
+						exit: 0,
+						truncated: false,
+						output: "literal native shell result",
+					},
+				},
+			};
+			const original = structuredClone(after);
+			expect(await capture.observeToolAfter(after)).toBeNull();
+			expect(after).toEqual(original);
+			expect(observations).toEqual([]);
+			expect(capture.pendingCount()).toBe(1);
+			const event: OpenCodeEvent = {
+				id: "evt_foreign_capture_idle",
+				type: "session.execution.succeeded",
+				created: 2,
+				durable: { aggregateID: sessionID, seq: 2, version: 1 },
+				data: { sessionID },
+			};
+			f.native.push({
+				type: "idle",
+				id: SessionMessage.ID.fromEvent(event.id),
+				outcome: "succeeded",
+				time: { created: 2 },
+			});
+			f.session.time.idle = 2;
+			f.session.outcome = "succeeded";
+			await f.sendEventAndWait(event);
+			expect(capture.pendingCount()).toBe(1);
+			expect(f.flowTerminals).toEqual([]);
+			expect(f.repository.saveCount).toBe(0);
+			expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
+			capture.cancel(sessionID);
+			await admitOrdinaryInput(
+				f,
+				"msg_fresh_capture",
+				"Fresh observed validation",
+			);
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			await tool.execute({}, ownershipNativeCall(f));
+			const fresh: NativeToolBefore = {
+				...ownershipNativeCall(f, "shell"),
+				tool: "shell",
+				input: { command: "bun test" },
+			};
+			const authorized = await f.lifecycle.verifyTool(fresh, "native", "shell");
+			if (authorized.kind !== "flow")
+				throw new Error("Expected exact Flow observation.");
+			await capture.observeToolBefore(fresh, authorized.assertCurrent);
+			const result: NativeToolAfter = {
+				...fresh,
+				status: "completed",
+				result: {
+					content: "fresh passed",
+					output: { exit: 0, truncated: false, output: "fresh passed" },
+				},
+			};
+			expect((await capture.observeToolAfter(result))?.id).toBe("capture-2");
+			expect(await capture.observeToolAfter(result)).toBeNull();
+			expect(observations.map((value) => value.captureId)).toEqual([
+				"capture-2",
+			]);
+			expect(JSON.stringify(result)).toContain("[flow-validation]");
+			expect(capture.pendingCount()).toBe(0);
+			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		} finally {
+			capture.clear();
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const proof of ["before", "after"] as const)
+	test(`owned terminal read failure ${proof} prefix proof has bounded cleanup`, async () => {
+		const f = await fixture();
+		try {
+			await initialOwnershipWork(f);
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			const event: OpenCodeEvent = {
+				id: "evt_owned_proof",
+				type: "session.execution.succeeded",
+				created: 4,
+				durable: { aggregateID: sessionID, seq: 4, version: 1 },
+				data: { sessionID },
+			};
+			f.native.push({
+				type: "idle",
+				id: SessionMessage.ID.fromEvent(event.id),
+				outcome: "succeeded",
+				time: { created: 4 },
+			});
+			f.session.outcome = "succeeded";
+			f.session.time.idle = 4;
+			if (proof === "before") f.rejectNextContextRead();
+			else f.rejectNextSessionRead();
+			await f.sendEventAndWait(event);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(
+				proof === "before" ? authority : null,
+			);
+			expect(f.flowTerminals).toEqual([]);
+			expect(f.logs.includes("Flow event stream failed closed.")).toBe(false);
+			await f.command("flow-auto", "Fresh source after terminal read error");
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const settled of [false, true])
+	test(`missing raw native input above ${settled ? "rejected" : "pending"} lineage refuses without authority`, async () => {
+		const f = await fixture();
+		try {
+			if (settled) f.corruptReceipt();
+			else f.blockAdmission();
+			const command = f
+				.command("flow-plan", "Pending plan source")
+				.catch(String);
+			await f.flush();
+			f.native.push({
+				type: "synthetic",
+				id: "msg_missing_above_unaccepted",
+				text: "External native",
+				time: { created: 1 },
+			});
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				"unknown, synthetic, or stale real input",
+			);
+			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+			expect(f.repository.saveCount).toBe(0);
+			f.releaseAdmission();
+			await command;
+		} finally {
+			f.releaseAdmission();
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const replacement of ["same-epoch", "new-epoch"] as const)
+	for (const reject of [false, true])
+		test(`native-only delayed shell read ${reject} cannot affect ${replacement} successor`, async () => {
+			const f = await fixture();
+			try {
+				await f.command("flow-auto", "Establish current Flow lineage");
+				f.native.push({
+					type: "synthetic",
+					id: "msg_delayed_native",
+					text: "Ordinary external request",
+					time: { created: 1 },
+				});
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+				const call = ownershipNativeCall(f, "shell");
+				f.blockNextContextRead();
+				if (reject) f.rejectNextContextRead();
+				const pending = f.lifecycle
+					.verifyTool(call, "native", "shell")
+					.catch(String);
+				await f.waitContextRead();
+				if (replacement === "same-epoch")
+					await f.lifecycle.prompt(sessionID, "Private successor", delivery, {
+						[FLOW_AUTO_METADATA_KEY]: "local-token",
+					});
+				else await f.command("flow-auto", "Fresh successor command");
+				const authority = f.autoDrive.captureAuthority(sessionID);
+				const request = await startOwnedRequest(f);
+				f.releaseContextRead();
+				expect(await pending).toBe(
+					reject
+						? "Error: Native context snapshot failed."
+						: "Error: Flow execution epoch was revoked.",
+				);
+				expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+				await finishOwnedResponse(f, request);
+				await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+				expect(f.repository.saveCount).toBe(0);
+			} finally {
+				f.releaseContextRead();
+				await f.lifecycle.dispose();
+			}
+		});
+
+test("native-only unfinished retry preserves exact call identity and isolates the old Request", async () => {
+	const f = await unregisteredFixture();
+	try {
+		const oldRequest = await startOwnedRequest(f);
+		const messageID = SessionMessage.ID.make("msg_native_retry");
+		const retry: Extract<SessionMessageInfo, { type: "assistant" }> = {
+			type: "assistant",
+			id: messageID,
+			agent,
+			model,
+			time: { created: 1 },
+			content: [],
+			retry: {
+				attempt: 1,
+				at: 100,
+				error: { type: "provider.transport", message: "retry" },
+			},
+		};
+		f.native.push(retry);
+		const next = await startOwnedRequest(f);
+		await expect(
+			f.emit("http.response", {
+				sessionID,
+				agent,
+				model,
+				kind: "primary",
+				request: oldRequest,
+				response: new Response("old retry response"),
+			}),
+		).rejects.toThrow("Request identity");
+		await finishOwnedResponse(f, next);
+		const id = CallID.make("call_native_retry");
+		retry.content.push({
+			type: "tool",
+			id,
+			name: "shell",
+			time: { created: 2 },
+			state: {
+				status: "running",
+				input: { command: "printf native" },
+				metadata: {},
+			},
+		});
+		expect(
+			await f.lifecycle.verifyTool(
+				{ sessionID, agent, messageID, id },
+				"native",
+				"shell",
+			),
+		).toEqual({ kind: "native-only" });
+		await expect(
+			f.lifecycle.verifyTool(
+				{ sessionID, agent, messageID, id },
+				"flow",
+				"shell",
+			),
+		).rejects.toThrow("live admitted input origin");
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const callback of ["http.request", "http.response"] as const)
+	test(`unbound mismatched ${callback} cannot fail a healthy Flow owner`, async () => {
+		const f = await fixture();
+		try {
+			await f.command("flow-auto", "Exact healthy Flow source");
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			const request = await startOwnedRequest(f);
+			const unbound = {
+				sessionID,
+				agent,
+				model: { ...model, id: Model.ID.make("foreign") },
+				kind: "primary" as const,
+				request: new Request("http://localhost/unbound"),
+			};
+			if (callback === "http.request")
+				await expect(f.emit(callback, unbound)).rejects.toThrow(
+					"unique frozen context",
+				);
+			else
+				await expect(
+					f.emit(callback, { ...unbound, response: new Response("unbound") }),
+				).rejects.toThrow("Request identity");
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			await finishOwnedResponse(f, request);
+			const effects: string[] = [];
+			const tool = await effectTool(f, effects);
+			await tool.execute({}, ownershipNativeCall(f));
+			expect(effects).toEqual(["effect"]);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+test("a bound native-only shell cannot use the grantless Flow ordinary-tool bypass after replacement", async () => {
+	const f = await unregisteredFixture();
+	try {
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		const old = ownershipNativeCall(f, "shell");
+		await f.lifecycle.verifyTool(old, "native", "shell");
+		await admitOrdinaryInput(
+			f,
+			"msg_grantless_replacement",
+			"Fresh observed ordinary",
+		);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		let staleEffects = 0;
+		await expect(
+			(async () => {
+				for (const callback of f.toolCallbacks["execute.before"])
+					await callback({
+						sessionID,
+						agent,
+						messageID: old.messageID,
+						id: old.id,
+						tool: "shell",
+						input: { command: "printf stale" },
+					});
+				staleEffects++;
+			})(),
+		).rejects.toThrow();
+		expect(staleEffects).toBe(0);
+		const current = ownershipNativeCall(f, "shell");
+		let ordinaryEffects = 0;
+		for (const callback of f.toolCallbacks["execute.before"])
+			await callback({
+				sessionID,
+				agent,
+				messageID: current.messageID,
+				id: current.id,
+				tool: "shell",
+				input: { command: "printf current" },
+			});
+		ordinaryEffects++;
+		expect(ordinaryEffects).toBe(1);
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const identity of ["agent", "model", "session"] as const)
+	test(`native-only context rejects changed selected ${identity} without revoking Flow lineage`, async () => {
+		const f = await fixture();
+		try {
+			await f.command("flow-auto", "Unrelated exact Flow authority");
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			f.native.push({
+				type: "synthetic",
+				id: "msg_native_selection",
+				text: "Foreign ordinary request",
+				time: { created: 1 },
+			});
+			if (identity === "agent") f.session.agent = Agent.ID.make("other");
+			if (identity === "model")
+				f.session.model = { ...model, id: Model.ID.make("other") };
+			if (identity === "session")
+				f.session.id = Session.ID.make("session-other");
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				"native selected session",
+			);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			expect(f.repository.saveCount).toBe(0);
+			f.session.agent = agent;
+			f.session.model = model;
+			f.session.id = sessionID;
+			await f.command("flow-auto", "Fresh exact selected source");
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const rejectedAt of ["model", "agent", "session", "session-read"] as const)
+	test(`rejected native ${rejectedAt} preserves the previous usable primary`, async () => {
+		const f = await fixture();
+		try {
+			await initialOwnershipWork(f);
+			const call = ownershipNativeCall(f);
+			const access = await f.lifecycle.verifyTool(call, "flow");
+			if (access.kind !== "flow") throw new Error("Expected admitted owner.");
+			access.assertCurrent();
+			const effects: string[] = [];
+			const tool = await effectTool(f, effects);
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			f.native.push({
+				type: "synthetic",
+				id: "msg_invalid_replacement",
+				text: "External candidate",
+				time: { created: 5 },
+			});
+			await tool.execute({}, call);
+			expect(effects).toEqual(["effect"]);
+			if (rejectedAt === "model")
+				f.session.model = {
+					...model,
+					id: Model.ID.make("unselected-other-model"),
+				};
+			if (rejectedAt === "agent")
+				f.session.agent = Agent.ID.make("unselected-agent");
+			if (rejectedAt === "session")
+				f.session.id = Session.ID.make("session-foreign");
+			if (rejectedAt === "session-read") f.rejectNextSessionRead();
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				rejectedAt === "session-read"
+					? "Native session snapshot failed"
+					: "native selected session",
+			);
+			f.session.model = model;
+			f.session.agent = agent;
+			f.session.id = sessionID;
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			access.assertCurrent();
+			await tool.execute({}, call);
+			expect(effects).toEqual(["effect", "effect"]);
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			expect(
+				await f.lifecycle.verifyTool(
+					ownershipNativeCall(f, "shell"),
+					"native",
+					"shell",
+				),
+			).toEqual({ kind: "native-only" });
+			expect(() => access.assertCurrent()).toThrow("superseded");
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			expect(f.repository.saveCount).toBe(0);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});

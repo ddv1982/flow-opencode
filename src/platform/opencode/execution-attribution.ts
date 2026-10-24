@@ -25,7 +25,13 @@ export type InputOrigin = Readonly<{
 		| Readonly<{ automatic: false; authority: AutoDriveAuthority | null }>
 	);
 
+export type Participation =
+	| Readonly<{ kind: "flow"; origin: InputOrigin }>
+	| Readonly<{ kind: "native-only" }>;
+type InputClock = Readonly<{ current(): boolean; assertCurrent(): void }>;
+
 type Snapshot = Readonly<{
+	clock: InputClock;
 	inputs: readonly string[];
 	previousAssistants: ReadonlySet<string>;
 	previousTerminals: ReadonlySet<string>;
@@ -45,7 +51,7 @@ type PrimaryOwner = {
 	readonly sessionID: string;
 	readonly agent: string;
 	readonly model: SessionContext["model"];
-	readonly origin: InputOrigin;
+	readonly participation: Participation;
 	http: HttpResource;
 	lifetime: Lifetime;
 };
@@ -173,6 +179,20 @@ export class ExecutionAttribution {
 			throw new Error("Flow primary ownership was superseded.");
 		return primary.lifetime.snapshot;
 	}
+	assertCurrent(primary: PrimaryOwner): void {
+		const snapshot = this.#evidence(primary);
+		snapshot.clock.assertCurrent();
+		if (primary.participation.kind === "flow")
+			this.#assertLive(primary.participation.origin);
+	}
+	isCurrent(primary: PrimaryOwner): boolean {
+		return (
+			!this.#closed &&
+			this.current(primary.sessionID) === primary &&
+			primary.lifetime.kind === "current" &&
+			primary.lifetime.snapshot.clock.current()
+		);
+	}
 	requestOwner(request: Request): PrimaryOwner | undefined {
 		return this.#requests.get(request);
 	}
@@ -197,33 +217,47 @@ export class ExecutionAttribution {
 	freeze(
 		input: SessionContext,
 		native: readonly SessionMessageInfo[],
-		origin: InputOrigin,
+		participation: Participation,
+		clock: InputClock,
 	): PrimaryOwner {
 		if (this.#closed) throw new Error("Flow lifecycle is closed.");
 		const record = this.#session(input.sessionID);
 		const prior = record?.current;
-		if (prior && prior.http.phase !== "ended")
+		if (prior && this.isCurrent(prior) && prior.http.phase !== "ended")
 			throw new Error("Flow primary contexts or streams overlap.");
-		this.#assertLive(origin);
+		clock.assertCurrent();
+		if (participation.kind === "flow") this.#assertLive(participation.origin);
 		const inputs = modelInputIDs(input);
 		if (!same(inputs, nativeInputIDs(native)))
 			throw new Error(
 				"Flow native inputs differ from the model-visible prefix.",
 			);
 		const delivery = nativeDelivery({ agent: input.agent, model: input.model });
-		if (!sameDelivery(origin.delivery, delivery))
+		if (
+			participation.kind === "flow" &&
+			!sameDelivery(participation.origin.delivery, delivery)
+		)
 			throw new Error(
 				"Flow admitted agent or model differs from its primary request.",
 			);
-		const previous = prior && this.#evidence(prior);
+		const previous =
+			prior?.lifetime.kind === "current" ? prior.lifetime.snapshot : undefined;
 		const retry =
 			prior &&
 			this.#retries.delete(prior) &&
-			prior.origin === origin &&
+			previous?.clock.current() &&
+			prior.participation.kind === participation.kind &&
+			(participation.kind === "native-only" ||
+				(prior.participation.kind === "flow" &&
+					prior.participation.origin === participation.origin)) &&
 			same(previous?.inputs, inputs) &&
 			prior.agent === input.agent &&
 			sameModel(prior.model, input.model);
 		const snapshot: Snapshot = Object.freeze({
+			clock: Object.freeze({
+				current: clock.current,
+				assertCurrent: clock.assertCurrent,
+			}),
 			inputs: Object.freeze(inputs),
 			previousAssistants:
 				retry && previous
@@ -250,7 +284,7 @@ export class ExecutionAttribution {
 			sessionID: input.sessionID,
 			agent: input.agent,
 			model: Object.freeze({ ...input.model }),
-			origin,
+			participation: Object.freeze(participation),
 			http: { phase: "context", requestSeen: false },
 			lifetime: { kind: "current", snapshot },
 		};
@@ -259,7 +293,7 @@ export class ExecutionAttribution {
 			assistants: new Map<string, AssistantRecord>(),
 			bindings: new Map<string, Binding>(),
 		};
-		if (prior) prior.lifetime = retired;
+		if (prior) this.retire(prior);
 		next.current = primary;
 		this.#sessions.set(input.sessionID, next);
 		for (const id of snapshot.previousAssistants)
@@ -278,24 +312,30 @@ export class ExecutionAttribution {
 			throw new Error(
 				"Flow primary HTTP request has no unique frozen context.",
 			);
-		this.#assertLive(primary.origin);
+		this.assertCurrent(primary);
 		primary.http = { phase: "request", requestSeen: true };
 		this.#requests.set(input.request, primary);
 	}
-	hasFailedTerminal(
+	terminal(
 		primary: PrimaryOwner,
 		native: readonly SessionMessageInfo[],
-	): boolean {
+		id?: string,
+	): Extract<SessionMessageInfo, { type: "idle" }> | undefined {
+		this.assertCurrent(primary);
 		const snapshot = this.#evidence(primary);
-		return native.some(
-			(message, position) =>
+		return native.find(
+			(
+				message,
+				position,
+			): message is Extract<SessionMessageInfo, { type: "idle" }> =>
 				message.type === "idle" &&
-				message.outcome !== "succeeded" &&
+				(id === undefined || message.id === id) &&
 				!snapshot.previousTerminals.has(message.id) &&
 				same(nativeInputIDs(native.slice(0, position)), snapshot.inputs),
 		);
 	}
 	retry(primary: PrimaryOwner, native: readonly SessionMessageInfo[]): boolean {
+		this.assertCurrent(primary);
 		const snapshot = this.#evidence(primary);
 		const record = this.#session(primary.sessionID);
 		if (
@@ -328,9 +368,13 @@ export class ExecutionAttribution {
 		primary.http = { phase: "ended", requestSeen: primary.http.requestSeen };
 		return active && this.current(primary.sessionID) === primary;
 	}
+	retire(primary: PrimaryOwner): void {
+		this.end(primary);
+		primary.lifetime = retired;
+	}
 	response(
 		input: SessionHttpResponse,
-		failed: (sessionID: string) => void,
+		failed: (primary: PrimaryOwner) => void,
 	): void {
 		if (input.kind !== "primary") return;
 		this.#session(input.sessionID);
@@ -343,11 +387,7 @@ export class ExecutionAttribution {
 			!sameModel(primary.model, input.model)
 		) {
 			if (primary) {
-				if (this.end(primary)) failed(primary.sessionID);
-			} else {
-				const current = this.current(input.sessionID);
-				if (current) this.end(current);
-				failed(input.sessionID);
+				if (this.end(primary)) failed(primary);
 			}
 			throw new Error(
 				"Flow primary response did not match its Request identity.",
@@ -355,14 +395,14 @@ export class ExecutionAttribution {
 		}
 		const finish = () => this.end(primary);
 		const fail = () => {
-			if (finish()) failed(primary.sessionID);
+			if (finish()) failed(primary);
 		};
 		if (!input.response.ok) {
 			fail();
 			return;
 		}
 		try {
-			this.#assertLive(primary.origin);
+			this.assertCurrent(primary);
 			if (!input.response.body)
 				throw new Error("Flow primary response has no successful stream.");
 			const reader = input.response.body.getReader();
@@ -455,7 +495,7 @@ export class ExecutionAttribution {
 			throw new Error(
 				"Flow execution identity conflicts with an immutable binding.",
 			);
-		this.#assertLive(primary.origin);
+		this.assertCurrent(primary);
 		if (!prior)
 			record.assistants.set(
 				execution.messageID,

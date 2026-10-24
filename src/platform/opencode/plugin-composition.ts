@@ -160,12 +160,7 @@ export function createFlowPlugin(dependencies: {
 							signal: controller.signal,
 						})) {
 							validation.observeShellEvent(event);
-							if (
-								event.type === "session.deleted" ||
-								event.type === "session.execution.succeeded" ||
-								event.type === "session.execution.failed" ||
-								event.type === "session.execution.interrupted"
-							)
+							if (event.type === "session.deleted")
 								validation.cancel(event.data.sessionID);
 						}
 						if (!controller.signal.aborted)
@@ -210,6 +205,9 @@ export function createFlowPlugin(dependencies: {
 					runtimeGuard,
 					log,
 					codingModels,
+					onFlowTerminal: (host) => {
+						validation.cancel(host);
+					},
 					...(dependencies.defaultRecovery
 						? { defaultRecovery: dependencies.defaultRecovery }
 						: {}),
@@ -244,36 +242,29 @@ export function createFlowPlugin(dependencies: {
 					guardTools(tools, runtimeGuard, autoDrive, (sessionID) =>
 						ctx.session.get({ sessionID }),
 					),
-					(context) => activeLifecycle.beforeTool(context),
+					async (context) => {
+						await activeLifecycle.verifyTool(context, "flow");
+					},
 				);
 				cleanups.push(() => registration.dispose());
-				const before = await ctx.tool.hook("execute.before", (input) =>
-					validation.observeToolBefore(input),
-				);
+				const before = await ctx.tool.hook("execute.before", async (input) => {
+					if (input.tool !== "shell" || validation.pendingCount() === 0) return;
+					const access = await activeLifecycle.verifyTool(
+						input,
+						"native",
+						input.tool,
+					);
+					if (access.kind === "flow")
+						await validation.observeToolBefore(input, access.assertCurrent);
+				});
 				cleanups.push(() => before.dispose());
 				const after = await ctx.tool.hook("execute.after", async (input) => {
 					try {
 						await validation.observeToolAfter(input);
 					} catch (error) {
-						validation.cancel(input.sessionID);
 						log("error", "Flow validation capture failed closed.", {
 							message: String(error),
 						});
-						if (input.status === "completed") {
-							const content = input.result.content;
-							input.result = {
-								...input.result,
-								content: [
-									...(typeof content === "string"
-										? [{ type: "text" as const, text: content }]
-										: (content ?? [])),
-									{
-										type: "text",
-										text: `[flow-validation-error] ${String(error)}`,
-									},
-								],
-							};
-						}
 					}
 				});
 				cleanups.push(() => after.dispose());

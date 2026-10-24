@@ -176,9 +176,11 @@ export async function readWorkspaceTestReport(
 export function persistWorkspaceValidation(
 	workspace: string,
 	input: ObservedValidation,
+	assertAuthorized?: () => void,
 ) {
 	return persistObservedValidation(
 		createFileSessionRepository(workspace),
 		input,
+		assertAuthorized,
 	);
 }

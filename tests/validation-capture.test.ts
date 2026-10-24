@@ -168,6 +168,7 @@ test.each([
 					...(beforeWorkdir === undefined ? {} : { workdir: beforeWorkdir }),
 				},
 			}),
+			() => {},
 		);
 		const completed = after(
 			undefined,
@@ -240,7 +241,7 @@ for (const phase of ["before", "after"] as const) {
 			const completed = after(undefined, {}, { input });
 			if (phase === "before") {
 				await expect(
-					capture.observeToolBefore(before({ input })),
+					capture.observeToolBefore(before({ input }), () => {}),
 				).rejects.toThrow("capture was cancelled");
 				expect(await capture.observeToolAfter(completed)).toBeNull();
 			} else {
@@ -248,6 +249,7 @@ for (const phase of ["before", "after"] as const) {
 					before({
 						input: { command: prepared.command, workdir: workspace },
 					}),
+					() => {},
 				);
 				await expect(capture.observeToolAfter(completed)).rejects.toThrow();
 			}
@@ -329,7 +331,7 @@ test.each([
 	async (_name, output, metadata, exitCode, outputComplete, ineligibleReason) => {
 		const { capture, observations } = fixture();
 		capture.arm("ses_host", workspace, prepared);
-		await capture.observeToolBefore(before());
+		await capture.observeToolBefore(before(), () => {});
 		await capture.observeToolAfter(after(output, metadata));
 		expect(observations[0]).toMatchObject({ exitCode, outputComplete });
 		expect(observations[0]?.ineligibleReason).toBe(ineligibleReason);
@@ -338,7 +340,7 @@ test.each([
 test("native tool errors are durable ineligible observations", async () => {
 	const { capture, observations } = fixture();
 	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	await capture.observeToolAfter({
 		...before(),
 		status: "error",
@@ -359,9 +361,9 @@ test.each([
 	async (_name, input) => {
 		const { capture, observations } = fixture();
 		capture.arm("ses_host", workspace, prepared);
-		await expect(capture.observeToolBefore(before({ input }))).rejects.toThrow(
-			"capture was cancelled",
-		);
+		await expect(
+			capture.observeToolBefore(before({ input }), () => {}),
+		).rejects.toThrow("capture was cancelled");
 		expect(observations).toEqual([]);
 		expect(capture.pendingCount()).toBe(0);
 	},
@@ -378,7 +380,10 @@ test.each(["flow-reviewer", "flow-worker", "flow-planner"])(
 		});
 		capture.arm("ses_host", workspace, prepared);
 		await expect(
-			capture.observeToolBefore(before({ agent: Agent.ID.make(agent) })),
+			capture.observeToolBefore(
+				before({ agent: Agent.ID.make(agent) }),
+				() => {},
+			),
 		).rejects.toThrow("capture was cancelled");
 		expect(observations).toEqual([]);
 	},
@@ -393,7 +398,7 @@ test("wrong session facts and changed locations fail closed", async () => {
 		}),
 	});
 	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	directory = tmpdir();
 	await expect(capture.observeToolAfter(after())).rejects.toThrow(
 		"workspace changed",
@@ -410,7 +415,7 @@ test.each([
 	async (_name, identity) => {
 		const { capture, observations } = fixture();
 		capture.arm("ses_host", workspace, prepared);
-		await capture.observeToolBefore(before());
+		await capture.observeToolBefore(before(), () => {});
 		expect(
 			await capture.observeToolAfter(after(undefined, {}, identity)),
 		).toBeNull();
@@ -424,7 +429,7 @@ test.each([
 test("later shell input cannot relabel the frozen command", async () => {
 	const { capture, observations } = fixture();
 	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	await expect(
 		capture.observeToolAfter(
 			after(undefined, {}, { input: { command: "different" } }),
@@ -435,10 +440,10 @@ test("later shell input cannot relabel the frozen command", async () => {
 test("only the native shell ID binds capture", async () => {
 	const { capture, observations } = fixture();
 	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before({ tool: "bash" }));
+	await capture.observeToolBefore(before({ tool: "bash" }), () => {});
 	expect(await capture.observeToolAfter(after())).toBeNull();
 	expect(observations).toEqual([]);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	expect(await capture.observeToolAfter(after())).toMatchObject({
 		exitCode: 0,
 	});
@@ -483,7 +488,7 @@ test.each([
 			assertions: ["suite.critical"],
 			resultsPath: "results.xml",
 		});
-		await capture.observeToolBefore(before());
+		await capture.observeToolBefore(before(), () => {});
 		now = 200;
 		await capture.observeToolAfter(after());
 		expect(observations[0]?.observedAssertions).toEqual([
@@ -502,7 +507,7 @@ test("unchanged JUnit cannot certify the just-run command", async () => {
 		assertions: ["suite.critical"],
 		resultsPath: "results.xml",
 	});
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	now = 200;
 	await capture.observeToolAfter(after());
 	expect(observations[0]?.observedAssertions).toEqual([
@@ -567,7 +572,7 @@ test("a verified native shell record permits a secure complete managed-output re
 		readFullOutput: (path) => readHostToolOutput(path, dataHome),
 	});
 	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	now = 200;
 	capture.observeShellEvent(shellEvent(path));
 	capture.observeShellEvent(exited());
@@ -599,7 +604,7 @@ test.each([
 		});
 		const path = join(workspace, "sh_native.out");
 		capture.arm("ses_host", workspace, prepared);
-		await capture.observeToolBefore(before());
+		await capture.observeToolBefore(before(), () => {});
 		now = 200;
 		if (changes) {
 			capture.observeShellEvent(shellEvent(path, changes));
@@ -660,7 +665,7 @@ test("receipts become available only after source-bound observation persistence"
 		},
 	});
 	capture.arm("ses_host", workspace, prepared, origin);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	const completion = capture.observeToolAfter(after());
 	for (let step = 0; step < 10 && !pending; step++) await Promise.resolve();
 	expect(receipts).toEqual([]);
@@ -676,7 +681,7 @@ test("receipts become available only after source-bound observation persistence"
 test("a nonzero completed shell vetoes a passing receipt", async () => {
 	const { capture } = fixture();
 	capture.arm("ses_host", workspace, prepared);
-	await capture.observeToolBefore(before());
+	await capture.observeToolBefore(before(), () => {});
 	const completed = after({
 		exit: 7,
 		truncated: false,
@@ -707,8 +712,11 @@ test("competing shell-before callbacks cannot replace the first native call", as
 		},
 	});
 	capture.arm("ses_host", workspace, prepared);
-	const first = capture.observeToolBefore(before());
-	await capture.observeToolBefore(before({ id: CallID.make("second") }));
+	const first = capture.observeToolBefore(before(), () => {});
+	await capture.observeToolBefore(
+		before({ id: CallID.make("second") }),
+		() => {},
+	);
 	if (!release) throw new Error("First native identity read did not start.");
 	release();
 	await first;
@@ -739,7 +747,7 @@ test.each([
 			readFullOutput: async () => full,
 		});
 		capture.arm("ses_host", workspace, prepared);
-		await capture.observeToolBefore(before());
+		await capture.observeToolBefore(before(), () => {});
 		now = 200;
 		capture.observeShellEvent(shellEvent(path));
 		capture.observeShellEvent(exited());
@@ -763,3 +771,188 @@ test.each([
 		});
 	},
 );
+
+test("a stale before read cannot delete its successor capture", async () => {
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	let first = true;
+	let current = true;
+	const { capture, observations } = fixture({
+		readSession: async (id) => {
+			if (first) {
+				first = false;
+				entered.resolve();
+				await release.promise;
+				throw new Error("old native read failed");
+			}
+			return { id, agent: "build", location: { directory: workspace } };
+		},
+	});
+	capture.arm("ses_host", workspace, prepared);
+	const pending = capture
+		.observeToolBefore(before(), () => {
+			if (!current) throw new Error("stale owner");
+		})
+		.catch(String);
+	await entered.promise;
+	current = false;
+	capture.cancel("ses_host");
+	capture.arm("ses_host", workspace, prepared);
+	release.resolve();
+	await pending;
+	expect(capture.pendingCount()).toBe(1);
+	await capture.observeToolBefore(
+		before({ id: CallID.make("fresh") }),
+		() => {},
+	);
+	const result = after(undefined, {}, { id: CallID.make("fresh") });
+	await capture.observeToolAfter(result);
+	expect(observations.length).toBe(1);
+	if (result.status !== "completed")
+		throw new Error("Expected completed shell.");
+	expect(JSON.stringify(result.result.content)).toContain("[flow-validation]");
+});
+
+test("a stale after read cannot persist or append a receipt", async () => {
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	let reads = 0;
+	let current = true;
+	const { capture, observations } = fixture({
+		readSession: async (id) => {
+			if (++reads === 2) {
+				entered.resolve();
+				await release.promise;
+			}
+			return { id, agent: "build", location: { directory: workspace } };
+		},
+	});
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before(), () => {
+		if (!current) throw new Error("stale owner");
+	});
+	const result = after();
+	const original = structuredClone(result);
+	const pending = capture.observeToolAfter(result).catch(String);
+	await entered.promise;
+	current = false;
+	capture.cancel("ses_host");
+	capture.arm("ses_host", workspace, prepared);
+	release.resolve();
+	await pending;
+	expect(observations).toEqual([]);
+	expect(result).toEqual(original);
+	expect(capture.pendingCount()).toBe(1);
+});
+
+for (const boundary of ["session", "report", "output", "persistence"] as const)
+	for (const order of ["old-first", "fresh-first"] as const)
+		for (const reject of [false, true])
+			test(`stale ${boundary} ${reject ? "rejection" : "completion"} preserves ${order} capture and receipts`, async () => {
+				const entered = Promise.withResolvers<void>();
+				const release = Promise.withResolvers<void>();
+				let live = true;
+				let serial = 0;
+				let reports = 0;
+				let sessions = 0;
+				let outputs = 0;
+				let persists = 0;
+				const saved: ObservedValidation[] = [];
+				const receipts: string[] = [];
+				const pause = async () => {
+					entered.resolve();
+					await release.promise;
+					if (reject) throw new Error("old observation rejected");
+				};
+				const { capture } = fixture({
+					randomId: () => `capture-${++serial}`,
+					now: () => 200,
+					readSession: async (id) => {
+						if (++sessions === 2 && boundary === "session") await pause();
+						return { id, agent: "build", location: { directory: workspace } };
+					},
+					readReport: async () => {
+						if (++reports === 2 && boundary === "report") await pause();
+						return {
+							text: '<testsuite><testcase name="passes"/></testsuite>',
+							modifiedMs: 201,
+						};
+					},
+					readFullOutput: async () => {
+						if (++outputs === 1 && boundary === "output") await pause();
+						return `prefix${tail}`;
+					},
+					persistObservation: async (_workspace, value, assertAuthorized) => {
+						if (++persists === 1 && boundary === "persistence") await pause();
+						assertAuthorized();
+						saved.push(value);
+						return persisted(value);
+					},
+					onRecorded: (receipt) => {
+						receipts.push(receipt.captureId);
+					},
+				});
+				const armed =
+					boundary === "report"
+						? {
+								...prepared,
+								assertions: ["passes"],
+								resultsPath: "results.xml",
+							}
+						: prepared;
+				const origin = {
+					hostSessionId: "ses_host",
+					sessionId: "flow",
+					authority: "user",
+					assistantId: "msg_assistant",
+					featureId: prepared.featureId,
+					runId: prepared.runId,
+					sourceDigest: prepared.sourceDigest,
+					command: prepared.command,
+					scope: prepared.scope,
+					hostPlatform: prepared.hostPlatform,
+					intent: prepared.intent,
+					assertions: armed.assertions,
+				};
+				capture.arm("ses_host", workspace, armed, origin);
+				await capture.observeToolBefore(before(), () => {
+					if (!live) throw new Error("stale owner");
+				});
+				const path = join(workspace, "sh_native.out");
+				if (boundary === "output") {
+					capture.observeShellEvent(
+						shellEvent(path, { time: { started: 200 } }),
+					);
+					capture.observeShellEvent(exited());
+				}
+				const old = boundary === "output" ? spilled(path) : after();
+				const original = structuredClone(old);
+				const pending = capture.observeToolAfter(old).catch(String);
+				await entered.promise;
+				live = false;
+				capture.cancel("ses_host");
+				capture.arm("ses_host", workspace, prepared, origin);
+				const freshBefore = before({
+					id: CallID.make("fresh-call"),
+					messageID: SessionMessage.ID.make("msg_fresh"),
+				});
+				const freshAfter = after(undefined, {}, freshBefore);
+				const fresh = async () => {
+					await capture.observeToolBefore(freshBefore, () => {});
+					expect((await capture.observeToolAfter(freshAfter))?.id).toBe(
+						"capture-2",
+					);
+				};
+				if (order === "fresh-first") await fresh();
+				release.resolve();
+				await pending;
+				if (order === "old-first") {
+					expect(capture.pendingCount()).toBe(1);
+					await fresh();
+				}
+				expect(old).toEqual(original);
+				expect(saved.map((value) => value.captureId)).toEqual(["capture-2"]);
+				expect(receipts).toEqual(["capture-2"]);
+				expect(JSON.stringify(freshAfter)).toContain("[flow-validation]");
+				expect(capture.pendingCount()).toBe(0);
+			});

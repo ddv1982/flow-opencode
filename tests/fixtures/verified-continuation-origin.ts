@@ -96,7 +96,12 @@ export async function verifiedContinuationOrigin(
 	const evidence = await inputs.evidence(scope, [user], delivery);
 	if (evidence.kind !== "live")
 		throw new Error("Missing accepted fixture origin.");
-	attribution.freeze(context, [user], evidence.origin);
+	attribution.freeze(
+		context,
+		[user],
+		{ kind: "flow", origin: evidence.origin },
+		scope,
+	);
 	attribution.request({
 		sessionID,
 		agent,
@@ -137,9 +142,12 @@ export async function verifiedContinuationOrigin(
 		process.cwd(),
 		"flow_status",
 	);
-	auto.observeAssistant(host, assistantID, verified.primary.origin.id);
+	if (verified.primary.participation.kind !== "flow")
+		throw new Error("Expected Flow fixture participation.");
+	const origin = verified.primary.participation.origin;
+	auto.observeAssistant(host, assistantID, origin.id);
 	scope.release();
 	inputs.clear();
 	attribution.clear();
-	return verified.primary.origin.id;
+	return origin.id;
 }

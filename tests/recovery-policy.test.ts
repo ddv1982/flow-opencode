@@ -246,7 +246,7 @@ describe("process-local recovery", () => {
 			{},
 			"ses_host",
 		);
-		await commands.lifecycle.beforeTool(native);
+		await commands.lifecycle.verifyTool(native, "flow");
 		const resumedFlow = createFlowService(
 			s.repository,
 			s.env,

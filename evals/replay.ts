@@ -304,7 +304,7 @@ async function replayBash(
 ): Promise<string> {
 	const fixture = recordedBashDecisionFixture(event);
 	try {
-		await validation.observeToolBefore(fixture);
+		await validation.observeToolBefore(fixture, () => {});
 	} catch (error) {
 		return `[flow-validation-error] ${error instanceof Error ? error.message : String(error)}`;
 	}

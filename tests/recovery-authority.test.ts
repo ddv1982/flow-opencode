@@ -120,7 +120,7 @@ test.each(["off", "no-key", "shadow"] as const)(
 			{},
 			"ses_host",
 		);
-		await commands.lifecycle.beforeTool(native);
+		await commands.lifecycle.verifyTool(native, "flow");
 		const guarded = createFlowService(
 			s.repository,
 			s.env,
@@ -815,7 +815,7 @@ test("unmatched native requests fail closed and fresh flow-run restores a verifi
 		{},
 		"ses_host",
 	);
-	await commands.lifecycle.beforeTool(native);
+	await commands.lifecycle.verifyTool(native, "flow");
 	const manual = createFlowService(
 		s.repository,
 		s.env,

@@ -106,11 +106,13 @@ export class CompactionBoundary {
 			);
 			if (!same(first.proof, second.proof))
 				throw new Error("Flow automatic compaction control identity changed.");
-			const evidence = await this.#options.inputs.evidence(
+			const source = await this.#options.inputs.evidence(
 				scope,
 				second.prefix,
 				second.proof.delivery,
 			);
+			const evidence =
+				source.kind === "unregistered" ? { kind: source.lineage } : source;
 			const final = running(
 				input,
 				await scope.wait(this.#options.readNative(scope.host)),

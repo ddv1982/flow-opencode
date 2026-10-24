@@ -54,15 +54,15 @@ type Entry =
 	| Real
 	| Alias
 	| Readonly<{ kind: "reserved"; reservation: InputReservation }>;
+type History =
+	| "retired-ordinary"
+	| "retired-automatic"
+	| "unknown-history"
+	| "rejected";
 type SourceEvidence =
+	| Readonly<{ kind: "unregistered"; lineage: History }>
 	| Readonly<{ kind: "live"; origin: InputOrigin }>
-	| Readonly<{
-			kind:
-				| "retired-ordinary"
-				| "retired-automatic"
-				| "unknown-history"
-				| "rejected";
-	  }>;
+	| Readonly<{ kind: History }>;
 export type InputScope = Readonly<{
 	host: string;
 	consumed: readonly string[];
@@ -307,7 +307,11 @@ export class InputAdmissions {
 		scope.assertCurrent();
 		await scope.ready();
 		const entry = this.#scopes.get(scope)?.entry;
-		if (!entry) return this.#history(this.#scopes.get(scope)?.frontierEntry);
+		if (!entry)
+			return {
+				kind: "unregistered",
+				lineage: this.#history(this.#scopes.get(scope)?.frontierEntry).kind,
+			};
 		if (entry.kind === "reserved") return { kind: "rejected" };
 		if (entry.kind === "alias") {
 			if (entry.origin) return this.#classify(entry.origin);
@@ -374,7 +378,7 @@ export class InputAdmissions {
 		})();
 		return this.#classify(await scope.wait(entry.resolving));
 	}
-	#history(entry: Entry | undefined): SourceEvidence {
+	#history(entry: Entry | undefined): Readonly<{ kind: History }> {
 		if (!entry) return { kind: "unknown-history" };
 		if (entry.kind === "alias") return this.#history(entry.source);
 		if (
