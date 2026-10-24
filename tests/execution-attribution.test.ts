@@ -698,3 +698,76 @@ test("resource end grants no same-origin retry and cannot revive an explicitly r
 	).toThrow("revoked epoch");
 	expect(failures).toBe(0);
 });
+
+function retainedSnapshot(primary: {
+	previousAssistants?: ReadonlySet<string>;
+	lifetime?: {
+		kind: string;
+		snapshot?: { previousAssistants: ReadonlySet<string> };
+	};
+}) {
+	return primary.lifetime?.kind === "current"
+		? primary.lifetime.snapshot
+		: primary.previousAssistants
+			? { previousAssistants: primary.previousAssistants }
+			: undefined;
+}
+
+test("64 held owners retain one current payload with 63 historical assistant IDs", () => {
+	const attribution = new ExecutionAttribution(() => {});
+	const native: SessionMessageInfo[] = [user];
+	const owners: ReturnType<ExecutionAttribution["freeze"]>[] = [];
+	const requests: Request[] = [];
+	for (let index = 0; index < 64; index++) {
+		const primary = attribution.freeze(context, native, origin);
+		const request = new Request("http://localhost/retention");
+		attribution.request({
+			sessionID: sid,
+			agent,
+			model,
+			kind: "primary",
+			request,
+		});
+		const message = { ...assistant, id: `msg_retention_${index}` };
+		native.push(message);
+		const call = {
+			...execution,
+			messageID: SessionMessage.ID.make(message.id),
+		};
+		expect(
+			attribution.verify(call, native, session, "/tmp", "shell").primary,
+		).toBe(primary);
+		attribution.end(primary);
+		owners.push(primary);
+		requests.push(request);
+	}
+	const payloads = owners.flatMap((owner) => retainedSnapshot(owner) ?? []);
+	expect(payloads.length).toBe(1);
+	expect(
+		payloads.reduce(
+			(total, payload) => total + payload.previousAssistants.size,
+			0,
+		),
+	).toBe(63);
+	for (const [index, owner] of owners.entries()) {
+		const request = requests[index];
+		if (!request) throw new Error("Missing retained request.");
+		expect(attribution.requestOwner(request)).toBe(owner);
+		expect(
+			attribution.executionOwner({
+				...execution,
+				messageID: SessionMessage.ID.make(`msg_retention_${index}`),
+			}),
+		).toBe(owner);
+	}
+
+});
+
+test("clear retires evidence even when callers hold owners and Request keys", () => {
+	const f = fixture();
+	f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell");
+	f.attribution.clear();
+	expect(retainedSnapshot(f.primary)).toBeUndefined();
+	expect(f.attribution.requestOwner(f.request)).toBe(f.primary);
+	expect(() => f.attribution.freeze(context, [user], origin)).toThrow("closed");
+});
