@@ -119,10 +119,16 @@ describe("eval provenance", () => {
 		]) as EvalHost;
 		Reflect.set(host, "nativeClient", {
 			session: {
+				get: async () => ({
+					id: "session",
+					agent: "build",
+					location: { directory: "/unused" },
+				}),
 				switchModel: capture("switchModel"),
 				command: capture("command"),
 				prompt: capture("prompt"),
 			},
+			message: { list: async () => ({ data: [], cursor: {} }) },
 		});
 		Object.assign(host, {
 			waitForQuiet: async (

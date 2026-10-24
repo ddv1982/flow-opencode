@@ -151,6 +151,7 @@ class FakeReleaseHost {
 			costUsd: 0,
 			assistantMessages: 1,
 			durationMs: 1,
+			nativeFailure: null,
 			providerError: observation ? providerFailure(observation.message) : null,
 			providerErrorObservation: observation,
 		};

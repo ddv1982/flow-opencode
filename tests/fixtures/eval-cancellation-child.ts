@@ -144,6 +144,7 @@ function plannedOutcome(sessionId: string): Outcome {
 		assistantMessages: 1,
 		durationMs: 1,
 		providerError: null,
+		nativeFailure: null,
 	};
 }
 
@@ -215,6 +216,7 @@ class FakeEvalHost {
 				nativeClient: nativeClient(),
 			});
 			const originalFetch = globalThis.fetch;
+			let dispatched = false;
 			this.restoreFetch = () => {
 				globalThis.fetch = originalFetch;
 			};
@@ -223,12 +225,23 @@ class FakeEvalHost {
 					const url = new URL(String(input));
 					if (url.origin !== "http://fixture")
 						throw new Error("Unexpected fixture request");
-					if (
-						url.pathname.endsWith("/command") ||
-						url.pathname.endsWith("/model")
-					)
+					if (url.pathname.endsWith("/command")) {
+						dispatched = true;
 						return new Response(null, { status: 204 });
+					}
+					if (url.pathname.endsWith("/model"))
+						return new Response(null, { status: 204 });
+					if (url.pathname === `/api/session/${sessionId}` && !dispatched)
+						return Response.json({
+							id: sessionId,
+							agent: "build",
+							location: { directory: this.project },
+						});
 					if (url.pathname.endsWith("/message")) {
+						if (!dispatched) {
+							event("actual-command-boundary");
+							return Response.json({ data: [], cursor: {} });
+						}
 						event("actual-progress-poll");
 						return Response.json({
 							data: [

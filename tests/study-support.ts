@@ -131,6 +131,7 @@ export async function studyArtifact(
 export function fakeStudyTransport(
 	options: {
 		failStart?: number;
+		nativeFailure?: Outcome["nativeFailure"];
 		badProduct?: number;
 		usage?: Outcome["tokens"];
 		costUsd?: number | null;
@@ -227,6 +228,7 @@ export function fakeStudyTransport(
 					},
 					costUsd: options.costUsd === undefined ? 0.25 : options.costUsd,
 					providerError: null,
+					nativeFailure: options.nativeFailure ?? null,
 					...(options.usageAvailability === undefined
 						? {}
 						: { usageAvailability: options.usageAvailability }),

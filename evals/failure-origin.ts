@@ -1,4 +1,5 @@
 import { CampaignCancelled } from "./campaign-stop.js";
+import type { NativeExecution } from "./host-trace.js";
 import type { AttemptOutcome } from "./report.js";
 
 export type DurableFailureOrigin = Extract<
@@ -47,6 +48,43 @@ export function failureOutcome(
 
 export function providerFailure(error: unknown): AttemptFailure<"provider"> {
 	return attemptFailure("provider", "provider-rejected-turn", error, true);
+}
+
+export type NativeExecutionFailure = Readonly<{
+	origin: "host";
+	code: "native-execution-failed" | "native-execution-interrupted";
+	detail: string;
+	retryable: false;
+}>;
+
+export function nativeExecutionFailure(
+	execution: NativeExecution,
+): NativeExecutionFailure | null {
+	if (execution.kind !== "observed") return null;
+	for (const session of execution.sessions) {
+		const end = session.end;
+		if (
+			session.sessionId !== session.rootSessionId ||
+			(end.kind !== "failed" && end.kind !== "interrupted")
+		)
+			continue;
+		const diagnostic =
+			end.error.kind === "absent"
+				? "Native idle error was absent."
+				: end.error.kind === "withheld"
+					? `Native idle error was withheld (${end.error.reason}).`
+					: `${end.error.value.type}: ${end.error.value.message}`;
+		return {
+			origin: "host",
+			code:
+				end.kind === "failed"
+					? "native-execution-failed"
+					: "native-execution-interrupted",
+			detail: `Native idle outcome ${end.kind} in session ${session.sessionId}, message ${end.messageId}. ${diagnostic}`,
+			retryable: false,
+		};
+	}
+	return null;
 }
 
 export function evaluateScenario<T>(

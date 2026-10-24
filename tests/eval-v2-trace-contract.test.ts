@@ -207,6 +207,12 @@ test("V2 preserves native message kinds, endpoint ownership and timestamps witho
 		type: "assistant",
 		agent: "build",
 		contentCount: 2,
+		terminal: {
+			finish: { kind: "absent" },
+			error: { kind: "absent" },
+			streamed: { kind: "absent" },
+			completed: { kind: "absent" },
+		},
 		tools: [
 			{
 				version: 2,

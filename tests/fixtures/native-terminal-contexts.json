@@ -1,0 +1,151 @@
+[
+	{
+		"mode": "normal-close",
+		"sessionId": "ses_e91766c78ffewdLyYkNsy5bITL",
+		"messages": [
+			{
+				"id": "msg_16e89945e001jZ2CkI1PhMZa5u",
+				"type": "user",
+				"time": {
+					"created": 1792855872615
+				},
+				"text": "Fixture request"
+			},
+			{
+				"id": "msg_16e899491001FlhwdCxSS3silb",
+				"type": "assistant",
+				"time": {
+					"created": 1792855872663,
+					"streamed": 1792855872683,
+					"completed": 1792855872690
+				},
+				"agent": "build",
+				"model": {
+					"id": "gpt-6.1-sol",
+					"providerID": "responses-local",
+					"variant": "default"
+				},
+				"finish": "tool-calls",
+				"content": [
+					{
+						"type": "tool",
+						"id": "call_responses_status",
+						"name": "flow_status",
+						"time": {
+							"created": 1792855872679,
+							"ran": 1792855872681,
+							"completed": 1792855872689
+						},
+						"state": {
+							"status": "completed",
+							"input": {
+								"request": {
+									"view": "compact"
+								}
+							},
+							"content": [
+								{
+									"type": "text",
+									"text": "{}"
+								}
+							]
+						}
+					}
+				]
+			},
+			{
+				"id": "msg_16e8994b7001JVcsiqZtybzJIj",
+				"type": "assistant",
+				"time": {
+					"created": 1792855872700,
+					"streamed": 1792855872706,
+					"completed": 1792855872706
+				},
+				"agent": "build",
+				"model": {
+					"id": "gpt-6.1-sol",
+					"providerID": "responses-local",
+					"variant": "default"
+				},
+				"finish": "stop",
+				"content": []
+			},
+			{
+				"id": "msg_16e8994c3001NgFoPH3kOc3oB0",
+				"type": "idle",
+				"time": {
+					"created": 1792855872707
+				},
+				"outcome": "succeeded"
+			}
+		]
+	},
+	{
+		"mode": "completed-tool-before-terminal",
+		"sessionId": "ses_e91766ab1ffenjZzLh218mYdkW",
+		"messages": [
+			{
+				"id": "msg_16e899551001EDDNUfbuAVMaP9",
+				"type": "user",
+				"time": {
+					"created": 1792855872855
+				},
+				"text": "Fixture request"
+			},
+			{
+				"id": "msg_16e899559001RYdY0aw1qC8Uic",
+				"type": "assistant",
+				"time": {
+					"created": 1792855872861,
+					"streamed": 1792855872876,
+					"completed": 1792855872876
+				},
+				"agent": "build",
+				"model": {
+					"id": "gpt-6.1-sol",
+					"providerID": "responses-local",
+					"variant": "default"
+				},
+				"finish": "tool-calls",
+				"content": [
+					{
+						"type": "tool",
+						"id": "call_responses_status",
+						"name": "flow_status",
+						"time": {
+							"created": 1792855872865,
+							"ran": 1792855872866,
+							"completed": 1792855872869
+						},
+						"state": {
+							"status": "completed",
+							"input": {
+								"request": {
+									"view": "compact"
+								}
+							},
+							"content": [
+								{
+									"type": "text",
+									"text": "{}"
+								}
+							]
+						}
+					}
+				]
+			},
+			{
+				"id": "msg_16e899574001hADN9XI1LunggS",
+				"type": "idle",
+				"time": {
+					"created": 1792855872884
+				},
+				"outcome": "failed",
+				"error": {
+					"type": "unknown",
+					"message": "Flow context has an unknown, synthetic, or stale real input."
+				}
+			}
+		]
+	}
+]

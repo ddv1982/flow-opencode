@@ -195,6 +195,17 @@ export type EvalMessage = {
 	}[];
 };
 
+function projectedHostError(native: SessionMessageInfo): unknown {
+	switch (native.type) {
+		case "assistant":
+			return native.error;
+		case "compaction":
+			return native.status === "failed" ? native.error : undefined;
+		default:
+			return undefined;
+	}
+}
+
 export function projectEvalMessage(
 	native: SessionMessageInfo,
 	sessionID: string,
@@ -214,7 +225,6 @@ export function projectEvalMessage(
 		};
 		if (native.cost !== undefined) info.cost = native.cost;
 		if (native.tokens !== undefined) info.tokens = native.tokens;
-		if (native.error !== undefined) info.error = native.error;
 		for (const content of native.content) {
 			if (content.type !== "tool") {
 				parts.push({
@@ -259,7 +269,6 @@ export function projectEvalMessage(
 	} else if (native.type === "compaction") {
 		info.summary = true;
 		if (native.status !== "running") {
-			if (native.status === "failed") info.error = native.error;
 			if (native.cost !== undefined) info.cost = native.cost;
 			if (native.tokens !== undefined) info.tokens = native.tokens;
 			if (native.status === "completed" && native.model)
@@ -288,6 +297,8 @@ export function projectEvalMessage(
 			messageID: native.id,
 		});
 	}
+	const error = projectedHostError(native);
+	if (error !== undefined) info.error = error;
 	return { native, info, parts };
 }
 

@@ -4,22 +4,24 @@
   "bun": "/tmp/flow-v2-toolchain/node_modules/.bin/bun",
   "nativeHost": "/tmp/flow-opencode-v2-plan-host/npm-cache/_npx/2314e955696d2fea/node_modules/@opencode/cli-darwin-arm64/bin/opencode",
   "candidate": {
-    "path": "/tmp/flow-v2-candidate-r8/opencode-plugin-flow-10.0.0.tgz",
-    "sha256": "fc19ca4a55a8f1684fe9e1c988adce2536a667a339a3a0e622d0c2e39518195d",
-    "unpackedManifestSha256": "667d6029038248b4222e28c8e5f7656bf1534286441335925faa4c2d20f3c95a",
-    "status": "Synthetic packed QA and fresh independent R8 source review PASS. Candidate is ready for paid pre-push smoke authorization; no release qualification or publication approval.",
-    "sourceBinding": "/tmp/flow-v2-candidate-r8/review-source-binding.json"
+    "path": "/tmp/flow-v2-candidate-stream-lifetime/opencode-plugin-flow-10.0.0.tgz",
+    "sha256": "e8d85c5339d1aa058493088a61a6410b5785a6462f65aed09b73de01ef6dd7d9",
+    "unpackedManifestSha256": "ce2b3bf96a6cf3e57c987df65d8da3ae97abbcd4b20294266841b6c3d2088985",
+    "status": "PENDING commit/push preflight and a new explicit paid-smoke authorization. Core R9/evaluator R2 passed. Final macOS/Linux4744 checks, exact packed119 both platforms, recovery, continuation, picker and unwrapped Responses compatibility pass. No publication.",
+    "sourceBinding": "/tmp/flow-v2-candidate-stream-lifetime/source-binding.json"
   },
   "verification": {
-    "check": "/tmp/flow-v2-r7-check-macos.log",
+    "check": "/tmp/flow-v2-stream-lifetime-check-macos-final.log",
     "tests": {
-      "pass": 4679,
+      "pass": 4744,
       "skip": 27,
-      "fail": 0
+      "fail": 0,
+      "assertions": 99135,
+      "files": 185
     },
-    "packed": "/tmp/flow-v2-product-r7-qa-47fb9cwz/verification.json",
-    "continuation": "/tmp/flow-v2-packed-r7-continuation-qa-uljdjwv7/runs/run-20261024-143740-052985/verification.json",
-    "picker": "/tmp/flow-v2-picker-implementation/packed-r7-74da6ab8/verification.json",
+    "packed": "/tmp/flow-v2-stream-lifetime-packed-eval/verification.json",
+    "continuation": "/tmp/flow-v2-stream-lifetime-packed-continuation/verification.json",
+    "picker": "/tmp/flow-v2-picker-implementation/packed-stream-lifetime-e8d85c53/verification.json",
     "canaryFixes": "/tmp/flow-v2-canary-implementation/review-r1-fixes/report.json",
     "postCheckTestOnlyCorrection": {
       "files": [
@@ -31,13 +33,13 @@
       "native": "/tmp/flow-v2-native-auth-portable-native.log",
       "linuxFocused": "/tmp/flow-v2-linux/portability-recheck.log"
     },
-    "replay": "/tmp/flow-v2-final-replay.log",
-    "audit": "/tmp/flow-v2-final-audit.log",
-    "actionlint": "/tmp/flow-v2-final-actionlint.log",
+    "replay": "/tmp/flow-v2-stream-lifetime-replay.log",
+    "audit": "/tmp/flow-v2-stream-lifetime-audit.log",
+    "actionlint": "/tmp/flow-v2-stream-lifetime-actionlint.log",
     "frozenInstall": "/tmp/flow-v2-final-frozen-install-macos.log",
-    "documentation": "/tmp/flow-v2-final-documentation.log",
+    "documentation": "/tmp/flow-v2-stream-lifetime-documentation-final.log",
     "commentInventory": "/tmp/flow-v2-comment-review-r7-final/manifest.json",
-    "recovery": "/tmp/flow-v2-product-r7-qa-47fb9cwz/recovery/report.json",
+    "recovery": "/tmp/flow-v2-stream-lifetime-packed-eval/recovery/report.json",
     "nativePreContextCompactionCounterexample": "/tmp/flow-v2-final-continuation-qa-zc8ncill/native-stale-callback-verification.json",
     "nativeTypesafeOption": "Three actual-native option cases pass on d3d46d92 with zero advice attempts; general candidate remains blocked.",
     "nativeAuthParentR3Focused": {
@@ -204,7 +206,69 @@
       "files": 17,
       "freshNativeRuns": 0,
       "sourceDrift": false
-    }
+    },
+    "actualAccountPrePush": {
+      "status": "FAIL",
+      "probe": "PASS",
+      "scenario": "plan-only-stops",
+      "model": "openai/gpt-6.1-sol",
+      "consumedDispatches": 2,
+      "remainingDispatches": 0,
+      "receipt": "/tmp/flow-v2-prepush-20261024/result.json",
+      "sourceCleanup": "PASS, source exit0 and private connection removed",
+      "paidCause": "UNRESOLVED"
+    },
+    "continuationStatus": "PASS for exact e8d archive, bounded16profiles plus interrupted ordinary/manual sequence.",
+    "commentReview": "/tmp/flow-v2-stream-lifetime-final-comment-review/report.md",
+    "responsesCompatibility": "/tmp/flow-v2-stream-lifetime-packed-responses/report.md",
+    "streamLifetimeChecks": {
+      "macOS": {
+        "log": "/tmp/flow-v2-stream-lifetime-check-macos-final.log",
+        "pass": 4744,
+        "skip": 27,
+        "fail": 0,
+        "assertions": 99135
+      },
+      "linux": {
+        "log": "/tmp/flow-v2-linux/stream-lifetime/full-check-final.log",
+        "pass": 4744,
+        "skip": 27,
+        "fail": 0,
+        "assertions": 99132
+      },
+      "fixturePort": "/tmp/flow-v2-test-boundary-fixture-port/prepared-verification.json",
+      "fixturePortStatus": "APPLIED. Four test-only fixture ports pass153 affected tests; final canonical checks pass on macOS and Linux. No production or archive byte changes.",
+      "linuxPackedSmoke": {
+        "log": "/tmp/flow-v2-linux/stream-lifetime/packed-smoke.log",
+        "pass": 2,
+        "fail": 0,
+        "assertions": 119
+      },
+      "linuxArchiveReproducibility": "/tmp/flow-v2-linux/stream-lifetime/repack-verification.json",
+      "coreFreeze": "/tmp/flow-v2-stream-lifetime-core-implementation/freeze.json",
+      "evaluatorFreeze": "/tmp/flow-v2-terminal-evidence-implementation/review-r1-fixes/freeze.json",
+      "coreReview": "/tmp/flow-v2-core-review-r9/report.md",
+      "evaluatorReview": "/tmp/flow-v2-terminal-evidence-review-r2/report.md",
+      "initialMacOS": {
+        "log": "/tmp/flow-v2-stream-lifetime-check-macos.log",
+        "pass": 4740,
+        "skip": 27,
+        "fail": 4,
+        "assertions": 99113
+      },
+      "initialLinux": {
+        "log": "/tmp/flow-v2-linux/stream-lifetime/full-check.log",
+        "pass": 4740,
+        "skip": 27,
+        "fail": 4,
+        "assertions": 99110
+      },
+      "fixturePortFinalFreeze": "/tmp/flow-v2-candidate-stream-lifetime/combined-freeze-final.json",
+      "evaluatorReviewStatus": "PASS, F1 closed, final27 hashes checked, expected test-only child drift disclosed.",
+      "coreReviewStatus": "PASS, bounded source/archive review, 525 focused tests, 3061 assertions. Canonical results verified separately by parent.",
+      "recordedTerminalVisual": "/tmp/flow-v2-terminal-render/stream-lifetime-e8d85c53/responsive/visual-inspection.json"
+    },
+    "rootFixtureCommentReview": "/tmp/flow-v2-root-fixture-comment-review/report.md"
   },
   "pending": {
     "coreR3Report": "/tmp/flow-v2-core-review-r3/report.md",
@@ -307,19 +371,38 @@
       "sourceFreeze": "/tmp/flow-v2-compaction-r8-bnmny7om/freeze-final.json",
       "parentReviewFreeze": "/tmp/flow-v2-candidate-r8/review-freeze.json"
     },
-    "coreR8Review": "/tmp/flow-v2-core-review-r8/report.md, bounded PASS"
+    "coreR8Review": "/tmp/flow-v2-core-review-r8/report.md, bounded PASS",
+    "terminalEvidence": {
+      "decision": ".agents/plans/18-opencode-v2/terminal-evidence.md",
+      "implementation": "/tmp/flow-v2-terminal-evidence-implementation",
+      "status": "Evaluator-only implementation in progress"
+    },
+    "streamCompletion": {
+      "design": "/tmp/flow-v2-stream-completion-design",
+      "proof": "/tmp/flow-v2-paid-smoke-investigation/responses-addendum/report.md",
+      "status": "Two core designs in progress; unwrapped control confirms the matching stopping mechanism persists.",
+      "unwrappedControl": {
+        "status": "Failure reproduced without independent HTTP/body observer",
+        "report": "/tmp/flow-v2-paid-smoke-investigation/responses-addendum/unwrapped-confirmation/report.md",
+        "hostCount": 1,
+        "cases": 2,
+        "ownedProcessesStopped": true,
+        "clientCancellation": "unobserved",
+        "paidCause": "UNRESOLVED"
+      }
+    }
   },
   "next": [
-    "Finish staged-index review and commit preflight, then commit the reviewed migration.",
-    "Complete repository contribution gates and commit the reviewed migration.",
-    "Obtain explicit paid pre-push smoke authorization before account use and push; then Linux CI and separate full qualification approval.",
-    "Publish through the usual exact-artifact release gate, then wiki publication and public readback."
+    "Finish evaluator-only terminal observation correction and its focused review.",
+    "Choose and prove the Responses logical-completion compatibility correction without weakening true interruption or stale-owner guards.",
+    "Run canonical and exact-package gates on the combined frozen changes before proposing another paid diagnostic.",
+    "Push only after required paid smoke succeeds; release qualification, publication, and wiki public readback remain separate gates."
   ],
   "authority": {
-    "mainRepositoryCommits": 0,
+    "mainRepositoryCommits": 1,
     "pushes": 0,
     "pullRequests": 0,
-    "paidProviderCalls": 0,
+    "paidProviderCalls": 2,
     "tags": 0,
     "published": false,
     "localOpenAiAndXaiApiKeysPresent": false,
@@ -340,7 +423,8 @@
       "local": true,
       "authenticatedNativeCliInfo": "PASS",
       "originalRefreshValuesRead": false
-    }
+    },
+    "paidProviderCallsSemantics": "Two approved top-level dispatches: route probe and plan-only attempt; internal generation is separate."
   },
   "notes": [
     "Do not reuse a completed review thread for another review round. Use delegate_task with a fresh clientRequestId.",
@@ -392,6 +476,15 @@
       "sha256": "d3d46d92148a34d829536c939a528f52c3ef6adeb612230afab860b003c09292",
       "unpackedManifestSha256": "29a1d475fae346ee7fd52a62ac079ca2af5b0f0c36ee05bb946d2f9fc8aba0d8",
       "status": "REJECTED. Retained exact archive has the native pre-primary compaction defect. Current source has additional ordinary automatic/manual compaction corrections; fresh R7 and full checks are running. No replacement archive exists."
+    }
+  ],
+  "supersededCandidates": [
+    {
+      "path": "/tmp/flow-v2-candidate-r8/opencode-plugin-flow-10.0.0.tgz",
+      "sha256": "fc19ca4a55a8f1684fe9e1c988adce2536a667a339a3a0e622d0c2e39518195d",
+      "unpackedManifestSha256": "667d6029038248b4222e28c8e5f7656bf1534286441335925faa4c2d20f3c95a",
+      "status": "HOLD. Actual-account pre-push planning smoke failed. Responses logical-completion cancellation mechanism demonstrated; diagnostics implementation and core design in progress. Actual paid cause unresolved.",
+      "sourceBinding": "/tmp/flow-v2-candidate-r8/review-source-binding.json"
     }
   ]
 }

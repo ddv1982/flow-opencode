@@ -1122,7 +1122,16 @@ describe("eval campaign cancellation", () => {
 				abortSignal = init?.signal;
 				return new Promise(() => {});
 			}
-			if (String(input).endsWith("/command")) controller.abort(reason);
+			const path = new URL(String(input)).pathname;
+			if (path.endsWith("/message"))
+				return Response.json({ data: [], cursor: {} });
+			if (path === "/api/session/id")
+				return Response.json({
+					id: "id",
+					agent: "build",
+					location: { directory: scratch },
+				});
+			if (path.endsWith("/command")) controller.abort(reason);
 			return new Response(null, { status: 204 });
 		});
 		try {

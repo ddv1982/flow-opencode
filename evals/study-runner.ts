@@ -562,7 +562,7 @@ export async function executeStudy(
 						? {}
 						: { availability: outcome.usageAvailability }),
 				});
-				failure ??= outcome.providerError;
+				failure ??= outcome.providerError ?? outcome.nativeFailure;
 				if (failure && usage.costUsd === 0)
 					usage = normalizeStudyUsage({
 						tokens: usage.tokens,

@@ -6,14 +6,20 @@ Update the README, maintained documentation, and public wiki.
 Publish through the existing qualified release workflow.
 
 Implementation started on 2026-10-24 on `feat/opencode-v2`.
-The R8 candidate passes full checks and unchanged packed smoke on macOS and
-Linux. Its continuation, validation, reviewer return, recovery harness, and picker
-pass exact-package loopback checks. Fresh independent core review passed.
-Account-helper cleanup and configurable Typesafe key selection passed their
-bounded reviews. Paid qualification and publication have not started.
+The committed R8 candidate passed local and packed checks, but its approved
+real-account smoke failed after one completed status call without saving a plan.
+Both authorized dispatches are consumed. Offline investigation confirmed lost
+native terminal evidence and a Responses logical-completion cancellation case.
+Evaluator diagnostics and the core request-lifetime correction are implemented.
+The new exact package passes macOS/Linux packed smoke, recovery, picker, and
+unwrapped Responses compatibility. Four test fixtures now model the pre-dispatch
+read, and final macOS and Linux checks each pass 4,744 tests. Evaluator R2 and
+core R9 reviews passed. Commit and pre-push gates remain.
+The actual paid cause remains unresolved. No push or release occurred.
 Current execution evidence is recorded in [execution.md](execution.md).
 Research is recorded in [research.md](research.md). Decisions are recorded in
 [decisions.tsv](decisions.tsv).
+The stream correction is recorded in [stream lifetime](stream-lifetime.md).
 
 ## Read and execute the plan
 

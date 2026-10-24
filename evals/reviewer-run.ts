@@ -350,8 +350,10 @@ async function main(): Promise<void> {
 							false,
 							() => activeHost.outcome([sessionId], Date.now() - started),
 						);
-						if (outcome.providerError) {
-							runFailure = outcome.providerError;
+						const observedFailure =
+							outcome.providerError ?? outcome.nativeFailure;
+						if (observedFailure) {
+							runFailure = observedFailure;
 							throw new EvaluationPhaseError(runFailure, runFailure);
 						}
 						const submission = await evaluationPhase(

@@ -383,7 +383,7 @@ function failedStreamFixture() {
 }
 
 test.each([
-	"cancel",
+	"steer-then-cancel",
 	"read-error",
 	"no-body",
 	"locked-body",
@@ -403,7 +403,7 @@ test.each([
 								},
 							}),
 						)
-					: failure === "cancel"
+					: failure === "steer-then-cancel"
 						? new Response(new ReadableStream())
 						: new Response("body");
 		const input = {
@@ -432,12 +432,24 @@ test.each([
 				);
 			else {
 				if (!input.response.body) throw new Error("Missing native body.");
-				await input.response.body.cancel("real steer");
+				f.steer();
+				expect(() =>
+					f.attribution.verify(
+						execution,
+						[user, assistant],
+						session,
+						"/tmp",
+						"shell",
+					),
+				).toThrow("revoked stream origin");
+				await input.response.body.cancel("consumer cleanup");
 			}
 		}
 		const verifyFresh = f.fresh();
 		expect(verifyFresh()).toBe("user-2");
-		expect(f.failures).toEqual(["session-test"]);
+		expect(f.failures).toEqual(
+			failure === "steer-then-cancel" ? [] : ["session-test"],
+		);
 	},
 );
 
@@ -456,16 +468,233 @@ test("a late old-stream cancellation failure cannot end or revoke a newer primar
 	};
 	f.attribution.response(input, f.fail);
 	if (!input.response.body) throw new Error("Missing wrapped body.");
-	const pending = input.response.body.cancel("steer");
+	const pending = input.response.body.cancel("consumer cleanup");
+	f.steer();
+	expect(() =>
+		f.attribution.verify(
+			execution,
+			[user, assistant],
+			session,
+			"/tmp",
+			"shell",
+		),
+	).toThrow("revoked stream origin");
 	const verifyFresh = f.fresh();
 	cancelled.reject(new Error("late native cancel failure"));
 	await expect(pending).rejects.toThrow("late native cancel failure");
 	expect(verifyFresh()).toBe("user-2");
-	expect(f.failures).toEqual(["session-test"]);
+	expect(f.failures).toEqual([]);
 	const late = { ...input, response: new Response("late duplicate response") };
 	expect(() => f.attribution.response(late, f.fail)).toThrow(
 		"Request identity",
 	);
 	expect(verifyFresh()).toBe("user-2");
-	expect(f.failures).toEqual(["session-test"]);
+	expect(f.failures).toEqual([]);
+});
+
+test("consumer cancellation ends its captured resource without revoking the exact unbound tool origin", async () => {
+	const f = fixture();
+	let failures = 0;
+	const input = {
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary" as const,
+		request: f.request,
+		response: new Response(new ReadableStream()),
+	};
+	f.attribution.response(input, () => {
+		failures++;
+		f.revoke();
+	});
+	if (!input.response.body) throw new Error("Missing wrapped body.");
+	await input.response.body.cancel("protocol consumer stopped");
+	expect(f.primary.phase).toBe("ended");
+	expect(f.primary.origin).toBe(origin);
+	expect(
+		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
+			.primary.origin.id,
+	).toBe("user-1");
+	expect(failures).toBe(0);
+	f.attribution.freeze(context, [user, assistant], origin);
+	const nextRequest = new Request("http://localhost/next-same-origin");
+	f.attribution.request({
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary",
+		request: nextRequest,
+	});
+	const nextID = SessionMessage.ID.make("msg_second");
+	const nextAssistant: SessionMessageInfo = { ...assistant, id: nextID };
+	expect(
+		f.attribution.verify(
+			{ ...execution, messageID: nextID },
+			[user, assistant, nextAssistant],
+			session,
+			"/tmp",
+			"shell",
+		).primary.origin,
+	).toBe(origin);
+	expect(f.attribution.current(sid)?.request).toBe(nextRequest);
+	expect(failures).toBe(0);
+});
+
+test("consumer cancellation awaits cleanup rejection without declaring an epoch failure", async () => {
+	const f = fixture();
+	const cleanup = Promise.withResolvers<void>();
+	let failures = 0;
+	const input = {
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary" as const,
+		request: f.request,
+		response: new Response(
+			new ReadableStream({ cancel: () => cleanup.promise }),
+		),
+	};
+	f.attribution.response(input, () => {
+		failures++;
+		f.revoke();
+	});
+	if (!input.response.body) throw new Error("Missing wrapped body.");
+	let settled = false;
+	const cancel = input.response.body.cancel("consumer end").finally(() => {
+		settled = true;
+	});
+	await Promise.resolve();
+	expect(settled).toBe(false);
+	expect(f.primary.phase).toBe("ended");
+	expect(
+		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
+			.primary.origin.id,
+	).toBe("user-1");
+	cleanup.reject(new Error("native cancel cleanup failed"));
+	await expect(cancel).rejects.toThrow("native cancel cleanup failed");
+	expect(failures).toBe(0);
+	expect(
+		f.attribution.verify(execution, [user, assistant], session, "/tmp", "shell")
+			.primary.origin.id,
+	).toBe("user-1");
+});
+test("a late captured EOF cannot retire a separately steered fresh primary", async () => {
+	const f = failedStreamFixture();
+	const body =
+		Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>();
+	const input = {
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary" as const,
+		request: f.request,
+		response: new Response(
+			new ReadableStream<Uint8Array>({
+				start: (controller) => body.resolve(controller),
+			}),
+		),
+	};
+	f.attribution.response(input, f.fail);
+	const text = input.response.text();
+	const old = f.attribution.current(sid);
+	if (!old) throw new Error("Missing old primary");
+	f.steer();
+	f.attribution.end(old);
+	const verifyFresh = f.fresh();
+	const fresh = f.attribution.current(sid);
+	expect(verifyFresh()).toBe("user-2");
+	(await body.promise).close();
+	expect(await text).toBe("");
+	expect(f.attribution.current(sid)).toBe(fresh);
+	expect(verifyFresh()).toBe("user-2");
+	expect(f.failures).toEqual([]);
+});
+for (const kind of ["compaction", "title", "generate"] as const)
+	test(`${kind} HTTP resource cannot end or prove the captured primary`, async () => {
+		const f = fixture();
+		const response = new Response("auxiliary");
+		const input = {
+			sessionID: sid,
+			agent,
+			model,
+			kind,
+			request: new Request("http://localhost/auxiliary"),
+			response,
+		};
+		let failures = 0;
+		f.attribution.request(input);
+		f.attribution.response(input, () => {
+			failures++;
+			f.revoke();
+		});
+		expect(input.response).toBe(response);
+		expect(await input.response.text()).toBe("auxiliary");
+		expect(f.primary.phase).toBe("request");
+		expect(f.attribution.requestOwner(input.request)).toBeUndefined();
+		expect(failures).toBe(0);
+		const primary = {
+			...input,
+			kind: "primary" as const,
+			request: f.request,
+			response: new Response(new ReadableStream()),
+		};
+		f.attribution.response(primary, () => {
+			failures++;
+			f.revoke();
+		});
+		if (!primary.response.body) throw new Error("Missing primary body");
+		await primary.response.body.cancel();
+		expect(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary.origin.id,
+		).toBe("user-1");
+		expect(failures).toBe(0);
+	});
+test("resource end grants no same-origin retry and cannot revive an explicitly revoked origin", async () => {
+	const f = fixture();
+	const input = {
+		sessionID: sid,
+		agent,
+		model,
+		kind: "primary" as const,
+		request: f.request,
+		response: new Response(new ReadableStream()),
+	};
+	let failures = 0;
+	f.attribution.response(input, () => {
+		failures++;
+		f.revoke();
+	});
+	if (!input.response.body) throw new Error("Missing body");
+	await input.response.body.cancel();
+	const retry: SessionMessageInfo = {
+		...assistant,
+		id: "msg_retry",
+		content: [],
+		retry: {
+			attempt: 2,
+			at: 2,
+			error: { type: "provider.transport", message: "Refused" },
+		},
+	};
+	expect(f.attribution.retry(f.primary, [user, retry])).toBe(false);
+	f.revoke();
+	expect(() =>
+		f.attribution.verify(
+			execution,
+			[user, assistant],
+			session,
+			"/tmp",
+			"shell",
+		),
+	).toThrow("revoked epoch");
+	expect(() =>
+		f.attribution.freeze(context, [user, assistant], origin),
+	).toThrow("revoked epoch");
+	expect(failures).toBe(0);
 });

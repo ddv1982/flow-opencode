@@ -474,6 +474,7 @@ export async function replayCassette(
 			assistantMessages: cassette.assistantMessages,
 			durationMs: Date.now() - started,
 			providerError: null,
+			nativeFailure: null,
 		};
 		return {
 			cassette,

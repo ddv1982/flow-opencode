@@ -1224,11 +1224,17 @@ export async function runCampaign(
 						observedOutcome = outcome;
 						// An interrupted attempt is not a measured product result. Previously
 						// committed attempts remain in the stopped campaign's report.
-						if (!stepFailure && !outcome.providerError) signal.throwIfAborted();
+						if (
+							!stepFailure &&
+							!outcome.providerError &&
+							!outcome.nativeFailure
+						)
+							signal.throwIfAborted();
 						const cell = campaignCells[job.slot];
 						if (!cell?.managerModel)
 							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
-						const observedFailure = outcome.providerError;
+						const observedFailure =
+							outcome.providerError ?? outcome.nativeFailure;
 						// Asking the user is the designed end of some scenarios, but only at the
 						// wall. `askedScoring` holds the rule and its reasoning.
 						const { escalated, unscored } = askedScoring(
@@ -1359,7 +1365,10 @@ export async function runCampaign(
 							finalText: outcome.finalText,
 							questions: askedQuestions(outcome),
 							durationMs: outcome.durationMs,
-							hostError: outcome.providerError?.detail ?? null,
+							hostError:
+								outcome.providerError?.detail ??
+								outcome.nativeFailure?.code ??
+								null,
 							provenance: {
 								artifact,
 								evaluator,
@@ -1624,7 +1633,10 @@ export async function runCampaign(
 								? bestEffortEvaluation(() => askedQuestions(outcome), [])
 								: [],
 							durationMs: outcome?.durationMs ?? durationMs,
-							hostError: outcome?.providerError?.detail ?? null,
+							hostError:
+								outcome?.providerError?.detail ??
+								outcome?.nativeFailure?.code ??
+								null,
 							provenance: {
 								artifact,
 								evaluator,

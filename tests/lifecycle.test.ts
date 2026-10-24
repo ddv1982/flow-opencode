@@ -3449,7 +3449,28 @@ test("interrupted ordinary manual summaries retain lineage without an execution 
 		if (!frame.response.body) throw new Error("Missing response body");
 		const reader = frame.response.body.getReader();
 		await reader.read();
-		await reader.cancel();
+		await reader.cancel("consumer cleanup");
+		f.native.push(
+			{
+				type: "assistant",
+				id: "msg_interrupted_stream",
+				agent,
+				model,
+				content: [],
+				finish: "error",
+				error: { type: "aborted", message: "Step interrupted" },
+				time: { created: 2, streamed: 3, completed: 4 },
+			},
+			{
+				type: "idle",
+				id: "msg_interrupted_idle",
+				outcome: "interrupted",
+				time: { created: 4 },
+			},
+		);
+		f.sendEvent(terminal("interrupted"));
+		await f.flush();
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
 		for (const id of ["msg_interrupted_summary", "msg_repeated_summary"]) {
 			const input = f.context();
 			const control = { ...automaticControl(id), reason: "manual" as const };
@@ -3578,3 +3599,73 @@ test("a source accepted while context waits owns a later native-read failure", a
 		await f.lifecycle.dispose();
 	}
 });
+
+for (const outcome of ["failed", "interrupted"] as const)
+	test(`observed owned ${outcome} idle revokes after resource-only cancellation and preserves fresh work`, async () => {
+		const f = await fixture();
+		try {
+			await f.command("flow-auto", "Inspect the original exact source");
+			const request = await startOwnedRequest(f);
+			const call = ownershipNativeCall(f);
+			const before = f.autoDrive.captureAuthority(sessionID);
+			expect(before).not.toBeNull();
+			const response = {
+				sessionID,
+				agent,
+				model,
+				kind: "primary" as const,
+				request,
+				response: new Response(new ReadableStream()),
+			};
+			await f.emit("http.response", response);
+			if (!response.response.body) throw new Error("Missing body");
+			await response.response.body.cancel("consumer end");
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(before);
+			const message = f.native.find((message) => message.id === call.messageID);
+			if (message?.type !== "assistant")
+				throw new Error("Missing captured assistant");
+			message.content = [];
+			message.finish = "error";
+			message.error = {
+				type: outcome === "interrupted" ? "aborted" : "provider.transport",
+				message:
+					outcome === "interrupted" ? "Step interrupted" : "ECONNREFUSED",
+			};
+			message.time.completed = 5;
+			f.native.push({
+				type: "idle",
+				id: "msg_owned_terminal",
+				outcome,
+				time: { created: 6 },
+			});
+			const event = terminal(outcome);
+			f.sendEvent(event);
+			await f.flush();
+			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+			let oldEffects = 0;
+			await expect(
+				(async () => {
+					await f.lifecycle.beforeTool(call);
+					oldEffects++;
+				})(),
+			).rejects.toThrow("epoch was revoked");
+			expect(oldEffects).toBe(0);
+			expect(f.repository.saveCount).toBe(0);
+			await f.command("flow-auto", "Inspect separately accepted fresh source");
+			const fresh = f.autoDrive.captureAuthority(sessionID);
+			expect(fresh).not.toBeNull();
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			const freshCall = ownershipNativeCall(f);
+			await f.lifecycle.beforeTool(freshCall);
+			f.sendEvent(event);
+			await f.flush();
+			await expect(f.lifecycle.beforeTool(call)).rejects.toThrow();
+			await f.lifecycle.beforeTool(freshCall);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(fresh);
+			expect(f.autoDrive.captureAuthority(sessionID)).not.toBeNull();
+			expect(oldEffects).toBe(0);
+			expect(f.repository.saveCount).toBe(0);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});

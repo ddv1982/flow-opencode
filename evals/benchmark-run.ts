@@ -578,7 +578,7 @@ async function main(): Promise<void> {
 								outputTokens: outcome.tokens.output,
 								costUsd: outcome.costUsd,
 							};
-							runFailure ??= outcome.providerError;
+							runFailure ??= outcome.providerError ?? outcome.nativeFailure;
 							if (runFailure)
 								throw new EvaluationPhaseError(runFailure, runFailure);
 							await evaluationPhase("host", "host-cleanup-failed", false, () =>

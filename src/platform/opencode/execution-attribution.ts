@@ -340,7 +340,7 @@ export class ExecutionAttribution {
 						}
 					},
 					async cancel(reason) {
-						fail();
+						finish();
 						await reader.cancel(reason);
 					},
 				}),

@@ -2,14 +2,12 @@
 
 ## Decision
 
-Flow 10.0.0 targets OpenCode v2 with 2.1.4 as the tested minimum. OpenCode 1
-support is removed in this release. Later 2.x releases require a compatibility
-check before they enter the supported set. The peer range excludes OpenCode 3.
-Finish or explicitly close active Flow sessions before the upgrade.
+Flow 10.0.0 removes OpenCode 1 support and targets 2.1.4 or later tested 2.x.
+Later 2.x releases must pass compatibility checks. The peer range excludes 3.
+Finish or close active Flow sessions before upgrading.
 
-The maintainer requested the immediate cutover. This deliberately waives the
-earlier-announcement cadence for this host removal. No bridge release or dual
-runtime entrypoint is introduced. Session v5 remains unchanged.
+The maintainer requested immediate removal, waiving the earlier-announcement
+cadence. There is no bridge release or dual runtime. Session v5 is unchanged.
 
 ## Host boundary
 
@@ -22,6 +20,10 @@ workspace, and consumed-input snapshot. Asynchronous event arrival order does
 not establish authority. Flow selects HTTP in provider, model, and variant
 settings so each request stays observable.
 
+HTTP consumer cancellation ends the captured request, as EOF does. It proves
+neither success nor user interruption. Tool guards retain exact input identity
+and the native abort signal. Read and status failures retain owned revocation.
+
 Automatic compaction can precede the first primary request. It preserves the
 epoch of an accepted input only through the exact checked native control.
 Its user-role checkpoint grants no approval. The input ledger owns reservations,
@@ -32,12 +34,11 @@ that fallback. Live ordinary continuations retain their checked origin.
 Matched source failures revoke that source; stale unmatched callbacks cannot
 revoke a fresh one. Authority never comes from summary text or survives restart.
 
-The model picker loads automatically with the server package. Server-owned
-global preferences are separate from native configuration. Project plugin
-options override global choices. Updates check revision, catalog, project, and
-activity before changing one role. Role transforms refresh across loaded
-instances. Explicit selection clears the role's reasoning variant. Reset
-restores the configured base. The coding model stays under native selection.
+The model picker loads with the server package. Server-owned global preferences
+are separate from native configuration; project plugin options override them.
+Role updates check revision, catalog, project, and activity. Transforms refresh
+loaded instances. Explicit selection clears the role's reasoning variant; reset
+restores its base. The coding model stays under native selection.
 
 ## Qualification
 

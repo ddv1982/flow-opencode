@@ -52,6 +52,8 @@ import {
 	attemptFailure,
 	EvaluationPhaseError,
 	evaluationPhase,
+	type NativeExecutionFailure,
+	nativeExecutionFailure,
 	preservePrimaryFailure,
 	providerFailure,
 } from "./failure-origin.js";
@@ -85,7 +87,9 @@ import {
 	type HostAbortObservation,
 	HostAbortObservationSchema,
 	type HostTrace,
+	type NativeExecutionScope,
 	type NativeToolProvenance,
+	nativeExecution,
 	nativeToolProvenance,
 } from "./host-trace.js";
 import { HTTP_TRANSPORT_PLUGIN_ID } from "./http-transport-plugin.js";
@@ -388,6 +392,7 @@ export type Outcome = {
 	readonly assistantMessages: number;
 	readonly durationMs: number;
 	readonly providerError: AttemptFailure<"provider"> | null;
+	readonly nativeFailure: NativeExecutionFailure | null;
 	readonly providerErrorObservation?: ProviderErrorObservation | null;
 };
 
@@ -1625,7 +1630,16 @@ export async function preparePackageCache(
 
 type MessageEntry = EvalMessage;
 
-type OwnedProgressSession = { id: string; messages: readonly MessageEntry[] };
+type OwnedProgressSession = {
+	id: string;
+	messages: readonly MessageEntry[];
+	metadata?: SessionInfo;
+};
+type NativeCommandObservation = {
+	scope: NativeExecutionScope;
+	metadata: SessionInfo | null;
+	stop: "observing" | "question-escalated";
+};
 function isProgressId(value: unknown): value is string {
 	return (
 		typeof value === "string" &&
@@ -1766,6 +1780,13 @@ export class EvalHost {
 	}
 	private lastSelfAbortAt = 0;
 	private commandAbortObservation: HostAbortObservation | undefined;
+	private readonly nativeCommands = new Map<string, NativeCommandObservation>();
+	private polledNativeFailure: {
+		sessionId: string;
+		failure: NativeExecutionFailure;
+		sessions: readonly OwnedProgressSession[];
+		childrenComplete: boolean;
+	} | null = null;
 	private readonly escalationQuestions = new Map<string, EpisodeQuestion>();
 	escalationQuestion(sessionId: string): EpisodeQuestion {
 		const question = this.escalationQuestions.get(sessionId);
@@ -2741,6 +2762,33 @@ export class EvalHost {
 		return session.id;
 	}
 
+	private async commandObservation(
+		sessionId: string,
+	): Promise<NativeCommandObservation> {
+		if (this.polledNativeFailure?.sessionId === sessionId)
+			this.polledNativeFailure = null;
+		let metadata: SessionInfo | null = null;
+		try {
+			const observed = await this.nativeRequest((options) =>
+				this.client.session.get({ sessionID: sessionId }, options),
+			);
+			if (isRecord(observed) && observed.id === sessionId) metadata = observed;
+		} catch (error) {
+			if (this.signal?.aborted && error === this.signal.reason) throw error;
+		}
+		const messages = await this.messages(sessionId, this.signal);
+		const last = messages.at(-1);
+		if (last && !isProgressId(last.info.id))
+			throw new Error("Native command boundary is malformed.");
+		const observation: NativeCommandObservation = {
+			metadata,
+			scope: { sessionId, afterMessageId: last?.info.id ?? null },
+			stop: "observing",
+		};
+		this.nativeCommands.set(sessionId, observation);
+		return observation;
+	}
+
 	/**
 	 * Sends one slash command and returns when the session has been quiet for
 	 * `quietMs`. The quiet window (rather than a single idle event) is what lets
@@ -2771,6 +2819,7 @@ export class EvalHost {
 			),
 		);
 		const { variant: _variant, ...waitOptions } = options;
+		const observation = await this.commandObservation(sessionId);
 		return runSessionRequest({
 			signal: this.signal,
 			waitOwnsCancellation: true,
@@ -2789,6 +2838,7 @@ export class EvalHost {
 				this.waitForQuiet(sessionId, {
 					...waitOptions,
 					request,
+					observation,
 				}),
 		});
 	}
@@ -2818,6 +2868,7 @@ export class EvalHost {
 			),
 		);
 		const { variant: _variant, ...waitOptions } = options;
+		const observation = await this.commandObservation(sessionId);
 		return runSessionRequest({
 			signal: this.signal,
 			waitOwnsCancellation: true,
@@ -2836,6 +2887,7 @@ export class EvalHost {
 				this.waitForQuiet(sessionId, {
 					...waitOptions,
 					request,
+					observation,
 				}),
 		});
 	}
@@ -2847,6 +2899,7 @@ export class EvalHost {
 			timeoutMs?: number;
 			stalledMs?: number;
 			request: SessionRequest;
+			observation: NativeCommandObservation;
 		},
 	): Promise<CommandEnd> {
 		this.commandAbortObservation = undefined;
@@ -2855,6 +2908,8 @@ export class EvalHost {
 		const completedParts = new Set<string>();
 		let activitySignature = "";
 		let lastSessions: readonly OwnedProgressSession[] = [];
+		let rootMessages: readonly MessageEntry[] = [];
+		let treeComplete = false;
 		let observedAt = startedAt;
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
@@ -2878,10 +2933,48 @@ export class EvalHost {
 		let pending: string[] = [];
 		let ownedPending: string[] = [];
 		let suspendedMs = 0;
-		const abortWait = async () => {
-			const aborting = this.abortSession(sessionId);
-			options.request.cancel();
-			await aborting;
+		const pinNativeFailure = (): NativeExecutionFailure | null => {
+			if (
+				options.observation.stop === "question-escalated" ||
+				this.polledProviderFailure?.sessionId === sessionId
+			)
+				return null;
+			const rootTrace = collectHostTrace({
+				runnerRootSessionIds: [sessionId],
+				directory: this.project,
+				sessionMetadata: options.observation.metadata
+					? [options.observation.metadata]
+					: [],
+				sessionMessages: [
+					{ sessionId, messages: rootMessages.map((entry) => entry.native) },
+				],
+				childrenComplete: true,
+			});
+			const failure = nativeExecutionFailure(
+				nativeExecution(rootTrace, [options.observation.scope]),
+			);
+			if (failure)
+				this.polledNativeFailure = {
+					sessionId,
+					failure,
+					sessions: structuredClone(lastSessions),
+					childrenComplete: treeComplete,
+				};
+			return failure;
+		};
+		const abortWait = async (inspectNative = true) => {
+			const failure = inspectNative ? pinNativeFailure() : null;
+			const cleanup = async () => {
+				const aborting = this.abortSession(sessionId);
+				options.request.cancel();
+				await aborting;
+			};
+			if (failure)
+				return preservePrimaryFailure(
+					() => Promise.reject(new EvaluationPhaseError(failure, undefined)),
+					cleanup,
+				);
+			await cleanup();
 		};
 		const suspensionNote = () =>
 			suspendedMs > 0
@@ -2956,188 +3049,208 @@ export class EvalHost {
 					suspensionNote(),
 			);
 		};
-		for (;;) {
-			const before = Date.now();
-			let accountedInPoll = 0;
-			const accountPollElapsed = () => {
-				const elapsed = Date.now() - before;
-				if (elapsed < suspendFloor) return;
-				const credit = Math.min(
-					Math.max(0, elapsed - accountedInPoll),
-					timeoutMs - suspendedMs,
-				);
-				accountedInPoll = elapsed;
-				suspendedMs += credit;
-				deadline += credit;
-				settledAt += credit;
-				changedAt += credit;
-			};
-			await abortable(this.signal, () => Bun.sleep(poll));
-			const delivery = options.request.state();
-			if (delivery?.kind === "rejected") {
-				throw delivery.error;
-			}
-			const messages = (await this.messages(
-				sessionId,
-				this.signal,
-			)) as MessageEntry[];
-			const failed = messages.find(
-				(entry) =>
-					(entry.native.type === "assistant" ||
-						entry.native.type === "compaction") &&
-					entry.info.error &&
-					!isSelfAbortError(
-						entry.info.error,
-						this.lastSelfAbortAt > 0 &&
-							(entry.info.time?.created === undefined ||
-								entry.info.time.created <= this.lastSelfAbortAt),
-					),
-			);
-			if (failed) {
-				const failure = providerFailure(failed.info.error);
-				// Preserve the evidence before aborting the host. Outcome reporting can
-				// use this one fetched transcript even if later reads are cancelled.
-				this.polledProviderFailure = {
-					sessionId,
-					messages,
-					failure,
-					observation: providerErrorObservation(failed.info.error, sessionId),
+		try {
+			for (;;) {
+				treeComplete = false;
+				const before = Date.now();
+				let accountedInPoll = 0;
+				const accountPollElapsed = () => {
+					const elapsed = Date.now() - before;
+					if (elapsed < suspendFloor) return;
+					const credit = Math.min(
+						Math.max(0, elapsed - accountedInPoll),
+						timeoutMs - suspendedMs,
+					);
+					accountedInPoll = elapsed;
+					suspendedMs += credit;
+					deadline += credit;
+					settledAt += credit;
+					changedAt += credit;
 				};
-				await abortWait();
-				throw new EvaluationPhaseError(failure, failed.info.error);
-			}
-			accountPollElapsed();
-			const remaining = deadline - Date.now();
-			if (remaining < 0) await failDeadline();
-			if (remaining === 0) continue;
-			const observerDeadline = AbortSignal.timeout(remaining);
-			let sessions: readonly {
-				id: string;
-				messages: readonly MessageEntry[];
-			}[];
-			try {
-				sessions = await this.ownedProgressSessions(
+				await abortable(this.signal, () => Bun.sleep(poll));
+				const delivery = options.request.state();
+				if (delivery?.kind === "rejected") {
+					throw delivery.error;
+				}
+				const messages = (await this.messages(
 					sessionId,
-					messages,
-					AbortSignal.any([
-						...(this.signal ? [this.signal] : []),
-						observerDeadline,
-					]),
+					this.signal,
+				)) as MessageEntry[];
+				rootMessages = messages;
+				lastSessions = [
+					{
+						id: sessionId,
+						messages,
+						...(options.observation.metadata
+							? { metadata: options.observation.metadata }
+							: {}),
+					},
+					...lastSessions.filter((session) => session.id !== sessionId),
+				];
+				const failed = messages.find(
+					(entry) =>
+						(entry.native.type === "assistant" ||
+							entry.native.type === "compaction") &&
+						entry.info.error &&
+						!isSelfAbortError(
+							entry.info.error,
+							this.lastSelfAbortAt > 0 &&
+								(entry.info.time?.created === undefined ||
+									entry.info.time.created <= this.lastSelfAbortAt),
+						),
 				);
-			} catch (error) {
+				if (failed) {
+					const failure = providerFailure(failed.info.error);
+					this.polledProviderFailure = {
+						sessionId,
+						messages,
+						failure,
+						observation: providerErrorObservation(failed.info.error, sessionId),
+					};
+					await abortWait(false);
+					throw new EvaluationPhaseError(failure, failed.info.error);
+				}
 				accountPollElapsed();
-				if (this.signal?.aborted && error === this.signal.reason) throw error;
-				if (observerDeadline.aborted && error === observerDeadline.reason) {
-					if (Date.now() < deadline) continue;
+				const remaining = deadline - Date.now();
+				if (remaining < 0) await failDeadline();
+				if (remaining === 0) continue;
+				const observerDeadline = AbortSignal.timeout(remaining);
+				let sessions: readonly OwnedProgressSession[];
+				try {
+					sessions = await this.ownedProgressSessions(
+						sessionId,
+						messages,
+						AbortSignal.any([
+							...(this.signal ? [this.signal] : []),
+							observerDeadline,
+						]),
+						options.observation.metadata,
+					);
+				} catch (error) {
+					accountPollElapsed();
+					if (this.signal?.aborted && error === this.signal.reason) throw error;
+					if (observerDeadline.aborted && error === observerDeadline.reason) {
+						if (Date.now() < deadline) continue;
+						await failDeadline();
+					}
+					await abortWait();
+					throw error;
+				}
+				accountPollElapsed();
+				lastSessions = sessions;
+				treeComplete = true;
+				observedAt = Date.now();
+				let nextActivity: string;
+				try {
+					nextActivity = activeProgressSnapshot(
+						sessions,
+						completedMessages,
+						completedParts,
+					);
+				} catch (error) {
+					await abortWait();
+					throw error;
+				}
+				const ownedMessages = sessions.flatMap((session) => session.messages);
+				pending = messages.flatMap((entry) =>
+					entry.parts
+						.filter(
+							(part) =>
+								part.type === "tool" &&
+								part.state?.status &&
+								part.state.status !== "completed" &&
+								part.state.status !== "error",
+						)
+						.map((part) => pendingCallLabel(part)),
+				);
+				ownedPending = ownedMessages.flatMap((entry) =>
+					entry.parts
+						.filter(
+							(part) =>
+								part.type === "tool" &&
+								part.state?.status &&
+								part.state.status !== "completed" &&
+								part.state.status !== "error",
+						)
+						.map((part) => pendingCallLabel(part)),
+				);
+				const busy =
+					delivery?.kind === "pending" ||
+					ownedPending.length > 0 ||
+					ownedMessages.some(
+						(entry) =>
+							(entry.native.type === "assistant" &&
+								!entry.native.time.completed) ||
+							(entry.native.type === "compaction" &&
+								entry.native.status === "running"),
+					);
+				const counts = sessions
+					.map((session) => ({
+						id: session.id,
+						messages: session.messages.length,
+						parts: session.messages.reduce(
+							(total, entry) => total + entry.parts.length,
+							0,
+						),
+					}))
+					.toSorted((left, right) => left.id.localeCompare(right.id));
+				const next = `${ownedMessages.length}:${ownedMessages.reduce((total, entry) => total + entry.parts.length, 0)}:${JSON.stringify(counts)}`;
+				const changed = nextActivity !== activitySignature;
+				activitySignature = nextActivity;
+				signature = next;
+				if (changed) changedAt = Date.now();
+				if (changed || busy) settledAt = Date.now();
+				else if (Date.now() - settledAt >= quietMs) {
+					if (pinNativeFailure()) await abortWait();
+					return "quiet";
+				}
+				const unansweredQuestionReachedQuiet =
+					onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs;
+				if (unansweredQuestionReachedQuiet) {
+					const captured = EpisodeQuestionSchema.safeParse({
+						sessionId,
+						calls: messages.flatMap((entry) =>
+							entry.parts
+								.filter(
+									(part) =>
+										part.type === "tool" &&
+										part.tool === "question" &&
+										(part.state?.status === "running" ||
+											part.state?.status === "pending"),
+								)
+								.map((part) => ({
+									messageId: part.messageID ?? entry.info.id,
+									callId: part.callID,
+									input: part.state?.input,
+								})),
+						),
+					});
+					if (captured.success)
+						this.escalationQuestions.set(sessionId, captured.data);
+					options.observation.stop = "question-escalated";
+					await abortWait(false);
+					return "escalated";
+				}
+				const stalled = Date.now() - changedAt;
+				if (isWedged(ownedPending, stalled, stalledMs)) {
+					captureAbort("stall");
+					await abortWait();
+					throw new Error(
+						`Scenario had no observed activity for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
+					);
+				}
+				if (Date.now() > deadline) {
 					await failDeadline();
 				}
+			}
+		} catch (error) {
+			if (
+				!(error instanceof EvaluationPhaseError) &&
+				options.request.state().kind !== "rejected" &&
+				pinNativeFailure()
+			)
 				await abortWait();
-				throw error;
-			}
-			accountPollElapsed();
-			lastSessions = sessions;
-			observedAt = Date.now();
-			let nextActivity: string;
-			try {
-				nextActivity = activeProgressSnapshot(
-					sessions,
-					completedMessages,
-					completedParts,
-				);
-			} catch (error) {
-				await abortWait();
-				throw error;
-			}
-			const ownedMessages = sessions.flatMap((session) => session.messages);
-			pending = messages.flatMap((entry) =>
-				entry.parts
-					.filter(
-						(part) =>
-							part.type === "tool" &&
-							part.state?.status &&
-							part.state.status !== "completed" &&
-							part.state.status !== "error",
-					)
-					.map((part) => pendingCallLabel(part)),
-			);
-			ownedPending = ownedMessages.flatMap((entry) =>
-				entry.parts
-					.filter(
-						(part) =>
-							part.type === "tool" &&
-							part.state?.status &&
-							part.state.status !== "completed" &&
-							part.state.status !== "error",
-					)
-					.map((part) => pendingCallLabel(part)),
-			);
-			const busy =
-				delivery?.kind === "pending" ||
-				ownedPending.length > 0 ||
-				ownedMessages.some(
-					(entry) =>
-						(entry.native.type === "assistant" &&
-							!entry.native.time.completed) ||
-						(entry.native.type === "compaction" &&
-							entry.native.status === "running"),
-				);
-			const counts = sessions
-				.map((session) => ({
-					id: session.id,
-					messages: session.messages.length,
-					parts: session.messages.reduce(
-						(total, entry) => total + entry.parts.length,
-						0,
-					),
-				}))
-				.toSorted((left, right) => left.id.localeCompare(right.id));
-			const next = `${ownedMessages.length}:${ownedMessages.reduce((total, entry) => total + entry.parts.length, 0)}:${JSON.stringify(counts)}`;
-			const changed = nextActivity !== activitySignature;
-			activitySignature = nextActivity;
-			signature = next;
-			if (changed) changedAt = Date.now();
-			if (changed || busy) settledAt = Date.now();
-			else if (Date.now() - settledAt >= quietMs) return "quiet";
-			// A pending question keeps `busy` true forever, so the quiet window above
-			// can never close and only the deadline ends the wait. Nothing here answers
-			// questions, so that state is terminal rather than slow: four recorded
-			// attempts each burned their full twenty minutes producing nothing after the
-			// model asked.
-			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
-				const captured = EpisodeQuestionSchema.safeParse({
-					sessionId,
-					calls: messages.flatMap((entry) =>
-						entry.parts
-							.filter(
-								(part) =>
-									part.type === "tool" &&
-									part.tool === "question" &&
-									(part.state?.status === "running" ||
-										part.state?.status === "pending"),
-							)
-							.map((part) => ({
-								messageId: part.messageID ?? entry.info.id,
-								callId: part.callID,
-								input: part.state?.input,
-							})),
-					),
-				});
-				if (captured.success)
-					this.escalationQuestions.set(sessionId, captured.data);
-				await abortWait();
-				return "escalated";
-			}
-			const stalled = Date.now() - changedAt;
-			if (isWedged(ownedPending, stalled, stalledMs)) {
-				captureAbort("stall");
-				await abortWait();
-				throw new Error(
-					`Scenario had no observed activity for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
-				);
-			}
-			if (Date.now() > deadline) {
-				await failDeadline();
-			}
+			throw error;
 		}
 	}
 
@@ -3145,6 +3258,7 @@ export class EvalHost {
 		root: string,
 		messages: readonly MessageEntry[],
 		signal: AbortSignal,
+		rootMetadata: SessionInfo | null,
 	): Promise<readonly OwnedProgressSession[]> {
 		const listed = await this.nativeRequest(
 			(options) =>
@@ -3170,9 +3284,21 @@ export class EvalHost {
 				ids.push(child.id);
 			}
 		}
-		const sessions = [{ id: root, messages }];
-		for (const id of ids.slice(1))
-			sessions.push({ id, messages: await this.messages(id, signal) });
+		const sessions: OwnedProgressSession[] = [
+			{
+				id: root,
+				messages,
+				...(rootMetadata ? { metadata: rootMetadata } : {}),
+			},
+		];
+		for (const id of ids.slice(1)) {
+			const metadata = listed.find((session) => session.id === id);
+			sessions.push({
+				id,
+				messages: await this.messages(id, signal),
+				...(metadata ? { metadata } : {}),
+			});
+		}
 		return sessions;
 	}
 
@@ -3186,6 +3312,17 @@ export class EvalHost {
 	 */
 	private async abortSession(sessionId: string): Promise<void> {
 		this.lastSelfAbortAt = Date.now();
+		const observation = this.nativeCommands.get(sessionId);
+		if (observation)
+			observation.scope = {
+				...observation.scope,
+				abort: {
+					requestedAt: this.lastSelfAbortAt,
+					priorFailure:
+						this.polledNativeFailure?.sessionId === sessionId ||
+						this.polledProviderFailure?.sessionId === sessionId,
+				},
+			};
 		await this.nativeRequest(
 			(options) =>
 				this.client.session.interrupt(
@@ -3293,14 +3430,46 @@ export class EvalHost {
 			sessionIds.includes(this.polledProviderFailure.sessionId)
 				? this.polledProviderFailure
 				: null;
-		if (!polled) checkCancellation(signal);
-		const descendantResult = polled
-			? { sessions: [], endpointFailed: false, metadata: [] }
-			: await this.descendantSessions(sessionIds, signal);
-		if (!polled) checkCancellation(signal);
+		const nativePin =
+			!polled &&
+			this.polledNativeFailure &&
+			sessionIds.includes(this.polledNativeFailure.sessionId)
+				? this.polledNativeFailure
+				: null;
+		let nativeFailure = nativePin?.failure ?? null;
+		const pinned = polled !== null || nativePin !== null;
+		if (!pinned) checkCancellation(signal);
+		const descendantResult = nativePin
+			? {
+					sessions: nativePin.sessions.flatMap((session) =>
+						session.metadata && !sessionIds.includes(session.id)
+							? [
+									{
+										id: session.id,
+										agent: session.metadata.agent ?? null,
+										parentID: session.metadata.parentID ?? null,
+									},
+								]
+							: [],
+					),
+					endpointFailed: !nativePin.childrenComplete,
+					metadata: nativePin.sessions.flatMap((session) =>
+						session.metadata ? [session.metadata] : [],
+					),
+				}
+			: polled
+				? { sessions: [], endpointFailed: false, metadata: [] }
+				: await this.descendantSessions(sessionIds, signal);
+		if (!pinned) checkCancellation(signal);
 		const nativeSessionMetadata: unknown[] = [...descendantResult.metadata];
-		let rootMetadataComplete = !polled;
-		if (!polled) {
+		let rootMetadataComplete = nativePin
+			? sessionIds.every((id) =>
+					nativePin.sessions.some(
+						(session) => session.id === id && session.metadata !== undefined,
+					),
+				)
+			: !polled;
+		if (!pinned) {
 			for (const sessionId of sessionIds) {
 				try {
 					const metadata = await this.nativeRequest(
@@ -3325,17 +3494,23 @@ export class EvalHost {
 		const ordered = sessionRecords.map((session) => session.id);
 		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
 		const sessionMessages: SessionMessages[] = [];
+		let messagesComplete = true;
 		for (const [sessionIndex, sessionId] of ordered.entries()) {
 			if (polled && sessionId !== polled.sessionId) continue;
-			let entries: MessageEntry[] | null;
+			let entries: readonly MessageEntry[] | null;
 			try {
-				entries = polled
-					? polled.messages
-					: ((await this.messages(sessionId, signal)) as MessageEntry[]);
+				entries = nativePin
+					? (nativePin.sessions.find((session) => session.id === sessionId)
+							?.messages ?? null)
+					: polled
+						? polled.messages
+						: ((await this.messages(sessionId, signal)) as MessageEntry[]);
 			} catch (error) {
 				// Reduce transcripts already fetched before deciding whether cancellation
 				// can discard this attempt. An earlier provider error still counts.
-				if (signal?.aborted && error === signal.reason) break;
+				messagesComplete = false;
+				if (nativeFailure || (signal?.aborted && error === signal.reason))
+					break;
 				throw new EvaluationPhaseError(
 					attemptFailure("host", "session-messages-read-failed", error, true),
 					error,
@@ -3345,6 +3520,30 @@ export class EvalHost {
 			if (session) sessionMessages.push({ ...session, messages: entries });
 			if (entries) {
 				for (const entry of entries) messages.push({ sessionIndex, entry });
+				const observation = this.nativeCommands.get(sessionId);
+				if (
+					sessionIds.includes(sessionId) &&
+					observation?.stop !== "question-escalated"
+				) {
+					const metadata = nativeSessionMetadata.find(
+						(candidate) => isRecord(candidate) && candidate.id === sessionId,
+					);
+					const scope = observation?.scope;
+					nativeFailure ??= nativeExecutionFailure(
+						nativeExecution(
+							collectHostTrace({
+								runnerRootSessionIds: [sessionId],
+								directory: this.project,
+								sessionMetadata: metadata ? [metadata] : [],
+								sessionMessages: [
+									{ sessionId, messages: entries.map((entry) => entry.native) },
+								],
+								childrenComplete: true,
+							}),
+							scope ? [scope] : [],
+						),
+					);
+				}
 			}
 		}
 		messages.sort(
@@ -3528,7 +3727,7 @@ export class EvalHost {
 		let session: Record<string, unknown> | null = null;
 		let archives: Record<string, unknown>[] = [];
 		try {
-			if (!polled) {
+			if (!pinned) {
 				checkCancellation(signal);
 				session = await this.readJson(
 					join(this.project, ".flow", "session.json"),
@@ -3541,26 +3740,33 @@ export class EvalHost {
 		} catch (error) {
 			// Cancelled workspace enrichment must not erase a provider failure
 			// already observed in the transcript.
-			if (!providerError || !signal?.aborted || error !== signal.reason)
+			if (
+				(!providerError && !nativeFailure) ||
+				!signal?.aborted ||
+				error !== signal.reason
+			)
 				throw error;
 		}
 		const currentWorkspace = await captureWorkspaceSnapshot(this.project);
+		const hostTrace = collectHostTrace({
+			runnerRootSessionIds: sessionIds,
+			directory: this.project,
+			sessionMetadata: nativeSessionMetadata,
+			sessionMessages: sessionMessages.map(({ id, messages }) => ({
+				sessionId: id,
+				messages: messages?.map((entry) => entry.native) ?? null,
+			})),
+			childrenComplete:
+				messagesComplete &&
+				rootMetadataComplete &&
+				!descendantResult.endpointFailed,
+		});
 		return {
 			packetBytes: collectReviewerPacketBytes(allCalls, [
 				...(session ? [session] : []),
 				...archives,
 			]),
-			hostTrace: collectHostTrace({
-				runnerRootSessionIds: sessionIds,
-				directory: this.project,
-				sessionMetadata: nativeSessionMetadata,
-				sessionMessages: sessionMessages.map(({ id, messages }) => ({
-					sessionId: id,
-					messages: messages?.map((entry) => entry.native) ?? null,
-				})),
-				childrenComplete:
-					rootMetadataComplete && !descendantResult.endpointFailed,
-			}),
+			hostTrace,
 			...(this.commandAbortObservation &&
 			sessionIds.includes(this.commandAbortObservation.rootSessionId)
 				? { abortObservation: this.commandAbortObservation }
@@ -3601,6 +3807,7 @@ export class EvalHost {
 			assistantMessages,
 			durationMs,
 			providerError,
+			nativeFailure,
 			providerErrorObservation: observedProviderError,
 		};
 	}

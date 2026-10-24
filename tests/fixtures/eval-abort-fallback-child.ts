@@ -167,6 +167,7 @@ class FixtureHost {
 			assistantMessages: 1,
 			durationMs: now - startedAt,
 			providerError: null,
+			nativeFailure: null,
 		};
 	}
 	async stop() {}

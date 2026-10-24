@@ -3,6 +3,7 @@ import { Session } from "@opencode/schema/session";
 import { SessionMessage } from "@opencode/schema/session-message";
 import { Schema } from "effect";
 import { z } from "zod";
+import { scrubSecrets } from "./cassette.js";
 
 type TopologyIssue =
 	| "unknown-root"
@@ -584,8 +585,131 @@ function collectHostTraceV1(input: HostTraceCollection): HostTraceV1 {
 }
 
 const Digest = z.string().regex(/^sha256:[a-f0-9]{64}$/);
+const DIAGNOSTIC_INPUT_BYTES = 16 * 1024;
+const DIAGNOSTIC_MESSAGE_BYTES = 2048;
+const DIAGNOSTIC_COUNT = 64;
+const DIAGNOSTIC_TOTAL_BYTES = 128 * 1024;
+const TERMINAL_TOTAL_BYTES = 4 * 1024 * 1024;
+const unsafeDiagnostic = (text: string): boolean =>
+	/(?:^|[\s"'(=:])(?:\/|[A-Za-z]:[\\/]|~[\\/]|\\\\)/.test(text) ||
+	/[A-Za-z0-9_~+/=-]{32,}/.test(text) ||
+	scrubSecrets(text) !== text ||
+	/\p{Cf}/u.test(text) ||
+	Array.from(text).some((point) => {
+		const code = point.codePointAt(0) ?? 0;
+		return (
+			(code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+			code === 127 ||
+			(code >= 0xd800 && code <= 0xdfff)
+		);
+	});
+const diagnosticText = (bytes: number) =>
+	z
+		.string()
+		.refine(
+			(text) => Buffer.byteLength(text) <= bytes && !unsafeDiagnostic(text),
+		);
+const DiagnosticErrorSchema = z
+	.object({
+		type: diagnosticText(64).refine((text) =>
+			/^[A-Za-z][A-Za-z0-9_.-]*$/.test(text),
+		),
+		message: diagnosticText(DIAGNOSTIC_MESSAGE_BYTES),
+		status: z.number().int().min(100).max(599).nullable(),
+		retryAfterMs: Order.max(86_400_000).nullable(),
+	})
+	.strict();
+const AbsentFactSchema = z.object({ kind: z.literal("absent") }).strict();
+const DiagnosticErrorFactSchema = z.discriminatedUnion("kind", [
+	AbsentFactSchema,
+	z
+		.object({ kind: z.literal("observed"), value: DiagnosticErrorSchema })
+		.strict(),
+	z
+		.object({
+			kind: z.literal("withheld"),
+			reason: z.enum(["malformed", "unsafe-text", "limits-exceeded"]),
+		})
+		.strict(),
+]);
+const observedFact = <T extends z.ZodType>(value: T) =>
+	z.discriminatedUnion("kind", [
+		AbsentFactSchema,
+		z.object({ kind: z.literal("observed"), value }).strict(),
+	]);
+const AssistantTerminalSchema = z
+	.object({
+		finish: observedFact(
+			z.enum([
+				"stop",
+				"length",
+				"tool-calls",
+				"content-filter",
+				"error",
+				"unknown",
+			]),
+		),
+		error: DiagnosticErrorFactSchema,
+		streamed: observedFact(Order),
+		completed: observedFact(Order),
+	})
+	.strict();
+const IdleExecutionSchema = z
+	.object({
+		outcome: z.enum(["succeeded", "failed", "interrupted"]),
+		error: DiagnosticErrorFactSchema,
+	})
+	.strict();
+type DiagnosticErrorFact = z.infer<typeof DiagnosticErrorFactSchema>;
+type DiagnosticBudget = { count: number; bytes: number };
+
+function projectDiagnosticError(
+	error: unknown,
+	budget: DiagnosticBudget,
+): DiagnosticErrorFact {
+	if (error === undefined) return { kind: "absent" };
+	const fields = z
+		.object({
+			type: z.string(),
+			message: z.string(),
+			status: z.number().int().min(100).max(599).optional(),
+			retryAfterMs: Order.max(86_400_000).optional(),
+		})
+		.safeParse(error);
+	if (!fields.success) return { kind: "withheld", reason: "malformed" };
+	if (
+		Buffer.byteLength(fields.data.type) > DIAGNOSTIC_INPUT_BYTES ||
+		Buffer.byteLength(fields.data.message) > DIAGNOSTIC_INPUT_BYTES
+	)
+		return { kind: "withheld", reason: "limits-exceeded" };
+	const type = scrubSecrets(fields.data.type);
+	const scrubbed = scrubSecrets(fields.data.message);
+	if (unsafeDiagnostic(type) || unsafeDiagnostic(scrubbed))
+		return { kind: "withheld", reason: "unsafe-text" };
+	const message = scrubbed;
+	const bytes = Buffer.byteLength(message);
+	if (Buffer.byteLength(type) > 64 || bytes > DIAGNOSTIC_MESSAGE_BYTES)
+		return { kind: "withheld", reason: "limits-exceeded" };
+	const parsed = DiagnosticErrorSchema.safeParse({
+		type,
+		message,
+		status: fields.data.status ?? null,
+		retryAfterMs: fields.data.retryAfterMs ?? null,
+	});
+	if (!parsed.success) return { kind: "withheld", reason: "malformed" };
+	const size = Buffer.byteLength(type) + bytes;
+	if (
+		budget.count >= DIAGNOSTIC_COUNT ||
+		budget.bytes + size > DIAGNOSTIC_TOTAL_BYTES
+	)
+		return { kind: "withheld", reason: "limits-exceeded" };
+	budget.count++;
+	budget.bytes += size;
+	return { kind: "observed", value: parsed.data };
+}
+
 const V2MessageIdentity = MessageIdentity;
-const V2MessageSchema = z.discriminatedUnion("role", [
+const V2MessageSchema = z.union([
 	z
 		.object({
 			...V2MessageIdentity,
@@ -603,6 +727,7 @@ const V2MessageSchema = z.discriminatedUnion("role", [
 			role: z.literal("assistant"),
 			type: z.literal("assistant"),
 			agent: Id,
+			terminal: AssistantTerminalSchema.optional(),
 			contentCount: Order.max(256),
 			tools: z
 				.array(
@@ -626,8 +751,15 @@ const V2MessageSchema = z.discriminatedUnion("role", [
 				"skill",
 				"shell",
 				"compaction",
-				"idle",
 			]),
+		})
+		.strict(),
+	z
+		.object({
+			...V2MessageIdentity,
+			role: z.literal("event"),
+			type: z.literal("idle"),
+			execution: IdleExecutionSchema.optional(),
 		})
 		.strict(),
 ]);
@@ -667,6 +799,9 @@ const HostTraceV2Schema = z
 		const keys = new Set<string>();
 		let toolCount = 0;
 		let contentCount = 0;
+		let diagnosticCount = 0;
+		let diagnosticBytes = 0;
+		let terminalBytes = 0;
 		for (const message of trace.messages) {
 			if (ids.has(message.id)) issue("Duplicate native identity.");
 			ids.add(message.id);
@@ -679,8 +814,35 @@ const HostTraceV2Schema = z
 			)
 				issue("Native chronology conflicts.");
 			orders.set(message.sessionId, message);
+			const facts =
+				message.role === "assistant"
+					? message.terminal
+					: message.role === "event" && message.type === "idle"
+						? message.execution
+						: undefined;
+			if (facts) {
+				terminalBytes += Buffer.byteLength(JSON.stringify(facts));
+				if (facts.error.kind === "observed") {
+					diagnosticCount++;
+					diagnosticBytes +=
+						Buffer.byteLength(facts.error.value.type) +
+						Buffer.byteLength(facts.error.value.message);
+				}
+			}
 			if (message.role === "user") contentCount += 1 + message.attachments;
 			if (message.role !== "assistant") continue;
+			if (message.terminal) {
+				const { streamed, completed } = message.terminal;
+				if (
+					(streamed.kind === "observed" && streamed.value < message.created) ||
+					(completed.kind === "observed" &&
+						completed.value < message.created) ||
+					(streamed.kind === "observed" &&
+						completed.kind === "observed" &&
+						streamed.value > completed.value)
+				)
+					issue("Native assistant terminal chronology conflicts.");
+			}
 			contentCount += message.contentCount;
 			let previousIndex = -1;
 			for (const tool of message.tools) {
@@ -708,6 +870,12 @@ const HostTraceV2Schema = z
 		}
 		if (toolCount > 4096 || contentCount > 16384)
 			issue("Host trace exceeds aggregate limits.");
+		if (
+			diagnosticCount > DIAGNOSTIC_COUNT ||
+			diagnosticBytes > DIAGNOSTIC_TOTAL_BYTES ||
+			terminalBytes > TERMINAL_TOTAL_BYTES
+		)
+			issue("Native terminal evidence exceeds aggregate limits.");
 	});
 export const HostTraceSchema = z.union([HostTraceV1Schema, HostTraceV2Schema]);
 export type HostTrace = z.infer<typeof HostTraceSchema>;
@@ -885,6 +1053,7 @@ function collectHostTraceV2(input: HostTraceCollection): HostTrace {
 	const messages: ObservedTraceV2["messages"] = [];
 	let contentCount = 0;
 	let toolCount = 0;
+	const diagnosticBudget: DiagnosticBudget = { count: 0, bytes: 0 };
 	for (const transcript of input.sessionMessages) {
 		if (transcripts.has(transcript.sessionId))
 			return fail("duplicate-native-id");
@@ -930,6 +1099,14 @@ function collectHostTraceV2(input: HostTraceCollection): HostTrace {
 				created,
 			};
 			if (raw.type === "assistant") {
+				if (
+					raw.time.streamed !== undefined &&
+					(!Order.safeParse(raw.time.streamed).success ||
+						raw.time.streamed < created ||
+						(raw.time.completed !== undefined &&
+							raw.time.streamed > raw.time.completed))
+				)
+					return fail("chronology-conflict");
 				contentCount += raw.content.length;
 				if (raw.content.length > 256 || contentCount > 16384)
 					return fail("limits-exceeded");
@@ -967,6 +1144,21 @@ function collectHostTraceV2(input: HostTraceCollection): HostTrace {
 					agent: raw.agent,
 					contentCount: raw.content.length,
 					tools,
+					terminal: {
+						finish:
+							raw.finish === undefined
+								? { kind: "absent" }
+								: { kind: "observed", value: raw.finish },
+						error: projectDiagnosticError(raw.error, diagnosticBudget),
+						streamed:
+							raw.time.streamed === undefined
+								? { kind: "absent" }
+								: { kind: "observed", value: raw.time.streamed },
+						completed:
+							raw.time.completed === undefined
+								? { kind: "absent" }
+								: { kind: "observed", value: raw.time.completed },
+					},
 				});
 			} else if (raw.type === "user" || raw.type === "synthetic") {
 				if (Buffer.byteLength(raw.text) > 4 * 1024 * 1024)
@@ -999,7 +1191,19 @@ function collectHostTraceV2(input: HostTraceCollection): HostTrace {
 					raw.location.directory !== input.directory
 				)
 					return fail("directory-mismatch");
-				messages.push({ ...identity, role: "event", type: raw.type });
+				messages.push(
+					raw.type === "idle"
+						? {
+								...identity,
+								role: "event",
+								type: "idle",
+								execution: {
+									outcome: raw.outcome,
+									error: projectDiagnosticError(raw.error, diagnosticBudget),
+								},
+							}
+						: { ...identity, role: "event", type: raw.type },
+				);
 			}
 		}
 	}
@@ -1029,4 +1233,108 @@ export function collectHostTrace(input: HostTraceCollection): HostTrace {
 				),
 		);
 	return v2 ? collectHostTraceV2(input) : collectHostTraceV1(input);
+}
+
+export type NativeExecutionScope = Readonly<{
+	sessionId: string;
+	afterMessageId: string | null;
+	abort?: Readonly<{ requestedAt: number; priorFailure: boolean }>;
+}>;
+
+type NativeEnd =
+	| Readonly<{
+			kind: "unobserved";
+			reason:
+				| "boundary-not-found"
+				| "no-closing-idle"
+				| "terminal-fields-not-retained";
+	  }>
+	| Readonly<{
+			kind: "succeeded" | "failed" | "interrupted" | "self-interrupted";
+			messageId: string;
+			created: number;
+			error: DiagnosticErrorFact;
+	  }>;
+export type NativeExecution =
+	| Readonly<{ kind: "unavailable" }>
+	| Readonly<{
+			kind: "observed";
+			sessions: readonly Readonly<{
+				sessionId: string;
+				rootSessionId: string;
+				end: NativeEnd;
+			}>[];
+	  }>;
+
+export function nativeExecution(
+	trace: HostTrace | undefined,
+	scopes: readonly NativeExecutionScope[] = [],
+): NativeExecution {
+	if (trace?.version !== 2 || trace.kind !== "observed")
+		return { kind: "unavailable" };
+	const parents = new Map(
+		trace.sessions.map((session) => [session.id, session.parentId]),
+	);
+	const bySession = new Map<string, ObservedTraceV2["messages"]>(
+		trace.sessions.map((session) => [session.id, []]),
+	);
+	for (const message of trace.messages)
+		bySession.get(message.sessionId)?.push(message);
+	return {
+		kind: "observed",
+		sessions: trace.sessions.map((session) => {
+			let rootSessionId = session.id;
+			for (
+				let parent = parents.get(session.id);
+				parent;
+				parent = parents.get(parent)
+			)
+				rootSessionId = parent;
+			const messages = bySession.get(session.id) ?? [];
+			const scope = scopes.find(
+				(candidate) => candidate.sessionId === session.id,
+			);
+			const boundary =
+				scope?.afterMessageId == null
+					? -1
+					: messages.findIndex(
+							(message) => message.id === scope.afterMessageId,
+						);
+			let end: NativeEnd = { kind: "unobserved", reason: "no-closing-idle" };
+			if (scope?.afterMessageId != null && boundary < 0)
+				end = { kind: "unobserved", reason: "boundary-not-found" };
+			else
+				for (const message of messages.slice(boundary + 1)) {
+					if (message.role === "event" && message.type === "idle") {
+						if (!message.execution) {
+							end = {
+								kind: "unobserved",
+								reason: "terminal-fields-not-retained",
+							};
+							continue;
+						}
+						const { outcome, error } = message.execution;
+						const selfInterrupted =
+							outcome === "interrupted" &&
+							scope?.abort !== undefined &&
+							!scope.abort.priorFailure &&
+							message.created > scope.abort.requestedAt &&
+							(error.kind === "absent" ||
+								(error.kind === "observed" && error.value.type === "aborted"));
+						end = {
+							kind: selfInterrupted ? "self-interrupted" : outcome,
+							messageId: message.id,
+							created: message.created,
+							error,
+						};
+					} else if (
+						message.role === "user" ||
+						message.role === "assistant" ||
+						message.type === "compaction"
+					)
+						end = { kind: "unobserved", reason: "no-closing-idle" };
+				}
+			return { sessionId: session.id, rootSessionId, end };
+		}),
+	};
 }

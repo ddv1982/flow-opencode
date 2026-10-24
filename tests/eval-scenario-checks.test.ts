@@ -23,6 +23,7 @@ function outcome(overrides: Partial<Outcome>): Outcome {
 		assistantMessages: 0,
 		durationMs: 0,
 		providerError: null,
+		nativeFailure: null,
 		...overrides,
 	};
 }

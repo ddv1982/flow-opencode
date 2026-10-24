@@ -291,6 +291,7 @@ function inspectionAuditOutcome(): Outcome {
 		assistantMessages: 0,
 		durationMs: 0,
 		providerError: null,
+		nativeFailure: null,
 	};
 }
 
@@ -366,6 +367,7 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 					assistantMessages: 1,
 					durationMs: 1,
 					providerError: null,
+					nativeFailure: null,
 				};
 				expect(scenario.check(observed), scenario.id).toEqual([]);
 				replayedByScenario.set(scenario.id, observed);

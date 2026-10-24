@@ -56,10 +56,11 @@ recognized checkpoint returns to waiting. Native assistant and call identities
 must match the frozen inputs consumed by that model request. Later input cannot
 relabel an older assistant or supply authority from another host.
 
-Automatic compaction retains the epoch only through its exact checked native
-automatic control record. Its user-role checkpoint grants no user approval.
-Real input, manual compaction of automatic work, interruption, or stream loss
-revokes the interval. Stale unmatched callbacks cannot revoke a fresh source.
+Automatic compaction retains the epoch through its checked native control.
+Its user-role checkpoint grants no approval. Real input, manual compaction of
+automatic work, user interruption, or event-stream loss revokes the interval.
+Consumer cancellation ends only its captured HTTP request.
+Stale unmatched callbacks cannot revoke a fresh source.
 Summary-only ordinary history grants no checkpoint execution. These checks add
 no Session v5 field. See
 [ADR 0018](adr/0018-opencode-v2-only.md).

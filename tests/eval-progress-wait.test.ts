@@ -377,7 +377,7 @@ for (const mode of ["duplicate-children", "cyclic-children"] as const) {
 			).length,
 		).toBe(
 			observed.visits.filter((path) => path === "/api/session/ses_root/message")
-				.length,
+				.length - 1,
 		);
 	});
 }
