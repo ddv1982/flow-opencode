@@ -3956,3 +3956,163 @@ for (const when of ["before", "during-read"] as const)
 			await f.lifecycle.dispose();
 		}
 	});
+
+async function exerciseUnregisteredNativeExecution(
+	f: OwnershipFixture,
+	expectedMessages: SessionContext["messages"],
+) {
+	expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
+	expect(f.repository.saveCount).toBe(0);
+	const context = f.context();
+	await f.emit("context", context);
+	expect(context.messages).toEqual(expectedMessages);
+	const request = new Request("http://localhost/unregistered-native", {
+		method: "POST",
+		body: "ordinary native request body",
+	});
+	const outbound = {
+		sessionID,
+		agent,
+		model,
+		kind: "primary" as const,
+		request,
+	};
+	await f.emit("http.request", outbound);
+	expect(await outbound.request.clone().text()).toBe(
+		"ordinary native request body",
+	);
+	const inbound = {
+		...outbound,
+		response: new Response("ordinary native response body"),
+	};
+	await f.emit("http.response", inbound);
+	expect(await inbound.response.text()).toBe("ordinary native response body");
+	const shell = ownershipNativeCall(f, "shell");
+	let shellEffects = 0;
+	for (const callback of f.toolCallbacks["execute.before"])
+		await callback({
+			...shell,
+			tool: "shell",
+			input: { command: "printf not-run" },
+		});
+	shellEffects++;
+	expect(shellEffects).toBe(1);
+	const assistant = f.native.find((message) => message.id === shell.messageID);
+	if (assistant?.type !== "assistant")
+		throw new Error("Missing native tool assistant.");
+	const flowCall = { ...shell, id: CallID.make("call_unregistered_flow") };
+	assistant.content.push({
+		type: "tool",
+		id: flowCall.id,
+		name: "flow_status",
+		time: { created: 4 },
+		state: {
+			status: "running",
+			input: { request: { view: "compact" } },
+			metadata: {},
+		},
+	});
+	const effects: string[] = [];
+	const tool = await effectTool(f, effects);
+	await expect(tool.execute({}, flowCall)).rejects.toThrow();
+	expect(effects).toEqual([]);
+	expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
+	expect(f.repository.saveCount).toBe(0);
+	expect(f.repository.session).toBeNull();
+}
+
+test("unregistered native regression: reloaded user runs ordinary execution without Flow authority", async () => {
+	const f = await fixture();
+	try {
+		f.native.push({
+			type: "user",
+			id: "msg_reloaded_user",
+			text: "Ordinary queued user before reload",
+			time: { created: 0 },
+		});
+		await exerciseUnregisteredNativeExecution(f, [
+			{
+				role: "user",
+				id: "msg_reloaded_user",
+				content: [{ type: "text", text: "Ordinary queued user before reload" }],
+			},
+		]);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("unregistered native regression: external synthetic in empty ledger runs ordinary execution without Flow authority", async () => {
+	const f = await fixture();
+	try {
+		f.native.push({
+			type: "synthetic",
+			id: "msg_external_synthetic",
+			text: "Ordinary external synthetic request",
+			time: { created: 0 },
+		});
+		await exerciseUnregisteredNativeExecution(f, [
+			{
+				role: "user",
+				id: "msg_external_synthetic",
+				content: [{ type: "text", text: "Ordinary external synthetic request" }],
+			},
+		]);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("unregistered native regression: external synthetic after ordinary prompt in same session runs without Flow authority", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(
+			f,
+			"msg_prior_ordinary",
+			"Ordinary prompt before external notification",
+		);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		f.native.push(
+			{
+				type: "assistant",
+				id: "msg_prior_ordinary_assistant",
+				agent,
+				model,
+				time: { created: 11, completed: 12 },
+				content: [{ type: "text", text: "Fixture finished" }],
+			},
+			{
+				type: "idle",
+				id: "msg_prior_ordinary_idle",
+				outcome: "succeeded",
+				time: { created: 13 },
+			},
+			{
+				type: "synthetic",
+				id: "msg_external_after_ordinary",
+				text: "External ordinary notification after prior prompt",
+				time: { created: 14 },
+			},
+		);
+		await exerciseUnregisteredNativeExecution(f, [
+			{
+				role: "user",
+				id: "msg_prior_ordinary",
+				content: [
+					{ type: "text", text: "Ordinary prompt before external notification" },
+				],
+			},
+			{
+				role: "user",
+				id: "msg_external_after_ordinary",
+				content: [
+					{ type: "text", text: "External ordinary notification after prior prompt" },
+				],
+			},
+		]);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
