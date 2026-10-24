@@ -1,0 +1,119 @@
+{
+  "results": [
+    {
+      "hooked": false,
+      "host": "2.1.4",
+      "pid": 46940,
+      "upgrades": 1,
+      "http": 0,
+      "frames": 1,
+      "waitError": null,
+      "native": [
+        {
+          "id": "msg_16d02df660011JUiWjdDmt8E4u",
+          "time": {
+            "created": 1792830267362
+          },
+          "text": "Reply OK only.",
+          "type": "user"
+        },
+        {
+          "id": "msg_16d02dfe7001YjxjVNa12ijxFt",
+          "time": {
+            "created": 1792830267371,
+            "completed": 1792830267377
+          },
+          "type": "assistant",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6.1-sol",
+            "providerID": "flow-transport",
+            "variant": "default"
+          },
+          "content": [],
+          "finish": "error",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        },
+        {
+          "id": "msg_16d02dff2001doMUdvgcTmGWJq",
+          "time": {
+            "created": 1792830267378
+          },
+          "type": "idle",
+          "outcome": "failed",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "hooked": true,
+      "host": "2.1.4",
+      "pid": 46942,
+      "upgrades": 1,
+      "http": 0,
+      "frames": 1,
+      "waitError": null,
+      "native": [
+        {
+          "id": "msg_16d02e176001YAScqDlzFsu6vi",
+          "time": {
+            "created": 1792830267886
+          },
+          "text": "Reply OK only.",
+          "type": "user"
+        },
+        {
+          "id": "msg_16d02e1fa001c4rxGkFY46MGQl",
+          "time": {
+            "created": 1792830267902,
+            "completed": 1792830267907
+          },
+          "type": "assistant",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6.1-sol",
+            "providerID": "flow-transport",
+            "variant": "default"
+          },
+          "content": [],
+          "finish": "error",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        },
+        {
+          "id": "msg_16d02e204001OJ11Ll2yfPfPen",
+          "time": {
+            "created": 1792830267908
+          },
+          "type": "idle",
+          "outcome": "failed",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "pass": false
+}

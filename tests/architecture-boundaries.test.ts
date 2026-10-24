@@ -153,18 +153,44 @@ describe("v6 architecture boundaries", () => {
 		expect(unused).toEqual([]);
 	});
 
-	test("routes every OpenCode host import through src/platform/opencode/sdk.ts", async () => {
-		// One seam holds the peer-dependency surface, and it is the only host import
-		// the published declarations expose. It had already drifted once, so it is
-		// enforced here rather than described in prose.
-		const importers: string[] = [];
+	test("keeps native OpenCode imports in the host adapters and RPC contract", async () => {
+		const violations: string[] = [];
 		for (const file of await sourceFiles()) {
 			const source = await readFile(file, "utf8");
-			if (/(?:from\s+|import\s*)["']@opencode-ai\//.test(source)) {
-				importers.push(repositoryPath(file));
-			}
+			const path = repositoryPath(file);
+			if (/(?:from\s+|import\s*)["']@opencode-ai\//.test(source))
+				violations.push(path);
+			if (
+				/(?:from\s+|import\s*)["']@opencode\//.test(source) &&
+				!path.startsWith("src/platform/opencode/") &&
+				path !== "src/tui.ts" &&
+				path !== "src/flow-rpc.ts"
+			)
+				violations.push(path);
 		}
-		expect(importers).toEqual(["src/platform/opencode/sdk.ts"]);
+		expect(violations).toEqual([]);
+	});
+
+	test("keeps active host tooling free of V1 imports and launch packages", async () => {
+		const files = (
+			await Promise.all(
+				["scripts", "evals"].map((directory) =>
+					sourceFiles(join(repositoryRoot, directory)),
+				),
+			)
+		).flat();
+		const violations: string[] = [];
+		for (const file of files) {
+			const path = repositoryPath(file);
+			if (path.startsWith("evals/qualification/")) continue;
+			const source = await readFile(file, "utf8");
+			if (
+				/(?:from\s+|import\s*)["']@opencode-ai\//.test(source) ||
+				/opencode-ai@/.test(source)
+			)
+				violations.push(path);
+		}
+		expect(violations).toEqual([]);
 	});
 
 	test("keeps domain, application, and infrastructure dependencies inward", async () => {
@@ -185,7 +211,7 @@ describe("v6 architecture boundaries", () => {
 
 			if (
 				(layer === "domain" || layer === "application") &&
-				/(?:from\s+|import\s*)["']@opencode-ai\//.test(source)
+				/(?:from\s+|import\s*)["']@opencode(?:-ai)?\//.test(source)
 			) {
 				violations.push(
 					`${relative(sourceRoot, file)} imports the OpenCode host`,

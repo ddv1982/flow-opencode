@@ -1,26 +1,3 @@
-// Replays a cassette against the real Flow tool handlers.
-//
-// No model, no OpenCode host, no network, no provider spend. The recorded
-// arguments go through the same host arg schemas and the same handlers a live host
-// calls, against a fresh git workspace, and the scenario's own `check` then grades
-// the durable state that just came out. What a live attempt buys and this cannot is
-// a *new* decision; what this buys and a live attempt cannot is running the same
-// decision again for free after every change to the runtime.
-//
-// Three things the recording cannot hand over literally, and how each is handled:
-//
-//   - Runtime-issued identifiers. A replayed `flow_plan_save` mints its own session
-//     id, `flow_review_start` its own assignment id, and a submission its own
-//     finding ids, so a recorded argument naming one is translated through a map
-//     learned as the replay goes. Untranslated strings pass through unchanged,
-//     which is what keeps a recorded *wrong* id a recorded wrong id.
-//   - The host a command ran on. Injected from the cassette rather than read from
-//     the replaying machine, so a Linux recording keeps its Linux verdict on a Mac.
-//   - Bash. Never re-executed. The recorded command, exit code, and truncation flag
-//     are fed through the real capture coordinator, so the arming rule, the
-//     command-match rule, and the eligibility rule all run for real; only the
-//     command itself does not.
-
 import { spawnSync } from "node:child_process";
 import {
 	mkdir,
@@ -46,7 +23,13 @@ import type { ValidationStartRequest } from "../src/application/schema.js";
 import { isArtifactPath } from "../src/domain/artifact.js";
 import { createFileSessionRepository } from "../src/infrastructure/fs/session-repository.js";
 import { readWorkspaceTestReport } from "../src/infrastructure/fs/workspace-validation.js";
-import { tool } from "../src/platform/opencode/sdk.js";
+import {
+	Agent,
+	CallID,
+	type NativeToolAfter,
+	Session,
+	SessionMessage,
+} from "../src/platform/opencode/sdk.js";
 import { createTools } from "../src/platform/opencode/tools.js";
 import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
 import {
@@ -63,34 +46,20 @@ export type ReplayedCall = ObservedToolCall &
 
 export type ReplayResult = Readonly<{
 	cassette: Cassette;
+	evidenceKind: "historical-decision-replay";
 	outcome: Outcome;
 	/** Divergences between the recorded and replayed Flow responses. */
 	divergences: readonly string[];
 }>;
 
-/**
- * One tool as the host sees it: a raw Zod shape for its arguments, and an execute
- * that takes the parsed object. Erased to `unknown` here because the replay looks a
- * tool up by a recorded name, which no static type can narrow.
- */
-type HostTool = Readonly<{
-	args: Record<string, unknown>;
-	execute: (
-		args: unknown,
-		context: ReturnType<typeof toolContext>,
-	) => Promise<string | { output: string }>;
-}>;
-
 function toolContext(workspace: string, sessionIndex: number, agent: string) {
 	return {
-		sessionID: `replay-${sessionIndex}`,
-		messageID: `replay-message-${sessionIndex}`,
+		sessionID: `ses_replay-${sessionIndex}`,
+		messageID: `msg_replay-${sessionIndex}`,
+		callID: `replay-call-${sessionIndex}`,
 		agent,
 		directory: workspace,
-		worktree: workspace,
 		abort: new AbortController().signal,
-		metadata: () => {},
-		ask: async () => {},
 	};
 }
 
@@ -125,7 +94,20 @@ async function seedWorkspace(
 		["add", "-A"],
 		["commit", "-m", "fixture"],
 	]) {
-		const git = spawnSync("git", argv, { cwd: workspace, encoding: "utf8" });
+		const git = spawnSync(
+			"git",
+			["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgSign=false", ...argv],
+			{
+				cwd: workspace,
+				encoding: "utf8",
+				env: {
+					PATH: process.env.PATH,
+					HOME: workspace,
+					GIT_CONFIG_NOSYSTEM: "1",
+					GIT_CONFIG_GLOBAL: "/dev/null",
+				},
+			},
+		);
 		if (git.status !== 0) {
 			throw new Error(`git ${argv[0]} failed:\n${git.stderr}`);
 		}
@@ -288,53 +270,63 @@ function statusOf(output: unknown): "ok" | "error" {
 	return asRecord(output)?.status === "ok" ? "ok" : "error";
 }
 
-/**
- * Runs one recorded Bash call through the capture coordinator without executing
- * it.
- *
- * The coordinator is production's, unmodified: it still refuses a command that does
- * not match the armed one and still records an ineligible observation when the host
- * reported no exit code. Only the subprocess is absent.
- */
+export function recordedBashDecisionFixture(
+	event: Extract<CassetteEvent, { kind: "bash" }>,
+): NativeToolAfter & { status: "completed" } {
+	const { exit, truncated } = event.metadata;
+	return {
+		tool: "shell",
+		sessionID: Session.ID.make(`ses_replay-${event.sessionIndex}`),
+		messageID: SessionMessage.ID.make(`msg_replay-${event.sessionIndex}`),
+		id: CallID.make(
+			`replay-call-${event.sessionIndex}-${event.command.length}`,
+		),
+		agent: Agent.ID.make(event.agent),
+		input: { command: event.command },
+		status: "completed",
+		result: {
+			content: event.output,
+			output: {
+				...(typeof exit === "number" && Number.isSafeInteger(exit)
+					? { exit }
+					: {}),
+				...(typeof truncated === "boolean" ? { truncated } : {}),
+				output: event.output,
+			},
+		},
+	};
+}
+
 async function replayBash(
 	validation: ValidationCaptureCoordinator,
 	event: Extract<CassetteEvent, { kind: "bash" }>,
 	workspace: string,
 ): Promise<string> {
-	const context = toolContext(workspace, event.sessionIndex, event.agent);
-	const callID = `replay-call-${event.sessionIndex}-${event.command.length}`;
-	const before = { tool: "bash", sessionID: context.sessionID, callID };
+	const fixture = recordedBashDecisionFixture(event);
 	try {
-		await validation.observeToolBefore(before, {
-			args: { command: event.command },
-		});
+		await validation.observeToolBefore(fixture);
 	} catch (error) {
 		return `[flow-validation-error] ${error instanceof Error ? error.message : String(error)}`;
 	}
-	const output = {
-		title: "bash",
-		output: event.output,
-		metadata: event.metadata,
-	};
 	try {
 		if (event.resultsPath && event.testReport) {
-			if (!isArtifactPath(event.resultsPath)) {
+			if (!isArtifactPath(event.resultsPath))
 				throw new Error("Cassette results path is unsafe.");
-			}
 			const target = join(workspace, event.resultsPath);
 			await mkdir(dirname(target), { recursive: true });
 			await Bun.sleep(2);
 			await writeFile(target, event.testReport, "utf8");
 			await Bun.sleep(2);
 		}
-		await validation.observeToolAfter(
-			{ ...before, args: { command: event.command } },
-			output,
-		);
+		await validation.observeToolAfter(fixture);
 	} catch (error) {
-		output.output = `${output.output}\n\n[flow-validation-error] ${error instanceof Error ? error.message : String(error)}`;
+		return `${event.output}\n\n[flow-validation-error] ${error instanceof Error ? error.message : String(error)}`;
 	}
-	return output.output;
+	return typeof fixture.result.content === "string"
+		? fixture.result.content
+		: (fixture.result.content ?? [])
+				.flatMap((part) => (part.type === "text" ? [part.text] : []))
+				.join("\n");
 }
 
 export async function replayCassette(
@@ -343,7 +335,13 @@ export async function replayCassette(
 	const started = Date.now();
 	const workspace = await seedWorkspace(cassette.files);
 	try {
+		const replayAgents = new Map<string, string>();
 		const validation = new ValidationCaptureCoordinator({
+			readSession: async (sessionID) => ({
+				id: sessionID,
+				agent: replayAgents.get(sessionID) ?? "build",
+				location: { directory: workspace },
+			}),
 			readReport: readWorkspaceTestReport,
 			persistObservation: (root, observation) =>
 				persistObservedValidation(
@@ -359,12 +357,13 @@ export async function replayCassette(
 					request,
 					cassette.hostPlatform,
 				),
-		}) as unknown as Record<string, HostTool | undefined>;
+		});
 		const rebinding = new Rebinding();
 		const calls: ReplayedCall[] = [];
 		const divergences: string[] = [];
 
 		for (const [index, event] of cassette.events.entries()) {
+			replayAgents.set(`ses_replay-${event.sessionIndex}`, event.agent);
 			if (event.kind === "bash") {
 				const output = await replayBash(validation, event, workspace);
 				rebinding.learn(event, output);
@@ -414,12 +413,8 @@ export async function replayCassette(
 			const input = rebinding.apply(bindWorkspace(event.input, workspace));
 			let raw: string;
 			try {
-				// The host validates arguments against the schema mirror before calling,
-				// so replay does too: a mirror that drifted from the persisted schema
-				// fails here rather than silently accepting an argument no host would.
-				const args = parseArgs(definition, input);
-				const result = await definition.execute(args, context);
-				raw = typeof result === "string" ? result : result.output;
+				const result = await definition.execute(input, context);
+				raw = typeof result === "string" ? result : JSON.stringify(result);
 			} catch (error) {
 				raw = JSON.stringify({
 					status: "error",
@@ -480,29 +475,13 @@ export async function replayCassette(
 			durationMs: Date.now() - started,
 			providerError: null,
 		};
-		return { cassette, outcome, divergences };
+		return {
+			cassette,
+			outcome,
+			divergences,
+			evidenceKind: "historical-decision-replay",
+		};
 	} finally {
 		await rm(workspace, { recursive: true, force: true });
 	}
-}
-
-/**
- * Validates one recorded argument object against the tool's own host schema.
- *
- * `tool.schema` is Zod, and `args` is the raw shape a host wraps in an object, so
- * this is the same parse the host performs — which makes the schema mirror part of
- * what the replay tier covers rather than something only a unit test sees.
- *
- * Strict, because Zod 4 strips unknown keys by default: a recorded call carrying a
- * field the schema has since dropped would have parsed clean and replayed green,
- * which is the one thing this parse exists to catch.
- */
-function parseArgs(
-	definition: HostTool,
-	input: Record<string, unknown>,
-): unknown {
-	return tool.schema
-		.object(definition.args as Parameters<typeof tool.schema.object>[0])
-		.strict()
-		.parse(input);
 }

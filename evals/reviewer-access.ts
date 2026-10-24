@@ -5,7 +5,11 @@ import {
 	type ScenarioGradeInput,
 } from "./grader-input.js";
 import type { ObservedToolCall } from "./harness.js";
-import { type HostTrace, HostTraceSchema } from "./host-trace.js";
+import {
+	type HostTrace,
+	HostTraceSchema,
+	nativeToolKey,
+} from "./host-trace.js";
 import { decodeReviewerPacket } from "./reviewer-packet-bytes.js";
 
 const Id = z.string().min(1).max(256);
@@ -481,7 +485,9 @@ export function nativeToolWitness(
 	if (message?.role !== "assistant" || message.agent !== call.agent)
 		return null;
 	const tool = message.tools.find(
-		(candidate) => candidate.partId === call.native?.partId,
+		(candidate) =>
+			call.native !== undefined &&
+			nativeToolKey(candidate) === nativeToolKey(call.native),
 	);
 	if (!tool) return null;
 	const { tool: name, status, ...native } = tool;
@@ -534,6 +540,54 @@ export function checkAutonomousLineage(
 	const trace = parsed.data;
 	if (trace.runnerRootSessionIds.length !== 1)
 		return ["Autonomous execution requires one native root session."];
+	if (trace.version === 2) {
+		const issues: string[] = [];
+		const root = trace.runnerRootSessionIds[0];
+		const rootMessages = trace.messages.filter(
+			(message) => message.sessionId === root,
+		);
+		const users = rootMessages.filter((message) => message.role === "user");
+		const first = users[0];
+		if (
+			first?.role !== "user" ||
+			first.type !== "user" ||
+			first.textBytes === 0 ||
+			first.flowTokenSha256 === null
+		)
+			issues.push("The initial original Flow request marker is missing.");
+		const token = first?.role === "user" ? first.flowTokenSha256 : null;
+		if (
+			users.filter((user) => user.type === "user" && user.textBytes > 0)
+				.length !== 1
+		)
+			issues.push("Expected exactly one original root request.");
+		for (const user of users) {
+			if (user.attachments > 0 || user.compactionContinue === true)
+				issues.push(
+					"Native compaction or unknown user-part delivery is unproven.",
+				);
+			if (
+				user.type === "synthetic" &&
+				(user.flowTokenSha256 === null || user.flowTokenSha256 !== token)
+			)
+				issues.push("Unknown or mismatched synthetic Flow continuation.");
+			if (user.type === "user" && user.textBytes === 0)
+				issues.push("Unclassified native root user message.");
+		}
+		if (
+			rootMessages.some(
+				(message) =>
+					message.role === "event" &&
+					message.type !== "idle" &&
+					message.type !== "agent-switched" &&
+					message.type !== "model-switched",
+			)
+		)
+			issues.push(
+				"Native compaction or unknown user-part delivery is unproven.",
+			);
+		return [...new Set(issues)];
+	}
 	const users = trace.messages.filter(
 		(message) =>
 			message.role === "user" &&

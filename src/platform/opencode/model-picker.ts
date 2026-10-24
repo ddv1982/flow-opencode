@@ -1,77 +1,101 @@
+import type { ModelInfo, ProviderInfo } from "@opencode/client";
+import type {
+	EffectivePreference,
+	FlowModelRole,
+	PickerChoice,
+	ProjectPreferences,
+	RoleChoices,
+} from "../../application/model-preferences.js";
 import type { FlowReviewerConfiguration } from "../../config-shared.js";
-import type { Provider } from "./sdk.js";
 
-export function modelChoices(
-	providers: readonly Provider[],
-	connected: readonly string[],
-) {
-	const enabled = new Set(connected);
-	return providers
-		.filter((provider) => enabled.has(provider.id))
-		.flatMap((provider) =>
-			Object.values(provider.models)
-				.filter(
-					(model) =>
-						model.capabilities.toolcall &&
-						model.capabilities.input.text &&
-						model.capabilities.output.text &&
-						model.status !== "deprecated",
-				)
-				.map((model) => ({
-					title: model.name,
-					value: `${provider.id}/${model.id}`,
-					category: provider.name,
-					description: `${provider.id}/${model.id}`,
-				})),
-		)
-		.sort(
-			(a, b) =>
-				a.category.localeCompare(b.category) ||
-				a.title.localeCompare(b.title) ||
-				a.value.localeCompare(b.value),
-		);
-}
-
+export type { FlowModelRole } from "../../application/model-preferences.js";
 export const FLOW_MODEL_ROLES = {
 	planning: {
-		agent: "flow-planner",
-		key: "flowPlanningModel",
 		title: "planning specialist",
 		defaultDescription:
 			"The coding manager plans directly, without a specialist",
 	},
 	review: {
-		agent: "flow-reviewer",
-		key: "flowReviewerModel",
 		title: "reviewer",
 		defaultDescription:
 			"Existing plugin/environment settings, otherwise the coding model",
 	},
 } as const;
-export type FlowModelRole = keyof typeof FLOW_MODEL_ROLES;
-
-export function modelPreference(
-	config: { agent?: Record<string, unknown> },
+export type PickerCatalogModel = Pick<
+	ModelInfo,
+	"id" | "providerID" | "name" | "enabled" | "status"
+> & {
+	capabilities: Pick<ModelInfo["capabilities"], "tools" | "input" | "output">;
+};
+export function choiceKey(choice: PickerChoice): string {
+	return choice.kind === "default"
+		? ""
+		: `${choice.model.providerID}/${choice.model.id}`;
+}
+export function sameChoice(left: PickerChoice, right: PickerChoice) {
+	return left.kind === "default"
+		? right.kind === "default"
+		: right.kind === "model" &&
+				left.model.providerID === right.model.providerID &&
+				left.model.id === right.model.id;
+}
+export function sameProject(
+	left: ProjectPreferences,
+	right: ProjectPreferences,
+) {
+	return (["planning", "review"] as const).every((role) => {
+		const a = left[role];
+		const b = right[role];
+		return a === undefined
+			? b === undefined
+			: b !== undefined && sameChoice(a, b);
+	});
+}
+export function resolvePreference(
+	global: RoleChoices,
+	project: ProjectPreferences,
 	role: FlowModelRole,
-): string | undefined {
-	const setting = FLOW_MODEL_ROLES[role];
-	const agent = config.agent?.[setting.agent];
-	if (!agent || typeof agent !== "object" || !("options" in agent))
-		return undefined;
-	const options = agent.options;
-	if (!options || typeof options !== "object" || !(setting.key in options))
-		return undefined;
-	const value = (options as Record<string, unknown>)[setting.key];
-	if (typeof value !== "string")
-		throw new Error(`Flow ${setting.title} preference must be a string.`);
-	return value.trim();
+): EffectivePreference {
+	const override = project[role];
+	if (override) return { choice: override, source: "project" };
+	const choice = global[role];
+	return {
+		choice,
+		source: choice.kind === "model" ? "global-picker" : "role-default",
+	};
 }
-
-export function modelPreferencePatch(role: FlowModelRole, model: string) {
-	const setting = FLOW_MODEL_ROLES[role];
-	return { agent: { [setting.agent]: { options: { [setting.key]: model } } } };
+export function modelChoices(
+	models: readonly PickerCatalogModel[],
+	providers: readonly Pick<ProviderInfo, "id" | "name">[],
+) {
+	const names = new Map(
+		providers.map((provider) => [provider.id, provider.name]),
+	);
+	return models
+		.filter(
+			(model) =>
+				model.enabled &&
+				model.status !== "deprecated" &&
+				model.capabilities.tools &&
+				model.capabilities.input.includes("text") &&
+				model.capabilities.output.includes("text"),
+		)
+		.map((model) => ({
+			title: model.name,
+			value: {
+				kind: "model",
+				model: { providerID: model.providerID, id: model.id },
+			} satisfies PickerChoice,
+			category: names.get(model.providerID) ?? model.providerID,
+			description: `${model.providerID}/${model.id}`,
+		}))
+		.sort(
+			(a, b) =>
+				a.category.localeCompare(b.category) ||
+				a.title.localeCompare(b.title) ||
+				a.description.localeCompare(b.description),
+		);
 }
-
 export function applyReviewerPreference(
 	base: FlowReviewerConfiguration,
 	model: string | undefined,

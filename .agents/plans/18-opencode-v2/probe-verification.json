@@ -1,0 +1,106 @@
+{
+  "status": "PASS",
+  "meaning": "Disposable assertions passed. This is not an integrated Flow certification.",
+  "checks": [
+    "exact host health",
+    "plugin options and lifecycle",
+    "missing update invokes callback",
+    "reserved agents created",
+    "native child parentage",
+    "allowed custom effects",
+    "denied custom effects absent",
+    "explicit denial has native error",
+    "shell nonzero remains completed",
+    "shell execution error",
+    "shell timeout lacks exit",
+    "exact full output file",
+    "exact full output API",
+    "duplicate admission converges",
+    "duplicate hooks run twice",
+    "duplicate creates one enqueue",
+    "rejected hook prevents admission",
+    "real interruption",
+    "compaction retained post input",
+    "static agent public lookup",
+    "http-pending primary streams do not overlap",
+    "http-pending response joins same Request",
+    "http-pending exact assistant and call probe_plain",
+    "http-pending frozen inputs equal assistant prefix probe_plain",
+    "http-pending exact assistant and call probe_explicit",
+    "http-pending frozen inputs equal assistant prefix probe_explicit",
+    "http-pending old execution not relabeled",
+    "http-pending context waits for preceding primary stream",
+    "http-pending old assistant tool stays before next primary context",
+    "http-pending old assistant tool stays before next primary context",
+    "http-pending context waits for preceding primary stream",
+    "http-pending old assistant tool stays before next primary context",
+    "http-pending old assistant tool stays before next primary context",
+    "http-pending context waits for preceding primary stream",
+    "tool-running primary streams do not overlap",
+    "tool-running response joins same Request",
+    "tool-running exact assistant and call probe_hold",
+    "tool-running frozen inputs equal assistant prefix probe_hold",
+    "tool-running exact assistant and call probe_explicit",
+    "tool-running frozen inputs equal assistant prefix probe_explicit",
+    "tool-running old execution not relabeled",
+    "tool-running context waits for preceding primary stream",
+    "tool-running old assistant tool stays before next primary context",
+    "tool-running old assistant tool stays before next primary context",
+    "tool-running context waits for preceding primary stream",
+    "tool-running old assistant tool stays before next primary context",
+    "tool-running old assistant tool stays before next primary context",
+    "tool-running context waits for preceding primary stream",
+    "client subscriber terminates on host shutdown"
+  ],
+  "causalJoins": [
+    {
+      "phase": "http-pending",
+      "assistant": "msg_16ccafaf8001mTpLLYBhlWkORb",
+      "call": "call_probe_0",
+      "tool": "probe_plain",
+      "requestSeq": 17,
+      "consumedInputIDs": [
+        "msg_16ccafac1001P7iO2nf1EMMDxu"
+      ]
+    },
+    {
+      "phase": "http-pending",
+      "assistant": "msg_16ccb02df001MEtxYkbQjjHNnm",
+      "call": "call_probe_0",
+      "tool": "probe_explicit",
+      "requestSeq": 18,
+      "consumedInputIDs": [
+        "msg_16ccafac1001P7iO2nf1EMMDxu",
+        "msg_16ccafb6e001C7MiiXTxQfqQ38"
+      ]
+    },
+    {
+      "phase": "tool-running",
+      "assistant": "msg_16ccb039f001B6k1sK92P2H7RR",
+      "call": "call_probe_0",
+      "tool": "probe_hold",
+      "requestSeq": 20,
+      "consumedInputIDs": [
+        "msg_16ccb02fa001Ex3xaUyrLbcr53"
+      ]
+    },
+    {
+      "phase": "tool-running",
+      "assistant": "msg_16ccb0795001w7pJJ0XQYxSMJx",
+      "call": "call_probe_0",
+      "tool": "probe_explicit",
+      "requestSeq": 21,
+      "consumedInputIDs": [
+        "msg_16ccb02fa001Ex3xaUyrLbcr53",
+        "msg_16ccb03b4001E3tRSB1cxoO79i"
+      ]
+    }
+  ],
+  "limitations": [
+    "Only scripted local OpenAI-compatible provider and Darwin arm64 tested.",
+    "No general primary-request serialization guarantee claimed. Fail closed on overlap or unknown joins.",
+    "No complete async event prefix or durable replay established.",
+    "Automatic compaction during a live automatic turn remains unverified.",
+    "Revocation of an already running operation requires parent integration design and checks."
+  ]
+}

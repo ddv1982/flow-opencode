@@ -1,0 +1,15 @@
+{
+  "observedOn": "2026-10-24",
+  "platform": "Darwin",
+  "architecture": "arm64",
+  "package": "@opencode/cli@2.1.4",
+  "launcher": "npm exec --cache /tmp/flow-opencode-v2-plan-host/npm-cache --yes --package=@opencode/cli@2.1.4 -- opencode --version",
+  "environment": {
+    "XDG_CONFIG_HOME": "/tmp/flow-opencode-v2-plan-host/config",
+    "XDG_DATA_HOME": "/tmp/flow-opencode-v2-plan-host/data",
+    "XDG_CACHE_HOME": "/tmp/flow-opencode-v2-plan-host/cache"
+  },
+  "exitCode": 0,
+  "versionOutput": "opencode v2.1.4",
+  "scope": "Version invocation only. No server, plugin, TUI, or provider behavior verified."
+}

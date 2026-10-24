@@ -1,0 +1,29 @@
+{
+  "plugins": [
+    {
+      "package": "/tmp/flow-v2-server-probe",
+      "options": {
+        "receipt": "isolated-options"
+      }
+    }
+  ],
+  "agents": {
+    "flow-static-probe": {
+      "mode": "subagent",
+      "description": "Static configuration probe",
+      "system": "Read only static probe",
+      "permissions": [
+        {
+          "action": "*",
+          "resource": "*",
+          "effect": "deny"
+        },
+        {
+          "action": "read",
+          "resource": "*",
+          "effect": "allow"
+        }
+      ]
+    }
+  }
+}

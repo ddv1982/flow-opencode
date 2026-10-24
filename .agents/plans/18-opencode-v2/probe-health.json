@@ -1,0 +1,13 @@
+{
+  "version": "2.1.4",
+  "pid": 46076,
+  "urls": [
+    "http://127.0.0.1:47841"
+  ],
+  "paths": {
+    "tmp": "/private/tmp/flow-v2-server-probe/tmp/opencode"
+  },
+  "capabilities": {
+    "persistentPty": true
+  }
+}

@@ -50,6 +50,10 @@ import {
 } from "../evals/metrics.js";
 import { bestEffortEvaluation } from "../evals/run.js";
 import { authorizePaidRun } from "../scripts/paid-budget.js";
+import {
+	fileCredentialHandoff,
+	nativeTestClient,
+} from "./fixtures/opencode-v2-test-host.js";
 
 function processExists(pid: number): boolean {
 	try {
@@ -67,7 +71,18 @@ function mockFetch(
 	) => ReturnType<typeof fetch>,
 ) {
 	return spyOn(globalThis, "fetch").mockImplementation(
-		Object.assign(implementation, { preconnect: fetch.preconnect }),
+		Object.assign(
+			(input: Parameters<typeof fetch>[0], init?: RequestInit) =>
+				input instanceof Request
+					? implementation(input.url, {
+							...init,
+							method: input.method,
+							headers: input.headers,
+							signal: init?.signal ?? input.signal,
+						})
+					: implementation(input, init),
+			{ preconnect: fetch.preconnect },
+		),
 	);
 }
 
@@ -207,12 +222,12 @@ wait "$child"
 	// escalation nothing answers — the designed end of six scenarios — and
 	// reporting its own abort as a condition of the host buried the real ones.
 	test("does not report its own abort as a host error", () => {
-		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };
+		const abort = { type: "aborted", message: "Aborted" };
 		expect(isSelfAbortError(abort, true)).toBe(true);
 	});
 
 	test("reports an abort nobody here issued, and every other error always", () => {
-		const abort = { name: "MessageAbortedError", data: { message: "Aborted" } };
+		const abort = { type: "aborted", message: "Aborted" };
 		// No abort issued makes an abort error real news: something outside this
 		// process ended the turn, which is exactly what the field is for.
 		expect(isSelfAbortError(abort, false)).toBe(false);
@@ -493,7 +508,10 @@ describe("eval campaign cancellation", () => {
 					scratch,
 					scratch,
 				]) as EvalHost;
-				Object.assign(host, { baseUrl: "http://fixture" });
+				Object.assign(host, {
+					baseUrl: "http://fixture",
+					nativeClient: nativeTestClient(),
+				});
 				const controller = new AbortController();
 				const reason = new CampaignCancelled(130);
 				const entered = Promise.withResolvers<void>();
@@ -521,29 +539,38 @@ describe("eval campaign cancellation", () => {
 						return read(path, signal);
 					},
 				});
-				const requests = mockFetch(async (input) =>
-					String(input).endsWith("/children")
-						? Response.json([])
-						: Response.json([
+				const requests = mockFetch(async (input) => {
+					const path = new URL(String(input)).pathname;
+					if (path === "/api/session")
+						return Response.json({ data: [], cursor: {} });
+					if (path.endsWith("/message"))
+						return Response.json({
+							data: [
 								{
-									info: {
-										id: "message",
-										sessionID: "id",
-										role: "assistant",
-										time: { created: 1, completed: 2 },
-										...(failed
-											? {
-													error: {
-														name: "FixtureProviderUnavailable",
-														data: { message: "Fake provider failure" },
-													},
-												}
-											: {}),
-									},
-									parts: [],
+									id: "message",
+									type: "assistant",
+									agent: "build",
+									model: { providerID: "fixture", id: "model" },
+									time: { created: 1, completed: 2 },
+									content: [],
+									...(failed
+										? {
+												error: {
+													type: "FixtureProviderUnavailable",
+													message: "Fake provider failure",
+												},
+											}
+										: {}),
 								},
-							]),
-				);
+							],
+							cursor: {},
+						});
+					return Response.json({
+						id: "id",
+						agent: "build",
+						location: { directory: scratch },
+					});
+				});
 				try {
 					const result = host.outcome(["id"], 1, controller.signal);
 					const observed = result.catch((error) => error);
@@ -631,48 +658,49 @@ describe("eval campaign cancellation", () => {
 				scratch,
 				controller.signal,
 			]) as EvalHost;
-			Object.assign(host, { baseUrl: "http://fixture" });
+			Object.assign(host, {
+				baseUrl: "http://fixture",
+				nativeClient: nativeTestClient(),
+			});
 			const aborting = Promise.withResolvers<void>();
 			const cleanup = Promise.withResolvers<Response>();
 			let aborts = 0;
 			const requests = mockFetch(async (input) => {
 				const url = String(input);
-				if (url.endsWith("/abort")) {
+				const path = new URL(url).pathname;
+				if (path.endsWith("/interrupt")) {
 					aborts += 1;
 					aborting.resolve();
 					return cleanup.promise;
 				}
-				if (url.endsWith("/command")) return Response.json({});
-				if (url.endsWith("/children")) return Response.json([]);
-				return Response.json(
-					failure === "timeout"
-						? []
-						: [
-								{
-									info: {
+				if (path.endsWith("/command") || path.endsWith("/model"))
+					return new Response(null, { status: 204 });
+				if (path === "/api/session")
+					return Response.json({ data: [], cursor: {} });
+				return Response.json({
+					data:
+						failure === "timeout"
+							? []
+							: [
+									{
 										id: "msg_wedge",
-										sessionID: "id",
-										role: "assistant",
+										type: "assistant",
+										agent: "build",
+										model: { providerID: "fixture", id: "model" },
 										time: { created: 1 },
-									},
-									parts: [
-										{
-											id: "prt_wedge",
-											sessionID: "id",
-											messageID: "msg_wedge",
-											callID: "call_wedge",
-											type: "tool",
-											tool: "bash",
-											state: {
-												status: "running",
-												input: {},
-												time: { start: 1 },
+										content: [
+											{
+												type: "tool",
+												name: "shell",
+												id: "call_wedge",
+												time: { created: 1 },
+												state: { status: "running", input: {}, metadata: {} },
 											},
-										},
-									],
-								},
-							],
-				);
+										],
+									},
+								],
+					cursor: {},
+				});
 			});
 			let settled = false;
 			const running = host
@@ -722,18 +750,30 @@ describe("eval campaign cancellation", () => {
 					scratch,
 					scratch,
 				]) as EvalHost;
-				Object.assign(host, { baseUrl: "http://fixture" });
+				Object.assign(host, {
+					baseUrl: "http://fixture",
+					nativeClient: nativeTestClient(),
+				});
 				const reading = Promise.withResolvers<void>();
 				let transport: AbortSignal | null | undefined;
 				let reads = 0;
 				const requests = mockFetch(async (input, init) => {
 					reads += 1;
-					if (String(input).endsWith(`/${endpoint}`)) {
+					if (
+						endpoint === "children"
+							? new URL(String(input)).pathname === "/api/session"
+							: String(input).includes("/message")
+					) {
 						transport = init?.signal;
 						reading.resolve();
 						return new Promise(() => {});
 					}
-					return Response.json([]);
+					return Response.json(
+						new URL(String(input)).pathname === "/api/session" ||
+							String(input).includes("/message")
+							? { data: [], cursor: {} }
+							: { id: "id", agent: "build", location: { directory: scratch } },
+					);
 				});
 				try {
 					const observed = host
@@ -1009,7 +1049,10 @@ describe("eval campaign cancellation", () => {
 				scratch,
 				controller.signal,
 			]) as EvalHost;
-			Object.assign(host, { baseUrl: "http://fixture" });
+			Object.assign(host, {
+				baseUrl: "http://fixture",
+				nativeClient: nativeTestClient(),
+			});
 			const posted = Promise.withResolvers<void>();
 			let postSignal: AbortSignal | null | undefined;
 			let aborts = 0;
@@ -1018,14 +1061,21 @@ describe("eval campaign cancellation", () => {
 				if (url.endsWith("/command")) {
 					postSignal = init?.signal;
 					posted.resolve();
-					return accepted ? Response.json({}) : new Promise(() => {});
+					return accepted
+						? new Response(null, { status: 204 })
+						: new Promise(() => {});
 				}
 				expect(init?.signal?.aborted).not.toBe(true);
-				if (url.endsWith("/abort")) {
+				if (new URL(url).pathname.endsWith("/interrupt")) {
 					aborts += 1;
-					return Response.json(true);
+					return Response.json({ interrupted: true });
 				}
-				return Response.json([]);
+				if (url.endsWith("/model")) return new Response(null, { status: 204 });
+				return Response.json(
+					new URL(url).pathname === "/api/session" || url.includes("/message")
+						? { data: [], cursor: {} }
+						: { id: "id", agent: "build", location: { directory: scratch } },
+				);
 			});
 			try {
 				const running = host.runCommand(
@@ -1062,15 +1112,18 @@ describe("eval campaign cancellation", () => {
 			scratch,
 			controller.signal,
 		]) as EvalHost;
-		Object.assign(host, { baseUrl: "http://fixture" });
+		Object.assign(host, {
+			baseUrl: "http://fixture",
+			nativeClient: nativeTestClient(),
+		});
 		let abortSignal: AbortSignal | null | undefined;
 		const requests = mockFetch(async (input, init) => {
-			if (String(input).endsWith("/abort")) {
+			if (new URL(String(input)).pathname.endsWith("/interrupt")) {
 				abortSignal = init?.signal;
 				return new Promise(() => {});
 			}
-			controller.abort(reason);
-			return Response.json({});
+			if (String(input).endsWith("/command")) controller.abort(reason);
+			return new Response(null, { status: 204 });
 		});
 		try {
 			await expect(
@@ -1089,12 +1142,10 @@ describe("eval campaign cancellation", () => {
 		const rotated = JSON.stringify({ fixture: { refresh: "fake-rotated" } });
 		await writeFile(target, rotated);
 		const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
-		Object.assign(host, {
-			credentialPaths: {
-				source: join(scratch, "missing-parent", "auth.json"),
-				target,
-				snapshot: null,
-			},
+		fileCredentialHandoff(host, {
+			source: join(scratch, "missing-parent", "auth.json"),
+			target,
+			snapshot: null,
 		});
 		const complaints = spyOn(console, "error").mockImplementation(() => {});
 		try {
@@ -1121,7 +1172,7 @@ describe("eval campaign cancellation", () => {
 		await writeFile(source, snapshot);
 		await writeFile(target, JSON.stringify(rotated));
 		const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
-		Object.assign(host, { credentialPaths: { source, target, snapshot } });
+		fileCredentialHandoff(host, { source, target, snapshot });
 		try {
 			const first = host.stop();
 			expect(host.stop()).toBe(first);
@@ -1142,9 +1193,7 @@ describe("eval campaign cancellation", () => {
 			await writeFile(target, contents);
 			await writeFile(source, '{"fixture":"original"}');
 			const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
-			Object.assign(host, {
-				credentialPaths: { source, target, snapshot: null },
-			});
+			fileCredentialHandoff(host, { source, target, snapshot: null });
 			try {
 				await expect(host.stop()).rejects.toThrow(
 					`Eval host credentials are invalid; retained at ${target}.`,
@@ -1188,19 +1237,23 @@ describe("eval campaign cancellation", () => {
 				scratch,
 				controller.signal,
 			]) as EvalHost;
-			Object.assign(host, { baseUrl: "http://fixture" });
+			Object.assign(host, {
+				baseUrl: "http://fixture",
+				nativeClient: nativeTestClient(),
+			});
 			let requestSignal: AbortSignal | null | undefined;
 			let aborts = 0;
 			const requests = mockFetch(async (input, init) => {
 				const url = String(input);
-				if (url.endsWith("/abort")) {
+				if (new URL(url).pathname.endsWith("/interrupt")) {
 					aborts += 1;
 					expect(init?.signal?.aborted).toBe(false);
-					return Response.json(true);
+					return Response.json({ interrupted: true });
 				}
-				if (init?.method === "DELETE") return Response.json(true);
-				if (operation === "probe" && url.endsWith("/session"))
-					return Response.json({ id: "id" });
+				if (init?.method === "DELETE")
+					return Response.json({ interrupted: true });
+				if (operation === "probe" && new URL(url).pathname === "/api/session")
+					return Response.json({ data: { id: "id", agent: "build" } });
 				requestSignal = init?.signal;
 				queueMicrotask(() => controller.abort(reason));
 				return new Promise(() => {});
@@ -1236,6 +1289,36 @@ describe("eval campaign cancellation", () => {
 				fixture: { refresh: "fake-original" },
 			});
 			await writeFile(source, credentials);
+			const fixturePackage = join(
+				fixture,
+				"opencode",
+				"node_modules",
+				"opencode-plugin-flow",
+			);
+			await mkdir(join(fixturePackage, "dist"), { recursive: true });
+			await writeFile(
+				join(fixturePackage, "package.json"),
+				JSON.stringify({
+					exports: {
+						".": { import: "./dist/index.js" },
+						"./tui": { import: "./dist/tui.js" },
+					},
+				}),
+			);
+			await writeFile(
+				join(fixturePackage, "dist/index.js"),
+				"export default {};\n",
+			);
+			await writeFile(
+				join(fixturePackage, "dist/tui.js"),
+				"export default {};\n",
+			);
+			const executable = join(fixture, "fake-native-cli");
+			await writeFile(
+				executable,
+				"#!/bin/sh\nprintf 'server password fixture-private\\n'\n/bin/sleep 60\n",
+				{ mode: 0o700 },
+			);
 			const oldData = process.env.XDG_DATA_HOME;
 			const oldOptOut = process.env.FLOW_EVAL_NO_AUTH_COPY;
 			process.env.XDG_DATA_HOME = fixture;
@@ -1255,8 +1338,13 @@ describe("eval campaign cancellation", () => {
 				},
 			);
 			const requests = mockFetch(async (input, init) => {
-				if (phase === "readiness" && String(input).endsWith("/global/health"))
-					return Response.json({ healthy: true });
+				if (phase === "readiness" && String(input).endsWith("/api/info"))
+					return Response.json({
+						version: "2.1.4",
+						pid: 123,
+						urls: [],
+						paths: { tmp: fixture },
+					});
 				if (phase === "readiness") {
 					expect(String(input)).toEndWith("/session");
 					expect(init?.method).toBe("POST");
@@ -1280,7 +1368,9 @@ describe("eval campaign cancellation", () => {
 							return join(fixture, "missing-cache");
 						return join(fixture, "opencode");
 					},
-					opencodeVersion: "fixture",
+					opencodeVersion: "2.1.4",
+					opencodeExecutable: executable,
+					providerCredentials: "disabled",
 					files: { "fixture.txt": "no paid calls" },
 					signal: controller.signal,
 				});
@@ -1310,8 +1400,10 @@ describe("eval campaign cancellation", () => {
 
 describe("eval actor and instruction observations", () => {
 	const assistant = (info: Record<string, unknown>) => ({
-		info: { role: "assistant", time: { created: 1, completed: 2 }, ...info },
-		parts: [],
+		type: "assistant",
+		time: { created: 1, completed: 2 },
+		...info,
+		content: [],
 	});
 
 	test("extracts nested and top-level model identities, including gateway ids", () => {
@@ -1320,7 +1412,7 @@ describe("eval actor and instruction observations", () => {
 				assistant({
 					model: {
 						providerID: "openrouter",
-						modelID: "openai/gpt-5.6-sol",
+						id: "openai/gpt-5.6-sol",
 					},
 				}),
 			]),
@@ -1333,7 +1425,7 @@ describe("eval actor and instruction observations", () => {
 		});
 		expect(
 			extractObservedModelIdentity([
-				assistant({ providerID: "anthropic", modelID: "claude-sonnet" }),
+				assistant({ model: { providerID: "anthropic", id: "claude-sonnet" } }),
 			]),
 		).toEqual({
 			kind: "observed",
@@ -1369,8 +1461,8 @@ describe("eval actor and instruction observations", () => {
 		});
 		expect(
 			extractObservedModelIdentity([
-				assistant({ providerID: "a", modelID: "one" }),
-				assistant({ providerID: "b", modelID: "two" }),
+				assistant({ model: { providerID: "a", id: "one" } }),
+				assistant({ model: { providerID: "b", id: "two" } }),
 			]),
 		).toEqual({ kind: "unobserved", reason: "conflicting-observations" });
 	});
@@ -1407,7 +1499,9 @@ describe("eval actor and instruction observations", () => {
 				sessions: [
 					{
 						id: "reviewer",
-						messages: [assistant({ providerID: "a", modelID: "reviewer" })],
+						messages: [
+							assistant({ model: { providerID: "a", id: "reviewer" } }),
+						],
 					},
 				],
 				childEndpointFailed: true,
@@ -1424,7 +1518,7 @@ describe("eval actor and instruction observations", () => {
 						id: "parent",
 						messages: [
 							assistant({
-								model: { providerID: "openrouter", modelID: "x/y" },
+								model: { providerID: "openrouter", id: "x/y" },
 							}),
 						],
 					},
@@ -1444,7 +1538,7 @@ describe("eval actor and instruction observations", () => {
 				sessions: [
 					{
 						id: "parent",
-						messages: [assistant({ providerID: "a", modelID: "m" })],
+						messages: [assistant({ model: { providerID: "a", id: "m" } })],
 					},
 					{ id: "resume", messages: null },
 				],

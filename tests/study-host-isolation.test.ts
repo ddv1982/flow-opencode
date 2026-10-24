@@ -13,11 +13,10 @@ import { join } from "node:path";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import { EvalHost } from "../evals/harness.js";
 import packageJson from "../package.json" with { type: "json" };
+import { nativeIsolationExecutable } from "./fixtures/native-eval-client.js";
 
 test("study host ignores ambient OpenCode configuration and synthetic Git hooks/signing", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "study-host-isolation-"));
-	const noAuthCopy = process.env.FLOW_EVAL_NO_AUTH_COPY;
-	process.env.FLOW_EVAL_NO_AUTH_COPY = "1";
 	let host: EvalHost | undefined;
 	try {
 		const hooks = join(directory, "hooks");
@@ -36,19 +35,19 @@ test("study host ignores ambient OpenCode configuration and synthetic Git hooks/
 			toolchain: {
 				...toolchain,
 				environment: {
-					...toolchain.environment,
+					PATH: toolchain.environment.PATH,
 					GIT_CONFIG_GLOBAL: gitConfig,
 					OPENCODE_CONFIG: poisonConfig,
 					OPENCODE_CONFIG_CONTENT: "not-json",
 					OPENCODE_CONFIG_DIR: directory,
-					OPENCODE_EXPERIMENTAL_NATIVE_LLM: "true",
 				},
 			},
 			packageCache: "",
 			withFlow: false,
-			opencodeVersion: "1.18.6",
+			opencodeVersion: "2.1.4",
+			opencodeExecutable: await nativeIsolationExecutable(directory),
+			providerCredentials: "disabled",
 			ambientConfig: "disabled",
-			nativeLlm: false,
 			reviewerEnvironment: "disabled",
 			files: { "package.json": '{"name":"project","private":true}\n' },
 			signal: AbortSignal.timeout(180000),
@@ -63,16 +62,12 @@ test("study host ignores ambient OpenCode configuration and synthetic Git hooks/
 		);
 		expect(log.status).toBe(0);
 		expect(log.stdout.trim()).toBe("Project <project@example.invalid>");
-		const baseUrl: unknown = Reflect.get(host, "baseUrl");
-		if (typeof baseUrl !== "string") throw new Error("Missing local host URL.");
-		const response = await fetch(`${baseUrl}/config`);
-		expect(response.ok).toBe(true);
-		const config = (await response.json()) as { plugin?: unknown[] };
-		expect(config.plugin ?? []).toEqual([]);
+		const config = await host.client.config.get({
+			location: { directory: host.project },
+		});
+		expect(config).toEqual([{ type: "document", info: { plugins: [] } }]);
 	} finally {
 		await host?.stop();
-		if (noAuthCopy === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
-		else process.env.FLOW_EVAL_NO_AUTH_COPY = noAuthCopy;
 		await rm(directory, { recursive: true, force: true });
 	}
 }, 240000);

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { canonicalJson } from "./canonical-json.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
+import { nativeToolKey } from "./host-trace.js";
 import {
 	checkAutonomousLineage,
 	checkReviewerEvidenceAccess,
@@ -165,7 +166,9 @@ function primaryTool(
 	);
 	if (message?.role !== "assistant" || message.agent !== call.agent)
 		return false;
-	const tool = message.tools.find((value) => value.partId === native.partId);
+	const tool = message.tools.find(
+		(value) => nativeToolKey(value) === nativeToolKey(native),
+	);
 	if (!tool || tool.tool !== call.tool || tool.status !== call.status)
 		return false;
 	const { tool: _tool, status: _status, ...observed } = tool;

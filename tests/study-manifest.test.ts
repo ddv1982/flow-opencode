@@ -11,6 +11,11 @@ import {
 	PackedArtifactIdentitySchema,
 } from "../evals/report-identities.js";
 import { prepareStudyManifest } from "../evals/study-manifest.js";
+import {
+	LEGACY_STUDY_PROTOCOL_VERSION_SHA256,
+	PairedStudyPolicySchema,
+	STUDY_PROTOCOL_VERSION_SHA256,
+} from "../evals/study-protocol.js";
 import { runStudyCommand } from "../evals/study-runner.js";
 import packageJson from "../package.json" with { type: "json" };
 import { studyArtifact, studyManifest } from "./study-support.js";
@@ -67,7 +72,7 @@ describe("paired-study manifest", () => {
 						toolchain,
 						packageCache: "unused",
 						packageVersion: version,
-						opencodeVersion: "1.18.6",
+						opencodeVersion: "2.1.4",
 						files: {},
 					}),
 				).rejects.toThrow("bounded exact SemVer");
@@ -77,6 +82,51 @@ describe("paired-study manifest", () => {
 			}
 		});
 	}
+	test("retains historical accounting policies while refusing active V1 studies", async () => {
+		const manifest = studyManifest();
+		const current = (await prepareStudyManifest(manifest, ".")).policy;
+		for (const digest of [
+			LEGACY_STUDY_PROTOCOL_VERSION_SHA256,
+			STUDY_PROTOCOL_VERSION_SHA256,
+		]) {
+			const historical = {
+				...current,
+				opencodeVersion: "1.18.6",
+				versionSha256: digest,
+				accounting: {
+					...current.accounting,
+					hostContract: "opencode-1.18.6-disjoint-output-v1",
+				},
+			};
+			expect(PairedStudyPolicySchema.safeParse(historical).success).toBe(true);
+			expect(
+				PairedStudyPolicySchema.safeParse({
+					...historical,
+					opencodeVersion: "2.1.4",
+				}).success,
+			).toBe(false);
+			expect(
+				PairedStudyPolicySchema.safeParse({ ...current, versionSha256: digest })
+					.success,
+			).toBe(false);
+		}
+		await expect(
+			prepareStudyManifest(
+				{
+					...manifest,
+					opencodeVersion: "1.18.6",
+					accounting: {
+						...manifest.accounting,
+						hostContract: "opencode-1.18.6-disjoint-output-v1",
+					},
+				},
+				".",
+			),
+		).rejects.toThrow(
+			"Active studies require the verified OpenCode 2.1.4 accounting contract.",
+		);
+	});
+
 	test("requires an explicit total-effect label when more than the declared factor changes", async () => {
 		const manifest = studyManifest();
 		manifest.comparison = "artifact";
@@ -130,7 +180,9 @@ describe("paired-study manifest", () => {
 		const manifest = studyManifest();
 		await expect(
 			prepareStudyManifest({ ...manifest, opencodeVersion: "1.19.0" }, "."),
-		).rejects.toThrow("verified only for OpenCode 1.18.6");
+		).rejects.toThrow(
+			"Active studies require the verified OpenCode 2.1.4 accounting contract.",
+		);
 		await expect(
 			prepareStudyManifest(
 				{

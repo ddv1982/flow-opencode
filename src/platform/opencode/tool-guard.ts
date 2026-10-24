@@ -1,57 +1,49 @@
 import { z } from "zod";
 import { dataNote } from "../../application/flow-response.js";
 import { PlanSaveInputSchema } from "../../application/schema.js";
+import { assertMutableWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
 import type { AutoDriveCoordinator } from "./auto-drive.js";
+import type { FlowTools, FlowToolValue } from "./flow-tool.js";
 import type {
 	FlowLeadershipHandle,
 	FlowLeadershipReason,
 	FlowLeadershipStatus,
 } from "./leadership.js";
-import type { Hooks } from "./sdk.js";
 
 const MUTATION =
 	/^flow_(?:plan_save|plan_approve|plan_amend|run_start|review_start|feature_complete|feature_reset|session_close)$/;
-function acceptedMutation(tool: string, output: string) {
+const AcceptedMutation = z.object({
+	status: z.enum(["ok", "error"]),
+	workflowData: z.object({
+		operation: z.object({ replayed: z.literal(false) }),
+		projection: z.object({
+			revision: z.number().int().safe(),
+			sessionId: z.string().optional(),
+		}),
+		closeState: z.object({ durableAccepted: z.boolean() }).optional(),
+	}),
+});
+function acceptedMutation(tool: string, output: FlowToolValue) {
 	if (!MUTATION.test(tool)) return null;
-	try {
-		const response = JSON.parse(output);
-		const data = response.workflowData;
-		const closeAccepted =
-			tool === "flow_session_close" &&
-			response.status === "error" &&
-			data?.closeState?.durableAccepted === true;
-		const revision = data?.projection?.revision;
-		if (
-			data?.operation?.replayed !== false ||
-			(response.status !== "ok" && !closeAccepted) ||
-			typeof revision !== "number" ||
-			!Number.isSafeInteger(revision)
-		)
-			return null;
-		const sessionId = data.projection?.sessionId;
-		return {
-			revision,
-			sessionId: typeof sessionId === "string" ? sessionId : undefined,
-		};
-	} catch {
+	const result = AcceptedMutation.safeParse(output);
+	if (
+		!result.success ||
+		(result.data.status !== "ok" &&
+			!(
+				tool === "flow_session_close" &&
+				result.data.workflowData.closeState?.durableAccepted
+			))
+	)
 		return null;
-	}
+	return result.data.workflowData.projection;
 }
-type FlowTools = NonNullable<Hooks["tool"]>;
 const NativeSessionIdentity = z.object({
 	id: z.string().min(1),
-	directory: z.string().min(1),
+	agent: z.string().min(1),
+	location: z.object({ directory: z.string().min(1) }),
 	parentID: z.string().min(1).optional(),
 });
 
-/**
- * Tools whose successful output is markdown prose rather than a Flow response
- * envelope. A guard rejection must stay in the same shape the caller is reading,
- * so these get a markdown failure instead of a JSON blob.
- */
-const MARKDOWN_TOOLS = new Set(["flow_guidance"]);
-
-/** Actionable recovery for each non-operational leadership reason. */
 function guardRecovery(reason: FlowLeadershipReason): string {
 	switch (reason) {
 		case "duplicate-instances":
@@ -62,29 +54,30 @@ function guardRecovery(reason: FlowLeadershipReason): string {
 			return "Flow is not registered for this project. Restart OpenCode to re-register, then retry.";
 	}
 }
-
-function guardRejection(name: string, status: FlowLeadershipStatus): string {
-	const recovery = guardRecovery(status.reason);
-	if (MARKDOWN_TOOLS.has(name)) {
-		return `${status.message}\n\nRecovery: ${recovery}`;
-	}
-	// The same envelope every other Flow failure uses, so a caller told to read
-	// `workflowData.failure.recovery` finds it here too.
-	return JSON.stringify({
-		status: "error",
-		summary: status.message,
-		workflowData: {
-			dataNote: dataNote(),
-			failure: { summary: status.message, recovery },
-			runtimeGuard: status,
-		},
-	});
+function rejection(
+	name: string,
+	summary: string,
+	recovery?: string,
+	status?: FlowLeadershipStatus,
+): FlowToolValue {
+	return name === "flow_guidance"
+		? `${summary}${recovery ? `\n\nRecovery: ${recovery}` : ""}`
+		: {
+				status: "error",
+				summary,
+				workflowData: {
+					dataNote: dataNote(),
+					failure: { summary, ...(recovery ? { recovery } : {}) },
+					...(status ? { runtimeGuard: status } : {}),
+				},
+			};
 }
+const SPECIALISTS = new Set(["flow-planner", "flow-worker", "flow-reviewer"]);
 
 export function guardTools(
 	tools: FlowTools,
 	runtimeGuard: FlowLeadershipHandle,
-	autoDrive: AutoDriveCoordinator,
+	autoDrive: Pick<AutoDriveCoordinator, "clear" | "observeMutation">,
 	readSession: (sessionId: string) => Promise<unknown>,
 ): FlowTools {
 	return Object.fromEntries(
@@ -92,57 +85,70 @@ export function guardTools(
 			name,
 			{
 				...definition,
-				execute: async (...args: Parameters<typeof definition.execute>) => {
-					if (args[1].agent === "flow-planner")
-						return JSON.stringify({
-							status: "error",
-							summary:
-								"The planning specialist supplies advice only; the manager owns all Flow tools.",
-							workflowData: {},
-						});
+				execute: async (
+					input: unknown,
+					context: Parameters<typeof definition.execute>[1],
+				) => {
 					const status = runtimeGuard.query();
 					if (!status.operational) {
 						autoDrive.clear();
-						return guardRejection(name, status);
+						return rejection(
+							name,
+							status.message,
+							guardRecovery(status.reason),
+							status,
+						);
 					}
-					const managerMutation =
-						(MUTATION.test(name) && name !== "flow_feature_complete") ||
-						name === "flow_validation_start" ||
-						(name === "flow_status" && args[0].recoveryProposal !== undefined);
-					const completion = name === "flow_feature_complete";
-					if (managerMutation || completion) {
-						let permitted = false;
-						try {
-							const identity = NativeSessionIdentity.safeParse(
-								await readSession(args[1].sessionID),
-							);
-							permitted =
-								identity.success &&
-								identity.data.id === args[1].sessionID &&
-								identity.data.directory === args[1].directory &&
-								(completion
-									? identity.data.parentID === undefined
-										? args[1].agent !== "flow-reviewer"
-										: args[1].agent === "flow-reviewer"
-									: identity.data.parentID === undefined);
-						} catch {}
-						if (!permitted) {
-							const summary =
-								"Flow mutations require a verified primary manager or verified reviewer child session.";
-							return JSON.stringify({
-								status: "error",
-								summary,
-								workflowData: { dataNote: dataNote(), failure: { summary } },
-							});
+					let permitted = false;
+					try {
+						const identity = NativeSessionIdentity.parse(
+							await readSession(context.sessionID),
+						);
+						const workspace = assertMutableWorkspaceRoot(context.directory);
+						const sameIdentity =
+							identity.id === context.sessionID &&
+							identity.agent === context.agent &&
+							assertMutableWorkspaceRoot(identity.location.directory) ===
+								workspace;
+						const request =
+							input && typeof input === "object" && "recoveryProposal" in input;
+						const managerMutation =
+							MUTATION.test(name) ||
+							name === "flow_validation_start" ||
+							request;
+						if (
+							sameIdentity &&
+							context.agent !== "flow-planner" &&
+							context.agent !== "flow-worker"
+						) {
+							if (
+								name === "flow_feature_complete" &&
+								identity.parentID &&
+								context.agent === "flow-reviewer"
+							) {
+								permitted = true;
+							} else {
+								permitted = managerMutation
+									? !identity.parentID && !SPECIALISTS.has(context.agent)
+									: true;
+							}
 						}
-					}
-					const output = await definition.execute(...args);
-					const mutation = acceptedMutation(name, String(output));
-					const context = args[1];
+					} catch {}
+					if (!permitted)
+						return rejection(
+							name,
+							"Flow tools require a verified workspace session. Mutations require a primary manager or an independent reviewer child session.",
+						);
+					await context.assertCurrent?.();
+					if (context.abort.aborted)
+						throw new Error("Flow tool execution was cancelled.");
+					runtimeGuard.assertOperational("execute a Flow tool");
+					const output = await definition.execute(input, context);
+					const mutation = acceptedMutation(name, output);
 					if (mutation) {
 						const saved =
 							name === "flow_plan_save"
-								? PlanSaveInputSchema.safeParse(args[0])
+								? PlanSaveInputSchema.safeParse(input)
 								: null;
 						autoDrive.observeMutation(
 							context.sessionID,
@@ -165,5 +171,5 @@ export function guardTools(
 				},
 			},
 		]),
-	) as FlowTools;
+	);
 }

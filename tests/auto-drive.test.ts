@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { Agent } from "@opencode/plugin";
+import { CallID } from "@opencode/plugin/promise/tool";
+import { Session } from "@opencode/schema/session";
+import { SessionMessage } from "@opencode/schema/session-message";
 import type { ObservedValidation } from "../src/application/prepare-validation.js";
 import { FLOW_MANAGER_KERNEL } from "../src/guidance/catalog.js";
 import {
@@ -15,6 +19,22 @@ const DELIVERY: AutoDriveDelivery = {
 	agent: "build",
 	model: { providerID: "provider", modelID: "model" },
 };
+const WORKSPACE = process.cwd();
+const readValidationSession = async () => ({
+	id: "session-host1",
+	agent: "build",
+	location: { directory: WORKSPACE },
+});
+function shellExecution(command: string, id: string, assistant: string) {
+	return {
+		tool: "shell",
+		sessionID: Session.ID.make("session-host1"),
+		agent: Agent.ID.make("build"),
+		messageID: SessionMessage.ID.make(assistant),
+		id: CallID.make(id),
+		input: { command },
+	};
+}
 const VALIDATION_SOURCE = `sha256:${"a".repeat(64)}` as const;
 function observation(input: ObservedValidation, revision: number) {
 	return { ...input, id: input.captureId, recordedRevision: revision };
@@ -30,7 +50,7 @@ function mutate(
 	mutation?: { tool: string; goal: string; features: Array<{ kind?: string }> },
 ): void {
 	const id = `assistant-${++assistantSequence}`;
-	driver.observeHostMessage(host, { id, role: "assistant", parentID: parent });
+	driver.observeAssistant(host, id, parent);
 	driver.observeMutation(
 		host,
 		revision,
@@ -46,32 +66,10 @@ function compact(
 	authority: string,
 	successor: string,
 ): void {
-	const trigger = `assistant-${++assistantSequence}`;
-	const user = `compaction-${assistantSequence}`;
-	driver.observeHostMessage(host, {
-		id: trigger,
-		role: "assistant",
-		parentID: authority,
-	});
-	driver.observeHostPart(host, {
-		type: "compaction",
-		messageID: user,
-		auto: true,
-	});
-	driver.observeHostMessage(host, {
-		id: `summary-${assistantSequence}`,
-		role: "assistant",
-		parentID: user,
-		summary: true,
-	});
-	driver.observeHostMessage(host, { id: successor, role: "user" });
-	driver.observeHostPart(host, {
-		type: "text",
-		messageID: successor,
-		synthetic: true,
-		metadata: { compaction_continue: true },
-	});
-	driver.observeCompaction(host);
+	const epoch = driver.captureAuthority(host);
+	if (!epoch)
+		throw new Error("Missing accepted authority in compaction fixture.");
+	driver.observeCompaction(host, epoch, authority, successor);
 }
 
 function harness(initial: AutoDriveProjection) {
@@ -101,7 +99,7 @@ function harness(initial: AutoDriveProjection) {
 		prompts,
 		warnings,
 		async activate(
-			sessionID = "host-1",
+			sessionID = "session-host1",
 			delivery = DELIVERY,
 			messageId = "command-message",
 			goal = "",
@@ -166,16 +164,16 @@ describe("Flow auto-drive coordinator", () => {
 			...DELIVERY,
 			model: { ...DELIVERY.model, variant: "high" },
 		});
-		await state.activate("host-1", delivery);
-		compact(state.driver, "host-1", "command-message", "compacted-user");
+		await state.activate("session-host1", delivery);
+		compact(state.driver, "session-host1", "command-message", "compacted-user");
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "ready",
 			revision: 12,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 12, undefined, "compacted-user");
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 12, undefined, "compacted-user");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts.map((prompt) => prompt.delivery)).toEqual([delivery]);
 	});
 
@@ -186,10 +184,10 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 4,
 			nextAction: "flow_plan_approve",
 		});
-		await state.activate("host-1", { ...DELIVERY, variant: "high" });
-		await state.driver.onIdle("host-1");
+		await state.activate("session-host1", { ...DELIVERY, variant: "high" });
+		await state.driver.onIdle("session-host1");
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			autoDriveDelivery(DELIVERY),
 			[{ synthetic: false }],
 			"reply",
@@ -200,8 +198,8 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 5, undefined, "reply");
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 5, undefined, "reply");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts.map((prompt) => prompt.delivery)).toEqual([DELIVERY]);
 	});
 
@@ -219,10 +217,10 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 12,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 12);
+		mutate(state.driver, "session-host1", 12);
 		state.setNow(25);
 
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]).toMatchObject({
 			delivery: DELIVERY,
@@ -235,10 +233,10 @@ describe("Flow auto-drive coordinator", () => {
 		);
 		expect(state.prompts[0]?.text).toContain("replay archiveRetry exactly");
 
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.warnings.at(-1)).toContain("made no lifecycle progress");
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 		state.setNow(1_000);
 		expect(state.driver.timingSnapshot()).toMatchObject({
 			state: "paused",
@@ -247,51 +245,17 @@ describe("Flow auto-drive coordinator", () => {
 		});
 	});
 
-	test("reports continuation support before anything depends on it", async () => {
-		// The preflight half of the same problem. The warning above arrives after the
-		// first continuation has already failed; this is what lets `/flow-auto` say so
-		// at the start, and it has three states because the negative needs evidence:
-		// no assistant message yet is not a host that cannot do it.
-		const state = harness({
-			sessionId: "flow-1",
-			status: "ready",
-			revision: 11,
-			nextAction: "flow_run_start",
-		});
-		expect(state.driver.continuationSupport()).toBe("unknown");
-		state.driver.observeHostMessage("host-1", {
-			id: "assistant-parentless",
-			role: "assistant",
-		});
-		expect(state.driver.continuationSupport()).toBe("unsupported");
-		// One parented assistant message settles it: the host does report parentage,
-		// and an earlier message without one says nothing about the capability.
-		state.driver.observeHostMessage("host-1", {
-			id: "assistant-parented",
-			role: "assistant",
-			parentID: "command-message",
-		});
-		expect(state.driver.continuationSupport()).toBe("supported");
+	test("reports the required v2 request attribution capability", () => {
+		expect(
+			harness({
+				status: "idle",
+				revision: 0,
+				nextAction: null,
+			}).driver.continuationSupport(),
+		).toBe("supported");
 	});
 
-	test("keeps a user message out of the parentage signal", () => {
-		// User messages carry no `parentID` and never did; counting them would report
-		// every host as incapable.
-		const state = harness({
-			sessionId: "flow-1",
-			status: "ready",
-			revision: 1,
-			nextAction: "flow_run_start",
-		});
-		state.driver.observeHostMessage("host-1", { id: "user-1", role: "user" });
-		expect(state.driver.continuationSupport()).toBe("unknown");
-	});
-
-	test("names a host that reports no assistant message parentage", async () => {
-		// Continuation anchors on the assistant message that owns the lease, so a
-		// host emitting no `parentID` can never continue. It must fail closed, but
-		// the warning has to say the host cannot support it: otherwise stopping
-		// after every feature is indistinguishable from a Flow defect.
+	test("rejects a mutation without verified execution origin", async () => {
 		const state = harness({
 			sessionId: "flow-1",
 			status: "ready",
@@ -299,16 +263,20 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		});
 		await state.activate();
-		state.driver.observeMutation("host-1", 12, undefined, "assistant-x", false);
-
-		await state.driver.onIdle("host-1");
-		expect(state.prompts).toHaveLength(0);
-		expect(state.warnings.at(-1)).toContain(
-			"reports no assistant message parentage",
+		state.driver.observeMutation(
+			"session-host1",
+			12,
+			undefined,
+			"assistant-x",
+			false,
 		);
-		expect(state.warnings.at(-1)).toContain("/flow-run");
 
-		// A host that does report parentage keeps the precise diagnosis.
+		await state.driver.onIdle("session-host1");
+		expect(state.prompts).toHaveLength(0);
+		expect(state.warnings.at(-1)).toBe(
+			"Flow: mutation origin was unavailable.",
+		);
+
 		const capable = harness({
 			sessionId: "flow-1",
 			status: "ready",
@@ -316,9 +284,9 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		});
 		await capable.activate();
-		mutate(capable.driver, "host-1", 12);
+		mutate(capable.driver, "session-host1", 12);
 		capable.driver.observeMutation(
-			"host-1",
+			"session-host1",
 			13,
 			undefined,
 			"assistant-unknown",
@@ -338,7 +306,7 @@ describe("Flow auto-drive coordinator", () => {
 		});
 		await state.activate();
 		state.setNow(10);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		state.setNow(21_600_010);
 		expect(state.driver.timingSnapshot()).toMatchObject({
@@ -353,7 +321,7 @@ describe("Flow auto-drive coordinator", () => {
 			model: { providerID: "provider", modelID: "new-model" },
 		};
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			resumedDelivery,
 			[{ synthetic: false }],
 			"checkpoint-reply",
@@ -364,9 +332,9 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 21,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 21, undefined, "checkpoint-reply");
+		mutate(state.driver, "session-host1", 21, undefined, "checkpoint-reply");
 		state.setNow(21_600_015);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(2);
 		expect(state.prompts[1]?.delivery).toEqual(resumedDelivery);
@@ -386,14 +354,14 @@ describe("Flow auto-drive coordinator", () => {
 				nextAction: "await-user-direction",
 			});
 			await state.activate();
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			if (status === "blocked") {
 				expect(state.prompts[0]?.text).toContain(
 					"Report workflowData.statusReport verbatim before stopping at await-user-direction.",
 				);
 				expect(state.prompts[0]?.text).toContain("detail view once");
 			}
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(status === "blocked" ? 1 : 0);
 			expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
 		});
@@ -407,22 +375,22 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "await-user-direction",
 		});
 		await state.activate();
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		const clarificationDelivery: AutoDriveDelivery = {
 			agent: "build-clarification",
 			model: { providerID: "provider", modelID: "clarification-model" },
 		};
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			clarificationDelivery,
 			[{ synthetic: false }],
 			"clarification-reply",
 		);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 		expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
 
 		const recommendationDelivery: AutoDriveDelivery = {
@@ -430,15 +398,15 @@ describe("Flow auto-drive coordinator", () => {
 			model: { providerID: "provider", modelID: "recommendation-model" },
 		};
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			recommendationDelivery,
 			[{ synthetic: false }],
 			"recommendation-reply",
 		);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 		expect(state.driver.timingSnapshot()?.state).toBe("waiting-for-user");
 
 		const approvalDelivery: AutoDriveDelivery = {
@@ -446,7 +414,7 @@ describe("Flow auto-drive coordinator", () => {
 			model: { providerID: "provider", modelID: "approved-model" },
 		};
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			approvalDelivery,
 			[{ synthetic: false }],
 			"approval-reply",
@@ -457,9 +425,9 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 21,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 21, undefined, "approval-reply");
-		await state.driver.onIdle("host-1");
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 21, undefined, "approval-reply");
+		await state.driver.onIdle("session-host1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(2);
 		expect(state.prompts[1]?.delivery).toEqual(approvalDelivery);
@@ -473,24 +441,24 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_plan_approve",
 		});
 		await state.activate();
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "ready",
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 5);
+		mutate(state.driver, "session-host1", 5);
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"late-reply",
 		);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("keeps initial command authority when its turn advances a checkpoint", async () => {
@@ -507,11 +475,11 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 5);
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 5);
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("rejects unowned checkpoint progress before the first idle", async () => {
@@ -521,17 +489,17 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 4,
 			nextAction: "flow_plan_approve",
 		});
-		await state.activate("host-1", DELIVERY, "command-message");
+		await state.activate("session-host1", DELIVERY, "command-message");
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "ready",
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("allows temporal progress only for an already-pending reviewer", async () => {
@@ -541,14 +509,14 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 4,
 			nextAction: "dispatch-flow-reviewer",
 		});
-		await state.activate("host-1", DELIVERY, "command-message");
+		await state.activate("session-host1", DELIVERY, "command-message");
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "ready",
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
 	});
@@ -564,10 +532,10 @@ describe("Flow auto-drive coordinator", () => {
 				revision: 4,
 				nextAction: "flow_plan_approve",
 			});
-			await state.activate("host-1", DELIVERY, "command-message");
-			await state.driver.onIdle("host-1");
+			await state.activate("session-host1", DELIVERY, "command-message");
+			await state.driver.onIdle("session-host1");
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ text: "Explain the tradeoff before proceeding." }],
 				"checkpoint-reply",
@@ -578,11 +546,11 @@ describe("Flow auto-drive coordinator", () => {
 				revision: 5,
 				nextAction: "flow_run_start",
 			});
-			mutate(state.driver, "host-1", 5, undefined, parentMessage);
-			await state.driver.onIdle("host-1");
+			mutate(state.driver, "session-host1", 5, undefined, parentMessage);
+			await state.driver.onIdle("session-host1");
 
 			expect(state.prompts).toHaveLength(expectedPrompts);
-			expect(state.driver.compactionContext("host-1") !== null).toBe(
+			expect(state.driver.compactionContext("session-host1") !== null).toBe(
 				expectedPrompts === 1,
 			);
 		}
@@ -595,17 +563,17 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 4,
 			nextAction: "flow_plan_approve",
 		});
-		await state.activate("host-1", DELIVERY, "command-message");
-		await state.driver.onIdle("host-1");
+		await state.activate("session-host1", DELIVERY, "command-message");
+		await state.driver.onIdle("session-host1");
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Approve after compaction." }],
 			"checkpoint-reply",
 		);
 		compact(
 			state.driver,
-			"host-1",
+			"session-host1",
 			"checkpoint-reply",
 			"compaction-continuation",
 		);
@@ -615,8 +583,14 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 5, undefined, "compaction-continuation");
-		await state.driver.onIdle("host-1");
+		mutate(
+			state.driver,
+			"session-host1",
+			5,
+			undefined,
+			"compaction-continuation",
+		);
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
 	});
@@ -628,17 +602,17 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 4,
 			nextAction: "flow_plan_approve",
 		});
-		await state.activate("host-1", DELIVERY, "command-message");
-		await state.driver.onIdle("host-1");
+		await state.activate("session-host1", DELIVERY, "command-message");
+		await state.driver.onIdle("session-host1");
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Approve after compaction." }],
 			"checkpoint-reply",
 		);
 		compact(
 			state.driver,
-			"host-1",
+			"session-host1",
 			"checkpoint-reply",
 			"compaction-continuation",
 		);
@@ -648,11 +622,11 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 5, undefined, "checkpoint-reply");
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 5, undefined, "checkpoint-reply");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("rejects compaction triggered by an assistant from older authority", async () => {
@@ -662,237 +636,26 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 4,
 			nextAction: "flow_plan_approve",
 		});
-		await state.activate("host-1", DELIVERY, "command-message");
-		await state.driver.onIdle("host-1");
+		await state.activate("session-host1", DELIVERY, "command-message");
+		await state.driver.onIdle("session-host1");
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "This is the current checkpoint reply." }],
 			"checkpoint-reply",
 		);
-		compact(state.driver, "host-1", "older-message", "compaction-continuation");
+		compact(
+			state.driver,
+			"session-host1",
+			"older-message",
+			"compaction-continuation",
+		);
 
 		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 		expect(state.warnings.at(-1)).toContain(
 			"compaction origin was unavailable",
 		);
-	});
-
-	test("rejects manual or unclassified compaction markers", async () => {
-		for (const auto of [false, undefined]) {
-			const state = harness({
-				sessionId: "flow-1",
-				status: "planning",
-				revision: 4,
-				nextAction: "flow_plan_approve",
-			});
-			await state.activate("host-1", DELIVERY, "command-message");
-			await state.driver.onIdle("host-1");
-			await state.driver.observeMessage(
-				"host-1",
-				DELIVERY,
-				[{ text: "Approve after compaction." }],
-				"checkpoint-reply",
-			);
-			const trigger = `assistant-${++assistantSequence}`;
-			const compaction = `compaction-${assistantSequence}`;
-			state.driver.observeHostMessage("host-1", {
-				id: trigger,
-				role: "assistant",
-				parentID: "checkpoint-reply",
-			});
-			state.driver.observeHostPart(
-				"host-1",
-				auto === undefined
-					? { type: "compaction", messageID: compaction }
-					: { type: "compaction", messageID: compaction, auto },
-			);
-			state.driver.observeHostMessage("host-1", {
-				id: `summary-${assistantSequence}`,
-				role: "assistant",
-				parentID: compaction,
-				summary: true,
-			});
-			state.driver.observeHostMessage("host-1", {
-				id: "compaction-continuation",
-				role: "user",
-			});
-			state.driver.observeCompaction("host-1");
-
-			expect(state.prompts).toHaveLength(0);
-			expect(state.driver.compactionContext("host-1")).toBeNull();
-			expect(state.warnings.at(-1)).toContain(
-				"compaction origin was unavailable",
-			);
-		}
-	});
-
-	test("rejects a compaction summary with the wrong parent", async () => {
-		const state = harness({
-			sessionId: "flow-1",
-			status: "planning",
-			revision: 4,
-			nextAction: "flow_plan_approve",
-		});
-		await state.activate("host-1", DELIVERY, "command-message");
-		await state.driver.onIdle("host-1");
-		await state.driver.observeMessage(
-			"host-1",
-			DELIVERY,
-			[{ text: "Approve after compaction." }],
-			"checkpoint-reply",
-		);
-		const trigger = `assistant-${++assistantSequence}`;
-		const compaction = `compaction-${assistantSequence}`;
-		state.driver.observeHostMessage("host-1", {
-			id: trigger,
-			role: "assistant",
-			parentID: "checkpoint-reply",
-		});
-		state.driver.observeHostPart("host-1", {
-			type: "compaction",
-			messageID: compaction,
-			auto: true,
-		});
-		state.driver.observeHostMessage("host-1", {
-			id: `summary-${assistantSequence}`,
-			role: "assistant",
-			parentID: "wrong-compaction-message",
-			summary: true,
-		});
-		state.driver.observeHostMessage("host-1", {
-			id: "compaction-continuation",
-			role: "user",
-		});
-		state.driver.observeHostPart("host-1", {
-			type: "text",
-			messageID: "compaction-continuation",
-			synthetic: true,
-			metadata: { compaction_continue: true },
-		});
-		state.driver.observeCompaction("host-1");
-
-		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
-		expect(state.warnings.at(-1)).toContain(
-			"compaction origin was unavailable",
-		);
-	});
-
-	test("rejects compaction with a missing or non-adjacent successor", async () => {
-		for (const successor of ["missing", "non-adjacent"] as const) {
-			const state = harness({
-				sessionId: "flow-1",
-				status: "planning",
-				revision: 4,
-				nextAction: "flow_plan_approve",
-			});
-			await state.activate("host-1", DELIVERY, "command-message");
-			await state.driver.onIdle("host-1");
-			await state.driver.observeMessage(
-				"host-1",
-				DELIVERY,
-				[{ text: "Approve after compaction." }],
-				"checkpoint-reply",
-			);
-			const trigger = `assistant-${++assistantSequence}`;
-			const compaction = `compaction-${assistantSequence}`;
-			state.driver.observeHostMessage("host-1", {
-				id: trigger,
-				role: "assistant",
-				parentID: "checkpoint-reply",
-			});
-			state.driver.observeHostPart("host-1", {
-				type: "compaction",
-				messageID: compaction,
-				auto: true,
-			});
-			state.driver.observeHostMessage("host-1", {
-				id: `summary-${assistantSequence}`,
-				role: "assistant",
-				parentID: compaction,
-				summary: true,
-			});
-			if (successor === "non-adjacent") {
-				state.driver.observeHostMessage("host-1", {
-					id: `intervening-${assistantSequence}`,
-					role: "assistant",
-					parentID: "unrelated-message",
-				});
-				state.driver.observeHostMessage("host-1", {
-					id: "compaction-continuation",
-					role: "user",
-				});
-			}
-			state.driver.observeCompaction("host-1");
-
-			expect(state.prompts).toHaveLength(0);
-			expect(state.driver.compactionContext("host-1")).toBeNull();
-			expect(state.warnings.at(-1)).toContain(
-				"compaction origin was unavailable",
-			);
-		}
-	});
-
-	test("ignores an unrelated compacted notification without consuming a candidate", async () => {
-		const state = harness({
-			sessionId: "flow-1",
-			status: "planning",
-			revision: 4,
-			nextAction: "flow_plan_approve",
-		});
-		await state.activate("host-1", DELIVERY, "command-message");
-		await state.driver.onIdle("host-1");
-		await state.driver.observeMessage(
-			"host-1",
-			DELIVERY,
-			[{ text: "Approve after compaction." }],
-			"checkpoint-reply",
-		);
-		const trigger = `assistant-${++assistantSequence}`;
-		const compaction = `compaction-${assistantSequence}`;
-		state.driver.observeHostMessage("host-1", {
-			id: trigger,
-			role: "assistant",
-			parentID: "checkpoint-reply",
-		});
-		state.driver.observeHostPart("host-1", {
-			type: "compaction",
-			messageID: compaction,
-			auto: true,
-		});
-		state.driver.observeHostMessage("host-1", {
-			id: `summary-${assistantSequence}`,
-			role: "assistant",
-			parentID: compaction,
-			summary: true,
-		});
-		state.driver.observeHostMessage("host-1", {
-			id: "compaction-continuation",
-			role: "user",
-		});
-		state.driver.observeHostPart("host-1", {
-			type: "text",
-			messageID: "compaction-continuation",
-			synthetic: true,
-			metadata: { compaction_continue: true },
-		});
-
-		state.driver.observeCompaction("host-2");
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
-
-		state.driver.observeCompaction("host-1");
-		state.setProjection({
-			sessionId: "flow-1",
-			status: "ready",
-			revision: 5,
-			nextAction: "flow_run_start",
-		});
-		mutate(state.driver, "host-1", 5, undefined, "compaction-continuation");
-		await state.driver.onIdle("host-1");
-
-		expect(state.prompts).toHaveLength(1);
 	});
 
 	test("accepts a baseline checkpoint reply before the first idle", async () => {
@@ -908,7 +671,7 @@ describe("Flow auto-drive coordinator", () => {
 			model: { providerID: "provider", modelID: "approved-model" },
 		};
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			replyDelivery,
 			[{ synthetic: false }],
 			"baseline-reply",
@@ -920,13 +683,13 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 5, undefined, "baseline-reply");
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 5, undefined, "baseline-reply");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts.map(({ delivery }) => delivery)).toEqual([
 			replyDelivery,
 		]);
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("does not carry a reply across a newer checkpoint", async () => {
@@ -937,7 +700,7 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_plan_approve",
 		});
 		await state.activate();
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "blocked",
@@ -945,7 +708,7 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "await-user-direction",
 		});
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"new-checkpoint-reply",
@@ -958,21 +721,21 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 7,
 			nextAction: "flow_run_start",
 		});
-		mutate(state.driver, "host-1", 7, undefined, "new-checkpoint-reply");
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 7, undefined, "new-checkpoint-reply");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]?.text).toContain("findingsDigest");
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("requires an accepted mutation from the checkpoint replying host", async () => {
 		for (const [mutationHost, mutationRevision, projectedRevision, prompts] of [
 			["host-2", 5, 5, 0],
-			["host-1", 4, 5, 0],
-			["host-1", 6, 5, 0],
-			["host-1", 5, 5, 1],
-			["host-1", 5, 6, 0],
+			["session-host1", 4, 5, 0],
+			["session-host1", 6, 5, 0],
+			["session-host1", 5, 5, 1],
+			["session-host1", 5, 6, 0],
 		] as const) {
 			const state = harness({
 				sessionId: "flow-1",
@@ -981,9 +744,9 @@ describe("Flow auto-drive coordinator", () => {
 				nextAction: "flow_plan_approve",
 			});
 			await state.activate();
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ synthetic: false }],
 				"checkpoint-reply",
@@ -1001,10 +764,10 @@ describe("Flow auto-drive coordinator", () => {
 				revision: projectedRevision,
 				nextAction: "flow_run_start",
 			});
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 
 			expect(state.prompts).toHaveLength(prompts);
-			expect(state.driver.compactionContext("host-1") !== null).toBe(
+			expect(state.driver.compactionContext("session-host1") !== null).toBe(
 				prompts === 1,
 			);
 		}
@@ -1022,24 +785,31 @@ describe("Flow auto-drive coordinator", () => {
 				nextAction: "flow_plan_approve",
 			});
 			await state.activate();
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ synthetic: false }],
 				"checkpoint-reply",
 			);
-			mutate(state.driver, "host-1", 5, undefined, "checkpoint-reply", true);
+			mutate(
+				state.driver,
+				"session-host1",
+				5,
+				undefined,
+				"checkpoint-reply",
+				true,
+			);
 			state.setProjection({
 				sessionId: "flow-1",
 				status: "ready",
 				revision: projectedRevision,
 				nextAction: "flow_run_start",
 			});
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 
 			expect(state.prompts).toHaveLength(prompts);
-			expect(state.driver.compactionContext("host-1") !== null).toBe(
+			expect(state.driver.compactionContext("session-host1") !== null).toBe(
 				prompts === 1,
 			);
 		}
@@ -1060,7 +830,7 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_validation_start",
 		});
 		state.setNow(8);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		state.setNow(1_000);
 		expect(state.driver.timingSnapshot()).toMatchObject({
 			state: "inactive",
@@ -1146,8 +916,8 @@ describe("Flow auto-drive coordinator", () => {
 			await state.activate();
 			state.setProjection(projection);
 			if (shouldPrompt && projection.status !== "idle")
-				mutate(state.driver, "host-1", projection.revision);
-			await state.driver.onIdle("host-1");
+				mutate(state.driver, "session-host1", projection.revision);
+			await state.driver.onIdle("session-host1");
 			const handback =
 				projection.status === "blocked" ||
 				projection.nextAction === "flow_feature_reset" ||
@@ -1164,16 +934,16 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_feature_reset",
 		});
 		await state.activate();
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]?.text).toContain("findingsDigest");
 		expect(state.prompts[0]?.text).toContain("flow_feature_reset");
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 
 		const afterLifecycle = harness({
 			status: "idle",
@@ -1187,15 +957,15 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 2,
 			nextAction: "flow_run_start",
 		});
-		mutate(afterLifecycle.driver, "host-1", 2, "flow-1");
-		await afterLifecycle.driver.onIdle("host-1");
+		mutate(afterLifecycle.driver, "session-host1", 2, "flow-1");
+		await afterLifecycle.driver.onIdle("session-host1");
 		expect(afterLifecycle.prompts).toHaveLength(1);
 		afterLifecycle.setProjection({
 			status: "idle",
 			revision: 0,
 			nextAction: "flow_plan_save",
 		});
-		await afterLifecycle.driver.onIdle("host-1");
+		await afterLifecycle.driver.onIdle("session-host1");
 		expect(afterLifecycle.prompts).toHaveLength(1);
 	});
 
@@ -1207,11 +977,11 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "dispatch-flow-reviewer",
 		});
 		await state.activate();
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]?.text).toContain("findingsDigest");
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 	});
 
@@ -1223,14 +993,14 @@ describe("Flow auto-drive coordinator", () => {
 		});
 		await state.activate();
 
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]?.text).toContain("flow_plan_save");
 
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
-		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
+		expect(state.driver.continuationSnapshot("session-host1")).toMatchObject({
 			state: "inactive",
 			reason: "no-progress",
 		});
@@ -1244,9 +1014,9 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		});
 		await unchanged.activate();
-		await unchanged.driver.onIdle("host-1");
+		await unchanged.driver.onIdle("session-host1");
 		expect(unchanged.prompts).toHaveLength(0);
-		expect(unchanged.driver.compactionContext("host-1")).toBeNull();
+		expect(unchanged.driver.compactionContext("session-host1")).toBeNull();
 
 		const created = harness({
 			status: "idle",
@@ -1260,8 +1030,8 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 2,
 			nextAction: "flow_run_start",
 		});
-		mutate(created.driver, "host-1", 2, "flow-new");
-		await created.driver.onIdle("host-1");
+		mutate(created.driver, "session-host1", 2, "flow-new");
+		await created.driver.onIdle("session-host1");
 		expect(created.prompts).toHaveLength(1);
 
 		const rebound = harness({
@@ -1270,17 +1040,17 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_plan_save",
 		});
 		await rebound.activate();
-		mutate(rebound.driver, "host-1", 1, "flow-first");
-		mutate(rebound.driver, "host-1", 1, "flow-replacement");
+		mutate(rebound.driver, "session-host1", 1, "flow-first");
+		mutate(rebound.driver, "session-host1", 1, "flow-replacement");
 		rebound.setProjection({
 			sessionId: "flow-replacement",
 			status: "ready",
 			revision: 2,
 			nextAction: "flow_run_start",
 		});
-		await rebound.driver.onIdle("host-1");
+		await rebound.driver.onIdle("session-host1");
 		expect(rebound.prompts).toHaveLength(0);
-		expect(rebound.driver.compactionContext("host-1")).toBeNull();
+		expect(rebound.driver.compactionContext("session-host1")).toBeNull();
 
 		const foreignCreated = harness({
 			status: "idle",
@@ -1295,10 +1065,10 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		});
 		mutate(foreignCreated.driver, "host-2", 1, "flow-foreign");
-		mutate(foreignCreated.driver, "host-1", 2);
-		await foreignCreated.driver.onIdle("host-1");
+		mutate(foreignCreated.driver, "session-host1", 2);
+		await foreignCreated.driver.onIdle("session-host1");
 		expect(foreignCreated.prompts).toHaveLength(0);
-		expect(foreignCreated.driver.compactionContext("host-1")).toBeNull();
+		expect(foreignCreated.driver.compactionContext("session-host1")).toBeNull();
 
 		const replaced = harness({
 			sessionId: "flow-old",
@@ -1313,8 +1083,8 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 2,
 			nextAction: "flow_run_start",
 		});
-		await replaced.driver.onIdle("host-1");
-		expect(replaced.driver.compactionContext("host-1")).toBeNull();
+		await replaced.driver.onIdle("session-host1");
+		expect(replaced.driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("preserves a fast reply only when the pending read finds a checkpoint", async () => {
@@ -1342,28 +1112,28 @@ describe("Flow auto-drive coordinator", () => {
 			},
 			createToken: () => "token",
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
 
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		const replyDelivery = {
 			agent: "resumed",
 			model: { providerID: "provider", modelID: "new-model" },
 		};
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			replyDelivery,
 			[{ synthetic: false }],
 			"checkpoint-reply",
 		);
 		resolvePending?.(projection);
 		await idle;
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 
 		projection = {
 			sessionId: "flow-1",
@@ -1371,8 +1141,8 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		};
-		mutate(driver, "host-1", 5, undefined, "checkpoint-reply");
-		await driver.onIdle("host-1");
+		mutate(driver, "session-host1", 5, undefined, "checkpoint-reply");
+		await driver.onIdle("session-host1");
 		expect(prompts).toEqual([replyDelivery]);
 	});
 
@@ -1406,25 +1176,25 @@ describe("Flow auto-drive coordinator", () => {
 				return Promise.resolve();
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 		const replyDelivery: AutoDriveDelivery = {
 			agent: "resumed",
 			model: { providerID: "provider", modelID: "new-model" },
 		};
 		const reply = driver.observeMessage(
-			"host-1",
+			"session-host1",
 			replyDelivery,
 			[{ synthetic: false }],
 			"checkpoint-reply",
 		);
-		const queuedIdle = driver.onIdle("host-1");
+		const queuedIdle = driver.onIdle("session-host1");
 
 		expect(reads).toBe(3);
 		await queuedIdle;
@@ -1438,13 +1208,13 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		};
-		mutate(driver, "host-1", 5, undefined, "checkpoint-reply");
-		const finalIdle = driver.onIdle("host-1");
+		mutate(driver, "session-host1", 5, undefined, "checkpoint-reply");
+		const finalIdle = driver.onIdle("session-host1");
 		resolveQueued?.(projection);
 		await finalIdle;
 
 		expect(prompts).toEqual([replyDelivery]);
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("replays a post-reply idle when an older status read is in flight", async () => {
@@ -1466,29 +1236,29 @@ describe("Flow auto-drive coordinator", () => {
 			},
 			prompt: () => Promise.resolve(),
 		});
-		await driver.activate("host-1");
-		const olderIdle = driver.onIdle("host-1");
+		await driver.activate("session-host1");
+		const olderIdle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
 		);
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 		resolvePending?.(checkpoint);
 		await olderIdle;
 
 		expect(reads).toBe(3);
 		expect(driver.timingSnapshot()?.state).toBe("waiting-for-user");
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"second-reply",
 		);
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("preserves mutation authority through a stale pending checkpoint read", async () => {
@@ -1517,21 +1287,21 @@ describe("Flow auto-drive coordinator", () => {
 			},
 			createToken: () => "token",
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
 
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		const replyDelivery: AutoDriveDelivery = {
 			agent: "resumed",
 			model: { providerID: "provider", modelID: "new-model" },
 		};
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			replyDelivery,
 			[{ synthetic: false }],
 			"checkpoint-reply",
@@ -1542,15 +1312,15 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 6,
 			nextAction: "flow_run_start",
 		};
-		mutate(driver, "host-1", 6, undefined, "checkpoint-reply");
+		mutate(driver, "session-host1", 6, undefined, "checkpoint-reply");
 		resolvePending?.(staleCheckpoint);
 		await idle;
 
 		expect(prompts).toEqual([]);
-		expect(driver.compactionContext("host-1")).not.toBeNull();
-		await driver.onIdle("host-1");
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
+		await driver.onIdle("session-host1");
 		expect(prompts).toEqual([replyDelivery]);
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("preserves mutation authority when a pending read sees the mechanical result", async () => {
@@ -1576,17 +1346,17 @@ describe("Flow auto-drive coordinator", () => {
 				return Promise.resolve();
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
 
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
@@ -1597,14 +1367,14 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		};
-		mutate(driver, "host-1", 5, undefined, "checkpoint-reply");
-		const finalIdle = driver.onIdle("host-1");
+		mutate(driver, "session-host1", 5, undefined, "checkpoint-reply");
+		const finalIdle = driver.onIdle("session-host1");
 		await finalIdle;
 		resolvePending?.(projection);
 		await idle;
 
 		expect(prompts).toEqual([DELIVERY]);
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("re-arms a newer checkpoint without stale mutation authority", async () => {
@@ -1630,21 +1400,21 @@ describe("Flow auto-drive coordinator", () => {
 				return Promise.resolve();
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
 		);
-		mutate(driver, "host-1", 5, undefined, "checkpoint-reply");
+		mutate(driver, "session-host1", 5, undefined, "checkpoint-reply");
 		resolvePending?.({
 			...projection,
 			revision: 6,
@@ -1659,10 +1429,10 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 7,
 			nextAction: "flow_run_start",
 		};
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 
 		expect(prompts).toHaveLength(0);
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("does not reuse an old baseline checkpoint for later interruptions", async () => {
@@ -1688,16 +1458,16 @@ describe("Flow auto-drive coordinator", () => {
 				return Promise.resolve();
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
@@ -1708,25 +1478,25 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "flow_run_start",
 		};
-		mutate(driver, "host-1", 5, undefined, "checkpoint-reply");
-		await driver.onIdle("host-1");
+		mutate(driver, "session-host1", 5, undefined, "checkpoint-reply");
+		await driver.onIdle("session-host1");
 		expect(prompts).toHaveLength(1);
 
-		const laterIdle = driver.onIdle("host-1");
+		const laterIdle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Change direction." }],
 			"interrupting-message",
 		);
 		projection = { ...projection, revision: 6 };
-		mutate(driver, "host-1", 6, undefined, "interrupting-message");
+		mutate(driver, "session-host1", 6, undefined, "interrupting-message");
 		resolvePending?.(projection);
 		await laterIdle;
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 
 		expect(prompts).toHaveLength(1);
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("a second user message interrupts a post-checkpoint status read", async () => {
@@ -1753,16 +1523,16 @@ describe("Flow auto-drive coordinator", () => {
 				return Promise.resolve();
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
@@ -1774,9 +1544,9 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		};
 
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			{
 				agent: "interrupting",
 				model: { providerID: "provider", modelID: "interrupting-model" },
@@ -1788,7 +1558,7 @@ describe("Flow auto-drive coordinator", () => {
 		await idle;
 
 		expect(prompts).toEqual([]);
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("a second user message interrupts the checkpoint reply read", async () => {
@@ -1810,23 +1580,23 @@ describe("Flow auto-drive coordinator", () => {
 			},
 			prompt: () => Promise.resolve(),
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 
 		const first = driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
 		);
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Use a different approach." }],
 			"interrupting-message",
@@ -1834,7 +1604,7 @@ describe("Flow auto-drive coordinator", () => {
 		resolveReply?.(projection);
 		await first;
 
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("a second message interrupts an already-pending checkpoint reply", async () => {
@@ -1861,24 +1631,24 @@ describe("Flow auto-drive coordinator", () => {
 				return Promise.resolve();
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
 		);
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"checkpoint-reply",
 		);
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			{
 				agent: "interrupting",
 				model: { providerID: "provider", modelID: "interrupting-model" },
@@ -1896,7 +1666,7 @@ describe("Flow auto-drive coordinator", () => {
 		await idle;
 
 		expect(prompts).toEqual([]);
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("explicit flow-auto stop and cancel deactivate at the same revision", async () => {
@@ -1914,16 +1684,16 @@ describe("Flow auto-drive coordinator", () => {
 				nextAction: "flow_plan_approve",
 			});
 			const metadata = await state.activate();
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ text }, { synthetic: true, metadata }],
 				"stop-message",
 			);
 
 			expect(state.prompts).toEqual([]);
-			expect(state.driver.compactionContext("host-1")).toBeNull();
+			expect(state.driver.compactionContext("session-host1")).toBeNull();
 		}
 
 		const qualified = harness({
@@ -1933,9 +1703,9 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_plan_approve",
 		});
 		await qualified.activate();
-		await qualified.driver.onIdle("host-1");
+		await qualified.driver.onIdle("session-host1");
 		await qualified.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[
 				{ text: "Stop /flow-auto" },
@@ -1943,7 +1713,7 @@ describe("Flow auto-drive coordinator", () => {
 			],
 			"qualified-stop-message",
 		);
-		expect(qualified.driver.compactionContext("host-1")).not.toBeNull();
+		expect(qualified.driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("a real user message interrupts, including during a status read", async () => {
@@ -1972,9 +1742,9 @@ describe("Flow auto-drive coordinator", () => {
 			},
 			createToken: () => "token",
 		});
-		await driver.activate("host-1");
+		await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[
 				{
@@ -1985,9 +1755,9 @@ describe("Flow auto-drive coordinator", () => {
 			"command-message",
 		);
 
-		const idle = driver.onIdle("host-1");
+		const idle = driver.onIdle("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"interrupting-message",
@@ -2001,7 +1771,7 @@ describe("Flow auto-drive coordinator", () => {
 		await idle;
 
 		expect(prompts).toHaveLength(0);
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("a user interruption during prompt enqueue cannot answer a future checkpoint", async () => {
@@ -2027,9 +1797,9 @@ describe("Flow auto-drive coordinator", () => {
 				});
 			},
 		});
-		const metadata = await driver.activate("host-1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"command-message",
@@ -2040,11 +1810,11 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 2,
 			nextAction: "flow_run_start",
 		};
-		mutate(driver, "host-1", 2);
-		const idle = driver.onIdle("host-1");
+		mutate(driver, "session-host1", 2);
+		const idle = driver.onIdle("session-host1");
 		await promptStarted;
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: false }],
 			"interrupting-message",
@@ -2057,10 +1827,10 @@ describe("Flow auto-drive coordinator", () => {
 		};
 		resolvePrompt?.();
 		await idle;
-		await driver.onIdle("host-1");
+		await driver.onIdle("session-host1");
 
 		expect(promptCount).toBe(1);
-		expect(driver.compactionContext("host-1")).toBeNull();
+		expect(driver.compactionContext("session-host1")).toBeNull();
 	});
 
 	test("an old rejected read cannot clear a newer same-host lease", async () => {
@@ -2084,11 +1854,11 @@ describe("Flow auto-drive coordinator", () => {
 			prompt: () => Promise.resolve(),
 			createToken: () => `token-${reads}`,
 		});
-		await driver.activate("host-1");
-		const oldIdle = driver.onIdle("host-1");
-		const metadata = await driver.activate("host-1");
+		await driver.activate("session-host1");
+		const oldIdle = driver.onIdle("session-host1");
+		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"replacement-command",
@@ -2096,7 +1866,7 @@ describe("Flow auto-drive coordinator", () => {
 		rejectOld?.(new Error("old status failure"));
 		await oldIdle;
 
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("overlapping baseline reads cannot revive an older activation", async () => {
@@ -2118,10 +1888,10 @@ describe("Flow auto-drive coordinator", () => {
 			},
 			prompt: () => Promise.resolve(),
 		});
-		const first = driver.activate("host-1");
-		const second = await driver.activate("host-1");
+		const first = driver.activate("session-host1");
+		const second = await driver.activate("session-host1");
 		await driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata: second }],
 			"second-command",
@@ -2134,7 +1904,7 @@ describe("Flow auto-drive coordinator", () => {
 		});
 
 		await expect(first).rejects.toThrow("superseded");
-		expect(driver.compactionContext("host-1")).not.toBeNull();
+		expect(driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("rejects stale internal messages and preserves a live lease through compaction", async () => {
@@ -2144,21 +1914,21 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		});
 		await state.activate();
-		expect(state.driver.compactionContext("host-1")).toContain(
+		expect(state.driver.compactionContext("session-host1")).toContain(
 			"/flow-auto continuation",
 		);
-		expect(state.driver.compactionContext("host-1")).toContain(
+		expect(state.driver.compactionContext("session-host1")).toContain(
 			FLOW_MANAGER_KERNEL,
 		);
-		expect(state.driver.compactionContext("host-1")).toContain(
+		expect(state.driver.compactionContext("session-host1")).toContain(
 			"Load flow-run guidance before any feature or closure route",
 		);
-		expect(state.driver.compactionContext("host-1")).toContain(
+		expect(state.driver.compactionContext("session-host1")).toContain(
 			"replay archiveRetry exactly",
 		);
 		expect(
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[
 					{
@@ -2169,7 +1939,7 @@ describe("Flow auto-drive coordinator", () => {
 				"stale-continuation",
 			),
 		).toBe("stale-continuation");
-		expect(state.driver.compactionContext("host-1")).not.toBeNull();
+		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
 	});
 
 	test("fails closed on replacement state and status or prompt errors", async () => {
@@ -2186,15 +1956,15 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 1,
 			nextAction: "flow_run_start",
 		});
-		await changed.driver.onIdle("host-1");
+		await changed.driver.onIdle("session-host1");
 		changed.setProjection({
 			sessionId: "flow-2",
 			status: "ready",
 			revision: 2,
 			nextAction: "flow_run_start",
 		});
-		await changed.driver.onIdle("host-1");
-		expect(changed.driver.compactionContext("host-1")).toBeNull();
+		await changed.driver.onIdle("session-host1");
+		expect(changed.driver.compactionContext("session-host1")).toBeNull();
 
 		for (const failure of ["status", "prompt"] as const) {
 			let reads = 0;
@@ -2211,9 +1981,9 @@ describe("Flow auto-drive coordinator", () => {
 				prompt: () => Promise.reject(new Error("unavailable")),
 				createToken: () => failure,
 			});
-			await driver.activate("host-1");
+			await driver.activate("session-host1");
 			await driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[
 					{
@@ -2223,8 +1993,8 @@ describe("Flow auto-drive coordinator", () => {
 				],
 				`${failure}-command`,
 			);
-			await driver.onIdle("host-1");
-			expect(driver.compactionContext("host-1")).toBeNull();
+			await driver.onIdle("session-host1");
+			expect(driver.compactionContext("session-host1")).toBeNull();
 		}
 	});
 
@@ -2242,8 +2012,8 @@ describe("Flow auto-drive coordinator", () => {
 			revision: 5,
 			nextAction: "await-user-direction",
 		});
-		expect(await replaced.driver.resumeForCommand("host-1")).toBeNull();
-		expect(replaced.driver.compactionContext("host-1")).toBeNull();
+		expect(await replaced.driver.resumeForCommand("session-host1")).toBeNull();
+		expect(replaced.driver.compactionContext("session-host1")).toBeNull();
 
 		const interrupted = harness({
 			sessionId: "flow-1",
@@ -2253,19 +2023,21 @@ describe("Flow auto-drive coordinator", () => {
 		});
 		await interrupted.activate();
 		await interrupted.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Answer the blocker" }],
 			"first-reply",
 		);
 		await interrupted.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Start a different task" }],
 			"unrelated-turn",
 		);
-		expect(await interrupted.driver.resumeForCommand("host-1")).toBeNull();
-		expect(interrupted.driver.compactionContext("host-1")).toBeNull();
+		expect(
+			await interrupted.driver.resumeForCommand("session-host1"),
+		).toBeNull();
+		expect(interrupted.driver.compactionContext("session-host1")).toBeNull();
 
 		const dropped = harness({
 			sessionId: "flow-1",
@@ -2274,14 +2046,16 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_run_start",
 		});
 		await dropped.activate();
-		expect(await dropped.driver.resumeForCommand("host-1")).not.toBeNull();
+		expect(
+			await dropped.driver.resumeForCommand("session-host1"),
+		).not.toBeNull();
 		await dropped.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Unrelated task after the command was dropped" }],
 			"unrelated-after-drop",
 		);
-		expect(dropped.driver.compactionContext("host-1")).toBeNull();
+		expect(dropped.driver.compactionContext("session-host1")).toBeNull();
 	});
 });
 
@@ -2302,12 +2076,9 @@ describe("authenticated validation continuation", () => {
 			runId?: string;
 		}> = {},
 	) {
-		driver.observeHostMessage("host-1", {
-			id: "validation-manager",
-			role: "assistant",
-			parentID: parent,
-		});
-		const value = driver.validationOrigin("host-1", "validation-manager", {
+		const assistant = `msg_validation${++assistantSequence}`;
+		driver.observeAssistant("session-host1", assistant, parent);
+		const value = driver.validationOrigin("session-host1", assistant, {
 			featureId: "feature",
 			runId: declaration.runId ?? "run-1",
 			sourceDigest: VALIDATION_SOURCE,
@@ -2329,8 +2100,8 @@ describe("authenticated validation continuation", () => {
 		});
 		await state.activate();
 		state.setProjection(running);
-		mutate(state.driver, "host-1", 3);
-		await state.driver.onIdle("host-1");
+		mutate(state.driver, "session-host1", 3);
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		for (const [index, command, scope, nextAction] of [
 			[0, "bun test focused", "focused", "flow_validation_start"],
@@ -2338,21 +2109,26 @@ describe("authenticated validation continuation", () => {
 		] as const) {
 			const messageId = `validation-turn-${index}`;
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ synthetic: true, metadata: state.prompts[index]?.metadata ?? {} }],
 				messageId,
 			);
 			const capture = new ValidationCaptureCoordinator({
+				readSession: readValidationSession,
 				persistObservation: async (_workspace, input) => {
 					state.setProjection({ ...running, revision: 4 + index, nextAction });
 					return observation(input, 4 + index);
 				},
 				onRecorded: (receipt) => state.driver.observeValidation(receipt),
 			});
+			const validationOrigin = origin(state.driver, messageId, {
+				command,
+				scope,
+			});
 			capture.arm(
-				"host-1",
-				"/workspace",
+				"session-host1",
+				WORKSPACE,
 				{
 					featureId: "feature",
 					runId: "run-1",
@@ -2364,58 +2140,56 @@ describe("authenticated validation continuation", () => {
 					assertions: [],
 					resultsPath: undefined,
 				},
-				origin(state.driver, messageId, { command, scope }),
+				validationOrigin,
 			);
-			await capture.observeToolBefore(
-				{ tool: "bash", sessionID: "host-1", callID: command },
-				{ args: { command } },
+			const execution = shellExecution(
+				command,
+				command,
+				validationOrigin.assistantId,
 			);
-			await capture.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: "host-1",
-					callID: command,
-					args: { command },
-				},
-				{
-					title: "validation",
-					output: "passed",
+			await capture.observeToolBefore(execution);
+			await capture.observeToolAfter({
+				...execution,
+				status: "completed",
+				result: {
+					content: [{ type: "text", text: "passed" }],
+					output: { exit: 0, truncated: false },
 					metadata: { exit: 0, truncated: false },
 				},
-			);
-			await state.driver.onIdle("host-1");
+			});
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(index + 2);
 		}
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata: state.prompts[2]?.metadata ?? {} }],
 			"review-turn",
 		);
-		mutate(state.driver, "host-1", 6, undefined, "review-turn", true);
+		mutate(state.driver, "session-host1", 6, undefined, "review-turn", true);
 		state.setProjection({
 			...running,
 			revision: 7,
 			status: "completed",
 			nextAction: "flow_session_close",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(4);
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata: state.prompts[3]?.metadata ?? {} }],
 			"close-turn",
 		);
-		mutate(state.driver, "host-1", 8, undefined, "close-turn");
+		mutate(state.driver, "session-host1", 8, undefined, "close-turn");
 		state.setProjection({
 			status: "idle",
 			revision: 0,
 			nextAction: "flow_plan_save",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(4);
-		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+		expect(state.driver.continuationSnapshot("session-host1")).toMatchObject({
 			state: "inactive",
 			reason: "completed",
 		});
@@ -2449,16 +2223,18 @@ describe("authenticated validation continuation", () => {
 				},
 			});
 			state.setProjection({ ...running, revision: 4, nextAction });
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(
 				nextAction === "flow_review_start" ? 1 : 0,
 			);
 			if (nextAction === "flow_validation_start") {
-				expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+				expect(
+					state.driver.continuationSnapshot("session-host1"),
+				).toMatchObject({
 					state: "paused",
 					reason: "validation-failed",
 				});
-				await state.driver.onIdle("host-1");
+				await state.driver.onIdle("session-host1");
 				expect(state.prompts).toHaveLength(0);
 			}
 		}
@@ -2489,9 +2265,9 @@ describe("authenticated validation continuation", () => {
 			},
 		});
 		state.setProjection({ ...running, revision: 4 });
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 	});
 
@@ -2524,7 +2300,7 @@ describe("authenticated validation continuation", () => {
 				observation: { ...observation, ...tamper },
 			});
 			state.setProjection({ ...running, revision: 4 });
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(0);
 		}
 	});
@@ -2574,54 +2350,54 @@ describe("authenticated validation continuation", () => {
 		});
 		failed("gate-1", 4, "command-message");
 		state.setProjection(projection("gate-1", 4));
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		expect(state.prompts[0]?.text).toContain("flow_plan_amend");
 		expect(state.prompts[0]?.text).toContain(
 			"Preserve test discovery, assertions, and acceptance criteria; never exclude or skip existing tests.",
 		);
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata: state.prompts[0]?.metadata ?? {} }],
 			"repair-turn",
 		);
 		failed("gate-2", 5, "repair-turn");
 		state.setProjection(projection("gate-2", 5));
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		await state.activate();
-		mutate(state.driver, "host-1", 6);
+		mutate(state.driver, "session-host1", 6);
 		failed("reset-gate", 7, "command-message", "run-2");
 		state.setProjection(projection("reset-gate", 7, "initial", "run-2"));
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
-		mutate(state.driver, "host-1", 8);
+		mutate(state.driver, "session-host1", 8);
 		failed("gate-3", 9, "command-message", "run-2");
 		state.setProjection(
 			projection("gate-3", 9, "accepted-amendment-1", "run-2"),
 		);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(2);
 		for (let index = 2; index <= 5; index++) {
 			const parent = `repair-turn-${index}`;
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ synthetic: true, metadata: state.prompts.at(-1)?.metadata ?? {} }],
 				parent,
 			);
 			const revision = 8 + index * 2;
-			mutate(state.driver, "host-1", revision, undefined, parent);
+			mutate(state.driver, "session-host1", revision, undefined, parent);
 			const id = `gate-after-amendment-${index}`;
 			failed(id, revision + 1, parent, "run-2");
 			state.setProjection(
 				projection(id, revision + 1, `accepted-amendment-${index}`, "run-2"),
 			);
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(index + 1);
 		}
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(6);
 	});
 
@@ -2636,13 +2412,18 @@ describe("authenticated validation continuation", () => {
 			const state = harness(running);
 			await state.activate();
 			const binding = origin(state.driver);
-			if (change === "stop") state.driver.deactivate("host-1");
+			if (change === "stop") state.driver.deactivate("session-host1");
 			if (change === "compaction")
-				compact(state.driver, "host-1", "command-message", "compacted-user");
+				compact(
+					state.driver,
+					"session-host1",
+					"command-message",
+					"compacted-user",
+				);
 			if (change === "new-invocation") await state.activate();
 			if (change === "user-interruption") {
 				await state.driver.observeMessage(
-					"host-1",
+					"session-host1",
 					DELIVERY,
 					[{ text: "Pause and answer this question" }],
 					"new-user-message",
@@ -2673,20 +2454,16 @@ describe("authenticated validation continuation", () => {
 					? { sessionId: "replacement" }
 					: {}),
 			});
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(0);
 		}
 	});
 	test("rejects wrong-parent origins and duplicate or source-stale receipts", async () => {
 		const state = harness(running);
 		await state.activate();
-		state.driver.observeHostMessage("host-1", {
-			id: "old-assistant",
-			role: "assistant",
-			parentID: "old-user",
-		});
+		state.driver.observeAssistant("session-host1", "old-assistant", "old-user");
 		expect(
-			state.driver.validationOrigin("host-1", "old-assistant", {
+			state.driver.validationOrigin("session-host1", "old-assistant", {
 				featureId: "feature",
 				runId: "run-1",
 				sourceDigest: VALIDATION_SOURCE,
@@ -2718,10 +2495,10 @@ describe("authenticated validation continuation", () => {
 		};
 		state.driver.observeValidation(receipt);
 		state.setProjection({ ...running, revision: 4 });
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		state.driver.observeValidation(receipt);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		const stale = harness(running);
 		await stale.activate();
@@ -2735,9 +2512,9 @@ describe("authenticated validation continuation", () => {
 			revision: 4,
 			nextAction: "flow_review_start",
 		});
-		await stale.driver.onIdle("host-1");
+		await stale.driver.onIdle("session-host1");
 		expect(stale.prompts).toHaveLength(0);
-		expect(stale.driver.continuationSnapshot("host-1")).toMatchObject({
+		expect(stale.driver.continuationSnapshot("session-host1")).toMatchObject({
 			state: "paused",
 			reason: "validation-ineligible",
 		});
@@ -2770,9 +2547,9 @@ describe("authenticated validation continuation", () => {
 			nextAction: "flow_review_start",
 		});
 		state.setSource(`sha256:${"b".repeat(64)}`);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+		expect(state.driver.continuationSnapshot("session-host1")).toMatchObject({
 			state: "paused",
 			reason: "validation-ineligible",
 		});
@@ -2787,13 +2564,13 @@ describe("authenticated validation continuation", () => {
 		] as const) {
 			const state = harness(running);
 			await state.activate();
-			state.driver.observeHostMessage("host-1", {
-				id: "assertion-manager",
-				role: "assistant",
-				parentID: "command-message",
-			});
+			state.driver.observeAssistant(
+				"session-host1",
+				"assertion-manager",
+				"command-message",
+			);
 			const binding = state.driver.validationOrigin(
-				"host-1",
+				"session-host1",
 				"assertion-manager",
 				{
 					featureId: "feature",
@@ -2829,10 +2606,12 @@ describe("authenticated validation continuation", () => {
 				},
 			});
 			state.setProjection({ ...running, revision: 4 });
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(status === "passed" ? 1 : 0);
 			if (status !== "passed")
-				expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+				expect(
+					state.driver.continuationSnapshot("session-host1"),
+				).toMatchObject({
 					state: "paused",
 					reason: "validation-ineligible",
 				});
@@ -2850,13 +2629,13 @@ describe("authenticated validation continuation", () => {
 		] as const) {
 			const state = harness(running);
 			await state.activate();
-			state.driver.observeHostMessage("host-1", {
-				id: "named-gate-manager",
-				role: "assistant",
-				parentID: "command-message",
-			});
+			state.driver.observeAssistant(
+				"session-host1",
+				"named-gate-manager",
+				"command-message",
+			);
 			const binding = state.driver.validationOrigin(
-				"host-1",
+				"session-host1",
 				"named-gate-manager",
 				{
 					featureId: "feature",
@@ -2909,11 +2688,11 @@ describe("authenticated validation continuation", () => {
 				},
 			});
 			if (gap === "live-source") state.setSource(`sha256:${"b".repeat(64)}`);
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(gap === null ? 1 : 0);
 			if (gap === null)
 				expect(state.prompts[0]?.text).toContain("flow_plan_amend");
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(state.prompts).toHaveLength(gap === null ? 1 : 0);
 		}
 	});
@@ -2921,17 +2700,24 @@ describe("authenticated validation continuation", () => {
 		const state = harness(running);
 		await state.activate();
 		let persist!: () => void;
+		let persisted!: () => void;
+		const persistenceStarted = new Promise<void>((resolve) => {
+			persisted = resolve;
+		});
 		const capture = new ValidationCaptureCoordinator({
+			readSession: readValidationSession,
 			persistObservation: (_workspace, input) =>
 				new Promise((resolve) => {
 					persist = () => resolve(observation(input, 4));
+					persisted();
 				}),
 			onRecorded: (receipt) => state.driver.observeValidation(receipt),
 		});
 		const command = "bun test";
+		const validationOrigin = origin(state.driver);
 		capture.arm(
-			"host-1",
-			"/workspace",
+			"session-host1",
+			WORKSPACE,
 			{
 				featureId: "feature",
 				runId: "run-1",
@@ -2943,29 +2729,31 @@ describe("authenticated validation continuation", () => {
 				assertions: [],
 				resultsPath: undefined,
 			},
-			origin(state.driver),
+			validationOrigin,
 		);
-		await capture.observeToolBefore(
-			{ tool: "bash", sessionID: "host-1", callID: "check" },
-			{ args: { command } },
+		const execution = shellExecution(
+			command,
+			"check",
+			validationOrigin.assistantId,
 		);
-		const output = {
-			title: "check",
-			output: "passed",
-			metadata: { exit: 0, truncated: false },
-		};
-		const completing = capture.observeToolAfter(
-			{ tool: "bash", sessionID: "host-1", callID: "check", args: { command } },
-			output,
-		);
-		await Promise.resolve();
-		state.driver.deactivate("host-1", "cancelled");
+		await capture.observeToolBefore(execution);
+		const completing = capture.observeToolAfter({
+			...execution,
+			status: "completed",
+			result: {
+				content: [{ type: "text", text: "passed" }],
+				output: { exit: 0, truncated: false },
+				metadata: { exit: 0, truncated: false },
+			},
+		});
+		await persistenceStarted;
+		state.driver.deactivate("session-host1", "cancelled");
 		persist();
 		expect((await completing)?.recordedRevision).toBe(4);
 		state.setProjection({ ...running, revision: 4 });
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(0);
-		expect(state.driver.continuationSnapshot("host-1")).toMatchObject({
+		expect(state.driver.continuationSnapshot("session-host1")).toMatchObject({
 			state: "inactive",
 			reason: "cancelled",
 		});
@@ -2986,24 +2774,32 @@ describe("own inspection draft approval", () => {
 				nextAction: "flow_plan_save",
 			});
 			await state.activate(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				"command-message",
 				"Review codebase",
 				{ newlyAnchoredSessionId: anchored, intent: "inspection-deliverable" },
 			);
-			mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
-				tool: "flow_plan_save",
-				goal: "Review codebase",
-				features: [{ kind: "inspect" }],
-			});
+			mutate(
+				state.driver,
+				"session-host1",
+				1,
+				"flow-1",
+				"command-message",
+				false,
+				{
+					tool: "flow_plan_save",
+					goal: "Review codebase",
+					features: [{ kind: "inspect" }],
+				},
+			);
 			state.setProjection({
 				sessionId: "flow-1",
 				status: "planning",
 				revision: 1,
 				nextAction: "flow_plan_approve",
 			});
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(
 				state.prompts.some((prompt) =>
 					prompt.text.includes("Approve this one draft"),
@@ -3019,24 +2815,32 @@ describe("own inspection draft approval", () => {
 				nextAction: "flow_plan_save",
 			});
 			await state.activate(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				"command-message",
 				"Just draft a Flow plan for inspection",
 				options,
 			);
-			mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
-				tool: "flow_plan_save",
-				goal: "Just draft a Flow plan for inspection",
-				features: [{ kind: "inspect" }],
-			});
+			mutate(
+				state.driver,
+				"session-host1",
+				1,
+				"flow-1",
+				"command-message",
+				false,
+				{
+					tool: "flow_plan_save",
+					goal: "Just draft a Flow plan for inspection",
+					features: [{ kind: "inspect" }],
+				},
+			);
 			state.setProjection({
 				sessionId: "flow-1",
 				status: "planning",
 				revision: 1,
 				nextAction: "flow_plan_approve",
 			});
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(
 				state.prompts.some((prompt) =>
 					prompt.text.includes("Approve this one draft"),
@@ -3051,43 +2855,51 @@ describe("own inspection draft approval", () => {
 			nextAction: "flow_plan_save",
 		});
 		await state.activate(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			"command-message",
 			"Review codebase",
 			{ intent: "inspection-deliverable" },
 		);
-		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
-			tool: "flow_plan_save",
-			goal: "Review codebase",
-			features: [{ kind: "inspect" }],
-		});
+		mutate(
+			state.driver,
+			"session-host1",
+			1,
+			"flow-1",
+			"command-message",
+			false,
+			{
+				tool: "flow_plan_save",
+				goal: "Review codebase",
+				features: [{ kind: "inspect" }],
+			},
+		);
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "planning",
 			revision: 1,
 			nextAction: "flow_plan_approve",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts.at(-1)?.text).toContain("Approve this one draft");
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
 		const metadata = state.prompts[0]?.metadata;
 		if (!metadata) throw new Error("Expected approval prompt.");
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ synthetic: true, metadata }],
 			"approval-message",
 		);
-		mutate(state.driver, "host-1", 2, undefined, "approval-message");
+		mutate(state.driver, "session-host1", 2, undefined, "approval-message");
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "ready",
 			revision: 2,
 			nextAction: "flow_run_start",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(state.prompts.at(-1)?.text).toContain(
 			"Continue the same user-authorized /flow-auto lifecycle",
 		);
@@ -3111,28 +2923,36 @@ describe("own inspection draft approval", () => {
 					: { status: "idle", revision: 0, nextAction: "flow_plan_save" },
 			);
 			await state.activate(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				"command-message",
 				"Review codebase",
 				{ intent: "inspection-deliverable" },
 			);
 			if (!existing)
-				mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
-					tool: "flow_plan_save",
-					goal:
-						variant === "paraphrase"
-							? "Review the codebase"
-							: "Review codebase",
-					features: [{ kind: variant === "change" ? "change" : "inspect" }],
-				});
+				mutate(
+					state.driver,
+					"session-host1",
+					1,
+					"flow-1",
+					"command-message",
+					false,
+					{
+						tool: "flow_plan_save",
+						goal:
+							variant === "paraphrase"
+								? "Review the codebase"
+								: "Review codebase",
+						features: [{ kind: variant === "change" ? "change" : "inspect" }],
+					},
+				);
 			state.setProjection({
 				sessionId: "flow-1",
 				status: "planning",
 				revision: variant === "revised" ? 2 : 1,
 				nextAction: "flow_plan_approve",
 			});
-			await state.driver.onIdle("host-1");
+			await state.driver.onIdle("session-host1");
 			expect(
 				state.prompts.some((prompt) =>
 					prompt.text.includes("Approve this one draft"),
@@ -3147,17 +2967,25 @@ describe("own inspection draft approval", () => {
 			nextAction: "flow_plan_save",
 		});
 		await state.activate(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			"command-message",
 			"Review codebase",
 			{ intent: "inspection-deliverable" },
 		);
-		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
-			tool: "flow_plan_save",
-			goal: "Review codebase",
-			features: [{ kind: "inspect" }],
-		});
+		mutate(
+			state.driver,
+			"session-host1",
+			1,
+			"flow-1",
+			"command-message",
+			false,
+			{
+				tool: "flow_plan_save",
+				goal: "Review codebase",
+				features: [{ kind: "inspect" }],
+			},
+		);
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "planning",
@@ -3165,12 +2993,12 @@ describe("own inspection draft approval", () => {
 			nextAction: "flow_plan_approve",
 		});
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Change the plan." }],
 			"interruption",
 		);
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		expect(
 			state.prompts.some((prompt) =>
 				prompt.text.includes("Approve this one draft"),
@@ -3184,36 +3012,44 @@ describe("own inspection draft approval", () => {
 			nextAction: "flow_plan_save",
 		});
 		await state.activate(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			"command-message",
 			"Review codebase",
 			{ intent: "inspection-deliverable" },
 		);
-		mutate(state.driver, "host-1", 1, "flow-1", "command-message", false, {
-			tool: "flow_plan_save",
-			goal: "Review codebase",
-			features: [{ kind: "inspect" }],
-		});
+		mutate(
+			state.driver,
+			"session-host1",
+			1,
+			"flow-1",
+			"command-message",
+			false,
+			{
+				tool: "flow_plan_save",
+				goal: "Review codebase",
+				features: [{ kind: "inspect" }],
+			},
+		);
 		state.setProjection({
 			sessionId: "flow-1",
 			status: "planning",
 			revision: 1,
 			nextAction: "flow_plan_approve",
 		});
-		await state.driver.onIdle("host-1");
+		await state.driver.onIdle("session-host1");
 		const metadata = state.prompts.at(-1)?.metadata;
 		if (!metadata) throw new Error("Expected approval prompt.");
 		await state.driver.observeMessage(
-			"host-1",
+			"session-host1",
 			DELIVERY,
 			[{ text: "Change the plan." }],
 			"user-interruption",
 		);
-		expect(state.driver.compactionContext("host-1")).toBeNull();
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 		expect(
 			await state.driver.observeMessage(
-				"host-1",
+				"session-host1",
 				DELIVERY,
 				[{ synthetic: true, metadata }],
 				"late-approval",
@@ -3221,156 +3057,3 @@ describe("own inspection draft approval", () => {
 		).toBe("stale-continuation");
 	});
 });
-
-test("native historical user summary updates cannot replace the compaction successor", async () => {
-	const state = harness({
-		sessionId: "flow-1",
-		status: "planning",
-		revision: 4,
-		nextAction: "flow_plan_approve",
-	});
-	await state.activate();
-	await state.driver.observeMessage(
-		"host-1",
-		DELIVERY,
-		[{ text: "Approve the existing plan." }],
-		"checkpoint-reply",
-	);
-	state.driver.observeHostMessage("host-1", {
-		id: "manager-before-compaction",
-		role: "assistant",
-		parentID: "checkpoint-reply",
-	});
-	state.driver.observeHostPart("host-1", {
-		type: "compaction",
-		messageID: "native-compaction",
-		auto: true,
-	});
-	const summary = {
-		id: "native-summary",
-		role: "assistant",
-		parentID: "native-compaction",
-		summary: true,
-	};
-	state.driver.observeHostMessage("host-1", summary);
-	state.driver.observeHostMessage("host-1", {
-		id: "command-message",
-		role: "user",
-		summary: { diffs: [] },
-	});
-	state.driver.observeHostMessage("host-1", summary);
-	state.driver.observeHostMessage("host-1", summary);
-	state.driver.observeHostMessage("host-1", {
-		id: "native-successor",
-		role: "user",
-	});
-	const continuation = {
-		type: "text",
-		messageID: "native-successor",
-		synthetic: true,
-		metadata: { compaction_continue: true },
-	};
-	state.driver.observeHostMessage("host-1", {
-		id: "command-message",
-		role: "user",
-		summary: { diffs: [] },
-	});
-	state.driver.observeHostPart("host-1", continuation);
-	state.driver.observeHostPart("host-1", continuation);
-	state.driver.observeHostMessage("host-1", summary);
-	state.driver.observeHostMessage("host-1", {
-		id: "command-message",
-		role: "user",
-		summary: { diffs: [] },
-	});
-	state.driver.observeHostPart("host-1", {
-		type: "compaction",
-		messageID: "native-compaction",
-		auto: true,
-	});
-	state.driver.observeCompaction("host-1");
-	expect(state.driver.compactionContext("host-1")).not.toBeNull();
-	state.setProjection({
-		sessionId: "flow-1",
-		status: "ready",
-		revision: 5,
-		nextAction: "flow_run_start",
-	});
-	mutate(state.driver, "host-1", 5, undefined, "native-successor");
-	await state.driver.onIdle("host-1");
-	expect(state.prompts).toHaveLength(1);
-});
-
-test.each([
-	{ label: "missing marker", marker: null },
-	{ label: "manual marker", marker: { synthetic: false } },
-	{ label: "unclassified marker", marker: { synthetic: undefined } },
-	{ label: "unknown native user", marker: { messageID: "unknown-user" } },
-	{ label: "wrong part type", marker: { type: "tool" } },
-	{
-		label: "false marker",
-		marker: { metadata: { compaction_continue: false } },
-	},
-	{
-		label: "string marker",
-		marker: { metadata: { compaction_continue: "true" } },
-	},
-	{ label: "wrong host", marker: {}, host: "host-2" },
-	{ label: "marker before summary", marker: {}, early: true },
-	{ label: "replaced authority", marker: {}, freshDirection: true },
-])(
-	"rejects compaction continuation with $label",
-	async ({ marker, host, early, freshDirection }) => {
-		const state = harness({
-			sessionId: "flow-1",
-			status: "planning",
-			revision: 4,
-			nextAction: "flow_plan_approve",
-		});
-		await state.activate();
-		state.driver.observeHostMessage("host-1", {
-			id: "manager",
-			role: "assistant",
-			parentID: "command-message",
-		});
-		state.driver.observeHostPart("host-1", {
-			type: "compaction",
-			messageID: "compaction",
-			auto: true,
-		});
-		const part = {
-			type: "text",
-			messageID: "successor",
-			synthetic: true,
-			metadata: { compaction_continue: true },
-			...marker,
-		};
-		const { synthetic, ...unclassified } = part;
-		const nativePart =
-			synthetic === undefined ? unclassified : { ...unclassified, synthetic };
-		if (early) state.driver.observeHostPart("host-1", nativePart);
-		state.driver.observeHostMessage("host-1", {
-			id: "summary",
-			role: "assistant",
-			parentID: "compaction",
-			summary: true,
-		});
-		state.driver.observeHostMessage("host-1", {
-			id: "successor",
-			role: "user",
-		});
-		if (freshDirection)
-			await state.driver.observeMessage(
-				"host-1",
-				DELIVERY,
-				[{ text: "Continue from my new direction." }],
-				"new-user",
-			);
-		if (marker) state.driver.observeHostPart(host ?? "host-1", nativePart);
-		state.driver.observeCompaction("host-1");
-		expect(state.driver.compactionContext("host-1")).toBeNull();
-		expect(state.warnings.at(-1)).toContain(
-			"compaction origin was unavailable",
-		);
-	},
-);

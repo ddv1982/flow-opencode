@@ -1,13 +1,26 @@
 import { expect, spyOn, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+	SessionInterruptResponse,
+	SessionMessageInfo,
+} from "@opencode/client";
 import { CampaignCancelled } from "../evals/campaign-stop.js";
 import {
-	EvalHost,
-	postSessionJson,
-	runSessionRequest,
-} from "../evals/harness.js";
+	fixtureModel,
+	messagePage,
+	nativeAssistant,
+	nativeClient,
+	nativeHost,
+	nativeSession,
+	nativeTool,
+	sessionPage,
+	sessionReply,
+	useNativeFixtureBudget,
+} from "./fixtures/native-eval-client.js";
+
+useNativeFixtureBudget();
 
 type Mode =
 	| "owned-progress"
@@ -35,18 +48,14 @@ type Mode =
 
 async function observeWait(mode: Mode) {
 	const project = await mkdtemp(join(tmpdir(), "flow-progress-wait-"));
+	const outside = join(project, "..", `${project.split("/").at(-1)}-outside`);
+	await mkdir(outside);
 	const controller = new AbortController();
 	const cancelled = new CampaignCancelled(143);
-	const requestTimeout = new DOMException(
+	const transportTimeout = new DOMException(
 		"Child HTTP request timed out",
 		"TimeoutError",
 	);
-	const host = Reflect.construct(EvalHost, [
-		project,
-		project,
-		controller.signal,
-	]) as EvalHost;
-	Object.assign(host, { baseUrl: "http://progress-fixture" });
 	let now = 0;
 	let aborts = 0;
 	let childReads = 0;
@@ -93,42 +102,42 @@ async function observeWait(mode: Mode) {
 			now += 40_000;
 		slept = true;
 	});
-	const childMetadata = {
-		id: "ses_child",
-		parentID: mode === "wrong-parent" ? "ses_unrelated" : "ses_root",
-		directory: mode === "wrong-directory" ? `${project}-unrelated` : project,
-		agent: "flow-reviewer",
-	};
-	const rootMessages = () => [
+	const root = nativeSession("ses_root", project);
+	const child = nativeSession(
+		"ses_child",
+		mode === "wrong-directory" ? outside : project,
 		{
-			info: {
-				id: "msg_root",
-				sessionID: "ses_root",
-				role: "assistant",
-				agent: "build",
-				time: {
-					created: 1,
-					...(finishes && now >= finishesAt ? { completed: finishesAt } : {}),
-				},
-			},
-			parts: [
-				{
-					id: "prt_task",
-					messageID: "msg_root",
-					sessionID: "ses_root",
-					type: "tool",
-					tool: "task",
-					callID: "call_task",
-					state: {
-						status: finishes && now >= finishesAt ? "completed" : "running",
-						input: { subagent_type: "flow-reviewer" },
-						time: { start: 1 },
-					},
-				},
-			],
+			parentID: mode === "wrong-parent" ? "ses_unrelated" : "ses_root",
+			agent: "flow-reviewer",
 		},
-	];
-	const childMessages = () =>
+	);
+	const rootMessages = (): SessionMessageInfo[] => {
+		const done = finishes && now >= finishesAt;
+		return [
+			nativeAssistant("msg_root", {
+				time: { created: 1, ...(done ? { completed: finishesAt } : {}) },
+				content: [
+					nativeTool(
+						"call_task",
+						"task",
+						done
+							? {
+									status: "completed",
+									input: { subagent_type: "flow-reviewer" },
+									content: [{ type: "text", text: "review complete" }],
+								}
+							: {
+									status: "running",
+									input: { subagent_type: "flow-reviewer" },
+									metadata: {},
+								},
+						{ created: 1, ...(done ? { completed: finishesAt } : {}) },
+					),
+				],
+			}),
+		];
+	};
+	const childMessages = (): SessionMessageInfo[] =>
 		Array.from(
 			{
 				length:
@@ -137,163 +146,157 @@ async function observeWait(mode: Mode) {
 						: Math.floor(Math.min(now, finishes ? finishesAt : now) / 16_000) +
 							1,
 			},
-			(_, index) => ({
-				info: {
-					id: `msg_child_${index}`,
-					sessionID: "ses_child",
-					role: "assistant",
+			(_, index) =>
+				nativeAssistant(`msg_child_${index}`, {
 					agent: "flow-reviewer",
 					time: { created: index * 16_000, completed: index * 16_000 + 1 },
-				},
-				parts: [
-					{
-						id: `prt_read_${index}`,
-						messageID: `msg_child_${index}`,
-						sessionID: "ses_child",
-						type: "tool",
-						tool: "read",
-						callID: `call_read_${index}`,
-						state: {
-							status: "completed",
-							input: { filePath: "src/index.ts" },
-							output:
-								mode === "in-place-progress"
-									? `source page updated at ${now}`
-									: `source page ${index}`,
-						},
-					},
-				],
-			}),
-		);
-	const transport = spyOn(globalThis, "fetch").mockImplementation(
-		Object.assign(
-			async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-				const path = new URL(String(input)).pathname;
-				visits.push(path);
-				if (path.endsWith("/abort")) {
-					aborts++;
-					return Response.json(true);
-				}
-				if (path === "/session/ses_root/command") return Response.json({});
-				if (path === "/session/ses_root/message") {
-					if (mode === "clock-boundary" && now >= 60_000 && !clockBoundary) {
-						now = 59_999;
-						clockBoundary = true;
-					}
-					return Response.json(rootMessages());
-				}
-				if (path === "/session/ses_root")
-					return Response.json({ id: "ses_root", directory: project });
-				if (
-					path === "/session/ses_root/children" &&
-					mode === "async-deadline" &&
-					now >= 60_000
-				) {
-					const signal = init?.signal;
-					if (!signal) throw new Error("Missing observer cancellation signal");
-					return new Promise<Response>((_, reject) => {
-						if (signal.aborted) reject(signal.reason);
-						else
-							signal.addEventListener("abort", () => reject(signal.reason), {
-								once: true,
-							});
-					});
-				}
-				if (
-					path === "/session/ses_root/children" &&
-					mode === "malformed-endpoint"
-				)
-					return Response.json({ unavailable: true });
-				if (path === "/session/ses_root/children")
-					return Response.json(
-						mode === "tree-limit"
-							? Array.from({ length: 128 }, (_, index) => ({
-									...childMetadata,
-									id: `ses_child_${index}`,
-								}))
-							: mode === "duplicate-children"
-								? [childMetadata, childMetadata]
-								: mode === "malformed-children"
-									? [null, {}, { ...childMetadata, id: 42 }]
-									: [childMetadata],
-					);
-				if (path === "/session/ses_child") return Response.json(childMetadata);
-				if (
-					path === "/session/ses_child/children" &&
-					mode === "cyclic-children"
-				)
-					return Response.json([
-						{ id: "ses_root", parentID: "ses_child", directory: project },
-					]);
-				if (
-					path === "/session/ses_child/children" ||
-					/\/session\/ses_child_\d+\/children/.test(path)
-				)
-					return Response.json([]);
-				if (path === "/session/ses_child/message") {
-					childReads++;
-					if (mode === "request-timeout") throw requestTimeout;
-					if (
-						(mode === "deadline-suspend" || mode === "cancel-suspend") &&
-						childReads === 1
-					) {
-						now += 80_000;
-						if (mode === "cancel-suspend") controller.abort(cancelled);
-						else
-							observerDeadline?.abort(
-								new DOMException(
-									"Observer elapsed during suspension",
-									"TimeoutError",
-								),
-							);
-						if (!init?.signal?.aborted)
-							throw new Error("Fixture observer signal did not abort");
-						throw init.signal.reason;
-					}
-					if (
-						(mode === "child-suspend" || mode === "combined-credit") &&
-						childReads === 1
-					)
-						now += 40_000;
-					if (mode === "credit-cap" && childReads <= 3) now += 40_000;
-					if (mode === "cancel-child") controller.abort(cancelled);
-					if (mode === "foreign-message")
-						return Response.json([
+					content: [
+						nativeTool(
+							`call_read_${index}`,
+							"read",
 							{
-								info: { sessionID: "ses_unrelated", role: "assistant" },
-								parts: [],
+								status: "completed",
+								input: { filePath: "src/index.ts" },
+								content: [
+									{
+										type: "text",
+										text:
+											mode === "in-place-progress"
+												? `source page updated at ${now}`
+												: `source page ${index}`,
+									},
+								],
 							},
-						]);
-					return Response.json(childMessages());
+							{ created: index * 16_000, completed: index * 16_000 + 1 },
+						),
+					],
+				}),
+		);
+	const client = nativeClient(async ({ url, init, method }) => {
+		const path = url.pathname;
+		visits.push(path);
+		if (path === "/api/session/ses_root/interrupt") {
+			expect(method).toBe("POST");
+			expect(url.searchParams.get("resume")).toBe("false");
+			aborts++;
+			return Response.json({
+				interrupted: true,
+			} satisfies SessionInterruptResponse);
+		}
+		if (
+			path === "/api/session/ses_root/model" ||
+			path === "/api/session/ses_root/command"
+		)
+			return new Response(null, { status: 204 });
+		if (path === "/api/session/ses_root/message") {
+			if (mode === "clock-boundary" && now >= 60_000 && !clockBoundary) {
+				now = 59_999;
+				clockBoundary = true;
+			}
+			return messagePage(rootMessages());
+		}
+		if (path === "/api/session/ses_root") return sessionReply(root);
+		if (path === "/api/session") {
+			if (mode === "async-deadline" && now >= 60_000) {
+				const signal = init.signal;
+				if (!signal) throw new Error("Missing observer cancellation signal");
+				return new Promise<Response>((_, reject) => {
+					if (signal.aborted) reject(signal.reason);
+					else
+						signal.addEventListener("abort", () => reject(signal.reason), {
+							once: true,
+						});
+				});
+			}
+			if (mode === "malformed-endpoint")
+				return Response.json({ unavailable: true });
+			if (mode === "malformed-children")
+				return Response.json({
+					data: [null, {}, { ...child, id: 42 }],
+					cursor: {},
+				});
+			if (mode === "tree-limit")
+				return sessionPage([
+					root,
+					...Array.from({ length: 128 }, (_, index) => ({
+						...child,
+						id: `ses_child_${index}`,
+					})),
+				]);
+			if (mode === "duplicate-children")
+				return sessionPage([root, child, child]);
+			if (mode === "cyclic-children")
+				return sessionPage([{ ...root, parentID: child.id }, child]);
+			return sessionPage([root, child]);
+		}
+		if (path === "/api/session/ses_child/message") {
+			childReads++;
+			if (mode === "request-timeout") throw transportTimeout;
+			if (
+				(mode === "deadline-suspend" || mode === "cancel-suspend") &&
+				childReads === 1
+			) {
+				now += 80_000;
+				if (mode === "cancel-suspend") controller.abort(cancelled);
+				else
+					observerDeadline?.abort(
+						new DOMException(
+							"Observer elapsed during suspension",
+							"TimeoutError",
+						),
+					);
+				if (!init.signal?.aborted)
+					throw new Error("Fixture observer signal did not abort");
+				throw init.signal.reason;
+			}
+			if (
+				(mode === "child-suspend" || mode === "combined-credit") &&
+				childReads === 1
+			)
+				now += 40_000;
+			if (mode === "credit-cap" && childReads <= 3) now += 40_000;
+			if (mode === "cancel-child") controller.abort(cancelled);
+			if (mode === "foreign-message") {
+				return messagePage([
+					nativeAssistant("msg_root", { agent: "flow-reviewer" }),
+				]);
+			}
+			return messagePage(childMessages());
+		}
+		if (/^\/api\/session\/ses_child_\d+\/message$/.test(path))
+			return messagePage([]);
+		throw new Error(`Unexpected native progress endpoint ${method} ${path}`);
+	});
+	let requestTimeout: unknown = transportTimeout;
+	const list = client.message.list;
+	const messageReads = spyOn(client.message, "list").mockImplementation(
+		async (input, options) => {
+			try {
+				return await list(input, options);
+			} catch (error) {
+				if (mode === "request-timeout") {
+					expect(error).toBeInstanceOf(Error);
+					if (!(error instanceof Error)) throw error;
+					expect(error.cause).toBe(transportTimeout);
+					requestTimeout = error;
 				}
-				if (/\/session\/ses_child_\d+\/message/.test(path))
-					return Response.json([]);
-				throw new Error(`Unexpected progress endpoint ${path}`);
-			},
-			{ preconnect: fetch.preconnect },
-		),
+				throw error;
+			}
+		},
 	);
+	const host = nativeHost(project, client, controller.signal);
 	try {
-		const result = await runSessionRequest({
-			url: "http://progress-fixture/session/ses_root/command",
-			body: {},
-			post: postSessionJson,
-			signal: controller.signal,
-			waitOwnsCancellation: true,
-			onRejected: () => {},
-			onCancelled: () =>
-				Reflect.apply(Reflect.get(host, "abortSession"), host, ["ses_root"]),
-			wait: (request) =>
-				Reflect.apply(Reflect.get(host, "waitForQuiet"), host, [
-					"ses_root",
-					{
-						request,
-						...(timing
-							? { timeoutMs: mode === "combined-credit" ? 120_000 : 60_000 }
-							: {}),
-					},
-				]),
-		}).catch((error: unknown) => error);
+		const result: unknown = await host
+			.runCommand(
+				"ses_root",
+				"flow-auto",
+				"fixture",
+				fixtureModel,
+				timing
+					? { timeoutMs: mode === "combined-credit" ? 120_000 : 60_000 }
+					: {},
+			)
+			.catch((error: unknown) => error);
 		return {
 			result,
 			now,
@@ -304,12 +307,12 @@ async function observeWait(mode: Mode) {
 			requestTimeout,
 		};
 	} finally {
+		messageReads.mockRestore();
 		timeouts.mockRestore();
-		transport.mockRestore();
 		sleep.mockRestore();
 		clock.mockRestore();
-		await host.stop();
 		await rm(project, { recursive: true, force: true });
+		await rm(outside, { recursive: true, force: true });
 	}
 }
 
@@ -319,7 +322,7 @@ test("owned reviewer progress prevents a false root-task wedge beyond three minu
 	expect(observed.now).toBeGreaterThanOrEqual(210_000);
 	expect(observed.now).toBeLessThanOrEqual(240_000);
 	expect(observed.aborts).toBe(0);
-	expect(observed.visits).toContain("/session/ses_child/message");
+	expect(observed.visits).toContain("/api/session/ses_child/message");
 });
 
 for (const mode of [
@@ -337,7 +340,7 @@ for (const mode of [
 		expect(observed.now).toBe(182_000);
 		expect(observed.aborts).toBe(1);
 		if (mode !== "wedged")
-			expect(observed.visits).not.toContain("/session/ses_child/message");
+			expect(observed.visits).not.toContain("/api/session/ses_child/message");
 	});
 }
 
@@ -369,10 +372,11 @@ for (const mode of ["duplicate-children", "cyclic-children"] as const) {
 		expect(observed.result).toBe("quiet");
 		expect(observed.aborts).toBe(0);
 		expect(
-			observed.visits.filter((path) => path === "/session/ses_child/message")
-				.length,
+			observed.visits.filter(
+				(path) => path === "/api/session/ses_child/message",
+			).length,
 		).toBe(
-			observed.visits.filter((path) => path === "/session/ses_root/message")
+			observed.visits.filter((path) => path === "/api/session/ses_root/message")
 				.length,
 		);
 	});

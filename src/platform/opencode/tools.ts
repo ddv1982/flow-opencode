@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { errorResponse } from "../../application/flow-response.js";
 import type { PreparedValidation } from "../../application/prepare-validation.js";
 import type { RecoveryController } from "../../application/recovery-policy.js";
@@ -31,12 +32,14 @@ import type {
 	AutoValidationOrigin,
 	ProcessLocalAutoContinuationSupport,
 } from "./auto-drive.js";
-import { defineFlowTool } from "./schema-adapter.js";
-import { type Hooks, type ToolContext, tool } from "./sdk.js";
+import {
+	defineFlowTool,
+	type FlowToolContext,
+	type FlowToolResponse,
+	type FlowTools,
+} from "./flow-tool.js";
 import type { ValidationCaptureCoordinator } from "./validation-capture.js";
 
-const host = tool.schema;
-type FlowTools = NonNullable<Hooks["tool"]>;
 type WorkspaceFlowService = ReturnType<typeof createWorkspaceFlowService>;
 
 type ToolOptions = Readonly<{
@@ -79,22 +82,8 @@ type ToolOptions = Readonly<{
 		| undefined;
 }>;
 
-function json(value: unknown): string {
-	const serialized = JSON.stringify(value, null, 2);
-	if (serialized === undefined) {
-		throw new Error("Flow tool response could not be serialized.");
-	}
-	return serialized;
-}
-
-type FlowToolResponse = Readonly<{
-	status: "ok" | "error";
-	summary: string;
-	workflowData: object;
-}>;
-
-function toolError(error: unknown): string {
-	return json(errorResponse(error));
+function toolError(error: unknown): FlowToolResponse {
+	return errorResponse(error);
 }
 
 function bestEffort<Value>(read: () => Value): Value | undefined {
@@ -143,9 +132,6 @@ function withAutoContext(
 		: undefined;
 	if (continuation) workflowData = { ...workflowData, autoDrive: continuation };
 	const support = bestEffort(() => options.autoContinuationSupport?.());
-	// `unknown` is withheld deliberately: before any assistant message exists it
-	// is the absence of a signal, and reporting it invites a caller to relay it as
-	// a limitation.
 	if (support === "supported" || support === "unsupported") {
 		workflowData = {
 			...workflowData,
@@ -154,7 +140,7 @@ function withAutoContext(
 				support,
 				...(support === "unsupported"
 					? {
-							reason: "host-reports-no-assistant-message-parentage",
+							reason: "host-request-attribution-unavailable",
 							recovery: "Drive each feature with /flow-run.",
 						}
 					: {}),
@@ -168,20 +154,18 @@ function withAutoContext(
 
 export function createTools(options: ToolOptions): FlowTools {
 	async function execute<T extends FlowToolResponse>(
-		context: ToolContext,
+		context: FlowToolContext,
 		handler: (flow: WorkspaceFlowService) => Promise<T>,
-	): Promise<string> {
+	): Promise<FlowToolResponse> {
 		try {
-			return json(
-				await handler(
-					createWorkspaceFlowService(
-						resolveWorkspaceRoot(context),
-						options.recovery?.guard({
-							hostSessionId: context.sessionID,
-							messageId: context.messageID,
-							agent: context.agent,
-						}),
-					),
+			return await handler(
+				createWorkspaceFlowService(
+					resolveWorkspaceRoot(context),
+					options.recovery?.guard({
+						hostSessionId: context.sessionID,
+						messageId: context.messageID,
+						agent: context.agent,
+					}),
 				),
 			);
 		} catch (error) {
@@ -190,19 +174,19 @@ export function createTools(options: ToolOptions): FlowTools {
 	}
 
 	function executeMutation<T extends FlowToolResponse>(
-		context: ToolContext,
+		context: FlowToolContext,
 		validation: ValidationCaptureCoordinator,
 		handler: (flow: WorkspaceFlowService) => Promise<T>,
-	): Promise<string> {
+	): Promise<FlowToolResponse> {
 		validation.cancel(context.sessionID);
 		return execute(context, handler);
 	}
 
 	function executeReviewerMutation<T extends FlowToolResponse>(
-		context: ToolContext,
+		context: FlowToolContext,
 		handler: (flow: WorkspaceFlowService) => Promise<T>,
 		replayHandler: (flow: WorkspaceFlowService) => Promise<T>,
-	): Promise<string> {
+	): Promise<FlowToolResponse> {
 		if (context.agent !== "flow-reviewer") {
 			return execute(context, replayHandler);
 		}
@@ -210,9 +194,9 @@ export function createTools(options: ToolOptions): FlowTools {
 	}
 
 	return {
-		flow_guidance: tool({
+		flow_guidance: defineFlowTool({
 			description: "Load one concise package-owned Flow guide.",
-			args: { id: host.enum(FLOW_GUIDANCE_IDS) },
+			schema: z.object({ id: z.enum(FLOW_GUIDANCE_IDS) }),
 			execute: async ({ id }) => getFlowGuidance(id).content,
 		}),
 		flow_status: defineFlowTool({
@@ -228,9 +212,7 @@ export function createTools(options: ToolOptions): FlowTools {
 					) {
 						try {
 							await options.onRecoveryOutcome(response.workflowData.recovery);
-						} catch {
-							// A missing TUI cannot change the Flow status result.
-						}
+						} catch {}
 					}
 					const workflowData =
 						"projection" in response.workflowData
@@ -296,7 +278,7 @@ export function createTools(options: ToolOptions): FlowTools {
 		}),
 		flow_validation_start: defineFlowTool({
 			description:
-				"Arm host observation for the exact next Bash command; its result is recorded directly in Session v5.",
+				"Arm host observation for the exact next shell command; its result is recorded directly in Session v5.",
 			schema: ValidationStartInputSchema,
 			execute: async (args, context) => {
 				try {
@@ -305,9 +287,10 @@ export function createTools(options: ToolOptions): FlowTools {
 						workspace,
 						args.request,
 					);
-					return json({
+					await context.assertCurrent?.();
+					return {
 						status: "ok",
-						summary: "Validation armed for the exact next Bash command.",
+						summary: "Validation armed for the exact next shell command.",
 						workflowData: {
 							capture: options.validation.arm(
 								context.sessionID,
@@ -323,7 +306,7 @@ export function createTools(options: ToolOptions): FlowTools {
 							scope: prepared.scope,
 							intent: prepared.intent,
 						},
-					});
+					};
 				} catch (error) {
 					return toolError(error);
 				}
@@ -367,4 +350,85 @@ export function createTools(options: ToolOptions): FlowTools {
 				),
 		}),
 	};
+}
+
+export async function registerFlowTools(
+	ctx: {
+		tool: Pick<import("./sdk.js").PluginContext["tool"], "transform">;
+		permission: Pick<import("./sdk.js").PluginContext["permission"], "assert">;
+		location: Pick<import("./sdk.js").PluginContext["location"], "directory">;
+	},
+	tools: FlowTools,
+	beforeTool: (context: import("./sdk.js").ToolContext) => Promise<void>,
+) {
+	const directory = resolveWorkspaceRoot({ directory: ctx.location.directory });
+	return ctx.tool.transform((editor) => {
+		for (const [name, definition] of Object.entries(tools)) {
+			editor.remove(name);
+			editor.add({
+				name,
+				description: definition.description,
+				input: definition.input,
+				options: { codemode: false, permission: name },
+				execute: async (input: unknown, context) => {
+					const request =
+						input && typeof input === "object" && "request" in input
+							? input.request
+							: null;
+					const resources: string[] = [];
+					if (request && typeof request === "object") {
+						for (const key of [
+							"featureId",
+							"nextFeatureId",
+							"sessionId",
+						] as const) {
+							const value = Reflect.get(request, key);
+							if (typeof value === "string") resources.push(value);
+						}
+					}
+					if (
+						input &&
+						typeof input === "object" &&
+						"id" in input &&
+						typeof input.id === "string"
+					)
+						resources.push(input.id);
+					await ctx.permission.assert({
+						sessionID: context.sessionID,
+						agent: context.agent,
+						action: name,
+						resources: resources.length ? resources : [directory],
+						source: {
+							type: "tool",
+							messageID: context.messageID,
+							id: context.id,
+						},
+					});
+					await beforeTool(context);
+					if (context.signal.aborted)
+						throw new Error("Flow tool execution was cancelled.");
+					const value = await definition.execute(input, {
+						sessionID: context.sessionID,
+						messageID: context.messageID,
+						callID: context.id,
+						agent: context.agent,
+						directory,
+						abort: context.signal,
+						assertCurrent: () => beforeTool(context),
+					});
+					return {
+						content: [
+							{
+								type: "text",
+								text:
+									typeof value === "string"
+										? value
+										: JSON.stringify(value, null, 2),
+							},
+						],
+					};
+				},
+			});
+		}
+	});
 }

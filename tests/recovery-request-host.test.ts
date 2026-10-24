@@ -60,7 +60,6 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const)
 					withFlow: false,
 					providerCredentials: "disabled",
 					ambientConfig: "disabled",
-					nativeLlm: false,
 					requestBudget: {
 						directory,
 						authorizationDigest: datasetDigest(authorization),

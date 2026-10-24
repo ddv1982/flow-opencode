@@ -19,18 +19,20 @@ import {
 	readWorkspaceTestReport,
 } from "../../infrastructure/fs/workspace-validation.js";
 import { resolveFlowPluginVersion } from "../../version.js";
-import { AutoDriveCoordinator, autoDriveDelivery } from "./auto-drive.js";
-import { createCommandHook, textPart } from "./command-hook.js";
-import { createConfigHook } from "./config.js";
+import { AutoDriveCoordinator } from "./auto-drive.js";
+import { registerFlowAgents } from "./config.js";
+import { registerHttpTransport } from "./http-transport.js";
 import {
 	createFlowPluginInstanceId,
 	FLOW_LEADERSHIP_PROTOCOL_VERSION,
 	registerFlowPluginInstance,
 } from "./leadership.js";
+import { registerFlowLifecycle } from "./lifecycle.js";
 import { createFlowLog } from "./logging.js";
-import type { Hooks, Plugin } from "./sdk.js";
+import { createFlowModelPreferences } from "./model-preferences.js";
+import { Plugin } from "./sdk.js";
 import { guardTools } from "./tool-guard.js";
-import { createTools } from "./tools.js";
+import { createTools, registerFlowTools } from "./tools.js";
 import { ValidationCaptureCoordinator } from "./validation-capture.js";
 
 const JevModel = z
@@ -47,254 +49,240 @@ export function createFlowPlugin(dependencies: {
 	createRecovery(): RecoveryController;
 	defaultRecovery?(): RecoverySettings | null;
 	entryUrl: string;
-}): Plugin {
-	return async (ctx, pluginOptions) => {
-		const log = createFlowLog(ctx);
-		let reviewerConfiguration = resolveFlowReviewerConfiguration({
-			pluginOptions,
-			onWarning: (warning) => log("warn", warning),
-		});
-		let planningModel: string | undefined;
-		const codingModels = new Map<string, FlowCodingModel>();
-		const version = resolveFlowPluginVersion();
-		const pluginEntrySha256 = `sha256:${createHash("sha256")
-			.update(await readFile(fileURLToPath(dependencies.entryUrl)))
-			.digest("hex")}`;
-		let workspace: string;
-		try {
-			workspace = resolveWorkspaceRoot(ctx);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			log("error", `Flow ${version} cannot start here: ${message}`);
-			throw error;
-		}
-		const runtimeGuard = registerFlowPluginInstance(workspace, {
-			packageName: "opencode-plugin-flow",
-			version,
-			protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
-			instanceId: createFlowPluginInstanceId(),
-		});
-		const initial = runtimeGuard.query();
-		const level = initial.operational ? "info" : "error";
-		log(level, `Flow ${version}: ${initial.message}`);
-		const recovery = dependencies.createRecovery();
-		const flow = createWorkspaceFlowService(workspace);
-		const autoDrive = new AutoDriveCoordinator({
-			recovery,
-			readSourceDigest: () =>
-				createFileSourceIdentityProvider(workspace).computeSourceDigest(),
-			readProjection: async () => {
-				const response = await flow.status({ request: { view: "compact" } });
-				if (response.status !== "ok") throw new Error(response.summary);
-				const projection = response.workflowData.projection;
-				if (projection.view !== "compact")
-					throw new Error("Flow auto-drive received a non-compact projection.");
-				return {
-					sessionId:
-						"sessionId" in projection ? projection.sessionId : undefined,
-					status: projection.status,
-					revision: projection.revision,
-					nextAction: projection.nextAction,
-					...("prerequisiteRepair" in projection &&
-					projection.prerequisiteRepair
-						? { prerequisiteRepair: projection.prerequisiteRepair }
-						: {}),
-				};
-			},
-			prompt: async (sessionID, prompt, delivery, metadata) => {
-				await ctx.client.session.promptAsync({
-					path: { id: sessionID },
-					query: { directory: ctx.directory },
-					body: {
-						agent: delivery.agent,
-						model: delivery.model,
-						...(delivery.variant === undefined
-							? {}
-							: { variant: delivery.variant }),
-						parts: [textPart(prompt, true, metadata)],
-					},
-					throwOnError: true,
-				});
-			},
-			onWarning: (message) => log("warn", message),
-		});
-		const validation = new ValidationCaptureCoordinator({
-			persistObservation: persistWorkspaceValidation,
-			readReport: readWorkspaceTestReport,
-			onRecorded: (receipt) => autoDrive.observeValidation(receipt),
-			onReceiptError: (error) =>
-				log("warn", "Flow continuation receipt was not accepted.", {
-					message: String(error),
-				}),
-		});
-		const tools = createTools({
-			recovery,
-			onRecoveryOutcome: async (outcome) => {
-				const mismatch = ModelMismatch.safeParse(outcome);
-				if (!mismatch.success) return;
-				await ctx.client.tui.showToast({
-					body: {
-						title: "Jev model changed",
-						message: `Requested ${mismatch.data.requestedModel}, received ${mismatch.data.model}. Recovery remains blocked pending qualification.`,
-						variant: "warning",
-						duration: 15000,
-					},
-					query: { directory: ctx.directory },
-				});
-			},
-			validation,
-			prepareValidation: prepareWorkspaceValidation,
-			autoTimingSnapshot: () => autoDrive.timingSnapshot(),
-			autoContinuationSnapshot: (host) => autoDrive.continuationSnapshot(host),
-			validationOrigin: (host, assistant, prepared) =>
-				autoDrive.validationOrigin(host, assistant, prepared),
-			autoContinuationSupport: () => autoDrive.continuationSupport(),
-			readReviewerConfiguration: () => reviewerConfiguration,
-			readPlanningModel: () => planningModel,
-			readCodingModel: (sessionID) => codingModels.get(sessionID),
-			runtimeIdentity: { packageVersion: version, pluginEntrySha256 },
-		});
-		return {
-			config: createConfigHook(ctx, {
-				assertOperational: (action) => runtimeGuard.assertOperational(action),
-				reviewerConfiguration,
-				onPlanningModel: (model) => {
-					planningModel = model;
-				},
-				onReviewerConfiguration: (configuration) => {
-					reviewerConfiguration = configuration;
-				},
-			}),
-			tool: guardTools(tools, runtimeGuard, autoDrive, async (sessionID) => {
-				const response = await ctx.client.session.get({
-					path: { id: sessionID },
-					query: { directory: ctx.directory },
-					throwOnError: true,
-				});
-				return response.data;
-			}),
-			"command.execute.before": createCommandHook({
-				assertOperational: (action) => runtimeGuard.assertOperational(action),
-				autoDrive,
-				flow,
+}): Plugin.Plugin {
+	return Plugin.define({
+		id: "opencode-plugin-flow",
+		async setup(ctx) {
+			const log = createFlowLog(ctx);
+			const baseReviewer = resolveFlowReviewerConfiguration({
+				pluginOptions: ctx.options,
+				onWarning: (warning) => log("warn", warning),
+			});
+			let reviewerConfiguration = baseReviewer;
+			let planningModel: string | undefined;
+			const codingModels = new Map<string, FlowCodingModel>();
+			const version = resolveFlowPluginVersion();
+			const pluginEntrySha256 = `sha256:${createHash("sha256")
+				.update(await readFile(fileURLToPath(dependencies.entryUrl)))
+				.digest("hex")}`;
+			const workspace = resolveWorkspaceRoot({
+				directory: ctx.location.directory,
+			});
+			const runtimeGuard = registerFlowPluginInstance(workspace, {
+				packageName: "opencode-plugin-flow",
+				version,
+				protocolVersion: FLOW_LEADERSHIP_PROTOCOL_VERSION,
+				instanceId: createFlowPluginInstanceId(),
+			});
+			const initial = runtimeGuard.query();
+			log(
+				initial.operational ? "info" : "error",
+				`Flow ${version}: ${initial.message}`,
+			);
+			let recovery: RecoveryController;
+			try {
+				recovery = dependencies.createRecovery();
+			} catch (error) {
+				runtimeGuard.release();
+				throw error;
+			}
+			const flow = createWorkspaceFlowService(workspace);
+			let lifecycle:
+				| Awaited<ReturnType<typeof registerFlowLifecycle>>
+				| undefined;
+			const autoDrive = new AutoDriveCoordinator({
 				recovery,
-				...(dependencies.defaultRecovery
-					? { defaultRecovery: dependencies.defaultRecovery }
-					: {}),
-				showRefusal: async (message) => {
-					await ctx.client.tui.showToast({
-						body: {
-							title: "Flow recovery unavailable",
-							message,
-							variant: "warning",
-							duration: 12000,
-						},
-						query: { directory: ctx.directory },
-					});
+				readSourceDigest: () =>
+					createFileSourceIdentityProvider(workspace).computeSourceDigest(),
+				readProjection: async () => {
+					const response = await flow.status({ request: { view: "compact" } });
+					if (response.status !== "ok") throw new Error(response.summary);
+					const projection = response.workflowData.projection;
+					if (projection.view !== "compact")
+						throw new Error(
+							"Flow auto-drive received a non-compact projection.",
+						);
+					return {
+						sessionId:
+							"sessionId" in projection ? projection.sessionId : undefined,
+						status: projection.status,
+						revision: projection.revision,
+						nextAction: projection.nextAction,
+						...("prerequisiteRepair" in projection &&
+						projection.prerequisiteRepair
+							? { prerequisiteRepair: projection.prerequisiteRepair }
+							: {}),
+					};
 				},
-			}),
-			"chat.message": async (input, output) => {
-				if (
-					!["flow-planner", "flow-reviewer", "flow-worker"].includes(
-						output.message.agent,
-					)
-				) {
-					const delivery = autoDriveDelivery(output.message, input.variant);
-					codingModels.delete(input.sessionID);
-					codingModels.set(input.sessionID, {
-						...delivery.model,
-						...(delivery.variant ? { variant: delivery.variant } : {}),
-					});
-					if (codingModels.size > 128) {
-						const oldest = codingModels.keys().next().value;
-						if (oldest) codingModels.delete(oldest);
+				prompt: async (sessionID, prompt, delivery, metadata) => {
+					if (!lifecycle)
+						throw new Error(
+							"Flow lifecycle is not ready for continuation dispatch.",
+						);
+					await lifecycle.prompt(sessionID, prompt, delivery, metadata);
+				},
+				onWarning: (message) => log("warn", message),
+			});
+			const validation = new ValidationCaptureCoordinator({
+				readSession: (sessionID) => ctx.session.get({ sessionID }),
+				persistObservation: persistWorkspaceValidation,
+				readReport: readWorkspaceTestReport,
+				onRecorded: (receipt) => autoDrive.observeValidation(receipt),
+				onReceiptError: (error) =>
+					log("warn", "Flow continuation receipt was not accepted.", {
+						message: String(error),
+					}),
+			});
+			const cleanups: Array<() => void | Promise<void>> = [];
+			let disposed = false;
+			const dispose = async () => {
+				if (disposed) return;
+				disposed = true;
+				autoDrive.clear();
+				validation.clear();
+				codingModels.clear();
+				runtimeGuard.release();
+				for (const cleanup of cleanups.reverse()) {
+					try {
+						await cleanup();
+					} catch (error) {
+						log("error", "Flow cleanup failed.", { message: String(error) });
 					}
 				}
-
-				const observed = await autoDrive.observeMessage(
-					input.sessionID,
-					autoDriveDelivery(output.message, input.variant),
-					output.parts,
-					output.message.id,
-				);
-				if (observed === "stale-continuation")
-					throw new Error("Discarded a stale Flow auto continuation.");
-				recovery.observeMessage(
-					input.sessionID,
-					output.message.id,
-					output.parts.every(
-						(part) => part.type === "text" && part.synthetic === true,
+			};
+			try {
+				const transport = await registerHttpTransport(ctx.provider);
+				cleanups.push(() => transport.dispose());
+				const controller = new AbortController();
+				const events = (async () => {
+					try {
+						for await (const event of ctx.event.subscribe({
+							signal: controller.signal,
+						})) {
+							validation.observeShellEvent(event);
+							if (
+								event.type === "session.deleted" ||
+								event.type === "session.execution.succeeded" ||
+								event.type === "session.execution.failed" ||
+								event.type === "session.execution.interrupted"
+							)
+								validation.cancel(event.data.sessionID);
+						}
+						if (!controller.signal.aborted)
+							throw new Error("The native shell observation stream ended.");
+					} catch (error) {
+						if (controller.signal.aborted) return;
+						validation.clear();
+						autoDrive.clear();
+						runtimeGuard.release();
+						log("error", "Flow lost native shell observation and stopped.", {
+							message: String(error),
+						});
+					}
+				})();
+				cleanups.push(async () => {
+					controller.abort();
+					await events;
+				});
+				const preferences = await createFlowModelPreferences(ctx, {
+					onChange: async () => {
+						if (disposed) return;
+						planningModel = preferences.planningModel();
+						reviewerConfiguration =
+							preferences.reviewerConfiguration(baseReviewer);
+						await ctx.agent.reload();
+					},
+				});
+				cleanups.push(() => preferences.dispose());
+				planningModel = preferences.planningModel();
+				reviewerConfiguration = preferences.reviewerConfiguration(baseReviewer);
+				const agents = await registerFlowAgents(ctx, {
+					assertOperational: (action) => runtimeGuard.assertOperational(action),
+					readPlanningModel: () => planningModel,
+					readReviewerConfiguration: () => reviewerConfiguration,
+				});
+				cleanups.push(() => agents.dispose());
+				lifecycle = await registerFlowLifecycle({
+					ctx,
+					autoDrive,
+					recovery,
+					flow,
+					runtimeGuard,
+					log,
+					codingModels,
+					...(dependencies.defaultRecovery
+						? { defaultRecovery: dependencies.defaultRecovery }
+						: {}),
+				});
+				const activeLifecycle = lifecycle;
+				cleanups.push(() => activeLifecycle.dispose());
+				const tools = createTools({
+					recovery,
+					validation,
+					prepareValidation: prepareWorkspaceValidation,
+					onRecoveryOutcome: async (outcome) => {
+						const mismatch = ModelMismatch.safeParse(outcome);
+						if (mismatch.success)
+							log(
+								"warn",
+								`Requested ${mismatch.data.requestedModel}, received ${mismatch.data.model}. Recovery remains blocked pending qualification.`,
+							);
+					},
+					autoTimingSnapshot: () => autoDrive.timingSnapshot(),
+					autoContinuationSnapshot: (host) =>
+						autoDrive.continuationSnapshot(host),
+					validationOrigin: (host, assistant, prepared) =>
+						autoDrive.validationOrigin(host, assistant, prepared),
+					autoContinuationSupport: () => autoDrive.continuationSupport(),
+					readReviewerConfiguration: () => reviewerConfiguration,
+					readPlanningModel: () => planningModel,
+					readCodingModel: (sessionID) => codingModels.get(sessionID),
+					runtimeIdentity: { packageVersion: version, pluginEntrySha256 },
+				});
+				const registration = await registerFlowTools(
+					ctx,
+					guardTools(tools, runtimeGuard, autoDrive, (sessionID) =>
+						ctx.session.get({ sessionID }),
 					),
-					observed === "accepted-continuation",
+					(context) => activeLifecycle.beforeTool(context),
 				);
-			},
-			"experimental.session.compacting": async (input, output) => {
-				const context = autoDrive.compactionContext(input.sessionID);
-				if (context) output.context.push(context);
-			},
-			event: async (input) => {
-				const event = input.event;
-				if (
-					event.type === "message.updated" &&
-					event.properties.info.role === "assistant" &&
-					event.properties.info.parentID
-				)
-					recovery.observeAssistant(
-						event.properties.info.sessionID,
-						event.properties.info.id,
-						event.properties.info.parentID,
-					);
-				if (event.type === "message.updated")
-					return autoDrive.observeHostMessage(
-						event.properties.info.sessionID,
-						event.properties.info,
-					);
-				if (event.type === "message.part.updated")
-					return autoDrive.observeHostPart(
-						event.properties.part.sessionID,
-						event.properties.part,
-					);
-				if (
-					event.type === "session.deleted" ||
-					event.type === "session.error"
-				) {
-					const sessionID =
-						event.type === "session.deleted"
-							? event.properties.info.id
-							: event.properties.sessionID;
-					if (event.type === "session.deleted")
-						codingModels.delete(event.properties.info.id);
-					if (!sessionID) return autoDrive.clear();
-					validation.cancel(sessionID);
-					return void autoDrive.deactivate(sessionID);
-				}
-				if (event.type !== "session.idle" && event.type !== "session.compacted")
-					return;
-				const sessionID = event.properties?.sessionID;
-				validation.cancel(sessionID);
-				if (event.type === "session.compacted")
-					return autoDrive.observeCompaction(sessionID);
-				if (runtimeGuard.query().operational)
-					return autoDrive.onIdle(sessionID);
-				autoDrive.deactivate(sessionID);
-			},
-			"tool.execute.before": async (input, output) =>
-				validation.observeToolBefore(input, output),
-			"tool.execute.after": async (input, output) => {
-				try {
-					await validation.observeToolAfter(input, output);
-				} catch (error) {
-					const message =
-						error instanceof Error ? error.message : String(error);
-					log("error", "Flow validation capture failed closed.", { message });
-					output.output = `${output.output}\n\n[flow-validation-error] ${message}`;
-				}
-			},
-			dispose: async () => {
-				codingModels.clear();
-				autoDrive.clear();
-				runtimeGuard.release();
-			},
-		} satisfies Hooks;
-	};
+				cleanups.push(() => registration.dispose());
+				const before = await ctx.tool.hook("execute.before", (input) =>
+					validation.observeToolBefore(input),
+				);
+				cleanups.push(() => before.dispose());
+				const after = await ctx.tool.hook("execute.after", async (input) => {
+					try {
+						await validation.observeToolAfter(input);
+					} catch (error) {
+						validation.cancel(input.sessionID);
+						log("error", "Flow validation capture failed closed.", {
+							message: String(error),
+						});
+						if (input.status === "completed") {
+							const content = input.result.content;
+							input.result = {
+								...input.result,
+								content: [
+									...(typeof content === "string"
+										? [{ type: "text" as const, text: content }]
+										: (content ?? [])),
+									{
+										type: "text",
+										text: `[flow-validation-error] ${String(error)}`,
+									},
+								],
+							};
+						}
+					}
+				});
+				cleanups.push(() => after.dispose());
+
+				return dispose;
+			} catch (error) {
+				await dispose();
+				throw error;
+			}
+		},
+	});
 }

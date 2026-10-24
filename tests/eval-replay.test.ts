@@ -26,7 +26,10 @@ import {
 	WORKSPACE_TOKEN,
 } from "../evals/cassette.js";
 import { completionHonesty, type MetricSession } from "../evals/metrics.js";
-import { replayCassette } from "../evals/replay.js";
+import {
+	recordedBashDecisionFixture,
+	replayCassette,
+} from "../evals/replay.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import { SessionSchema } from "../src/application/schema.js";
 
@@ -476,6 +479,7 @@ describe("decision-layer replay", () => {
 
 	test("reproduces a passing happy-path run with no model and no host", async () => {
 		const result = await replayCassette(happyPathCassette());
+		expect(result.evidenceKind).toBe("historical-decision-replay");
 		expect(result.divergences).toEqual([]);
 		// The whole point: the graders run against durable state the replay just
 		// produced, not against anything the cassette carried.
@@ -697,5 +701,26 @@ describe("cassette hygiene", () => {
 		expect(cassetteFileName("happy-path", "openrouter/openai/gpt-5.6", 2)).toBe(
 			"happy-path--openrouter_openai_gpt-5.6--2.json",
 		);
+	});
+});
+
+test("historical Bash decoding is a decision fixture with explicit completeness", () => {
+	const event = {
+		kind: "bash" as const,
+		sessionIndex: 0,
+		agent: "build",
+		command: "bun test",
+		output: "recorded output",
+		metadata: { exit: 7, truncated: false },
+	};
+	expect(recordedBashDecisionFixture(event).result).toEqual({
+		content: "recorded output",
+		output: { exit: 7, truncated: false, output: "recorded output" },
+	});
+	expect(
+		recordedBashDecisionFixture({ ...event, metadata: {} }).result,
+	).toEqual({
+		content: "recorded output",
+		output: { output: "recorded output" },
 	});
 });

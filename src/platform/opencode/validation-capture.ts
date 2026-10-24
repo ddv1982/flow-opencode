@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { open, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
+import { z } from "zod";
 import type {
 	ObservedValidation,
 	PreparedValidation,
@@ -12,13 +13,18 @@ import type {
 	ValidationIneligibleReason,
 	ValidationObservation,
 } from "../../domain/session.js";
+import { assertMutableWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
 import { observeAssertions } from "../../infrastructure/junit-results.js";
 import type {
 	AutoValidationOrigin,
 	AutoValidationReceipt,
 } from "./auto-drive.js";
 import { validationContinuationOutcome } from "./auto-drive-validation.js";
-import type { Hooks } from "./sdk.js";
+import type {
+	NativeToolAfter,
+	NativeToolBefore,
+	OpenCodeEvent,
+} from "./sdk.js";
 
 const MAX_CAPTURES = 128;
 const CAPTURE_TTL_MS = 15 * 60 * 1_000;
@@ -32,11 +38,17 @@ type PendingCapture = PreparedValidation &
 		armedAt: number;
 		origin: AutoValidationOrigin | null;
 	}> & {
-		callID: string | null;
+		execution: {
+			id: string;
+			messageID: string;
+			agent: string;
+			startedAt: number;
+		} | null;
 		priorReport: { digest: string; modifiedMs: number } | null;
 	};
 
 type ValidationCaptureOptions = Readonly<{
+	readSession: (sessionID: string) => Promise<unknown>;
 	persistObservation: (
 		workspace: string,
 		observation: ObservedValidation,
@@ -54,41 +66,94 @@ type ValidationCaptureOptions = Readonly<{
 	onReceiptError?: (error: unknown) => void;
 }>;
 
-type BeforeInput = Parameters<NonNullable<Hooks["tool.execute.before"]>>[0];
-type BeforeOutput = Parameters<NonNullable<Hooks["tool.execute.before"]>>[1];
-type AfterInput = Parameters<NonNullable<Hooks["tool.execute.after"]>>[0];
-type AfterOutput = Parameters<NonNullable<Hooks["tool.execute.after"]>>[1];
+const SessionIdentity = z.object({
+	id: z.string(),
+	agent: z.string(),
+	parentID: z.string().optional(),
+	location: z.object({ directory: z.string() }),
+});
+const ShellInput = z.object({
+	command: z.string(),
+	workdir: z.string().optional(),
+});
+const ShellOutput = z.object({
+	exit: z.number().int().safe().optional(),
+	truncated: z.boolean().optional(),
+	status: z.string().optional(),
+	output: z.string().optional(),
+	timeout: z.boolean().optional(),
+});
+const ShellRecord = z.object({
+	id: z.string(),
+	file: z.string(),
+	command: z.string(),
+	cwd: z.string(),
+	status: z.enum(["running", "exited", "timeout", "killed"]),
+	exit: z.number().int().safe().optional(),
+	metadata: z.object({ sessionID: z.string() }),
+	time: z.object({ started: z.number() }),
+});
+type NativeShellRecord = z.output<typeof ShellRecord>;
+type ShellObservation =
+	| { kind: "exited"; exit: number; complete: boolean | null; text: string }
+	| { kind: "failed"; text: string }
+	| { kind: "unknown"; text: string };
 
-export class ValidationCaptureError extends Error {
+class ValidationCaptureError extends Error {
 	readonly code = "FLOW_VALIDATION_CAPTURE";
 }
-
-function commandFromArgs(value: unknown): string | null {
-	if (!value || typeof value !== "object") return null;
-	const command = (value as Record<string, unknown>).command;
-	return typeof command === "string" ? command : null;
+function textContent(
+	result: NativeToolAfter & { status: "completed" },
+): string {
+	const content = result.result.content;
+	return typeof content === "string"
+		? content
+		: (content ?? [])
+				.filter((part) => part.type === "text")
+				.map((part) => part.text)
+				.join("\n");
 }
-
-function exitCode(value: unknown): number | null {
-	if (!value || typeof value !== "object") return null;
-	const exit = (value as Record<string, unknown>).exit;
-	return typeof exit === "number" && Number.isSafeInteger(exit) ? exit : null;
-}
-
-/**
- * Whether the host reported that it captured the whole command output.
- *
- * `null` means the host reported neither flag, which is different from reporting
- * truncation: the output may well be complete, but Flow has no evidence of it, so
- * the observation is recorded as ineligible rather than silently treated as
- * truncated.
- */
-function completeOutput(value: unknown): boolean | null {
-	if (!value || typeof value !== "object") return null;
-	const metadata = value as Record<string, unknown>;
-	if (metadata.truncated === true || metadata.complete === false) return false;
-	if (metadata.truncated === false || metadata.complete === true) return true;
-	return null;
+function observeShell(input: NativeToolAfter): ShellObservation {
+	if (input.status === "error")
+		return { kind: "failed", text: input.error.message };
+	const wire = ShellOutput.safeParse(input.result.output);
+	const meta = ShellOutput.safeParse(input.result.metadata);
+	const output = wire.success ? wire.data : {};
+	const metadata = meta.success ? meta.data : {};
+	const text = output.output ?? textContent(input);
+	if (
+		(input.result.output !== undefined && !wire.success) ||
+		(input.result.metadata !== undefined && !meta.success)
+	)
+		return { kind: "unknown", text };
+	if (
+		output.timeout ||
+		metadata.timeout ||
+		(output.status && output.status !== "completed") ||
+		(metadata.status && metadata.status !== "completed")
+	)
+		return { kind: "unknown", text };
+	if (
+		output.exit !== undefined &&
+		metadata.exit !== undefined &&
+		output.exit !== metadata.exit
+	)
+		return { kind: "unknown", text };
+	if (
+		output.truncated !== undefined &&
+		metadata.truncated !== undefined &&
+		output.truncated !== metadata.truncated
+	)
+		return { kind: "unknown", text };
+	const exit = output.exit ?? metadata.exit;
+	if (exit === undefined) return { kind: "unknown", text };
+	const truncated = output.truncated ?? metadata.truncated;
+	return {
+		kind: "exited",
+		exit,
+		complete: truncated === undefined ? null : !truncated,
+		text,
+	};
 }
 
 function digest(value: string) {
@@ -100,15 +165,18 @@ export async function readHostToolOutput(
 	dataHome = process.env.XDG_DATA_HOME?.trim() ||
 		join(homedir(), ".local", "share"),
 ): Promise<string | null> {
-	if (
-		!isAbsolute(path) ||
-		!/^tool_[a-zA-Z0-9]+(?:\.txt)?$/.test(basename(path))
-	)
+	if (!isAbsolute(path) || !/^sh_[a-zA-Z0-9]+\.out$/.test(basename(path)))
 		return null;
-	const directory = join(dataHome, "opencode", "tool-output");
-	if (dirname(path) !== directory) return null;
+	const root = join(dataHome, "opencode", "shell");
+	const directory = dirname(path);
+	if (dirname(directory) !== root || !/^[a-f0-9]+$/.test(basename(directory)))
+		return null;
 	try {
-		if (dirname(await realpath(path)) !== (await realpath(directory)))
+		if (
+			dirname(await realpath(directory)) !== (await realpath(root)) ||
+			basename(await realpath(directory)) !== basename(directory) ||
+			dirname(await realpath(path)) !== (await realpath(directory))
+		)
 			return null;
 		const file = await open(
 			path,
@@ -118,9 +186,18 @@ export async function readHostToolOutput(
 		try {
 			const stat = await file.stat();
 			if (!stat.isFile() || stat.size > MAX_HOST_OUTPUT_BYTES) return null;
-			const bytes = await file.readFile();
-			if (bytes.byteLength !== stat.size) return null;
-			return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+			const bytes = Buffer.alloc(stat.size + 1);
+			let length = 0;
+			while (length < bytes.length) {
+				const read = await file.read(bytes, length, bytes.length - length);
+				if (read.bytesRead === 0) break;
+				length += read.bytesRead;
+			}
+			if (length !== stat.size || (await file.stat()).size !== stat.size)
+				return null;
+			return new TextDecoder("utf-8", { fatal: true }).decode(
+				bytes.subarray(0, length),
+			);
 		} finally {
 			await file.close();
 		}
@@ -129,11 +206,9 @@ export async function readHostToolOutput(
 	}
 }
 
-function isBash(tool: string): boolean {
-	return tool.toLowerCase() === "bash";
-}
-
 export class ValidationCaptureCoordinator {
+	readonly #readSession: ValidationCaptureOptions["readSession"];
+	readonly #shellRecords = new Map<string, NativeShellRecord>();
 	readonly #persist: ValidationCaptureOptions["persistObservation"];
 	readonly #readReport: ValidationCaptureOptions["readReport"];
 	readonly #now: () => number;
@@ -144,6 +219,7 @@ export class ValidationCaptureCoordinator {
 	readonly #onReceiptError: ValidationCaptureOptions["onReceiptError"];
 
 	constructor(options: ValidationCaptureOptions) {
+		this.#readSession = options.readSession;
 		this.#persist = options.persistObservation;
 		this.#readReport = options.readReport;
 		this.#now = options.now ?? Date.now;
@@ -153,21 +229,67 @@ export class ValidationCaptureCoordinator {
 		this.#onReceiptError = options.onReceiptError;
 	}
 
+	observeShellEvent(event: OpenCodeEvent): void {
+		if (event.type === "shell.created") {
+			const parsed = ShellRecord.safeParse(event.data.info);
+			if (parsed.success) this.#shellRecords.set(parsed.data.id, parsed.data);
+			if (this.#shellRecords.size > MAX_CAPTURES)
+				this.#shellRecords.delete(this.#shellRecords.keys().next().value ?? "");
+		} else if (event.type === "shell.exited") {
+			const record = this.#shellRecords.get(event.data.id);
+			if (record)
+				this.#shellRecords.set(record.id, {
+					...record,
+					status: event.data.status,
+					...(event.data.exit === undefined ? {} : { exit: event.data.exit }),
+				});
+		} else if (event.type === "shell.deleted")
+			this.#shellRecords.delete(event.data.id);
+	}
+
 	async #completeSpilledOutput(
-		visible: string,
-		metadata: unknown,
+		capture: PendingCapture,
+		input: NativeToolAfter,
+		observed: ShellObservation,
 	): Promise<string | null> {
-		if (!metadata || typeof metadata !== "object") return null;
-		const host = metadata as Record<string, unknown>;
-		if (host.truncated !== true || typeof host.outputPath !== "string")
+		if (
+			input.status !== "completed" ||
+			observed.kind !== "exited" ||
+			observed.complete !== false ||
+			!capture.execution
+		)
 			return null;
-		const marker = `...output truncated...\n\nFull output saved to: ${host.outputPath}\n\n`;
-		if (!visible.startsWith(marker)) return null;
-		const tail = visible.slice(marker.length);
-		if (tail.length < 64) return null;
+		const matches = [
+			...textContent(input).matchAll(/full output saved to ([^\]\n]+)/g),
+		];
+		if (matches.length !== 1) return null;
+		const path = matches[0]?.[1];
+		if (!path) return null;
+		const id = basename(path, ".out");
+		const record = this.#shellRecords.get(id);
+		if (
+			!record ||
+			record.file !== path ||
+			record.metadata.sessionID !== capture.sessionID ||
+			record.command !== capture.command ||
+			record.status !== "exited" ||
+			record.exit !== observed.exit ||
+			record.time.started < capture.execution.startedAt ||
+			record.time.started > this.#now()
+		)
+			return null;
 		try {
-			const full = await this.#readFullOutput(host.outputPath);
-			return full && full.length > tail.length && full.endsWith(tail)
+			if (assertMutableWorkspaceRoot(record.cwd) !== capture.workspace)
+				return null;
+			const tail = observed.text.replace(
+				/\n\n\[showing lines [0-9]+-[0-9]+ of [0-9]+; full output saved to [^\]\n]+\]$/,
+				"",
+			);
+			if (tail.length < 64 || tail === observed.text) return null;
+			const full = await this.#readFullOutput(path);
+			return full !== null &&
+				full.length > tail.length &&
+				(full.endsWith(tail) || full.endsWith(`${tail}\n`))
 				? full
 				: null;
 		} catch {
@@ -175,12 +297,6 @@ export class ValidationCaptureCoordinator {
 		}
 	}
 
-	/**
-	 * What the command's own report says about each name the plan declared.
-	 *
-	 * Every route that is not a report this command wrote lands on `absent`, because
-	 * they mean the same thing: nothing observed those cases.
-	 */
 	async #observeAssertions(
 		capture: PendingCapture,
 		observedAt: number,
@@ -192,10 +308,6 @@ export class ValidationCaptureCoordinator {
 		}));
 		if (!capture.resultsPath || !this.#readReport) return absent;
 		const report = await this.#report(capture.workspace, capture.resultsPath);
-		// `<=`, not `<`: the contract is that this command wrote the report, so a report
-		// whose mtime only *equals* the arming instant has not been shown to postdate it.
-		// Not a one-millisecond window either — mtime granularity is a whole second on
-		// some filesystems, which is wide enough for a stale report to share it.
 		if (
 			!report ||
 			report.modifiedMs <= capture.armedAt ||
@@ -225,7 +337,7 @@ export class ValidationCaptureCoordinator {
 	#prune(): void {
 		const cutoff = this.#now() - CAPTURE_TTL_MS;
 		for (const [sessionID, capture] of this.#pending) {
-			if (capture.callID === null && capture.armedAt < cutoff) {
+			if (capture.execution === null && capture.armedAt < cutoff) {
 				this.#pending.delete(sessionID);
 			}
 		}
@@ -238,6 +350,7 @@ export class ValidationCaptureCoordinator {
 		origin: AutoValidationOrigin | null = null,
 	): Readonly<{ captureId: string; expiresInMs: number }> {
 		this.#prune();
+		workspace = assertMutableWorkspaceRoot(workspace);
 		if (this.#pending.has(sessionID)) {
 			throw new ValidationCaptureError(
 				"This OpenCode session already has an armed validation command.",
@@ -265,7 +378,7 @@ export class ValidationCaptureCoordinator {
 			workspace,
 			armedAt: this.#now(),
 			origin,
-			callID: null,
+			execution: null,
 			priorReport: null,
 		});
 		return { captureId, expiresInMs: CAPTURE_TTL_MS };
@@ -275,21 +388,51 @@ export class ValidationCaptureCoordinator {
 		return this.#pending.delete(sessionID);
 	}
 
-	async observeToolBefore(
-		input: BeforeInput,
-		output: BeforeOutput,
-	): Promise<void> {
+	clear(): void {
+		this.#pending.clear();
+		this.#shellRecords.clear();
+	}
+
+	async observeToolBefore(input: NativeToolBefore): Promise<void> {
 		this.#prune();
-		if (!isBash(input.tool)) return;
+		if (input.tool !== "shell") return;
 		const capture = this.#pending.get(input.sessionID);
-		if (!capture || capture.callID !== null) return;
-		if (commandFromArgs(output.args) !== capture.command) {
+		if (!capture || capture.execution) return;
+		const args = ShellInput.safeParse(input.input);
+		capture.execution = {
+			id: input.id,
+			messageID: input.messageID,
+			agent: input.agent,
+			startedAt: this.#now(),
+		};
+		try {
+			const identity = SessionIdentity.parse(
+				await this.#readSession(input.sessionID),
+			);
+			if (
+				!args.success ||
+				args.data.command !== capture.command ||
+				identity.id !== input.sessionID ||
+				identity.agent !== input.agent ||
+				identity.parentID !== undefined ||
+				["flow-planner", "flow-worker", "flow-reviewer"].includes(
+					input.agent,
+				) ||
+				assertMutableWorkspaceRoot(identity.location.directory) !==
+					capture.workspace ||
+				(args.data.workdir &&
+					assertMutableWorkspaceRoot(args.data.workdir) !== capture.workspace)
+			)
+				throw new Error(
+					"The shell identity, workspace, or command did not match the armed validation.",
+				);
+		} catch (error) {
 			this.#pending.delete(input.sessionID);
 			throw new ValidationCaptureError(
-				"The next Bash command did not match the armed validation command; capture was cancelled.",
+				"The next shell command did not match the armed validation; capture was cancelled.",
+				{ cause: error },
 			);
 		}
-		capture.callID = input.callID;
 		if (capture.resultsPath && capture.assertions.length > 0) {
 			const report = await this.#report(capture.workspace, capture.resultsPath);
 			capture.priorReport = report
@@ -299,28 +442,48 @@ export class ValidationCaptureCoordinator {
 	}
 
 	async observeToolAfter(
-		input: AfterInput,
-		output: AfterOutput,
+		input: NativeToolAfter,
 	): Promise<ValidationObservation | null> {
 		this.#prune();
-		if (!isBash(input.tool)) return null;
+		if (input.tool !== "shell") return null;
 		const capture = this.#pending.get(input.sessionID);
-		if (!capture || capture.callID !== input.callID) return null;
+		const execution = capture?.execution;
+		if (
+			!capture ||
+			!execution ||
+			execution.id !== input.id ||
+			execution.messageID !== input.messageID ||
+			execution.agent !== input.agent
+		)
+			return null;
 		this.#pending.delete(input.sessionID);
-		if (commandFromArgs(input.args) !== capture.command) {
+		const args = ShellInput.safeParse(input.input);
+		const identity = SessionIdentity.parse(
+			await this.#readSession(input.sessionID),
+		);
+		if (
+			!args.success ||
+			args.data.command !== capture.command ||
+			identity.id !== input.sessionID ||
+			identity.agent !== input.agent ||
+			identity.parentID !== undefined ||
+			assertMutableWorkspaceRoot(identity.location.directory) !==
+				capture.workspace ||
+			(args.data.workdir &&
+				assertMutableWorkspaceRoot(args.data.workdir) !== capture.workspace)
+		)
 			throw new ValidationCaptureError(
-				"The executed Bash command changed after Flow armed it.",
+				"The executed shell command or workspace changed after Flow armed it.",
 			);
-		}
-		// A host that reports no exit code or no completeness flag still gets a
-		// durable observation, recorded as ineligible. Failing closed by throwing
-		// would lose the record entirely and make Flow unusable on such a host.
-		const observedExit = exitCode(output.metadata);
-		const observedComplete = completeOutput(output.metadata);
-		const fullOutput =
-			observedComplete === false
-				? await this.#completeSpilledOutput(output.output, output.metadata)
-				: null;
+		const observed = observeShell(input);
+		const observedExit = observed.kind === "exited" ? observed.exit : null;
+		const observedComplete =
+			observed.kind === "exited" ? observed.complete : null;
+		const fullOutput = await this.#completeSpilledOutput(
+			capture,
+			input,
+			observed,
+		);
 		const outputComplete = observedComplete === true || fullOutput !== null;
 		const hostGap: ValidationIneligibleReason | null =
 			observedExit === null
@@ -328,6 +491,7 @@ export class ValidationCaptureCoordinator {
 				: observedComplete === null
 					? "output-completeness-unknown"
 					: null;
+
 		const observedAssertions = await this.#observeAssertions(
 			capture,
 			this.#now(),
@@ -345,21 +509,18 @@ export class ValidationCaptureCoordinator {
 			...(observedAssertions.length > 0 ? { observedAssertions } : {}),
 			captureId: capture.captureId,
 			exitCode: observedExit,
-			outputDigest: digest(fullOutput ?? output.output),
+			outputDigest: digest(fullOutput ?? observed.text),
 			outputComplete,
 			...(hostGap ? { ineligibleReason: hostGap } : {}),
 		});
 		const outcome = validationContinuationOutcome(capture, observation);
-		output.output = `${output.output}\n\n[flow-validation] ${JSON.stringify({
+		const receipt = `\n\n[flow-validation] ${JSON.stringify({
 			id: observation.id,
 			scope: observation.scope,
 			intent: observation.intent ?? capture.intent,
 			passed: outcome === "passed",
 			observed: outcome === "observed",
 			recordedRevision: observation.recordedRevision,
-			// Reported back because a declared case that came out `skipped` or `absent` is
-			// exactly the state exit zero hides, and the caller has to be told before it
-			// reads the exit code as proof.
 			...(observation.observedAssertions
 				? { assertions: observation.observedAssertions }
 				: {}),
@@ -368,6 +529,11 @@ export class ValidationCaptureCoordinator {
 				: {}),
 			...(fullOutput ? { fullOutputDigest: observation.outputDigest } : {}),
 		})}`;
+		if (input.status === "completed")
+			input.result = {
+				...input.result,
+				content: [{ type: "text", text: textContent(input) + receipt }],
+			};
 		if (capture.origin) {
 			try {
 				this.#onRecorded?.({

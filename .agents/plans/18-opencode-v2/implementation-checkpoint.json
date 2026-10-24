@@ -1,0 +1,397 @@
+{
+  "branch": "feat/opencode-v2",
+  "base": "8103f1cd42e1b4d111f25d2a311935d4e41fb997",
+  "bun": "/tmp/flow-v2-toolchain/node_modules/.bin/bun",
+  "nativeHost": "/tmp/flow-opencode-v2-plan-host/npm-cache/_npx/2314e955696d2fea/node_modules/@opencode/cli-darwin-arm64/bin/opencode",
+  "candidate": {
+    "path": "/tmp/flow-v2-candidate-r8/opencode-plugin-flow-10.0.0.tgz",
+    "sha256": "fc19ca4a55a8f1684fe9e1c988adce2536a667a339a3a0e622d0c2e39518195d",
+    "unpackedManifestSha256": "667d6029038248b4222e28c8e5f7656bf1534286441335925faa4c2d20f3c95a",
+    "status": "Synthetic packed QA and fresh independent R8 source review PASS. Candidate is ready for paid pre-push smoke authorization; no release qualification or publication approval.",
+    "sourceBinding": "/tmp/flow-v2-candidate-r8/review-source-binding.json"
+  },
+  "verification": {
+    "check": "/tmp/flow-v2-r7-check-macos.log",
+    "tests": {
+      "pass": 4679,
+      "skip": 27,
+      "fail": 0
+    },
+    "packed": "/tmp/flow-v2-product-r7-qa-47fb9cwz/verification.json",
+    "continuation": "/tmp/flow-v2-packed-r7-continuation-qa-uljdjwv7/runs/run-20261024-143740-052985/verification.json",
+    "picker": "/tmp/flow-v2-picker-implementation/packed-r7-74da6ab8/verification.json",
+    "canaryFixes": "/tmp/flow-v2-canary-implementation/review-r1-fixes/report.json",
+    "postCheckTestOnlyCorrection": {
+      "files": [
+        "tests/native-auth.test.ts",
+        "tests/fixtures/native-auth-smoke.ts"
+      ],
+      "reason": "Remove dependence on the existing research temp directory and avoid overwriting earlier receipts",
+      "focused": "/tmp/flow-v2-native-auth-portability.log",
+      "native": "/tmp/flow-v2-native-auth-portable-native.log",
+      "linuxFocused": "/tmp/flow-v2-linux/portability-recheck.log"
+    },
+    "replay": "/tmp/flow-v2-final-replay.log",
+    "audit": "/tmp/flow-v2-final-audit.log",
+    "actionlint": "/tmp/flow-v2-final-actionlint.log",
+    "frozenInstall": "/tmp/flow-v2-final-frozen-install-macos.log",
+    "documentation": "/tmp/flow-v2-final-documentation.log",
+    "commentInventory": "/tmp/flow-v2-comment-review-r7-final/manifest.json",
+    "recovery": "/tmp/flow-v2-product-r7-qa-47fb9cwz/recovery/report.json",
+    "nativePreContextCompactionCounterexample": "/tmp/flow-v2-final-continuation-qa-zc8ncill/native-stale-callback-verification.json",
+    "nativeTypesafeOption": "Three actual-native option cases pass on d3d46d92 with zero advice attempts; general candidate remains blocked.",
+    "nativeAuthParentR3Focused": {
+      "log": "/tmp/flow-v2-native-auth-parent-r3-focused.log",
+      "pass": 50,
+      "fail": 0,
+      "scope": "Auth helpers, operator command/configuration, and credential-retention cleanup; no native or provider calls"
+    },
+    "r6CanonicalChecks": {
+      "status": "PASS, both macOS and Linux",
+      "macOS": "/tmp/flow-v2-r6-check-macos.log",
+      "linux": "/tmp/flow-v2-linux/r6-full-check.log",
+      "macOSSession": 54008,
+      "linuxSession": 48003,
+      "productionFrozen": true,
+      "documentationAfterSnapshot": "ADR0018 now distinguishes admission from provider attempts and pre-primary compaction; 15 documentation tests pass in /tmp/flow-v2-r6-documentation.log",
+      "tests": {
+        "pass": 4643,
+        "skip": 27,
+        "fail": 0
+      },
+      "linuxDocumentationAfterSnapshot": "/tmp/flow-v2-linux/r6-documentation.log"
+    },
+    "r7CanonicalChecks": {
+      "status": "PASS, macOS and Linux",
+      "macOS": "/tmp/flow-v2-r7-check-macos.log",
+      "linux": "/tmp/flow-v2-linux/r7-full-check.log",
+      "productionFrozen": true,
+      "macOSExitCode": 0,
+      "macOSTests": {
+        "pass": 4679,
+        "skip": 27,
+        "fail": 0,
+        "assertions": 98623,
+        "files": 183
+      },
+      "linuxExitCode": 0,
+      "linuxTests": {
+        "pass": 4679,
+        "skip": 27,
+        "fail": 0,
+        "assertions": 98620,
+        "files": 183
+      },
+      "scope": "Frozen R7 source before the next fix. Both canonical suites pass while opt-in packed native cancellation/compaction fails. Parent-only plan and review records updated separately.",
+      "sourceFreeze": "/tmp/flow-v2-manual-compaction-check-su6aydtb/freeze-final.json",
+      "linuxSnapshotManifest": "/tmp/flow-v2-linux/r7-source-manifest.json",
+      "ownedSourceFreezeVerified": true,
+      "logSha256": {
+        "macOS": "5cd30e799ffc841b6986227045202b157e12fede47763c02def8e793f07eb437",
+        "linux": "041579f2ed52708728581d39ba46a924fd332db55c002104bc30790675fd2760"
+      }
+    },
+    "r7NativeAuthRefresh": {
+      "status": "PASS",
+      "scope": "Synthetic isolated source and child services only. No real account, original user service, or paid provider.",
+      "native": "/tmp/flow-v2-native-auth-r7-native.log",
+      "canary": "/tmp/flow-v2-native-auth-r7-canary.log",
+      "reason": "Verify current reviewed disposal boundaries and current sealed client through maintained native fixture paths.",
+      "nativeTests": {
+        "pass": 1,
+        "fail": 0,
+        "assertions": 10
+      },
+      "canaryTests": {
+        "pass": 14,
+        "fail": 0,
+        "assertions": 111
+      },
+      "exitCodes": [
+        0,
+        0
+      ],
+      "logSha256": {
+        "native": "313f7482fc4f5766cc1c1670728aa312874121d2f05689f5db4f82726bd42dbd",
+        "canary": "dc401cd644d35ea3b9550825309c785fc5d57c06e7889b615752071439878b24"
+      },
+      "reviewedAuthSourceFreezeVerified": true,
+      "staticClientReceipt": "/tmp/flow-v2-auth-addon-r7-WHGmWw/verification.json",
+      "staticClientAggregate": "sha256:e8e4bed74dd1266ac3e1c4cd149918b8ffa35391afac0b098f95eb2930333c1b"
+    },
+    "r7Packed": {
+      "status": "ISSUES",
+      "macOS": "/tmp/flow-v2-product-r7-qa-47fb9cwz/verification.json",
+      "linuxLog": "/tmp/flow-v2-linux/r7-packed-smoke.log",
+      "failure": "Native manual summary after interrupted ordinary request returns failed, expected completed",
+      "picker": "PASS, both routes/eight native phases",
+      "normalRecovery": "PASS,3tests/four native hosts/zero claims",
+      "rawLinuxReproduction": "PASS, archive74da6ab8 identical to macOS",
+      "continuationLimits": "Nine prior compaction cases pass. Two transport families incomplete due initial context veto; forced pending-activation component finding separate from unproved native timing cause."
+    },
+    "r8CanonicalChecks": {
+      "status": "PASS macOS and Linux",
+      "macOS": "/tmp/flow-v2-candidate-r8/macos-check.json",
+      "linux": "/tmp/flow-v2-candidate-r8/linux-check.json",
+      "tests": {
+        "pass": 4700,
+        "skip": 27,
+        "fail": 0,
+        "files": 184
+      },
+      "assertions": {
+        "macOS": 98734,
+        "linux": 98731
+      },
+      "commentOnlySupplement": "/tmp/flow-v2-candidate-r8/review-freeze.json"
+    },
+    "r8Packed": {
+      "status": "PASS within synthetic loopback QA",
+      "macOS": "/tmp/flow-v2-product-r8-qa-_bp2a_dw/verification.json",
+      "linux": "/tmp/flow-v2-linux/r8-packed-smoke.log",
+      "assertionsEach": 119,
+      "continuation": "/tmp/flow-v2-packed-r8-b-yc4m9puu/verification.json",
+      "picker": "/tmp/flow-v2-picker-implementation/packed-r8-fc19ca4a/verification.json",
+      "recovery": "/tmp/flow-v2-product-r8-qa-_bp2a_dw/recovery/report.json",
+      "rawLinuxReproduction": true,
+      "serverMapRows": 75,
+      "tuiMapRows": 5,
+      "uniqueProjectMapPaths": 77
+    },
+    "r8Visual": {
+      "status": "PASS for recorded terminal-cell replay only",
+      "receipt": "/tmp/flow-v2-terminal-render/r8-fc19ca4a/responsive/visual-inspection.json",
+      "ansiSha256": "1da34ba1eaa1c3af9a4f1ab5919a04ea9d40db6698e4ce5351d8b72f2bca5202",
+      "limit": "No live native pixel/font verification"
+    },
+    "r8Comments": {
+      "report": "/tmp/flow-v2-comment-review-r8-independent/report.md",
+      "actualDeletions": 1,
+      "keeps": 3,
+      "suppressions": 0,
+      "mustKill": 0,
+      "response": "/tmp/flow-v2-comment-review-r8-independent/parent-response.json"
+    },
+    "r8Offline": {
+      "frozenInstallMacOS": "/tmp/flow-v2-r8-frozen-install-macos.log",
+      "frozenInstallLinux": "/tmp/flow-v2-linux/r8-frozen-install.log",
+      "replay": {
+        "log": "/tmp/flow-v2-r8-replay.log",
+        "gatedMatches": 13,
+        "gatedTotal": 13
+      },
+      "audit": {
+        "log": "/tmp/flow-v2-r8-audit.log",
+        "status": "No vulnerabilities found among276packages"
+      },
+      "actionlint": "/tmp/flow-v2-r8-actionlint.log",
+      "documentation": "/tmp/flow-v2-r8-documentation-final.log",
+      "wikiLocal": {
+        "receipt": "/tmp/flow-v2-wiki-r8-local/linkverification.json",
+        "pages": 45,
+        "checks": 293,
+        "status": "PASS; no public readback"
+      }
+    },
+    "r8IndependentReview": {
+      "verdict": "bounded PASS",
+      "report": "/tmp/flow-v2-core-review-r8/report.md",
+      "reportSha256": "444b09db9873198b26d50e5d5ca3c1f391bb7de030594648a71fcf788f331dca",
+      "pass": 496,
+      "filtered": 1,
+      "fail": 0,
+      "assertions": 2507,
+      "files": 17,
+      "freshNativeRuns": 0,
+      "sourceDrift": false
+    }
+  },
+  "pending": {
+    "coreR3Report": "/tmp/flow-v2-core-review-r3/report.md",
+    "evalR2Report": "/tmp/flow-v2-eval-review-r2/report.md",
+    "releaseR2Report": "/tmp/flow-v2-release-review-r2/report.md",
+    "nativeAccountHandoff": "/tmp/flow-v2-native-auth-probe",
+    "coreR4Report": "/tmp/flow-v2-core-review-r4/report.md",
+    "authentication": "Synthetic source-owned OAuth resolver prototype. Existing authenticated native service verified. Export bank remains unadopted.",
+    "evalR3Report": "/tmp/flow-v2-eval-review-r3/report.md",
+    "coreR5Report": "/tmp/flow-v2-core-review-r5/report.md",
+    "coreVerdict": "Bounded R8 PASS after unchanged packed smoke and full checks. No source defect remains in reviewed scope; paid qualification and publication are not approved.",
+    "typesafeEnvOption": "Implemented; independent bounded PASS at /tmp/flow-v2-typesafe-env-review-r1/report.md; final packed proof pending",
+    "nativeAuthenticationImplementation": "/tmp/flow-v2-native-auth-probe/review-r2-fixes/handoff.md",
+    "canaryNativeAuth": "Implemented; root native/sealing fixture14pass. Reviewed helper R3 PASS remains bounded; actual built-in accounts and final qualification pending.",
+    "nativeAuthRuntime": "/tmp/flow-v2-eval-auth-integration/verification.json, bootstrap and shutdown PASS; zero model generations",
+    "nativeAuthR1": "Closed by retained R1 fixes and independent R2/R3 reviews. Original report remains unchanged.",
+    "nativeAuthR2": "Closed by generic disposal error boundaries; independent R3 PASS. Original report remains unchanged.",
+    "nativeAuthR3": "Bounded PASS at /tmp/flow-v2-native-auth-review-r3/report.md. Current client e8e4bed7; real-account qualification remains pending.",
+    "coreR6": {
+      "handoff": "/tmp/flow-v2-preprimary-compaction-fix-9yngneay/handoff.md",
+      "freeze": "/tmp/flow-v2-preprimary-compaction-fix-9yngneay/freeze-for-r6.json",
+      "review": "ISSUES. Ordinary grantless compaction failed natively; same-epoch pending ownership failed in a component case. Current source corrects both; native overlap reachability remains unproved.",
+      "ownerProof": "300 focused tests,6 architecture tests,5 native cases; private source entry only, no new archive",
+      "report": "/tmp/flow-v2-core-review-r6/report.md",
+      "sameEpochObjection": "Proved component failure in same-epoch pending slot; native concurrent reachability unproved and must remain explicit."
+    },
+    "nativeAuthVerdict": "Bounded PASS, fresh Grok R3, /tmp/flow-v2-native-auth-review-r3/report.md; real-provider and paid qualification remain pending",
+    "coreR7Preparation": {
+      "handoff": "/tmp/flow-v2-manual-compaction-check-su6aydtb/handoff.md",
+      "freeze": "/tmp/flow-v2-manual-compaction-check-su6aydtb/freeze-final.json",
+      "ownerProof": "336 focused tests,6 architecture tests,9 native cases reported PASS; private development source entry only",
+      "additionalEmpiricalCheck": "Actual public session.compact failed in two ordinary-history states on the preceding source. Both are corrected and proved before/after; unattributed summaries grant no execution origin.",
+      "manualProof": "/tmp/flow-v2-manual-compaction-check-su6aydtb/handoff.md",
+      "review": "Bounded PASS at /tmp/flow-v2-core-review-r7/report.md. Independent native manual cases and 475 focused tests passed. Same-model auxiliary retry and native context overlap remain unproved."
+    },
+    "coreR7Report": "/tmp/flow-v2-core-review-r7/report.md",
+    "coreR8Design": {
+      "directory": "/tmp/flow-v2-compaction-design-r8",
+      "census": "/tmp/flow-v2-packed-r7-continuation-qa-uljdjwv7/runs/run-20261024-143740-052985/census-handoff.md",
+      "parentNativeFacts": "/tmp/flow-v2-compaction-design-r8/root-native-facts.json",
+      "parentCensusProvenance": "/tmp/flow-v2-compaction-design-r8/census-provenance-correction.json",
+      "pendingActivation": "/tmp/flow-v2-compaction-design-r8/root-pending/pending-activation.json",
+      "status": "Selected ledger implemented and frozen; exact-package gates passed before fresh R8 source review.",
+      "decision": ".agents/plans/18-opencode-v2/compaction-boundary.md",
+      "crossjudge": ".agents/plans/18-opencode-v2/reviews/compaction-design-r8.md",
+      "parentScores": {
+        "A": 15,
+        "B": 9
+      },
+      "crossjudgeScores": {
+        "A": 14,
+        "B": 10
+      },
+      "implementationThread": "flow-v2-continuation-implementation-20261024",
+      "grafts": [
+        "Synchronous pre-await reservation on one input frontier",
+        "Cancellable scope wait independent of admission.ready",
+        "Stable checked record/checkpoint origin reuse"
+      ],
+      "newSubstantiveLedgerModuleAllowed": "Retain src/platform/opencode/input-admission.ts for sole input knowledge ownership. Ceiling necessity is explicitly not claimed; earlier ceiling-dependent condition superseded by final ownership reconciliation.",
+      "additionalTestCallers": [
+        "tests/fixtures/verified-continuation-origin.ts",
+        "tests/recovery-authority.test.ts",
+        "tests/recovery-host.test.ts"
+      ],
+      "callerMigrationRule": "Move removed admission/compaction callers to real ledger and boundary; keep policy/retry/budget/prompt-count assertions; only two superseded-command strings may use new ledger epoch error. No compatibility forwards.",
+      "unmatchedCleanupReconciliation": "/tmp/flow-v2-compaction-design-r8/synthesis/unmatched-callback-reconciliation.md",
+      "preDispatchCancellation": {
+        "status": "Corrected; focused component acceptance and final source proof passed. Exact captured object cleanup retained.",
+        "beforeLog": "/tmp/flow-v2-compaction-r8-bnmny7om/pre-dispatch-cancel-before.log",
+        "ownershipRule": "End only the stale callback captured frozen primary. Revoke logical authority only for its exact still-current source. Never end the host-current replacement.",
+        "regression": "Held post-freeze session.get; same-epoch private acceptance cancels old scope, then fresh context and protected tool succeed with non-null unchanged authority.",
+        "nativeReachability": "Native overlapping-context reachability remains unproved."
+      },
+      "historicalFrontierLineage": {
+        "status": "Corrected in sole ledger; both component acceptance cases and final source proof passed.",
+        "beforeLog": "/tmp/flow-v2-compaction-r8-bnmny7om/lineage-before-correct-reason.log",
+        "rule": "Unregistered trailing history may retain only historical classification of the scope captured local frontier. Summary aliases retain that existing record; no positive origin, current lease, latest-user join, or new authority store.",
+        "automaticTombstone": "Known automatic classification cannot be erased by an unregistered trailing input or repeated summary alias.",
+        "nativeReachability": "Native reachability of the trailing-history sequence remains unproved."
+      },
+      "postReadyReadFailure": {
+        "status": "Corrected; exact post-ready source refresh and matched native-read failure regression passed.",
+        "beforeLog": "/tmp/flow-v2-compaction-r8-bnmny7om/ready-read-failure-before.log",
+        "rule": "Refresh the exact scope positive origin after ready settles and before native read. Catch may revoke only this source while the scope remains current. No pre-ready grant or host-global fallback.",
+        "regression": "No lease before readiness; matched native-read failure clears its lease; fresh exact input runs protected tool with non-null lease."
+      },
+      "modulePlacementReconciliation": {
+        "decision": "Keep separate substantive InputAdmissions and ExecutionAttribution modules; no co-location rewrite.",
+        "reportedActualLines": {
+          "lifecycle": 795,
+          "inputAdmissions": 509,
+          "executionAttribution": 454,
+          "compactionBoundary": 266
+        },
+        "ceilingFinding": "Ledger plus attribution total 963 lines before import deduplication; co-location would fit. These counts are owner-reported, not a final frozen receipt.",
+        "rationale": "Ledger owns reservation/readiness/lifetime/frontier/history. Attribution owns primary/Request/assistant/tool binding. Original admission methods and duplicate lifecycle maps are deleted; callers use the ledger directly.",
+        "limits": "No forwarding API, second registry, additional abstraction, or source-scope expansion. Final source proof and freeze remain pending."
+      },
+      "sourceFreeze": "/tmp/flow-v2-compaction-r8-bnmny7om/freeze-final.json",
+      "parentReviewFreeze": "/tmp/flow-v2-candidate-r8/review-freeze.json"
+    },
+    "coreR8Review": "/tmp/flow-v2-core-review-r8/report.md, bounded PASS"
+  },
+  "next": [
+    "Finish staged-index review and commit preflight, then commit the reviewed migration.",
+    "Complete repository contribution gates and commit the reviewed migration.",
+    "Obtain explicit paid pre-push smoke authorization before account use and push; then Linux CI and separate full qualification approval.",
+    "Publish through the usual exact-artifact release gate, then wiki publication and public readback."
+  ],
+  "authority": {
+    "mainRepositoryCommits": 0,
+    "pushes": 0,
+    "pullRequests": 0,
+    "paidProviderCalls": 0,
+    "tags": 0,
+    "published": false,
+    "localOpenAiAndXaiApiKeysPresent": false,
+    "ciModelApiSecretsPresent": false,
+    "prePushPaidGate": ".agents/skills/flow-contribution-check/references/validation-matrix.md",
+    "authorizationRule": ".agents/plans/05-release-simplification/README.md#authorize-paid-work",
+    "matrixDispatchDraft": ".agents/plans/18-opencode-v2/qualification-dispatch-draft.json",
+    "publicationRequiresImmediateApproval": true,
+    "authenticationSource": "Existing OpenCode 2 accounts, selected by user; no paid authorization.",
+    "nativeAccountMetadata": {
+      "openai": "oauth",
+      "xai": "oauth",
+      "secretValuesRead": false
+    },
+    "nativeServiceMetadata": {
+      "version": "2.1.4",
+      "pid": 76572,
+      "local": true,
+      "authenticatedNativeCliInfo": "PASS",
+      "originalRefreshValuesRead": false
+    }
+  },
+  "notes": [
+    "Do not reuse a completed review thread for another review round. Use delegate_task with a fresh clientRequestId.",
+    "The R1 marker provenance claim is superseded in reviews/reconciliation.md; preserve original reports.",
+    "The HTTP helper is proven on native 2.1.4. Old experimental environment flags are retired from active execution.",
+    "Wiki draft remains local. Visual appearance was not signed off; native PTY behavior passed."
+  ],
+  "linuxRunner": {
+    "profile": "flow-v2-qualification",
+    "dockerContext": "colima-flow-v2-qualification",
+    "platform": "linux/aarch64",
+    "image": "flow-v2-qualification:1.4.0",
+    "baseImageDigest": "sha256:5ff609364c049b54eb0ff560ec96319729a972078ef2c755d758f0c6ef89c2d6",
+    "sourceMount": "read-only",
+    "authExported": false,
+    "frozenInstall": "PASS, 272 packages; clean platform exposed and removed undeclared test yaml import",
+    "firstFullCheck": {
+      "log": "/tmp/flow-v2-linux/first-full-check.log",
+      "pass": 4494,
+      "skip": 25,
+      "fail": 0,
+      "scope": "Isolated source snapshot before stale callback ownership fix and native OAuth integration"
+    },
+    "activeContainer": "flow-v2-qualification-init",
+    "finalFullCheck": {
+      "log": "/tmp/flow-v2-linux/final-full-check-recheck.log",
+      "pass": 4603,
+      "skip": 27,
+      "fail": 0
+    },
+    "packedSmoke": {
+      "log": "/tmp/flow-v2-linux/final-packed-smoke-init.log",
+      "pass": 2,
+      "fail": 0,
+      "assertions": 119,
+      "evidenceDirectory": "/tmp/flow-v2-linux/final-packed-smoke-init"
+    },
+    "runnerCorrection": "Use Docker --init to reap exited native descendants. First no-init run failed cleanup on one confirmed zombie; no live product process remained.",
+    "rawArchiveReproducibility": {
+      "log": "/tmp/flow-v2-linux/packed-reproducibility.log",
+      "archive": "/tmp/flow-v2-linux/linux-packed-repro/opencode-plugin-flow-10.0.0.tgz",
+      "matchesMacOSCandidate": true,
+      "sha256": "d3d46d92148a34d829536c939a528f52c3ef6adeb612230afab860b003c09292"
+    }
+  },
+  "rejectedCandidates": [
+    {
+      "path": "/tmp/flow-v2-candidate-final/opencode-plugin-flow-10.0.0.tgz",
+      "sha256": "d3d46d92148a34d829536c939a528f52c3ef6adeb612230afab860b003c09292",
+      "unpackedManifestSha256": "29a1d475fae346ee7fd52a62ac079ca2af5b0f0c36ee05bb946d2f9fc8aba0d8",
+      "status": "REJECTED. Retained exact archive has the native pre-primary compaction defect. Current source has additional ordinary automatic/manual compaction corrections; fresh R7 and full checks are running. No replacement archive exists."
+    }
+  ]
+}

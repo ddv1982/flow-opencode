@@ -1,34 +1,25 @@
 import { compileFlowPromptSurface } from "./prompt-surfaces.js";
 
-type FlowPermissionConfig = {
-	edit?: string | Record<string, string>;
-	bash?: string | Record<string, string>;
-	skill?: string | Record<string, string>;
-	task?: Record<string, string>;
-	[toolPattern: string]: string | Record<string, string> | undefined;
-};
-
+type FlowPermissionRule = Readonly<{
+	action: string;
+	resource: string;
+	effect: "allow" | "deny" | "ask";
+}>;
 type FlowAgentConfig = {
 	mode: "subagent";
 	description: string;
-	prompt: string;
-	hidden?: boolean;
-	disable?: boolean;
+	system: string;
+	hidden: boolean;
 	model?: string;
 	variant?: string;
 	steps?: number;
-	permission?: FlowPermissionConfig;
+	permissions: FlowPermissionRule[];
 };
 
 type CommandBase = { description: string; template: string };
 type FlowCommandConfig =
 	| (CommandBase & { subtask: false; agent?: never })
 	| (CommandBase & { subtask: true; agent: string });
-
-export type MutableFlowConfig = {
-	agent?: Record<string, unknown>;
-	command?: Record<string, unknown>;
-};
 
 type FlowEnvironment = Readonly<Record<string, string | undefined>>;
 type ReviewerSettingSource = "plugin-option" | "environment" | "picker";
@@ -91,63 +82,52 @@ type FlowReviewerStatus = Readonly<{
 	report: readonly string[];
 }>;
 
+const READ_ONLY_RULES: FlowPermissionRule[] = [
+	{ action: "*", resource: "*", effect: "deny" },
+	{ action: "read", resource: "*", effect: "allow" },
+	{ action: "glob", resource: "*", effect: "allow" },
+	{ action: "grep", resource: "*", effect: "allow" },
+];
 export const FLOW_CORE_AGENTS = {
 	"flow-planner": {
 		mode: "subagent",
 		hidden: true,
 		description:
 			"Optional read-only planning specialist. Returns advisory draft analysis to the manager.",
-		prompt: compileFlowPromptSurface("flow-planner"),
-		permission: {
-			"*": "deny",
-			read: "allow",
-			glob: "allow",
-			grep: "allow",
-			edit: "deny",
-			bash: "deny",
-			external_directory: "deny",
-			skill: "deny",
-			task: { "*": "deny" },
-			"flow_*": "deny",
-		},
+		system: compileFlowPromptSurface("flow-planner"),
+		permissions: [...READ_ONLY_RULES],
 	},
 	"flow-reviewer": {
 		mode: "subagent",
 		hidden: true,
 		description:
 			"Independent workspace-read-only reviewer that submits one Flow result.",
-		prompt: compileFlowPromptSurface("flow-reviewer"),
-		permission: {
-			edit: "deny",
-			bash: "deny",
-			external_directory: "deny",
-			skill: "deny",
-			task: { "*": "deny" },
-			"flow_*": "deny",
-			flow_status: "allow",
-			flow_feature_complete: "allow",
-		},
+		system: compileFlowPromptSurface("flow-reviewer"),
+		permissions: [
+			...READ_ONLY_RULES,
+			{ action: "flow_status", resource: "*", effect: "allow" },
+			{ action: "flow_feature_complete", resource: "*", effect: "allow" },
+		],
 	},
 	"flow-worker": {
 		mode: "subagent",
 		hidden: true,
 		description:
 			"Bounded worker for one read-only evidence or exact-scope implementation slice.",
-		prompt: compileFlowPromptSurface("flow-worker"),
-		permission: {
-			edit: {
-				"*": "allow",
-				".flow": "deny",
-				".flow/**": "deny",
-				".git": "deny",
-				".git/**": "deny",
-			},
-			bash: "deny",
-			external_directory: "deny",
-			skill: "deny",
-			task: { "*": "deny" },
-			"flow_*": "deny",
-		},
+		system: compileFlowPromptSurface("flow-worker"),
+		permissions: [
+			...READ_ONLY_RULES,
+			{ action: "edit", resource: "*", effect: "allow" },
+			...[".flow", ".git"].flatMap((name) =>
+				[name, `${name}/**`, `**/${name}`, `**/${name}/**`].map(
+					(resource): FlowPermissionRule => ({
+						action: "edit",
+						resource,
+						effect: "deny",
+					}),
+				),
+			),
+		],
 	},
 } satisfies Record<string, FlowAgentConfig>;
 
@@ -388,10 +368,9 @@ export function createFlowCoreConfigEntries(options?: {
 		agent: {
 			"flow-planner": {
 				...FLOW_CORE_AGENTS["flow-planner"],
-				disable: !options?.planningModel,
 				...(options?.planningModel ? { model: options.planningModel } : {}),
-				permission: structuredClone(
-					FLOW_CORE_AGENTS["flow-planner"].permission,
+				permissions: structuredClone(
+					FLOW_CORE_AGENTS["flow-planner"].permissions,
 				),
 			},
 			"flow-reviewer": {
@@ -399,13 +378,15 @@ export function createFlowCoreConfigEntries(options?: {
 				...(model ? { model } : {}),
 				...(reviewer.variant ? { variant: reviewer.variant.value } : {}),
 				...(steps ? { steps } : {}),
-				permission: structuredClone(
-					FLOW_CORE_AGENTS["flow-reviewer"].permission,
+				permissions: structuredClone(
+					FLOW_CORE_AGENTS["flow-reviewer"].permissions,
 				),
 			},
 			"flow-worker": {
 				...FLOW_CORE_AGENTS["flow-worker"],
-				permission: structuredClone(FLOW_CORE_AGENTS["flow-worker"].permission),
+				permissions: structuredClone(
+					FLOW_CORE_AGENTS["flow-worker"].permissions,
+				),
 			},
 		},
 		command: Object.fromEntries(
@@ -415,38 +396,6 @@ export function createFlowCoreConfigEntries(options?: {
 			]),
 		),
 	};
-}
-
-export function applyFlowConfig(
-	config: MutableFlowConfig,
-	options?: {
-		pluginOptions?: FlowPluginOptions | undefined;
-		reviewerConfiguration?: FlowReviewerConfiguration | undefined;
-		planningModel?: string | undefined;
-		onCollision?: (kind: "agent" | "command", name: string) => void;
-		onWarning?: (warning: string) => void;
-		onNotice?: (notice: string) => void;
-	},
-): void {
-	const entries = createFlowCoreConfigEntries({
-		planningModel: options?.planningModel,
-		...(options?.onWarning ? { onWarning: options.onWarning } : {}),
-		...(options?.onNotice ? { onNotice: options.onNotice } : {}),
-		...(options?.pluginOptions ? { pluginOptions: options.pluginOptions } : {}),
-		...(options?.reviewerConfiguration
-			? { reviewerConfiguration: options.reviewerConfiguration }
-			: {}),
-	});
-	for (const name of Object.keys(entries.agent)) {
-		if (config.agent && name in config.agent)
-			options?.onCollision?.("agent", name);
-	}
-	for (const name of Object.keys(entries.command)) {
-		if (config.command && name in config.command)
-			options?.onCollision?.("command", name);
-	}
-	config.agent = { ...(config.agent ?? {}), ...entries.agent };
-	config.command = { ...(config.command ?? {}), ...entries.command };
 }
 
 export type FlowCodingModel = Readonly<{

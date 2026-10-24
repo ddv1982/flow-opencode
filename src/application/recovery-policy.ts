@@ -300,19 +300,20 @@ export class RecoveryController {
 			host.ordinaryAutoMessage = id;
 		if (authority && (!synthetic || trustedAutoContinuation)) {
 			if (authority.parent !== null && authority.parent !== id) {
-				const lease = this.#lease;
-				if (
-					lease?.authority === authority &&
-					(lease.inFlight || lease.pending)
-				) {
-					lease.controller.abort();
-					lease.controller = new AbortController();
-					lease.pending = null;
-					lease.last = { kind: "cancelled" };
-				}
+				this.invalidateOrigins(hostId);
 				if (!synthetic) authority.direction = id;
 			}
 			authority.parent = id;
+		}
+	}
+	invalidateOrigins(hostId: string): void {
+		this.#hosts.get(hostId)?.parents.clear();
+		const lease = this.#lease;
+		if (lease?.authority.host === hostId && (lease.inFlight || lease.pending)) {
+			lease.controller.abort();
+			lease.controller = new AbortController();
+			lease.pending = null;
+			lease.last = { kind: "cancelled" };
 		}
 	}
 	observeAssistant(hostId: string, id: string, parent: string): void {
@@ -483,7 +484,6 @@ export class RecoveryController {
 		session: Session,
 		request: SessionCloseRequest,
 	): void {
-		this.#expireLease();
 		this.#checkProtectedSession(context, session);
 		const authority = this.#origin(context);
 		if (!authority) return;

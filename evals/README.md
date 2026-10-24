@@ -11,14 +11,16 @@ hold.
 
 ## Running
 
-Needs provider credentials, so this is never part of `bun run check`.
+Model runs require provider credentials and an approved
+[dispatch ledger](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
+They are outside `bun run check`.
 
 Opt-in Jev corpus scoring needs `TYPESAFE_API_KEY` and is also outside the
 gate: `bun run eval:jev` writes gitignored `evals/results/jev-alignment-v2.json`.
 
 ```bash
-bun run eval -- --model openai/gpt-5.6-sol
-bun run eval -- --model openai/gpt-5.6-sol --model opencode/claude-opus-5
+bun run eval -- --model provider/model
+bun run eval -- --model provider-a/model --model provider-b/model
 bun run eval -- --scenario happy-path --repeat 3
 ```
 
@@ -26,7 +28,7 @@ To bind a campaign to a reviewed package, supply both
 `--expected-tarball-sha256 sha256:<64 lowercase hex digits>` and
 `--expected-manifest-sha256 sha256:<64 lowercase hex digits>`. The runner compares
 these values against its actual packed archive before cache installation,
-credential copying, model probes or workflow dispatches. A raw archive mismatch
+credential setup, model probes or workflow dispatches. A raw archive mismatch
 fails even when the complete unpacked content manifest matches. Missing, repeated,
 malformed or unpaired hash options fail before building. Both options also accept
 `--option=value` syntax. Runs without either option retain their existing behavior.
@@ -36,17 +38,15 @@ hashes in the launch command. Keep the build process's reviewed file mask. Prote
 private logs through individual exclusive files with mode `0600`, rather than
 changing the process file mask for both logging and package creation.
 
-Ids are `providerID/modelID` as the host resolves them, which depends on which
-providers you have authenticated — Opus 5 may be `opencode/claude-opus-5` rather
-than `anthropic/claude-opus-5`. Only the first slash separates the two halves, so
-a gateway model id keeps its own (`openrouter/openai/gpt-5.6-sol`).
+Ids are `providerID/modelID` as the host resolves them. Only the first slash
+separates provider and model, so routed model IDs may contain further slashes.
 
-A preflight boots one throwaway host and checks two separate things before the
-run spends anything:
+A preflight boots one throwaway host and checks availability before scenario work.
+Its model probes consume authorized dispatches.
 
 1. **The id resolves.** OpenCode builds its catalog from Models.dev overlaid with
    your configured providers. A miss here is a spelling or configuration problem.
-2. **The model answers.** One near-free completion per model. A model can resolve
+2. **The model answers.** One authorized completion per model. A model can resolve
    and still refuse, because the catalog says nothing about whether your account
    is *entitled* to call it — the normal state for a newly released or
    preview-gated model. Without this stage that failure surfaces partway into a
@@ -55,26 +55,87 @@ run spends anything:
 Either failure exits 2 before any scenario runs. Losing the probe host itself
 reports `SKIPPED` and continues, since that is no evidence about the models.
 
-The child host gets its own XDG directories so it never touches your session
-database, but credentials live in that same data directory, so `auth.json` is
-copied into the throwaway home and removed with it. Set `FLOW_EVAL_NO_AUTH_COPY=1`
-to skip the copy and rely on environment credentials only.
+Active runs use OpenCode 2.1.4 with private HOME and XDG directories. Provider
+environment credentials and the explicit native-account source below are
+supported. V1 `auth.json` copying is retired. Programmatic callers can supply
+an owned native `credentialHandoff`. Both Flow and ordinary comparison hosts
+use HTTP transport.
+
+### Native account authentication
+
+Keep OAuth refresh in the existing OpenCode 2.1.4 background service. The test
+host receives a placeholder refresh value and resolves access through a private
+local relay. Do not export or copy OAuth credentials into a second database.
+
+Use an existing approved `FLOW_EVAL_AUTHORIZATION` ledger before starting the
+source. Its models must include every requested model. Source setup may perform
+normal native OAuth refresh. It does not create authorization or consume a model
+dispatch. No real account values are printed.
+
+Keep this process running, with one `--model` argument per approved model:
+
+```sh
+bun scripts/native-eval-auth.ts --opencode opencode2 \
+  --model provider/model --out /tmp/flow-eval-auth/connection.json
+```
+
+The output directory must be owned by the operator with mode 0700. A missing
+directory is created privately. The connection file is created exclusively with
+mode 0600. The command refuses existing files. Stop it with SIGINT or SIGTERM
+after all test hosts have stopped. Cleanup removes its own connection file and
+unloads its temporary source location. It leaves the original service running.
+
+In the evaluation shell, select that private file and the same approved model:
+
+```sh
+export FLOW_EVAL_NATIVE_AUTH=/tmp/flow-eval-auth/connection.json
+bun run eval -- --model provider/model --scenario plan-only-stops --concurrency 1
+```
+
+Native-account runs require concurrency one. Missing, changed, unavailable or
+unapproved accounts fail rather than falling back to another credential. Warming
+is disabled. Keep the connection file, capability and account metadata out of
+logs, transcripts, Git and published artifacts. The file must be owned by the
+evaluation process user; copies need the same private permissions.
+
+For a Linux worker on another host, keep both endpoints on loopback and use a
+private SSH forward. In a private copy of the connection file, change only `url`
+to the forwarded loopback address. Preserve the capability and routing data.
+Do not forward the native service password or expose the relay on a public
+interface. The source service version and PID are checked around native RPC calls.
+
+Canaries require an explicitly sealed attachment:
+
+```sh
+bun run eval:canary -- prepare --report CAMPAIGN/report.json \
+  --out CANARY_DIR --native-auth
+bun scripts/canary-run.ts CANARY_DIR/prepared.json provider/model PROMPT_FILE \
+  --native-auth-source "$FLOW_EVAL_NATIVE_AUTH"
+```
+
+Recording an attached canary also requires `--launch-receipt` pointing to that
+launch's `run.json`. The installation evidence seals the static four-file client
+and public launch receipt. Live connection data stays private. No-auth
+preparations reject a native source argument; attached preparations require it.
 
 `FLOW_EVAL_MODEL` accepts a comma-separated list as an alternative to `--model`.
-`FLOW_OPENCODE_SMOKE_VERSION` overrides the pinned host.
+`FLOW_EVAL_OPENCODE_VERSION` selects another eligible host for ordinary runs.
+`FLOW_OPENCODE_SMOKE_VERSION` selects the compatibility-smoke host.
 
 For an ordinary run with a distinct reviewer, set
 `OPENCODE_FLOW_REVIEWER_MODEL` and optional `OPENCODE_FLOW_REVIEWER_STEPS`.
 The runner preflights the reviewer model, writes both values through native
-plugin tuple configuration, and records the same selection in provenance.
+plugin object options, and records the same selection in provenance.
 Release sampling rejects reviewer overrides.
 
 Ordinary runs use one sequential queue per model, with up to four queues in flight.
 Release mode is strictly sequential (`--concurrency 1`). Versions 9.1.0 and
 9.2.0 pin `openai/gpt-6-sol` with 38 primary targets and eight reserves. Version
 9.3.0 pins the same model with 48 primary targets and nine reserves. Version
-9.4.0 uses 57 primary targets and 12 reserves on the same route. Other versions
-require two providers, 96 primary targets and 18 reserves. Only retained retryable
+9.4.0 uses 57 primary targets and 12 reserves on the same route. Flow 10.0.0
+requires two providers across 17 cases, with 144 primary cells and 34 reserves.
+Cells are scheduling units; count scenario steps and probes separately for the
+dispatch authorization. Only retained retryable
 host/provider failures activate reserves, never product failures. Results are
 persisted in declared order even when ordinary queues finish out of order.
 
@@ -93,8 +154,8 @@ so signals reach it; allow shutdown grace (for example `docker stop --timeout 18
 <container>`), and wait for exit before removing the container or scratch files.
 
 An accepted signal stops new probes, steps, primary jobs and reserves. Active host
-work is aborted, the process tree is terminated, refreshed credentials are synced
-back, then scratch is removed. Cleanup failures propagate and preserve recoverable
+work is aborted and native credentials are collected before the process tree
+stops. An explicit handoff callback runs before scratch cleanup. Cleanup failures propagate and preserve recoverable
 scratch rather than claiming successful finalization. Never share that scratch:
 it can contain credentials.
 
@@ -341,8 +402,9 @@ Comparisons may isolate artifact or manager changes, measure
 measure the whole run; isolated reviewer quality needs frozen code and review
 evidence. Requested profiles remain distinct from observed host metadata.
 
-Studies pin OpenCode 1.18.6 and disable ambient host configuration and reviewer
-environment overrides. Catalog membership does not prove model entitlement or
+New studies pin OpenCode 2.1.4, select HTTP transport, and disable ambient host
+configuration and reviewer environment overrides. Historical 1.18.6 policies
+remain readable with their original hashes. Catalog membership does not prove model entitlement or
 effective effort. Optional entitlement probes have a separate explicit allowance
 and retained receipts. A failed probe stops the study.
 
@@ -447,9 +509,8 @@ review or release qualification. These limits are derived for existing recording
 without rewriting their measured bytes or expectations.
 
 Nothing credential-shaped is written into a cassette, and the recording host's
-project path is replaced by a token rather than baked in. The recording host copies
-the developer's real `auth.json` into its throwaway home, so this is a hard rule
-rather than a precaution; `tests/eval-replay.test.ts` pins it.
+project path is replaced by a token. Native credential snapshots stay outside
+recorded model decisions; `tests/eval-replay.test.ts` checks redaction.
 
 Only recordings someone has read belong in the committed `evals/cassettes/` set,
 which is what CI gates on. `--accept` rewrites supported cassette expectations

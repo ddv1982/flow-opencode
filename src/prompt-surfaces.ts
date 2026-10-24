@@ -32,7 +32,7 @@ const FLOW_WORKER_PROMPT = [
 	].join(" "),
 	"- Do not delegate, spawn subtasks, or load skills.",
 	"- Do not stage, commit, push, publish, or create a release.",
-	"- Do not run Bash commands. The manager owns every executable check.",
+	"- Do not run Shell commands. The manager owns every executable check.",
 	"- Never edit .flow or .git metadata paths; the host denies those paths.",
 	"- A read-only evidence slice must not edit files.",
 	[

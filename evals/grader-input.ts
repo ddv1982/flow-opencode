@@ -7,8 +7,10 @@ import type { ObservedToolCall, Outcome } from "./harness.js";
 import {
 	type HostAbortObservation,
 	HostAbortObservationSchema,
+	type HostTrace,
 	HostTraceSchema,
 	NativeToolProvenanceSchema,
+	nativeToolKey,
 } from "./host-trace.js";
 import { ReviewerPacketBytesListSchema } from "./reviewer-packet-bytes.js";
 
@@ -119,7 +121,7 @@ export const ScenarioGradeInputSchema = z
 		for (const message of value.hostTrace.messages) {
 			if (message.role !== "assistant") continue;
 			for (const tool of message.tools)
-				tools.set(tool.partId, {
+				tools.set(nativeToolKey(tool), {
 					sessionId: message.sessionId,
 					messageId: message.id,
 					agent: message.agent,
@@ -143,9 +145,9 @@ export const ScenarioGradeInputSchema = z
 					continue;
 				}
 				const native = call.native;
-				const observed = tools.get(native.partId);
+				const observed = tools.get(nativeToolKey(native));
 				if (
-					seen.has(native.partId) ||
+					seen.has(nativeToolKey(native)) ||
 					!observed ||
 					observed.sessionId !== native.sessionId ||
 					observed.messageId !== native.messageId ||
@@ -162,7 +164,7 @@ export const ScenarioGradeInputSchema = z
 						path: [field, index, "native"],
 						message: "Native call provenance does not match the host trace.",
 					});
-				seen.add(native.partId);
+				seen.add(nativeToolKey(native));
 			}
 		}
 	});
@@ -489,13 +491,7 @@ function verifiedAbortPending(
 	const tools: string[] = [];
 	for (const pending of observation.pending) {
 		const native = pending.native;
-		const identity = canonicalJson([
-			native.sessionId,
-			native.messageId,
-			native.partId,
-			native.partIndex,
-			native.callId,
-		]);
+		const identity = nativeToolKey(native);
 		if (
 			!owned.has(native.sessionId) ||
 			!native.callId ||
@@ -510,13 +506,7 @@ function verifiedAbortPending(
 			(call) =>
 				call.tool === pending.tool &&
 				call.native &&
-				canonicalJson([
-					call.native.sessionId,
-					call.native.messageId,
-					call.native.partId,
-					call.native.partIndex,
-					call.native.callId,
-				]) === identity,
+				nativeToolKey(call.native) === identity,
 		);
 		const call = matches[0];
 		if (
@@ -531,17 +521,15 @@ function verifiedAbortPending(
 		)
 			return null;
 		const nativeMatches = trace.messages
-			.flatMap((message) => (message.role === "assistant" ? message.tools : []))
+			.flatMap<
+				Extract<
+					Extract<HostTrace, { kind: "observed" }>["messages"][number],
+					{ role: "assistant" }
+				>["tools"][number]
+			>((message) => (message.role === "assistant" ? message.tools : []))
 			.filter(
 				(tool) =>
-					tool.tool === pending.tool &&
-					canonicalJson([
-						tool.sessionId,
-						tool.messageId,
-						tool.partId,
-						tool.partIndex,
-						tool.callId,
-					]) === identity,
+					tool.tool === pending.tool && nativeToolKey(tool) === identity,
 			);
 		const counterpart = nativeMatches[0];
 		if (

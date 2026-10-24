@@ -120,7 +120,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           FLOW_EVAL_MODEL: ${{ steps.matrix.outputs.models }}
-          FLOW_EVAL_NO_AUTH_COPY: "1"
           FLOW_EVAL_AUTHORIZATION: ${{ github.workspace }}/.paid-budget
         # A failing scenario must still publish its report: the durable documents are
         # the only way to read why, and paying for the pass twice is the alternative.

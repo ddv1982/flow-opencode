@@ -54,6 +54,16 @@ describe("package smoke", () => {
 		const plugin = (await import(`${entryUrl.href}?smoke=${Date.now()}`)) as {
 			default?: unknown;
 		};
-		expect(typeof plugin.default).toBe("function");
+		expect(plugin.default).toMatchObject({
+			id: "opencode-plugin-flow",
+			setup: expect.any(Function),
+		});
+		const tui = await import(
+			`${pathToFileURL(new URL("dist/tui.js", repositoryRoot).pathname).href}?smoke=${Date.now()}`
+		);
+		expect(tui.default).toMatchObject({
+			id: "opencode-plugin-flow.model-picker",
+			setup: expect.any(Function),
+		});
 	}, 30_000);
 });

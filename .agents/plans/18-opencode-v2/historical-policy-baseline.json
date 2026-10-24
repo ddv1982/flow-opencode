@@ -1,0 +1,26 @@
+{
+  "9.1.0": {
+    "policy": "sha256:6146ace9217f1c0555e2e0d8c55c79b63f57534b0155f180dbd67e102b2cbd08",
+    "host": "sha256:bc865ab8b4c506a874c2e380c5a7d9ba973a6fcdb12df82a3574dd6acba36312"
+  },
+  "9.2.0": {
+    "policy": "sha256:6146ace9217f1c0555e2e0d8c55c79b63f57534b0155f180dbd67e102b2cbd08",
+    "host": "sha256:bad12101c8bffda4d20ac5e8fc61c595108672b2b08e3012a4f6490e929c7da3"
+  },
+  "9.3.0": {
+    "policy": "sha256:be567f530fc5d9e1c25519a22a2d96f9b82aeb3849fe032b4fe2bb6c847ff265",
+    "host": "sha256:e93ef3eaf4a86a954580896b46b719a07e6cfecef91175c8b61987e712388828"
+  },
+  "9.4.0": {
+    "policy": "sha256:94cbb4ea9f07efb28760ff001a9a32e627a12448fa1fd5e166086fb6ecdaf9b2",
+    "host": "sha256:0c0f345dddedafdbae340f1809fdfa295e3bb9e49aec0146eaaa3bdebf61ab63"
+  },
+  "9.5.0": {
+    "policy": "sha256:b969b7aeacbdfb6b5194218e9fb18c014b66148f4b8c8cc0293fbdcee4cdd10c",
+    "host": "sha256:9d21ff22c74157ce1b9611b38589f9069180b094428b7bdd776a759ba49ea3f3"
+  },
+  "9.6.0": {
+    "policy": "sha256:8b1ca2667a4ef2df322b07eb73ff1d1bfb585e2c03481d358f89eb25bb6448b8",
+    "host": "sha256:370ad37456462add03aa780ba00ed7ea417ce066b0631cb03bd5a41f31c1cf82"
+  }
+}

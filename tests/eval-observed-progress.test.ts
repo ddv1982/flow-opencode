@@ -2,6 +2,11 @@ import { expect, spyOn, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import type {
+	SessionInterruptResponse,
+	SessionMessageAssistant,
+	SessionMessageInfo,
+} from "@opencode/client";
 import { deriveEnvironmentReserveState } from "../evals/environment-reserves.js";
 import {
 	deriveRetainedFailure,
@@ -10,7 +15,7 @@ import {
 	retainedFailureObservation,
 	ScenarioGradeInputSchema,
 } from "../evals/grader-input.js";
-import { EvalHost, type Outcome } from "../evals/harness.js";
+import type { EvalHost, Outcome } from "../evals/harness.js";
 import { redactTranscript } from "../evals/provenance.js";
 import { releaseCatalog, releaseCellsFor } from "../evals/release-policy.js";
 import { deriveReleaseRunState } from "../evals/release-progress.js";
@@ -19,6 +24,21 @@ import type {
 	CampaignPlan,
 	ScheduledCell,
 } from "../evals/report.js";
+
+import {
+	fixtureModel,
+	messagePage,
+	nativeAssistant,
+	nativeHost,
+	nativeHttpClient,
+	nativeSession,
+	nativeTool,
+	sessionPage,
+	sessionReply,
+	useNativeFixtureBudget,
+} from "./fixtures/native-eval-client.js";
+
+useNativeFixtureBudget();
 
 type Mode =
 	| "text"
@@ -55,7 +75,10 @@ const model = {
 };
 async function observe(
 	mode: Mode,
-	afterWait?: (host: EvalHost) => Promise<void>,
+	afterWait?: (
+		host: EvalHost,
+		cancel: (reason: Error) => void,
+	) => Promise<void>,
 	outcomeRoots: readonly string[] = [root],
 ) {
 	const project = await mkdtemp(join(tmpdir(), "flow-observed-progress-"));
@@ -84,96 +107,75 @@ async function observe(
 				: `Inspect ${root} in ${project} and ${homedir()}/fixture-review.`,
 		apiKey: "synthetic-private-token-for-redaction",
 	};
-	const user = (sessionID: string) => ({
-		info: {
-			id: sessionID === root ? "msg_rootuser" : "msg_childuser",
-			sessionID,
-			role: "user",
-			time: { created: 1 },
-		},
-		parts: [
-			{
-				id: sessionID === root ? "prt_rootprompt" : "prt_childprompt",
-				sessionID,
-				messageID: sessionID === root ? "msg_rootuser" : "msg_childuser",
-				type: "text",
-				text: "Inspect the fixture.",
+	const user = (session: string): SessionMessageInfo => ({
+		type: "user",
+		id: session === root ? "msg_rootuser" : "msg_childuser",
+		time: { created: 1 },
+		text: "Inspect the fixture.",
+	});
+	const assistant = (session: string, id: string, history = false) =>
+		nativeAssistant(id, {
+			agent: session === root ? "build" : "flow-reviewer",
+			model: { providerID: "openai", id: "gpt-6.1-sol" },
+			time: {
+				created: 2,
+				...(history && !(mode === "history-reopened" && now >= 100_000)
+					? { completed: 3 }
+					: completed()
+						? { completed: 210_000 }
+						: {}),
 			},
-		],
-	});
-	const info = (sessionID: string, id: string, history = false) => ({
-		id,
-		sessionID,
-		parentID: sessionID === root ? "msg_rootuser" : "msg_childuser",
-		role: "assistant",
-		agent: sessionID === root ? "build" : "flow-reviewer",
-		summary: false,
-		providerID: "openai",
-		modelID: "gpt-6.1-sol",
-		time: {
-			created: 2,
-			...(history && !(mode === "history-reopened" && now >= 100_000)
-				? { completed: 3 }
+		});
+	const rootMessages = (): SessionMessageInfo[] => {
+		const task = nativeTool(
+			"call_task",
+			"task",
+			aborted
+				? {
+						status: "error",
+						input: taskInput,
+						error: { type: "aborted", message: "Task cancelled" },
+					}
 				: completed()
-					? { completed: 210_000 }
-					: {}),
-		},
-	});
-	const rootMessages = () => {
-		const entries = [
-			user(root),
-			{
-				info: info(root, "msg_root"),
-				parts: [
-					{
-						id: "prt_task",
-						sessionID: mode === "foreign-root-part" ? "ses_foreign" : root,
-						messageID: "msg_root",
-						type: "tool",
-						tool: "task",
-						callID: "call_task",
-						state: {
-							status: aborted ? "error" : completed() ? "completed" : "running",
+					? {
+							status: "completed",
 							input: taskInput,
-							...(aborted ? { error: "Task cancelled" } : {}),
+							content: [{ type: "text", text: "review complete" }],
+						}
+					: {
+							status: "running",
+							input: taskInput,
 							metadata: {
 								sessionId: child,
 								parentSessionId: root,
-								model: { providerID: "openai", modelID: "gpt-6.1-sol" },
+								model: { providerID: "openai", id: "gpt-6.1-sol" },
 								heartbeat: mode === "metadata" ? now : 0,
 							},
-							time: {
-								start: 2,
-								...(aborted
-									? { end: now }
-									: completed()
-										? { end: 210_000 }
-										: {}),
-							},
 						},
-					},
-				],
+			{
+				created: 2,
+				...(aborted
+					? { completed: now }
+					: completed()
+						? { completed: 210_000 }
+						: {}),
 			},
-		];
-		const part = entries[1]?.parts[0];
-		if (!part) throw new Error("Missing root fixture part.");
+		);
 		if (!aborted && !completed()) {
-			if (mode === "object-call")
-				Reflect.set(part, "callID", { heartbeat: now });
-			if (mode === "object-tool") Reflect.set(part, "tool", { heartbeat: now });
+			if (mode === "object-call") Reflect.set(task, "id", { heartbeat: now });
+			if (mode === "object-tool") Reflect.set(task, "name", { heartbeat: now });
 		}
-		return entries;
+		const entry = { ...assistant(root, "msg_root"), content: [task] };
+		if (mode === "foreign-root-part") entry.id = "msg_child";
+		return [user(root), entry];
 	};
-	const childMessages = () => {
+	const childMessages = (): SessionMessageInfo[] => {
 		const tick = Math.floor(Math.min(now, 210_000) / 2_000);
 		const history = [
 			"completed-history",
 			"history-new-part",
 			"history-reopened",
 		].includes(mode);
-		const input = {
-			page: mode === "pending-input" || mode === "running-input" ? tick : 0,
-		};
 		const tool = [
 			"pending-raw",
 			"pending-input",
@@ -181,139 +183,157 @@ async function observe(
 			"running-output",
 			"object-pending-raw",
 		].includes(mode);
-		const part = {
-			id: "prt_stream",
-			sessionID: mode === "foreign-child-part" ? "ses_foreign" : child,
-			messageID: "msg_child",
-			type: tool ? "tool" : mode === "reasoning" ? "reasoning" : "text",
-			...(tool
-				? {
-						tool: "read",
-						callID: "call_read",
-						state: {
-							status: completed()
-								? "completed"
-								: mode.startsWith("pending") || mode === "object-pending-raw"
-									? "pending"
-									: "running",
+		let part: SessionMessageAssistant["content"][number];
+		if (tool) {
+			const input = {
+				page: mode === "pending-input" || mode === "running-input" ? tick : 0,
+			};
+			part = nativeTool(
+				"call_read",
+				"read",
+				completed()
+					? {
+							status: "completed",
 							input,
-							raw: mode === "pending-raw" ? `page:${tick}` : "page:0",
-							output:
-								mode === "running-output"
-									? `unsupported running output:${now}`
-									: "",
-							time: { start: 2, ...(completed() ? { end: 210_000 } : {}) },
-						},
-					}
-				: {
-						text:
-							mode === "replacement"
-								? `page${tick % 2}`
-								: mode === "text" ||
-										mode === "reasoning" ||
-										mode === "deadline" ||
-										mode === "completed-history"
-									? `evidence ${now}`
-									: "evidence",
-						time: {
-							start: mode === "timestamps" ? now : 2,
-							...(history && !(mode === "history-reopened" && now >= 100_000)
-								? { end: 3 }
-								: completed()
-									? { end: 210_000 }
-									: {}),
-						},
-					}),
-			metadata: { heartbeat: now },
-		};
-		const extra =
+							content: [{ type: "text", text: "read complete" }],
+						}
+					: mode.startsWith("pending") || mode === "object-pending-raw"
+						? {
+								status: "streaming",
+								input:
+									mode === "pending-input"
+										? JSON.stringify(input)
+										: mode === "pending-raw"
+											? `page:${tick}`
+											: "page:0",
+							}
+						: { status: "running", input, metadata: {} },
+				{ created: 2, ...(completed() ? { completed: 210_000 } : {}) },
+			);
+			if (mode === "running-output")
+				Reflect.set(part.state, "content", [
+					{ type: "text", text: `unsupported running output:${now}` },
+				]);
+			if (mode === "object-pending-raw" && !aborted && !completed())
+				Reflect.set(part.state, "input", { heartbeat: now });
+		} else {
+			part = {
+				type: mode === "reasoning" ? "reasoning" : "text",
+				text:
+					mode === "replacement"
+						? `page${tick % 2}`
+						: ["text", "reasoning", "deadline", "completed-history"].includes(
+									mode,
+								)
+							? `evidence ${now}`
+							: "evidence",
+			};
+			if (mode === "timestamps") Reflect.set(part, "time", { created: now });
+		}
+		const extra: SessionMessageAssistant["content"] =
 			mode === "history-new-part"
 				? Array.from({ length: tick }, (_, index) => ({
-						id: `prt_history_${index}`,
-						sessionID: child,
-						messageID: "msg_child",
 						type: "text",
 						text: `old ${index}`,
-						time: { start: 2, end: 3 },
 					}))
 				: mode === "duplicate-part"
-					? [part]
+					? [
+							nativeTool("call_read", "read", {
+								status: "running",
+								input: {},
+								metadata: {},
+							}),
+							nativeTool("call_read", "read", {
+								status: "running",
+								input: {},
+								metadata: {},
+							}),
+						]
 					: [];
 		const entry = {
-			info: info(child, "msg_child", history),
-			parts: [part, ...extra],
+			...assistant(child, "msg_child", history),
+			content: [part, ...extra],
 		};
 		if (!aborted && !completed()) {
-			if (mode === "numeric-message") {
-				Reflect.set(entry.info, "id", 42);
-				Reflect.set(part, "messageID", 42);
-			}
-			if (mode === "numeric-part") Reflect.set(part, "id", 42);
-			if (mode === "object-pending-raw") {
-				const state: unknown = Reflect.get(part, "state");
-				if (state && typeof state === "object")
-					Reflect.set(state, "raw", { heartbeat: now });
-			}
+			if (mode === "numeric-message") Reflect.set(entry, "id", 42);
+			if (mode === "numeric-part")
+				entry.content = [
+					nativeTool("call_read", "read", {
+						status: "running",
+						input: {},
+						metadata: {},
+					}),
+				];
+			if (mode === "numeric-part" && entry.content[0])
+				Reflect.set(entry.content[0], "id", 42);
 		}
+		if (mode === "foreign-child-part") entry.id = "msg_root";
 		return [user(child), entry];
 	};
-	const server = Bun.serve({
-		port: 0,
-		fetch(request) {
-			const path = new URL(request.url).pathname;
-			if (path === `/session/${root}/abort`) {
-				aborts++;
-				aborted = true;
-				return Response.json(true);
-			}
-			if (path === `/session/${root}/children`)
-				return Response.json([
-					{
-						id: child,
-						parentID: root,
-						directory: project,
-						agent: "flow-reviewer",
-					},
-				]);
-			if (path === `/session/${child}/children`) return Response.json([]);
-			if (path === `/session/${root}`)
-				return Response.json({ id: root, directory: project });
-			if (path === `/session/${child}`)
-				return Response.json({
-					id: child,
+	const server = nativeHttpClient(({ url, method }) => {
+		const path = url.pathname;
+		if (path === `/api/session/${root}/interrupt`) {
+			expect(method).toBe("POST");
+			expect(url.searchParams.get("resume")).toBe("false");
+			aborts++;
+			aborted = true;
+			return Response.json({
+				interrupted: true,
+			} satisfies SessionInterruptResponse);
+		}
+		if (
+			path === `/api/session/${root}/model` ||
+			path === `/api/session/${root}/command`
+		)
+			return new Response(null, { status: 204 });
+		if (path === "/api/session")
+			return sessionPage([
+				nativeSession(root, project, {
+					model: { providerID: "openai", id: "gpt-6.1-sol" },
+				}),
+				nativeSession(child, project, {
 					parentID: root,
-					directory: project,
 					agent: "flow-reviewer",
-				});
-			if (path === `/session/${root}/message`)
-				return Response.json(rootMessages());
-			if (path === `/session/${child}/message`)
-				return Response.json(childMessages());
-			return new Response("Unexpected fixture endpoint", { status: 404 });
-		},
+					model: { providerID: "openai", id: "gpt-6.1-sol" },
+				}),
+			]);
+		if (path === `/api/session/${root}`)
+			return sessionReply(
+				nativeSession(root, project, {
+					model: { providerID: "openai", id: "gpt-6.1-sol" },
+				}),
+			);
+		if (path === `/api/session/${child}`)
+			return sessionReply(
+				nativeSession(child, project, {
+					parentID: root,
+					agent: "flow-reviewer",
+					model: { providerID: "openai", id: "gpt-6.1-sol" },
+				}),
+			);
+		if (path === `/api/session/${root}/message`)
+			return messagePage(rootMessages());
+		if (path === `/api/session/${child}/message`)
+			return messagePage(childMessages());
+		throw new Error(`Unexpected native fixture endpoint ${method} ${path}`);
 	});
 	const clock = spyOn(Date, "now").mockImplementation(() => now);
 	const sleep = spyOn(Bun, "sleep").mockImplementation(async () => {
 		now += 2_000;
 	});
 	try {
-		const host = Reflect.construct(EvalHost, [project, project]) as EvalHost;
-		Object.assign(host, { baseUrl: server.url.toString().replace(/\/$/, "") });
-		let result: unknown;
-		try {
-			result = await Reflect.get(host, "waitForQuiet").call(host, root, {
-				request: { state: () => ({ kind: "accepted" }), cancel: () => {} },
-			});
-		} catch (error) {
-			result = error;
-		}
-		await afterWait?.(host);
+		const controller = new AbortController();
+		const host = nativeHost(project, server.client, controller.signal);
+		const result: unknown = await host
+			.runCommand(root, "flow-auto", "fixture", fixtureModel)
+			.catch((error: unknown) => error);
+		await afterWait?.(host, (reason) => controller.abort(reason));
 		const outcome = await host.outcome(outcomeRoots, now);
 		return { result, now, aborts, outcome, project };
 	} finally {
 		sleep.mockRestore();
 		clock.mockRestore();
-		server.stop(true);
+		server.stop();
 		await rm(project, { recursive: true, force: true });
 	}
 }
@@ -509,7 +529,7 @@ for (const mutation of [
 		if (mutation === "stale-observation")
 			observation.observedAt = task.native.startedAt;
 		if (mutation === "input") Reflect.set(task, "input", { different: true });
-		if (mutation === "native") task.native.partId = "prt_different";
+		if (mutation === "native") task.native.messageId = "msg_different";
 		if (mutation === "completed") Reflect.set(task, "status", "completed");
 		if (mutation === "empty") observation.pending = [];
 		if (mutation === "trace")
@@ -634,18 +654,14 @@ test("replayed native abort proof continues scheduling and uses only the predecl
 
 for (const method of ["runCommand", "runPrompt"] as const) {
 	test(`a new ${method} that fails before dispatch cannot borrow prior abort proof`, async () => {
-		const observed = await observe("silent", async (host) => {
+		const observed = await observe("silent", async (host, cancel) => {
 			const before = await host.outcome([root], 182000);
 			expect(Reflect.get(before, "abortObservation")).toBeDefined();
-			Object.assign(host, {
-				verifyArtifacts: async () => {
-					throw new Error("Fixture pre-dispatch rejection.");
-				},
-			});
+			cancel(new Error("Fixture pre-dispatch rejection."));
 			const request =
 				method === "runCommand"
-					? host.runCommand(root, "flow-auto", "fixture", "openai/gpt-6.1-sol")
-					: host.runPrompt(root, "fixture", "openai/gpt-6.1-sol");
+					? host.runCommand(root, "flow-auto", "fixture", fixtureModel)
+					: host.runPrompt(root, "fixture", fixtureModel);
 			await expect(request).rejects.toThrow("Fixture pre-dispatch rejection.");
 		});
 		expect(Reflect.get(observed.outcome, "abortObservation")).toBeUndefined();

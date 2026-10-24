@@ -5,7 +5,12 @@ import { pinnedBunVersion } from "../evals/bun-toolchain.js";
 import packageJson from "../package.json" with { type: "json" };
 import { FLOW_CORE_AGENTS, FLOW_CORE_COMMANDS } from "../src/config-shared.js";
 import { FLOW_GUIDANCE_IDS } from "../src/guidance/ids.js";
-import FlowPlugin from "../src/index.js";
+import {
+	persistWorkspaceValidation,
+	prepareWorkspaceValidation,
+} from "../src/infrastructure/fs/workspace-validation.js";
+import { createTools } from "../src/platform/opencode/tools.js";
+import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
 
 // This file asserts that the documentation matches the *runtime surface*, and
 // that the maintained set stays navigable. It deliberately does not pin prose.
@@ -152,13 +157,17 @@ const RETAINED_BASELINE_RULE_BYTES = 400;
 const RECOVERY_RUNTIME_DOC_BYTES = 1_400;
 const OBSERVED_INSPECTION_GATE_DOC_BYTES = 600;
 const INSPECTION_QUALIFICATION_DOC_BYTES = 400;
+const OPENCODE_V2_CUTOVER_DOC_BYTES = 4_500;
+const NATIVE_AUTH_AND_KEY_SELECTION_DOC_BYTES = 800;
 const MAX_MAINTAINED_DOC_BYTES =
 	PRIOR_MAINTAINED_DOC_BYTES +
 	FIRST_USE_AND_PILOT_DOC_BYTES +
 	RETAINED_BASELINE_RULE_BYTES +
 	RECOVERY_RUNTIME_DOC_BYTES +
 	OBSERVED_INSPECTION_GATE_DOC_BYTES +
-	INSPECTION_QUALIFICATION_DOC_BYTES;
+	INSPECTION_QUALIFICATION_DOC_BYTES +
+	OPENCODE_V2_CUTOVER_DOC_BYTES +
+	NATIVE_AUTH_AND_KEY_SELECTION_DOC_BYTES;
 
 /**
  * Decision records under `docs/adr/`, budgeted apart from maintained prose.
@@ -177,11 +186,13 @@ const MAX_MAINTAINED_DOC_BYTES =
 const DELEGATED_RECOVERY_RECORD_BYTES = 2_000;
 const RECOVERY_RUNTIME_RECORD_BYTES = 1_400;
 const INSPECTION_OUTCOME_RECORD_BYTES = 1_200;
+const OPENCODE_V2_CUTOVER_RECORD_BYTES = 3_000;
 const MAX_DECISION_RECORD_BYTES =
 	48_000 +
 	DELEGATED_RECOVERY_RECORD_BYTES +
 	RECOVERY_RUNTIME_RECORD_BYTES +
-	INSPECTION_OUTCOME_RECORD_BYTES;
+	INSPECTION_OUTCOME_RECORD_BYTES +
+	OPENCODE_V2_CUTOVER_RECORD_BYTES;
 
 /**
  * No single maintained document should outgrow the operator-facing README.
@@ -298,21 +309,16 @@ async function markdownFiles(directory: string): Promise<string[]> {
 	).flat();
 }
 
-async function registeredToolNames(): Promise<string[]> {
-	const hooks = await FlowPlugin({
-		client: { app: { log() {} } },
-		project: {},
-		directory: process.cwd(),
-		worktree: process.cwd(),
-		experimental_workspace: { register() {} },
-		serverUrl: new URL("http://localhost"),
-		$: {},
-	} as unknown as Parameters<typeof FlowPlugin>[0]);
-	try {
-		return Object.keys(hooks.tool ?? {}).sort();
-	} finally {
-		await hooks.dispose?.();
-	}
+function registeredToolNames(): string[] {
+	const validation = new ValidationCaptureCoordinator({
+		readSession: async () => {
+			throw new Error("Inventory must not execute a tool.");
+		},
+		persistObservation: persistWorkspaceValidation,
+	});
+	return Object.keys(
+		createTools({ validation, prepareValidation: prepareWorkspaceValidation }),
+	).sort();
 }
 
 describe("Flow documentation contract", () => {
@@ -323,11 +329,9 @@ describe("Flow documentation contract", () => {
 		const exactPackage = `opencode-plugin-flow@${packageVersion}`;
 
 		expect(JSON.parse(block ?? "null")).toEqual({
-			plugin: [exactPackage],
+			plugins: [exactPackage],
 		});
-		expect(install).toContain(
-			`opencode plugin ${exactPackage} --global --force`,
-		);
+		expect(install).toContain(`opencode2 plugin add ${exactPackage}`);
 		// Every version mentioned in Install must be the shipped one, so a release
 		// cannot leave a stale pin behind.
 		expect(
@@ -335,7 +339,7 @@ describe("Flow documentation contract", () => {
 				(match) => match[1],
 			),
 		).toEqual([packageVersion, packageVersion, packageVersion]);
-		expect(install).toContain("https://opencode.ai/docs/plugins/");
+		expect(install).toContain("https://opencode.ai/v2/docs/plugins/");
 		expect(install).not.toMatch(/\bnpx\b|activation-check/);
 	});
 
@@ -595,7 +599,7 @@ describe("Flow documentation contract", () => {
 			`[${packageVersion}]${releaseDate ? ` - ${releaseDate}` : ""}`,
 		);
 		expect(currentReleaseNotes).toContain(
-			`opencode plugin opencode-plugin-flow@${packageVersion} --global --force`,
+			`opencode plugin add opencode-plugin-flow@${packageVersion}`,
 		);
 		// Release notes must state the schema impact explicitly rather than the
 		// uninformative "public surface is unchanged".

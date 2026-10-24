@@ -1,0 +1,179 @@
+{
+  "results": [
+    {
+      "mode": "bare",
+      "hooked": false,
+      "host": "2.1.4",
+      "pid": 50316,
+      "upgrades": 1,
+      "http": 0,
+      "frames": 1,
+      "waitError": null,
+      "native": [
+        {
+          "id": "msg_16d051c5c001KcwIw3jRTahR63",
+          "time": {
+            "created": 1792830414042
+          },
+          "text": "Reply OK only.",
+          "type": "user"
+        },
+        {
+          "id": "msg_16d051cdf001A4f25mPsi8Eld1",
+          "time": {
+            "created": 1792830414050,
+            "completed": 1792830414056
+          },
+          "type": "assistant",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6.1-sol",
+            "providerID": "flow-transport",
+            "variant": "force-ws"
+          },
+          "content": [],
+          "finish": "error",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        },
+        {
+          "id": "msg_16d051ce90019Aw7nxaKzo6RO2",
+          "time": {
+            "created": 1792830414057
+          },
+          "type": "idle",
+          "outcome": "failed",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "hooked",
+      "hooked": true,
+      "host": "2.1.4",
+      "pid": 50318,
+      "upgrades": 1,
+      "http": 0,
+      "frames": 1,
+      "waitError": null,
+      "native": [
+        {
+          "id": "msg_16d051e76001sISZHxKLQUYsEy",
+          "time": {
+            "created": 1792830414586
+          },
+          "text": "Reply OK only.",
+          "type": "user"
+        },
+        {
+          "id": "msg_16d051f00001F9ywkeEU4upcXT",
+          "time": {
+            "created": 1792830414595,
+            "completed": 1792830414600
+          },
+          "type": "assistant",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6.1-sol",
+            "providerID": "flow-transport",
+            "variant": "force-ws"
+          },
+          "content": [],
+          "finish": "error",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        },
+        {
+          "id": "msg_16d051f09001tj8REbrSZThS68",
+          "time": {
+            "created": 1792830414601
+          },
+          "type": "idle",
+          "outcome": "failed",
+          "error": {
+            "type": "provider.invalid-output",
+            "message": "OpenAI Responses emitted response.completed before response.created",
+            "response": {
+              "body": "{\"type\":\"response.completed\",\"response\":{\"id\":\"resp_local\",\"object\":\"response\",\"created_at\":1,\"status\":\"completed\",\"model\":\"gpt-6.1-sol\",\"output\":[{\"type\":\"message\",\"id\":\"message_local\",\"role\":\"assistant\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"text\":\"OK\",\"annotations\":[]}]}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "mode": "forced",
+      "hooked": true,
+      "host": "2.1.4",
+      "pid": 50327,
+      "upgrades": 0,
+      "http": 1,
+      "frames": 0,
+      "waitError": null,
+      "native": [
+        {
+          "id": "msg_16d052076001IPKnXHRMTXFTzz",
+          "time": {
+            "created": 1792830415260
+          },
+          "text": "Reply OK only.",
+          "type": "user"
+        },
+        {
+          "id": "msg_16d0521a1001KyGGHNfzyRKz3d",
+          "time": {
+            "created": 1792830415269,
+            "streamed": 1792830415473,
+            "completed": 1792830415474
+          },
+          "type": "assistant",
+          "agent": "build",
+          "model": {
+            "id": "gpt-6.1-sol",
+            "providerID": "flow-transport",
+            "variant": "force-ws"
+          },
+          "content": [],
+          "finish": "stop",
+          "native": {
+            "responseId": "resp_local"
+          },
+          "cost": 0,
+          "tokens": {
+            "input": 1,
+            "output": 1,
+            "reasoning": 0,
+            "cache": {
+              "read": 0,
+              "write": 0
+            }
+          }
+        },
+        {
+          "id": "msg_16d052273002Ox4EuVO75h4w04",
+          "time": {
+            "created": 1792830415475
+          },
+          "type": "idle",
+          "outcome": "succeeded"
+        }
+      ]
+    }
+  ],
+  "pass": true
+}

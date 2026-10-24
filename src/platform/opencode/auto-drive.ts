@@ -3,20 +3,17 @@ import type { RecoveryController } from "../../application/recovery-policy.js";
 import type { SourceDigest } from "../../domain/session.js";
 import { FLOW_MANAGER_KERNEL } from "../../guidance/catalog.js";
 import {
-	authenticatedCompactionSuccessor,
-	type Compaction,
-	type HostMessage,
-	type HostPart,
-	observeCompactionMessage,
-	observeCompactionPart,
-} from "./auto-compaction.js";
-import {
 	decideOnIdle,
 	type IdleDecision,
 	isHandback,
 	isPendingReviewer,
 } from "./auto-drive-decision.js";
-import { autoHandbackMessage } from "./auto-drive-messages.js";
+import {
+	AUTO_INITIAL_PROMPT,
+	autoCompactionMessage,
+	autoHandbackMessage,
+	CONTINUATION_ROUTE,
+} from "./auto-drive-messages.js";
 import {
 	type AutoValidationOrigin,
 	type AutoValidationReceipt,
@@ -87,13 +84,17 @@ interface AutoDriveMessagePart {
 	readonly synthetic?: boolean;
 	readonly metadata?: Readonly<Record<string, unknown>>;
 }
+export type AutoDriveAuthority = Readonly<{
+	hostSessionId: string;
+	token: string;
+	epoch: number;
+}>;
 export interface AutoDriveDelivery {
 	readonly agent: string;
 	readonly model: Readonly<{ providerID: string; modelID: string }>;
 	readonly variant?: string | undefined;
 }
 
-/** OpenCode stores the resolved variant inside the model but accepts it beside it. */
 export function autoDriveDelivery(
 	message: Readonly<{
 		agent: string;
@@ -145,9 +146,7 @@ type Lease = {
 	inFlight: "status" | "reply-status" | "prompt" | null;
 	idlePending: boolean;
 	messageId: string | null;
-	assistantParents: Map<string, string>;
-	lastAssistantParent: string | null;
-	compaction: Compaction | null;
+	assistantOrigins: Map<string, string>;
 	manualContinuation: { revision: number } | null;
 	validation: {
 		revision: number;
@@ -183,13 +182,6 @@ type AutoDriveOptions = Readonly<{
 	now?: (() => number) | undefined;
 }>;
 const STOP = /^(?:(?:stop|cancel) \/flow-auto|\/flow-auto (?:stop|cancel))$/i;
-const INITIAL_ROUTE =
-	"Read compact status, load flow-plan, then call flow_plan_save.";
-const CONTINUATION_ROUTE = [
-	"Load flow-run guidance before any feature or closure route;",
-	"for a fresh close use compact session id/revision plus a fresh operation id,",
-	"and replay archiveRetry exactly from its projected request.",
-].join(" ");
 
 function inspectMessage(parts: readonly AutoDriveMessagePart[]) {
 	let token: string | null = null;
@@ -215,10 +207,8 @@ export class AutoDriveCoordinator {
 	readonly #options: AutoDriveOptions;
 	#repairSession: string | undefined;
 	readonly #repairHandoffs = new Set<string>();
-	/** Whether this host has ever reported assistant message parentage. */
-	#hostParentage = false;
-	/** Whether any assistant message has arrived without a parent. */
-	#hostMissingParentage = false;
+	#epoch = 0;
+	#authorityReady = false;
 	constructor(options: AutoDriveOptions) {
 		this.#options = options;
 	}
@@ -261,10 +251,8 @@ export class AutoDriveCoordinator {
 	#rejectOrigin(lease: Lease, kind: "compaction" | "mutation"): void {
 		this.#stop(
 			lease,
-			this.#hostParentage
-				? `Flow: ${kind} origin was unavailable.`
-				: "Flow: this host reports no assistant message parentage, so /flow-auto cannot continue automatically. Drive each feature with /flow-run.",
-			this.#hostParentage ? "missing-lineage" : "unsupported",
+			`Flow: ${kind} origin was unavailable.`,
+			"missing-lineage",
 		);
 	}
 	#waitAt(lease: Lease, revision: number): void {
@@ -283,6 +271,7 @@ export class AutoDriveCoordinator {
 		if (!isHandback(projection)) return;
 		if (lease.handbackPromptedRevision === projection.revision) return;
 		if (!lease.delivery) return;
+		const epoch = this.#epoch;
 		const token = lease.token;
 		lease.handbackPromptedRevision = projection.revision;
 		lease.messageId = null;
@@ -296,7 +285,7 @@ export class AutoDriveCoordinator {
 				{ [FLOW_AUTO_METADATA_KEY]: token },
 			);
 		} catch (error) {
-			if (lease.token !== token) return;
+			if (lease.token !== token || this.#epoch !== epoch) return;
 			this.#stop(
 				lease,
 				`Flow auto prompt failed: ${String(error)}`,
@@ -305,9 +294,12 @@ export class AutoDriveCoordinator {
 		}
 	}
 	async #read(lease: Lease): Promise<AutoDriveProjection | null> {
+		const epoch = this.#epoch;
 		try {
-			return await this.#options.readProjection();
+			const projection = await this.#options.readProjection();
+			return this.#epoch === epoch ? projection : null;
 		} catch (error) {
+			if (this.#epoch !== epoch) return null;
 			this.#stop(
 				lease,
 				`Flow auto status failed: ${String(error)}`,
@@ -316,15 +308,21 @@ export class AutoDriveCoordinator {
 			return null;
 		}
 	}
+	createInvocationToken(): string {
+		return this.#options.createToken?.() ?? crypto.randomUUID();
+	}
 	async activate(
 		hostSessionId: string,
 		requestGoal = "",
 		options: Readonly<{
+			token?: string;
 			newlyAnchoredSessionId?: string | null;
 			intent?: AutoGoalIntent;
 		}> = {},
 	): Promise<Record<string, unknown>> {
-		const token = this.#options.createToken?.() ?? crypto.randomUUID();
+		this.#epoch++;
+		this.#authorityReady = true;
+		const token = options.token ?? this.createInvocationToken();
 		this.#disposition = { state: "active", reason: "invocation" };
 		this.#dispositionHost = hostSessionId;
 		this.#timing = {
@@ -348,18 +346,16 @@ export class AutoDriveCoordinator {
 			inFlight: null,
 			idlePending: false,
 			messageId: null,
-			assistantParents: new Map(),
-			lastAssistantParent: null,
-			compaction: null,
+			assistantOrigins: new Map(),
 			manualContinuation: null,
 			validation: null,
 			ownInspectDraft: null,
 		};
 		const lease = this.#lease;
 		const baseline = await this.#read(lease);
+		if (this.#lease !== lease) throw new Error("Flow auto-drive superseded.");
 		if (!baseline) throw new Error("Flow auto-drive compact status failed.");
 		lease.baseline = baseline;
-		if (this.#lease !== lease) throw new Error("Flow auto-drive superseded.");
 		if (!isPendingReviewer(baseline))
 			lease.checkpoint = { revision: baseline.revision, answered: false };
 		return { [FLOW_AUTO_METADATA_KEY]: token };
@@ -377,11 +373,7 @@ export class AutoDriveCoordinator {
 	}
 	async resumeForCommand(hostSessionId: string): Promise<string | null> {
 		const lease = this.#lease;
-		if (
-			lease?.hostSessionId !== hostSessionId ||
-			this.continuationSupport() === "unsupported"
-		)
-			return null;
+		if (lease?.hostSessionId !== hostSessionId) return null;
 		const projection = await this.#read(lease);
 		if (this.#lease !== lease || !projection) return null;
 		if (
@@ -410,6 +402,7 @@ export class AutoDriveCoordinator {
 			{ state: "inactive" }
 		>["reason"] = "restarted",
 	): void {
+		this.#epoch++;
 		this.#options.recovery?.revoke();
 		if (this.#lease) {
 			this.#setTiming("inactive");
@@ -436,6 +429,7 @@ export class AutoDriveCoordinator {
 				lease.token !== message.token
 			)
 				return "stale-continuation";
+			this.#authorityReady = true;
 			lease.delivery = delivery;
 			lease.messageId = messageId;
 			if (
@@ -465,6 +459,7 @@ export class AutoDriveCoordinator {
 		if (!lease.checkpoint && lease.inFlight !== "status")
 			this.deactivate(hostSessionId);
 		else {
+			this.#authorityReady = true;
 			lease.token = crypto.randomUUID();
 			lease.messageId = messageId;
 			lease.delivery = delivery;
@@ -475,53 +470,58 @@ export class AutoDriveCoordinator {
 	}
 	compactionContext(hostSessionId: string): string | null {
 		if (this.#lease?.hostSessionId !== hostSessionId) return null;
-		const context = [
-			"An in-memory /flow-auto continuation remains active.",
-			"Read compact Flow state first.",
-			CONTINUATION_ROUTE,
-			"Do not expand the approved goal; stop for required user direction, a hard blocker, or confirmed closure.",
-		].join(" ");
-		return `${context}\n\n${FLOW_MANAGER_KERNEL}`;
+		return autoCompactionMessage();
 	}
-	observeHostMessage(host: string, message: HostMessage): void {
-		if (message.role === "assistant") {
-			if (message.parentID === undefined) this.#hostMissingParentage = true;
-			else this.#hostParentage = true;
-		}
+	captureAuthority(host: string, token?: string): AutoDriveAuthority | null {
+		const lease = this.#lease;
+		if (
+			!this.#authorityReady ||
+			!lease ||
+			lease.hostSessionId !== host ||
+			(token !== undefined && lease.token !== token)
+		)
+			return null;
+		return Object.freeze({
+			hostSessionId: host,
+			token: lease.token,
+			epoch: this.#epoch,
+		});
+	}
+	isAuthorityCurrent(authority: AutoDriveAuthority, source?: string): boolean {
+		return (
+			this.#authorityReady &&
+			this.#lease?.hostSessionId === authority.hostSessionId &&
+			this.#lease.token === authority.token &&
+			this.#epoch === authority.epoch &&
+			(source === undefined || this.#lease.messageId === source)
+		);
+	}
+	revokeExecutions(host: string): void {
+		if (this.#lease?.hostSessionId !== host) return;
+		this.#epoch++;
+		this.#authorityReady = false;
+		this.#lease.assistantOrigins.clear();
+	}
+	observeAssistant(host: string, assistantId: string, origin: string): void {
 		const lease = this.#lease;
 		if (lease?.hostSessionId !== host) return;
-		if (message.role === "assistant" && message.parentID !== undefined) {
-			lease.assistantParents.set(message.id, message.parentID);
-			if (message.summary !== true)
-				lease.lastAssistantParent = message.parentID;
-		}
-		lease.compaction = observeCompactionMessage(
-			lease.compaction,
-			lease.messageId,
-			message,
-		);
+		const prior = lease.assistantOrigins.get(assistantId);
+		if (prior !== undefined && prior !== origin)
+			return void this.#rejectOrigin(lease, "mutation");
+		lease.assistantOrigins.set(assistantId, origin);
 	}
-	observeHostPart(host: string, part: HostPart): void {
+	observeCompaction(
+		host: string,
+		authority: AutoDriveAuthority,
+		source: string,
+		controlID: string,
+	): void {
 		const lease = this.#lease;
-		if (lease?.hostSessionId !== host) return;
-		lease.compaction = observeCompactionPart(
-			lease.compaction,
-			lease.messageId,
-			lease.lastAssistantParent,
-			part,
-		);
-	}
-	observeCompaction(host: string): void {
-		const lease = this.#lease;
-		if (lease?.hostSessionId !== host || lease.messageId === null) return;
-		const successor = authenticatedCompactionSuccessor(
-			lease.compaction,
-			lease.messageId,
-		);
-		lease.compaction = null;
-		if (!successor) return void this.#rejectOrigin(lease, "compaction");
-		lease.messageId = successor;
-		this.#options.recovery?.observeMessage(host, successor, true, true);
+		if (!lease || lease.hostSessionId !== host) return;
+		if (!this.isAuthorityCurrent(authority) || lease.messageId !== source)
+			return void this.#rejectOrigin(lease, "compaction");
+		lease.messageId = controlID;
+		this.#options.recovery?.observeMessage(host, controlID, true, true);
 	}
 	observeMutation(
 		host: string,
@@ -536,8 +536,13 @@ export class AutoDriveCoordinator {
 		}>,
 	): void {
 		const lease = this.#lease;
-		if (lease?.hostSessionId !== host || !lease.messageId) return;
-		const origin = lease.assistantParents.get(assistantId);
+		if (
+			!this.#authorityReady ||
+			lease?.hostSessionId !== host ||
+			!lease.messageId
+		)
+			return;
+		const origin = lease.assistantOrigins.get(assistantId);
 		if (origin === undefined) return void this.#rejectOrigin(lease, "mutation");
 		if (origin !== lease.messageId) return;
 		lease.validation = null;
@@ -588,17 +593,18 @@ export class AutoDriveCoordinator {
 	): AutoValidationOrigin | null {
 		const lease = this.#lease;
 		if (
+			!this.#authorityReady ||
 			lease?.hostSessionId !== hostSessionId ||
 			!lease.messageId ||
 			!lease.baseline?.sessionId
 		)
 			return null;
-		const parent = lease.assistantParents.get(assistantId);
-		if (parent === undefined) {
+		const source = lease.assistantOrigins.get(assistantId);
+		if (source === undefined) {
 			this.#rejectOrigin(lease, "mutation");
 			return null;
 		}
-		if (parent !== lease.messageId) return null;
+		if (source !== lease.messageId) return null;
 		const origin: AutoValidationOrigin = {
 			hostSessionId,
 			sessionId: lease.baseline.sessionId,
@@ -630,7 +636,7 @@ export class AutoDriveCoordinator {
 			lease.hostSessionId !== origin.hostSessionId ||
 			lease.baseline?.sessionId !== origin.sessionId ||
 			lease.messageId !== origin.authority ||
-			lease.assistantParents.get(origin.assistantId) !== origin.authority ||
+			lease.assistantOrigins.get(origin.assistantId) !== origin.authority ||
 			!validationReceiptMatches(receipt)
 		)
 			return;
@@ -659,13 +665,8 @@ export class AutoDriveCoordinator {
 			? { scope: "current-plugin-process", ...this.#disposition }
 			: null;
 	}
-	/**
-	 * Automatic mutations and continuation require attributable parentage.
-	 * Unsupported hosts need a fresh manual command, which retires auto authority.
-	 */
 	continuationSupport(): ProcessLocalAutoContinuationSupport {
-		if (this.#hostParentage) return "supported";
-		return this.#hostMissingParentage ? "unsupported" : "unknown";
+		return "supported";
 	}
 	timingSnapshot(): AutoTimingSnapshot | null {
 		const timing = this.#timing;
@@ -682,10 +683,11 @@ export class AutoDriveCoordinator {
 			pausedTimeExcluded: true,
 		};
 	}
-	/** Routes one idle event; every unproven continuation stops or parks. */
 	async onIdle(hostSessionId: string): Promise<void> {
 		const lease = this.#lease;
 		if (!lease || lease.hostSessionId !== hostSessionId) return;
+		const epoch = this.#epoch;
+		if (!this.#authorityReady) return;
 		if (lease.inFlight) {
 			if (
 				lease.inFlight !== "reply-status" ||
@@ -699,7 +701,7 @@ export class AutoDriveCoordinator {
 		try {
 			const projection = await this.#read(lease);
 			if (!projection) return;
-			if (this.#lease !== lease) return;
+			if (this.#lease !== lease || this.#epoch !== epoch) return;
 			const baseline = lease.baseline;
 			if (!baseline) return this.#stop(lease);
 			if (lease.manualContinuation) {
@@ -741,6 +743,7 @@ export class AutoDriveCoordinator {
 						{ [FLOW_AUTO_METADATA_KEY]: lease.token },
 					);
 				} catch (error) {
+					if (this.#epoch !== epoch) return;
 					this.#stop(
 						lease,
 						`Flow inspection approval prompt failed: ${String(error)}`,
@@ -764,6 +767,7 @@ export class AutoDriveCoordinator {
 				}
 				if (
 					this.#lease !== lease ||
+					this.#epoch !== epoch ||
 					lease.messageId !== authority ||
 					lease.validation !== validation
 				)
@@ -831,6 +835,7 @@ export class AutoDriveCoordinator {
 					})
 					.catch(
 						(error) =>
+							this.#epoch === epoch &&
 							lease.token === token &&
 							this.#stop(
 								lease,
@@ -865,17 +870,14 @@ export class AutoDriveCoordinator {
 					const token = lease.token;
 					lease.lastPromptedRevision = 0;
 					lease.inFlight = "prompt";
-					// Narrowing only: decideOnIdle already required hasDelivery.
 					if (!lease.delivery) return;
 					await this.#options
-						.prompt(
-							hostSessionId,
-							`${INITIAL_ROUTE}\n\n${FLOW_MANAGER_KERNEL}`,
-							lease.delivery,
-							{ [FLOW_AUTO_METADATA_KEY]: token },
-						)
+						.prompt(hostSessionId, AUTO_INITIAL_PROMPT, lease.delivery, {
+							[FLOW_AUTO_METADATA_KEY]: token,
+						})
 						.catch(
 							(error) =>
+								this.#epoch === epoch &&
 								lease.token === token &&
 								this.#stop(
 									lease,
@@ -888,7 +890,12 @@ export class AutoDriveCoordinator {
 				case "handback-and-wait": {
 					const token = lease.token;
 					await this.#promptHandback(lease, projection);
-					if (this.#lease !== lease || lease.token !== token) return;
+					if (
+						this.#lease !== lease ||
+						lease.token !== token ||
+						this.#epoch !== epoch
+					)
+						return;
 					this.#disposition = {
 						state: "waiting",
 						reason:
@@ -907,7 +914,12 @@ export class AutoDriveCoordinator {
 					const already =
 						lease.handbackPromptedRevision === projection.revision;
 					await this.#promptHandback(lease, projection);
-					if (this.#lease !== lease || lease.token !== token) return;
+					if (
+						this.#lease !== lease ||
+						lease.token !== token ||
+						this.#epoch !== epoch
+					)
+						return;
 					if (
 						!already &&
 						lease.handbackPromptedRevision === projection.revision
@@ -933,7 +945,6 @@ export class AutoDriveCoordinator {
 					return this.#warn(decision.warning);
 				case "continue": {
 					if (decision.clearCheckpoint) lease.checkpoint = null;
-					// Narrowing only: decideOnIdle already required hasDelivery.
 					if (!lease.delivery) return;
 					if (decision.repairHandoff && repairKey)
 						this.#repairHandoffs.add(repairKey);
@@ -958,6 +969,7 @@ export class AutoDriveCoordinator {
 							{ [FLOW_AUTO_METADATA_KEY]: lease.token },
 						);
 					} catch (error) {
+						if (this.#epoch !== epoch) return;
 						this.#stop(
 							lease,
 							`Flow auto prompt failed: ${String(error)}`,

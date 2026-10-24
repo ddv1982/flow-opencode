@@ -18,8 +18,8 @@ import {
 } from "./report-identities.js";
 import {
 	assertStudyBudget,
+	OPENCODE2_STUDY_PROTOCOL_VERSION_SHA256,
 	PairedStudyPolicySchema,
-	STUDY_PROTOCOL_VERSION_SHA256,
 	StudyArmSchema,
 	StudyBudgetSchema,
 } from "./study-protocol.js";
@@ -79,6 +79,13 @@ export type StudyManifest = z.infer<typeof StudyManifestSchema>;
 
 export async function prepareStudyManifest(input: unknown, directory: string) {
 	const manifest = StudyManifestSchema.parse(input);
+	if (
+		manifest.opencodeVersion !== "2.1.4" ||
+		manifest.accounting.hostContract !== "opencode-2.1.4-disjoint-output-v1"
+	)
+		throw new Error(
+			"Active studies require the verified OpenCode 2.1.4 accounting contract.",
+		);
 	const readArm = async (arm: StudyManifest["arms"]["baseline"]) => {
 		if ("kind" in arm.artifact) {
 			return { specification: StudyArmSchema.parse(arm), bytes: null };
@@ -140,7 +147,7 @@ export async function prepareStudyManifest(input: unknown, directory: string) {
 			? {}
 			: { minimumDetectableEffect: manifest.minimumDetectableEffect }),
 		accounting: manifest.accounting,
-		versionSha256: STUDY_PROTOCOL_VERSION_SHA256,
+		versionSha256: OPENCODE2_STUDY_PROTOCOL_VERSION_SHA256,
 	});
 	const caseIds = new Set(
 		manifest.cases.map((item) => `${item.caseId}\u0000${item.caseVersion}`),

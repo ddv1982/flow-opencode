@@ -80,6 +80,15 @@ export const STUDY_PROTOCOL_VERSION_SHA256 = canonicalSha256(
 	},
 );
 
+export const OPENCODE2_STUDY_PROTOCOL_VERSION_SHA256 = canonicalSha256(
+	"flow-paired-study-protocol-v3",
+	{
+		previous: STUDY_PROTOCOL_VERSION_SHA256,
+		host: "opencode-2.1.4",
+		accounting: "native-disjoint-input-output-reasoning-cache-v1",
+	},
+);
+
 export const PairedStudyPolicySchema = z
 	.object({
 		kind: z.literal("paired-study"),
@@ -107,7 +116,10 @@ export const PairedStudyPolicySchema = z
 		accounting: z
 			.object({
 				schemaVersion: z.literal(1),
-				hostContract: z.literal("opencode-1.18.6-disjoint-output-v1"),
+				hostContract: z.enum([
+					"opencode-1.18.6-disjoint-output-v1",
+					"opencode-2.1.4-disjoint-output-v1",
+				]),
 				maxGeneratedOutputTokens: Positive,
 				estimate: z
 					.object({
@@ -146,13 +158,17 @@ export const PairedStudyPolicySchema = z
 				message:
 					"Arm differences exceed the declared comparison; pin other settings or declare total-effect.",
 			});
-		if (policy.opencodeVersion !== "1.18.6") {
+		const native =
+			policy.accounting.hostContract === "opencode-2.1.4-disjoint-output-v1";
+		if (policy.opencodeVersion !== (native ? "2.1.4" : "1.18.6")) {
 			context.addIssue({
 				code: "custom",
 				path: ["opencodeVersion"],
-				message: "Versioned accounting is verified only for OpenCode 1.18.6.",
+				message:
+					"Host version does not match its verified accounting contract.",
 			});
 		}
+
 		const methods = {
 			smoke: "descriptive",
 			exploratory: "equal-task-cluster-bootstrap-v1",
@@ -180,8 +196,10 @@ export const PairedStudyPolicySchema = z
 			});
 		}
 		if (
-			policy.versionSha256 !== STUDY_PROTOCOL_VERSION_SHA256 &&
-			policy.versionSha256 !== LEGACY_STUDY_PROTOCOL_VERSION_SHA256
+			native
+				? policy.versionSha256 !== OPENCODE2_STUDY_PROTOCOL_VERSION_SHA256
+				: policy.versionSha256 !== STUDY_PROTOCOL_VERSION_SHA256 &&
+					policy.versionSha256 !== LEGACY_STUDY_PROTOCOL_VERSION_SHA256
 		) {
 			context.addIssue({
 				code: "custom",
@@ -209,7 +227,9 @@ export function studyHostConfig(policy: PairedStudyPolicy, arm: StudyArm) {
 		artifact: arm.artifact,
 		reviewer: arm.reviewer,
 		reviewerEnvironment: "disabled",
-		nativeLlm: false,
+		...(policy.opencodeVersion === "1.18.6"
+			? { nativeLlm: false }
+			: { transport: "http" }),
 		ambientConfig: "disabled",
 		syntheticGit: "isolated-project-identity-no-hooks-or-signing",
 	};

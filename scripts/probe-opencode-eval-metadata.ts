@@ -9,7 +9,15 @@ import {
 	preparePackageCache,
 	splitModel,
 } from "../evals/harness.js";
+import { extractObservedModelIdentity } from "../evals/host-observation.js";
+import {
+	listNativeMessages,
+	listNativeSessions,
+	nativeModel,
+	OPENCODE_HOST_VERSION,
+} from "../evals/opencode-host.js";
 import packageJson from "../package.json" with { type: "json" };
+import { consumePaidDispatch } from "./paid-budget.js";
 
 const REQUEST_TIMEOUT_MS = 120_000;
 const REVIEWER_STEP_LIMIT = 8;
@@ -28,22 +36,18 @@ const SENSITIVE_FIELD_WORDS = new Set([
 	"token",
 	"tokens",
 ]);
-const MODEL_IDENTITY_PATHS = new Set([
-	"[].info.model.modelID",
-	"[].info.model.providerID",
-	"[].info.modelID",
-	"[].info.providerID",
-]);
+const MODEL_IDENTITY_PATHS = new Set(["[].model.id", "[].model.providerID"]);
 
 export const HOST_METADATA_CONTRACT = {
-	hostVersion: packageJson.devDependencies["@opencode-ai/plugin"],
+	hostVersion: OPENCODE_HOST_VERSION,
 	endpoints: {
-		agents: "GET /agent",
-		createSession: "POST /session",
-		dispatchReview: "POST /session/:id/command",
-		parentMessages: "GET /session/:id/message",
-		childSessions: "GET /session/:id/children",
-		childMessages: "GET /session/:child_id/message",
+		serverInfo: "GET /api/info",
+		agents: "GET /api/agent",
+		createSession: "POST /api/session",
+		dispatchReview: "POST /api/session/:id/command",
+		parentMessages: "GET /api/session/:id/message",
+		childSessions: "GET /api/session?directory=:directory",
+		childMessages: "GET /api/session/:child_id/message",
 	},
 	limits: {
 		requestTimeoutMs: REQUEST_TIMEOUT_MS,
@@ -169,7 +173,7 @@ function usage(): string {
 function parseArgs(argv: readonly string[]): ProbeArgs {
 	let model: string | undefined;
 	let output: string | undefined;
-	let opencodeVersion = HOST_METADATA_CONTRACT.hostVersion;
+	let opencodeVersion: string = HOST_METADATA_CONTRACT.hostVersion;
 	let allowLiveCredentials = false;
 	for (let index = 0; index < argv.length; index += 1) {
 		const [flag, value] = [argv[index], argv[index + 1]];
@@ -286,23 +290,24 @@ function completedAssistantMessages(value: unknown): readonly unknown[] {
 	return value.filter(
 		(message) =>
 			isRecord(message) &&
-			isRecord(message.info) &&
-			message.info.role === "assistant" &&
-			!("error" in message.info) &&
-			isRecord(message.info.time) &&
-			typeof message.info.time.completed === "number",
+			message.type === "assistant" &&
+			!("error" in message) &&
+			isRecord(message.time) &&
+			typeof message.time.completed === "number",
 	);
 }
 
 function modelIdentityFields(messages: unknown): readonly string[] {
-	return collectFieldObservations(completedAssistantMessages(messages))
+	const completed = completedAssistantMessages(messages);
+	if (extractObservedModelIdentity(completed).kind !== "observed") return [];
+	return collectFieldObservations(completed)
 		.filter((field) => MODEL_IDENTITY_PATHS.has(field.path))
 		.map((field) => field.path)
 		.sort();
 }
 
 function hasModelIdentity(fields: readonly string[]): boolean {
-	return ["providerID", "modelID"].every((suffix) =>
+	return ["providerID", ".id"].every((suffix) =>
 		fields.some((path) => path.endsWith(suffix)),
 	);
 }
@@ -349,7 +354,7 @@ function hostVersion(
 	attempt: EndpointAttempt | undefined,
 	requested: string,
 ): HostVersionCapability {
-	const endpoint = HOST_METADATA_CONTRACT.endpoints.createSession;
+	const endpoint = HOST_METADATA_CONTRACT.endpoints.serverInfo;
 	if (!attempt || attempt.kind === "endpoint-failure")
 		return unobserved("endpoint-failure", [endpoint]);
 	if (!isRecord(attempt.response))
@@ -400,10 +405,11 @@ export function buildHostEvidenceCapabilities(
 	input: ProbeInput,
 ): HostEvidenceCapabilities {
 	const parent: ParentLabel = "parent-1";
-	const createSession = input.endpointResponses.find(
+	const serverInfo = input.endpointResponses.find(
 		(attempt) =>
-			attempt.endpoint === HOST_METADATA_CONTRACT.endpoints.createSession,
+			attempt.endpoint === HOST_METADATA_CONTRACT.endpoints.serverInfo,
 	);
+
 	const { children, malformed } =
 		input.childSessions?.kind === "observed"
 			? parseChildren(input.childSessions.response)
@@ -510,7 +516,7 @@ export function buildHostEvidenceCapabilities(
 							]);
 				})();
 	const capabilities = {
-		hostVersion: hostVersion(createSession, input.opencodeVersion),
+		hostVersion: hostVersion(serverInfo, input.opencodeVersion),
 		parentManagerModelIdentity,
 		childReviewerModelIdentity,
 		childLineage,
@@ -560,27 +566,6 @@ export function buildHostEvidenceCapabilities(
 	};
 }
 
-async function fetchJson(url: string): Promise<unknown> {
-	const response = await fetch(url, {
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-	});
-	if (!response.ok)
-		throw new Error(`GET ${url} failed with ${response.status}.`);
-	return response.json();
-}
-
-async function postJson(url: string, body: unknown): Promise<unknown> {
-	const response = await fetch(url, {
-		method: "POST",
-		headers: { "content-type": "application/json" },
-		body: JSON.stringify(body),
-		signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-	});
-	if (!response.ok)
-		throw new Error(`POST ${url} failed with ${response.status}.`);
-	return response.json();
-}
-
 async function observeEndpoint(
 	endpoint: EndpointName,
 	task: () => Promise<unknown>,
@@ -617,14 +602,29 @@ async function runProbe(args: ProbeArgs): Promise<HostEvidenceCapabilities> {
 			opencodeVersion: args.opencodeVersion,
 			files: { "README.md": "# Metadata probe\n" },
 		});
-		const baseUrl = host.url;
+		const client = host.client;
+		const directory = host.project;
+		const request = { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
+		const serverInfo = await observeEndpoint(
+			HOST_METADATA_CONTRACT.endpoints.serverInfo,
+			() => client.server.info(request),
+		);
 		const agents = await observeEndpoint(
 			HOST_METADATA_CONTRACT.endpoints.agents,
-			() => fetchJson(`${baseUrl}/agent`),
+			() => client.agent.list(undefined, request),
 		);
 		const createSession = await observeEndpoint(
 			HOST_METADATA_CONTRACT.endpoints.createSession,
-			() => postJson(`${baseUrl}/session`, { title: "flow metadata probe" }),
+			() =>
+				client.session.create(
+					{
+						title: "flow metadata probe",
+						agent: "build",
+						location: { directory },
+						model: nativeModel(args.model),
+					},
+					request,
+				),
 		);
 		const parentSessionId = sessionId(createSession);
 		if (!parentSessionId)
@@ -632,28 +632,36 @@ async function runProbe(args: ProbeArgs): Promise<HostEvidenceCapabilities> {
 				opencodeVersion: args.opencodeVersion,
 				generatedAt: new Date().toISOString(),
 				parentSessionId: null,
-				endpointResponses: [agents, createSession],
+				endpointResponses: [serverInfo, agents, createSession],
 				childSessions: null,
 				parentMessages: null,
 				childMessages: [],
 			});
 		const dispatchReview = await observeEndpoint(
 			HOST_METADATA_CONTRACT.endpoints.dispatchReview,
-			() =>
-				postJson(`${baseUrl}/session/${parentSessionId}/command`, {
-					command: "flow-review",
-					arguments:
-						"Review this tiny project and submit the Flow review result.",
-					model: args.model,
-				}),
+			async () => {
+				await consumePaidDispatch({ model: args.model, kind: "command" });
+				await client.session.command(
+					{
+						sessionID: parentSessionId,
+						name: "flow-review",
+						text: "Review this tiny project and submit the Flow review result.",
+					},
+					request,
+				);
+				await client.session.wait({ sessionID: parentSessionId }, request);
+			},
 		);
 		const childSessions = await observeEndpoint(
 			HOST_METADATA_CONTRACT.endpoints.childSessions,
-			() => fetchJson(`${baseUrl}/session/${parentSessionId}/children`),
+			async () =>
+				(await listNativeSessions(client, directory, request.signal)).filter(
+					(session) => session.parentID === parentSessionId,
+				),
 		);
 		const parentMessages = await observeEndpoint(
 			HOST_METADATA_CONTRACT.endpoints.parentMessages,
-			() => fetchJson(`${baseUrl}/session/${parentSessionId}/message`),
+			() => listNativeMessages(client, parentSessionId, request.signal),
 		);
 		const children =
 			childSessions.kind === "observed"
@@ -668,7 +676,7 @@ async function runProbe(args: ProbeArgs): Promise<HostEvidenceCapabilities> {
 				sessionId: child.id,
 				messages: await observeEndpoint(
 					HOST_METADATA_CONTRACT.endpoints.childMessages,
-					() => fetchJson(`${baseUrl}/session/${child.id}/message`),
+					() => listNativeMessages(client, child.id, request.signal),
 				),
 			})),
 		);
@@ -676,7 +684,7 @@ async function runProbe(args: ProbeArgs): Promise<HostEvidenceCapabilities> {
 			opencodeVersion: args.opencodeVersion,
 			generatedAt: new Date().toISOString(),
 			parentSessionId,
-			endpointResponses: [agents, createSession, dispatchReview],
+			endpointResponses: [serverInfo, agents, createSession, dispatchReview],
 			childSessions,
 			parentMessages,
 			childMessages,

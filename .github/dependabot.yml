@@ -12,4 +12,6 @@ updates:
       # Deliberately pinned; bump manually with package.json and the focused
       # compatibility checks described in docs/development.md.
       - dependency-name: zod
-      - dependency-name: "@opencode-ai/plugin"
+      - dependency-name: "@opencode/plugin"
+      - dependency-name: "@opencode/client"
+      - dependency-name: "@opencode/schema"

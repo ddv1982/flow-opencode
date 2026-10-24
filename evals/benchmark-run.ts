@@ -55,6 +55,7 @@ import {
 	packPlugin,
 	preparePackageCache,
 } from "./harness.js";
+import { OPENCODE_HOST_VERSION } from "./opencode-host.js";
 import {
 	evaluatorIdentity,
 	hostActorObservation,
@@ -358,7 +359,7 @@ async function main(): Promise<void> {
 	const requested = model(options.model);
 	await requirePaidAuthorization();
 	const root = join(import.meta.dir, "..");
-	const opencodeVersion = packageJson.devDependencies["@opencode-ai/plugin"];
+	const opencodeVersion = OPENCODE_HOST_VERSION;
 	const runtimeSha256 = evidenceSha256(
 		canonicalJson(await benchmarkRuntimeIdentity()),
 	);
@@ -451,6 +452,8 @@ async function main(): Promise<void> {
 			toolchain,
 			packageCache: cache,
 			opencodeVersion,
+			ambientConfig: "disabled",
+			reviewerEnvironment: "disabled",
 			files: { "package.json": '{"name":"paired-preflight"}\n' },
 			withFlow: false,
 		});
@@ -520,6 +523,8 @@ async function main(): Promise<void> {
 								toolchain,
 								packageCache: cache,
 								opencodeVersion,
+								ambientConfig: "disabled",
+								reviewerEnvironment: "disabled",
 								files: benchmark.files,
 								withFlow: flow,
 							});

@@ -129,6 +129,11 @@ jobs:
                 "opencode-plugin-flow-${version}.tgz" "$sealed" "$digest"
             fi
           fi
+          if node -e 'process.exit(Number(process.argv[1].split(".")[0]) >= 10 ? 0 : 1)' "$version" && [[ -f "evals/qualification/archives/${version}.json" ]]; then
+            qualified="$(bun scripts/materialize-qualification.ts --descriptor "evals/qualification/archives/${version}.json" --out "${RUNNER_TEMP}/flow-qualified-${version}")"
+            bun run scripts/restore-exact-release-artifact.ts \
+              "opencode-plugin-flow-${version}.tgz" --bundle "$qualified" "$version"
+          fi
 
       - name: Report release evidence readiness without publishing
         timeout-minutes: 5
@@ -237,6 +242,11 @@ jobs:
               bun run scripts/restore-exact-release-artifact.ts \
                 "opencode-plugin-flow-${version}.tgz" "$sealed" "$digest"
             fi
+          fi
+          if node -e 'process.exit(Number(process.argv[1].split(".")[0]) >= 10 ? 0 : 1)' "$version"; then
+            qualified="$(bun scripts/materialize-qualification.ts --descriptor "evals/qualification/archives/${version}.json" --out "${RUNNER_TEMP}/flow-qualified-${version}")"
+            bun run scripts/restore-exact-release-artifact.ts \
+              "opencode-plugin-flow-${version}.tgz" --bundle "$qualified" "$version"
           fi
 
       - name: Restore release record from this workflow run

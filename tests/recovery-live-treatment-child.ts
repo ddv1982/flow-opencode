@@ -1,10 +1,10 @@
+import { mock } from "bun:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import type { Plugin, ToolContext } from "@opencode-ai/plugin";
+import { join } from "node:path";
+import { Plugin } from "@opencode/plugin";
 import BudgetPlugin from "../evals/recovery-decisions/budget-plugin.js";
-import LiveTreatmentPlugin from "../evals/recovery-decisions/live-treatment-plugin.js";
 import {
 	cancelRequestBudget,
 	createRequestBudget,
@@ -13,7 +13,83 @@ import {
 	requestBudgetStatus,
 } from "../evals/recovery-decisions/request-budget.js";
 import { datasetDigest } from "../evals/recovery-decisions/schema.js";
-import { frozenCampaignFixture } from "./recovery-campaign-support.js";
+import type { RecoveryController } from "../src/application/recovery-policy.js";
+import type { createFlowPlugin as FlowFactory } from "../src/platform/opencode/plugin-composition.js";
+import {
+	approveSession,
+	deterministicEnvironment,
+	MemorySessionRepository,
+	plan,
+	resetFeatureRun,
+	startReviewedRun,
+	submitReview,
+} from "./runtime-test-support.js";
+
+let capturedRecovery: RecoveryController | undefined;
+mock.module("../src/platform/opencode/plugin-composition.js", () => ({
+	createFlowPlugin: (dependencies: Parameters<typeof FlowFactory>[0]) =>
+		Plugin.define({
+			id: "native-composition-unit",
+			setup() {
+				capturedRecovery = dependencies.createRecovery();
+				return () => {
+					capturedRecovery?.revoke();
+				};
+			},
+		}),
+}));
+const { default: LiveTreatmentPlugin } = await import(
+	"../evals/recovery-decisions/live-treatment-plugin.js"
+);
+async function blockedFixture() {
+	const repository = new MemorySessionRepository();
+	const flow = await approveSession(repository, deterministicEnvironment(), {
+		goal: "Repair parser null handling and write the selected output after recovery.",
+		plan: {
+			...plan,
+			features: [
+				{
+					id: "parser",
+					title: "Parser recovery",
+					summary: "Repair parser null handling",
+					targets: ["parser.ts"],
+					validation: ["bun test"],
+					dependsOn: [],
+				},
+			],
+		},
+	});
+	for (let index = 0; index < 2; index += 1) {
+		if (index)
+			await resetFeatureRun(flow, repository, "parser", `reset-${index}`);
+		await startReviewedRun(flow, repository, {
+			featureId: "parser",
+			suffix: `failed-${index}`,
+		});
+		await submitReview(flow, repository, {
+			featureId: "parser",
+			suffix: `failed-${index}`,
+			summary: "Missing null guard",
+			verdict: "failed",
+			findings: [
+				{
+					severity: "blocking",
+					summary: "Null input crashes",
+					evidence: "parser.ts",
+					...(index
+						? {
+								findingId:
+									repository.session?.runs[0]?.reviews[0]?.result?.findings[0]
+										?.findingId,
+							}
+						: {}),
+				},
+			],
+		});
+	}
+	if (!repository.session) throw new Error("Missing blocked recovery session");
+	return { session: repository.session, sourceDigest: repository.sourceDigest };
+}
 
 const root = process.argv[2];
 const scenario = process.argv[3];
@@ -155,22 +231,15 @@ const intercepted = Object.assign(
 globalThis.fetch = intercepted as typeof fetch;
 const originalWebSocket = globalThis.WebSocket;
 const context = {
-	directory: workspace,
-	worktree: workspace,
-	project: {},
-	serverUrl: new URL("http://localhost:43210"),
-	$: {},
-	experimental_workspace: { register() {} },
-	client: {
-		app: { log() {} },
-		session: {
-			message: async () => ({ data: undefined }),
-			get: async (input: { path: { id: string } }) => ({
-				data: { id: input.path.id, directory: workspace },
-			}),
-		},
-	},
-} as unknown as Parameters<Plugin>[0];
+	options: {},
+	session: { hook: async () => ({ dispose: async () => {} }) },
+};
+const setupLive = (options: unknown): Promise<unknown> =>
+	Reflect.apply(LiveTreatmentPlugin.setup, undefined, [
+		{ ...context, options },
+	]);
+const installBudget = (options: unknown): Promise<void> =>
+	Reflect.apply(BudgetPlugin.install, undefined, [context, options]);
 const gateOptions = {
 	directory,
 	authorizationDigest: options.budget.authorizationDigest,
@@ -180,7 +249,6 @@ const gateOptions = {
 const expected = {
 	...options.budget,
 	origin: "live" as const,
-	controlOrigin: context.serverUrl.origin,
 };
 assert.throws(() => BudgetPlugin.assertInstalledRequestGate(expected));
 if (scenario === "forged-ready") {
@@ -195,7 +263,7 @@ if (scenario === "forged-ready") {
 		}),
 	);
 	assert.throws(() => BudgetPlugin.assertInstalledRequestGate(expected));
-	await assert.rejects(LiveTreatmentPlugin(context, options));
+	await assert.rejects(setupLive(options));
 	assert.throws(() => BudgetPlugin.assertInstalledRequestGate(expected));
 	console.log(JSON.stringify({ scenario, managerModel, requests, ok: true }));
 	process.exit(0);
@@ -223,31 +291,31 @@ if (invalid.includes(scenario)) {
 		input.script = { kind: "guarded-reset-v1", outcome: "accepted" };
 	if (scenario === "missing-scope")
 		delete (input.budget as Record<string, unknown>).scope;
-	await assert.rejects(LiveTreatmentPlugin(context, input));
+	await assert.rejects(setupLive(input));
 	assert.equal(globalThis.fetch, intercepted);
 	assert.equal(globalThis.WebSocket, originalWebSocket);
 	assert.equal((await requestBudgetStatus(directory)).consumed, 0);
 } else if (scenario === "failed-ready" || scenario === "pending-ready") {
 	if (scenario === "failed-ready") {
 		await writeFile(options.budgetReadyPath, "occupied");
-		await assert.rejects(BudgetPlugin(context, gateOptions));
+		await assert.rejects(installBudget(gateOptions));
 	} else {
 		await writeFile(options.budgetReadyPath, "occupied");
 		const results = await Promise.allSettled([
-			BudgetPlugin(context, gateOptions),
-			BudgetPlugin(context, gateOptions),
+			installBudget(gateOptions),
+			installBudget(gateOptions),
 		]);
 		assert(results.every((result) => result.status === "rejected"));
 	}
 	assert.notEqual(globalThis.fetch, intercepted);
 	assert.throws(() => BudgetPlugin.assertInstalledRequestGate(expected));
-	await assert.rejects(BudgetPlugin(context, gateOptions));
+	await assert.rejects(installBudget(gateOptions));
 	await assert.rejects(fetch("https://unlisted.invalid/inference"));
 } else if (
 	scenario === "control-manager-gate" ||
 	scenario === "treatment-manager-gate"
 ) {
-	await BudgetPlugin(context, gateOptions);
+	await installBudget(gateOptions);
 	BudgetPlugin.assertInstalledRequestGate(expected);
 	assert.throws(() => {
 		globalThis.fetch = intercepted as typeof fetch;
@@ -271,8 +339,8 @@ if (invalid.includes(scenario)) {
 	scenario === "gate-websocket" ||
 	scenario === "gate-scope"
 ) {
-	await BudgetPlugin(context, gateOptions);
-	await BudgetPlugin(context, gateOptions);
+	await installBudget(gateOptions);
+	await installBudget(gateOptions);
 	BudgetPlugin.assertInstalledRequestGate(expected);
 	if (scenario === "gate-fetch")
 		assert.throws(() => {
@@ -285,33 +353,24 @@ if (invalid.includes(scenario)) {
 	if (scenario === "gate-scope")
 		options.budget.scope = { ...scope, executionId: randomUUID() };
 	if (scenario === "gate-scope") {
-		await assert.rejects(LiveTreatmentPlugin(context, options));
+		await assert.rejects(setupLive(options));
 		await assert.rejects(
-			BudgetPlugin(context, { ...gateOptions, scope: options.budget.scope }),
+			installBudget({ ...gateOptions, scope: options.budget.scope }),
 		);
 	} else {
 		BudgetPlugin.assertInstalledRequestGate(expected);
-		await BudgetPlugin(context, gateOptions);
+		await installBudget(gateOptions);
 	}
 } else {
-	const fixture = await frozenCampaignFixture();
-	for (const [name, bytes] of Object.entries(fixture.fixture.files)) {
-		await mkdir(dirname(join(workspace, name)), { recursive: true });
-		await writeFile(join(workspace, name), bytes);
-	}
-	for (const args of [
-		["init", "--initial-branch=main"],
-		["add", "."],
-	])
-		assert.equal(Bun.spawnSync(["git", "-C", workspace, ...args]).exitCode, 0);
+	const fixture = await blockedFixture();
 	if (scenario === "treatment-ready")
 		await writeFile(options.readyPath, "occupied");
 	if (scenario === "treatment-ready") {
-		await assert.rejects(LiveTreatmentPlugin(context, options));
+		await assert.rejects(setupLive(options));
 		BudgetPlugin.assertInstalledRequestGate(expected);
 		await assert.rejects(fetch("https://unlisted.invalid/inference"));
 	} else {
-		const hooks = await LiveTreatmentPlugin(context, options);
+		const hooks = await setupLive(options);
 		try {
 			assert.equal(requests, 0);
 			const ready = JSON.parse(await readFile(options.readyPath, "utf8"));
@@ -331,41 +390,18 @@ if (invalid.includes(scenario)) {
 				assert.equal(requests, 0);
 			}
 			const mode = control ? "shadow" : "delegated";
-			await hooks["command.execute.before"]?.(
-				{
-					command: "flow-auto",
-					sessionID: "host",
-					arguments: `--recovery=${mode} --recovery-calls=${retryReplacedFetch ? 2 : 1} --recovery-usd=0.01`,
-				},
-				{ parts: [{ type: "text", text: "Flow", synthetic: true } as never] },
-			);
-			await hooks["chat.message"]?.(
-				{ sessionID: "host" },
-				{
-					message: {
-						id: "user",
-						agent: "build",
-						model: {
-							providerID: managerModel.split("/")[0],
-							modelID: managerModel.split("/")[1],
-						},
-					} as never,
-					parts: [{ type: "text", text: "Continue" } as never],
-				},
-			);
-			await hooks.event?.({
-				event: {
-					type: "message.updated",
-					properties: {
-						info: {
-							id: "assistant",
-							sessionID: "host",
-							role: "assistant",
-							parentID: "user",
-						},
-					},
-				} as never,
+			const recovery = capturedRecovery;
+			if (!recovery)
+				throw new Error(
+					"Native composition did not receive recovery controller",
+				);
+			recovery.activate("host", {
+				mode,
+				maxCalls: retryReplacedFetch ? 2 : 1,
+				maxUsd: 0.01,
 			});
+			recovery.observeMessage("host", "user", false);
+			recovery.observeAssistant("host", "assistant", "user");
 			if (scenario === "replaced-fetch")
 				assert.throws(() => {
 					globalThis.fetch = intercepted as typeof fetch;
@@ -378,36 +414,28 @@ if (invalid.includes(scenario)) {
 			assert(run);
 			const finding = run.reviews.at(-1)?.result?.findings[0]?.findingId;
 			assert(finding);
-			const result = await hooks.tool?.flow_status?.execute(
-				{
-					request: { view: "compact" },
-					recoveryProposal: {
-						id: "proposal",
-						sessionId: fixture.session.id,
-						expectedRevision: fixture.session.revision,
-						candidates: [
-							{
-								id: "retry",
-								action: "retry",
-								featureId: run.featureId,
-								remedy: "Add null guard",
-								changedFromPreviousAttempt: "Handle null",
-								findingIds: [finding],
-							},
-						],
-					},
-				},
-				{
-					directory: workspace,
-					worktree: workspace,
-					sessionID: "host",
-					messageID: "assistant",
+			const advice = await recovery
+				.guard({
+					hostSessionId: "host",
+					messageId: "assistant",
 					agent: "build",
-					abort: new AbortController().signal,
-					metadata() {},
-					async ask() {},
-				} as ToolContext,
-			);
+				})
+				.propose(fixture.session, fixture.sourceDigest, {
+					id: "proposal",
+					sessionId: fixture.session.id,
+					expectedRevision: fixture.session.revision,
+					candidates: [
+						{
+							id: "retry",
+							action: "retry",
+							featureId: run.featureId,
+							remedy: "Add null guard",
+							changedFromPreviousAttempt: "Handle null",
+							findingIds: [finding],
+						},
+					],
+				});
+			const result = JSON.stringify({ workflowData: { recovery: advice } });
 			assert.equal(typeof result, "string");
 			if (
 				["accepted", "replaced-fetch", "replaced-websocket"].includes(scenario)
@@ -447,7 +475,8 @@ if (invalid.includes(scenario)) {
 				assert.equal(requests, retryReplacedFetch ? 2 : 1);
 			}
 		} finally {
-			await hooks.dispose?.();
+			if (typeof hooks === "function")
+				await Reflect.apply(hooks, undefined, []);
 		}
 	}
 }
@@ -470,3 +499,5 @@ for (const name of [
 	}
 }
 console.log(JSON.stringify({ scenario, managerModel, requests, ok: true }));
+
+process.exit(0);

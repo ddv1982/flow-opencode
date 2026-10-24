@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,18 +11,28 @@ import type {
 	SourceDigest,
 	ValidationObservation,
 } from "../src/domain/session.js";
-import type { AutoValidationReceipt } from "../src/platform/opencode/auto-drive.js";
+import {
+	Agent,
+	CallID,
+	type NativeToolAfter,
+	type NativeToolBefore,
+	NativeToolError,
+	type OpenCodeEvent,
+	Session,
+	SessionMessage,
+} from "../src/platform/opencode/sdk.js";
 import {
 	readHostToolOutput,
 	ValidationCaptureCoordinator,
-	ValidationCaptureError,
 } from "../src/platform/opencode/validation-capture.js";
 
-const SOURCE = `sha256:${"a".repeat(64)}` as SourceDigest;
+const workspace = await mkdtemp(join(tmpdir(), "flow-native-validation-"));
+afterAll(() => rm(workspace, { recursive: true, force: true }));
+const SOURCE: SourceDigest = `sha256:${"a".repeat(64)}`;
 const prepared: PreparedValidation = {
-	featureId: "runtime-kernel",
+	featureId: "runtime",
 	runId: "run-1",
-	command: "bun test tests/runtime-gates.test.ts",
+	command: "bun test",
 	scope: "focused",
 	sourceDigest: SOURCE,
 	hostPlatform: "linux",
@@ -30,11 +40,7 @@ const prepared: PreparedValidation = {
 	assertions: [],
 	resultsPath: undefined,
 };
-
-function persistedObservation(
-	input: ObservedValidation,
-	recordedRevision = 4,
-): ValidationObservation {
+function persisted(input: ObservedValidation): ValidationObservation {
 	return {
 		id: input.captureId,
 		featureId: input.featureId,
@@ -46,9 +52,7 @@ function persistedObservation(
 		exitCode: input.exitCode,
 		outputDigest: input.outputDigest,
 		outputComplete: input.outputComplete,
-		recordedRevision,
-		...(input.hostPlatform ? { hostPlatform: input.hostPlatform } : {}),
-		...(input.resultsPath ? { resultsPath: input.resultsPath } : {}),
+		recordedRevision: 4,
 		...(input.observedAssertions
 			? { observedAssertions: input.observedAssertions }
 			: {}),
@@ -57,31 +61,476 @@ function persistedObservation(
 			: {}),
 	};
 }
+function before(overrides: Partial<NativeToolBefore> = {}): NativeToolBefore {
+	return {
+		tool: "shell",
+		sessionID: Session.ID.make("ses_host"),
+		messageID: SessionMessage.ID.make("msg_assistant"),
+		id: CallID.make("call"),
+		agent: Agent.ID.make("build"),
+		input: { command: prepared.command },
+		...overrides,
+	};
+}
+function after(
+	output: unknown = {
+		exit: 0,
+		truncated: false,
+		status: "completed",
+		output: "passed",
+	},
+	metadata: object = {},
+	changes: Partial<NativeToolBefore> = {},
+): NativeToolAfter {
+	return {
+		...before(changes),
+		status: "completed",
+		result: { output, metadata, content: [{ type: "text", text: "passed" }] },
+	};
+}
+function fixture(
+	options: Partial<
+		ConstructorParameters<typeof ValidationCaptureCoordinator>[0]
+	> = {},
+) {
+	const observations: ObservedValidation[] = [];
+	const capture = new ValidationCaptureCoordinator({
+		readSession: async (id) => ({
+			id,
+			agent: "build",
+			location: { directory: workspace },
+		}),
+		persistObservation: async (_workspace, value) => {
+			observations.push(value);
+			return persisted(value);
+		},
+		randomId: () => "capture-1",
+		...options,
+	});
+	return { capture, observations };
+}
+function digest(text: string): `sha256:${string}` {
+	return `sha256:${createHash("sha256").update(text).digest("hex")}`;
+}
 
-const REPORT = `<testsuites><testcase name="on Windows" classname="s"/></testsuites>`;
+test("persists the exact source-bound native shell observation and appends a receipt", async () => {
+	const { capture, observations } = fixture();
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before());
+	const completed = after();
+	const result = await capture.observeToolAfter(completed);
+	expect(observations).toEqual([
+		{
+			...prepared,
+			captureId: "capture-1",
+			exitCode: 0,
+			outputComplete: true,
+			outputDigest: digest("passed"),
+		},
+	]);
+	const observation = observations[0];
+	if (!observation) throw new Error("Observation was not persisted.");
+	expect(result).toEqual(persisted(observation));
+	expect(completed.status === "completed" && completed.result.content).toEqual([
+		{
+			type: "text",
+			text: 'passed\n\n[flow-validation] {"id":"capture-1","scope":"focused","intent":"pass","passed":true,"observed":false,"recordedRevision":4}',
+		},
+	]);
+	expect(capture.pendingCount()).toBe(0);
+});
+test.each([
+	[
+		"nonzero-completed",
+		{ exit: 7, truncated: false, status: "completed", output: "failed" },
+		{},
+		7,
+		true,
+		undefined,
+	],
+	[
+		"timeout",
+		{ truncated: false, status: "completed", output: "timeout" },
+		{ timeout: true, truncated: false },
+		null,
+		false,
+		"exit-code-unavailable",
+	],
+	[
+		"unknown-exit",
+		{ truncated: false, output: "unknown" },
+		{},
+		null,
+		false,
+		"exit-code-unavailable",
+	],
+	[
+		"unknown-completeness",
+		{ exit: 0, output: "unknown" },
+		{},
+		0,
+		false,
+		"output-completeness-unknown",
+	],
+	[
+		"truncated",
+		{ exit: 0, truncated: true, output: "partial" },
+		{},
+		0,
+		false,
+		undefined,
+	],
+	[
+		"conflicting-exit",
+		{ exit: 0, truncated: false, output: "conflict" },
+		{ exit: 7 },
+		null,
+		false,
+		"exit-code-unavailable",
+	],
+	[
+		"conflicting-truncation",
+		{ exit: 0, truncated: false, output: "conflict" },
+		{ truncated: true },
+		null,
+		false,
+		"exit-code-unavailable",
+	],
+	[
+		"killed",
+		{ exit: 0, truncated: false, status: "killed", output: "killed" },
+		{},
+		null,
+		false,
+		"exit-code-unavailable",
+	],
+] as const)(
+	"%s keeps truthful exit and completeness evidence",
+	async (_name, output, metadata, exitCode, outputComplete, ineligibleReason) => {
+		const { capture, observations } = fixture();
+		capture.arm("ses_host", workspace, prepared);
+		await capture.observeToolBefore(before());
+		await capture.observeToolAfter(after(output, metadata));
+		expect(observations[0]).toMatchObject({ exitCode, outputComplete });
+		expect(observations[0]?.ineligibleReason).toBe(ineligibleReason);
+	},
+);
+test("native tool errors are durable ineligible observations", async () => {
+	const { capture, observations } = fixture();
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before());
+	await capture.observeToolAfter({
+		...before(),
+		status: "error",
+		error: new NativeToolError({ message: "invalid workdir" }),
+	});
+	expect(observations[0]).toMatchObject({
+		exitCode: null,
+		outputComplete: false,
+		outputDigest: digest("invalid workdir"),
+		ineligibleReason: "exit-code-unavailable",
+	});
+});
+test.each([
+	["command", { command: "bun test --changed" }],
+	["workdir", { command: prepared.command, workdir: tmpdir() }],
+] as const)(
+	"mismatching %s cancels before shell execution",
+	async (_name, input) => {
+		const { capture, observations } = fixture();
+		capture.arm("ses_host", workspace, prepared);
+		await expect(capture.observeToolBefore(before({ input }))).rejects.toThrow(
+			"capture was cancelled",
+		);
+		expect(observations).toEqual([]);
+		expect(capture.pendingCount()).toBe(0);
+	},
+);
+test.each(["flow-reviewer", "flow-worker", "flow-planner"])(
+	"%s cannot capture manager validation",
+	async (agent) => {
+		const { capture, observations } = fixture({
+			readSession: async (id) => ({
+				id,
+				agent,
+				location: { directory: workspace },
+			}),
+		});
+		capture.arm("ses_host", workspace, prepared);
+		await expect(
+			capture.observeToolBefore(before({ agent: Agent.ID.make(agent) })),
+		).rejects.toThrow("capture was cancelled");
+		expect(observations).toEqual([]);
+	},
+);
+test("wrong session facts and changed locations fail closed", async () => {
+	let directory = workspace;
+	const { capture, observations } = fixture({
+		readSession: async (id) => ({
+			id,
+			agent: "build",
+			location: { directory },
+		}),
+	});
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before());
+	directory = tmpdir();
+	await expect(capture.observeToolAfter(after())).rejects.toThrow(
+		"workspace changed",
+	);
+	expect(observations).toEqual([]);
+});
+test.each([
+	["assistant", { messageID: SessionMessage.ID.make("msg_other") }],
+	["call", { id: CallID.make("other-call") }],
+	["agent", { agent: Agent.ID.make("other-agent") }],
+	["session", { sessionID: Session.ID.make("ses_other") }],
+] as const)(
+	"a repeated call ID cannot cross the %s boundary",
+	async (_name, identity) => {
+		const { capture, observations } = fixture();
+		capture.arm("ses_host", workspace, prepared);
+		await capture.observeToolBefore(before());
+		expect(
+			await capture.observeToolAfter(after(undefined, {}, identity)),
+		).toBeNull();
+		expect(observations).toEqual([]);
+		expect(await capture.observeToolAfter(after())).toMatchObject({
+			id: "capture-1",
+			exitCode: 0,
+		});
+	},
+);
+test("later shell input cannot relabel the frozen command", async () => {
+	const { capture, observations } = fixture();
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before());
+	await expect(
+		capture.observeToolAfter(
+			after(undefined, {}, { input: { command: "different" } }),
+		),
+	).rejects.toThrow("command or workspace changed");
+	expect(observations).toEqual([]);
+});
+test("only the native shell ID binds capture", async () => {
+	const { capture, observations } = fixture();
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before({ tool: "bash" }));
+	expect(await capture.observeToolAfter(after())).toBeNull();
+	expect(observations).toEqual([]);
+	await capture.observeToolBefore(before());
+	expect(await capture.observeToolAfter(after())).toMatchObject({
+		exitCode: 0,
+	});
+});
+test("expiry, cancellation, duplicate arming, and clear release captures", () => {
+	let now = 1;
+	const { capture } = fixture({ now: () => now });
+	capture.arm("ses_host", workspace, prepared);
+	expect(() => capture.arm("ses_host", workspace, prepared)).toThrow(
+		"already has an armed",
+	);
+	expect(() => capture.arm("other", workspace, prepared)).toThrow(
+		"workspace already has",
+	);
+	expect(capture.cancel("ses_host")).toBe(true);
+	capture.arm("ses_host", workspace, prepared);
+	now += 16 * 60 * 1000;
+	expect(capture.pendingCount()).toBe(0);
+	capture.arm("ses_host", workspace, prepared);
+	capture.clear();
+	expect(capture.pendingCount()).toBe(0);
+});
+const report =
+	'<testsuites><testcase classname="suite" name="critical"/></testsuites>';
+test.each([
+	["fresh", 101, "passed"],
+	["equal-arming-time", 100, "absent"],
+	["future", 201, "absent"],
+	["stale", 99, "absent"],
+] as const)(
+	"%s JUnit freshness preserves declared assertion evidence",
+	async (_name, modifiedMs, status) => {
+		let now = 100,
+			reads = 0;
+		const { capture, observations } = fixture({
+			now: () => now,
+			readReport: async () =>
+				++reads === 1 ? null : { text: report, modifiedMs },
+		});
+		capture.arm("ses_host", workspace, {
+			...prepared,
+			assertions: ["suite.critical"],
+			resultsPath: "results.xml",
+		});
+		await capture.observeToolBefore(before());
+		now = 200;
+		await capture.observeToolAfter(after());
+		expect(observations[0]?.observedAssertions).toEqual([
+			{ name: "suite.critical", status },
+		]);
+	},
+);
+test("unchanged JUnit cannot certify the just-run command", async () => {
+	let now = 100;
+	const { capture, observations } = fixture({
+		now: () => now,
+		readReport: async () => ({ text: report, modifiedMs: 101 }),
+	});
+	capture.arm("ses_host", workspace, {
+		...prepared,
+		assertions: ["suite.critical"],
+		resultsPath: "results.xml",
+	});
+	await capture.observeToolBefore(before());
+	now = 200;
+	await capture.observeToolAfter(after());
+	expect(observations[0]?.observedAssertions).toEqual([
+		{ name: "suite.critical", status: "absent" },
+	]);
+});
+function shellEvent(
+	path: string,
+	changes: Record<string, unknown> = {},
+): OpenCodeEvent {
+	return {
+		id: "event",
+		created: 110,
+		type: "shell.created",
+		location: { directory: workspace },
+		data: {
+			info: {
+				id: "sh_native",
+				command: prepared.command,
+				cwd: workspace,
+				shell: "/bin/sh",
+				status: "running",
+				file: path,
+				metadata: { sessionID: "ses_host" },
+				time: { started: 101 },
+				...changes,
+			},
+		},
+	};
+}
+function exited(): OpenCodeEvent {
+	return {
+		id: "exit-event",
+		created: 120,
+		type: "shell.exited",
+		data: { id: "sh_native", exit: 0, status: "exited" },
+	};
+}
+const tail = "native output\n".repeat(100);
+function spilled(path: string): NativeToolAfter {
+	const text = `${tail}\n\n[showing lines 10001-10100 of 10100; full output saved to ${path}]`;
+	const value = after({
+		exit: 0,
+		truncated: true,
+		status: "completed",
+		output: text,
+	});
+	if (value.status === "completed")
+		value.result = { ...value.result, content: [{ type: "text", text }] };
+	return value;
+}
+test("a verified native shell record permits a secure complete managed-output read", async () => {
+	const dataHome = join(workspace, "managed-data");
+	const directory = join(dataHome, "opencode", "shell", "abc123");
+	await mkdir(directory, { recursive: true });
+	const path = join(directory, "sh_native.out"),
+		full = "earlier output\n".repeat(1000) + tail;
+	await writeFile(path, full);
+	let now = 100;
+	const { capture, observations } = fixture({
+		now: () => now,
+		readFullOutput: (path) => readHostToolOutput(path, dataHome),
+	});
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before());
+	now = 200;
+	capture.observeShellEvent(shellEvent(path));
+	capture.observeShellEvent(exited());
+	await capture.observeToolAfter(spilled(path));
+	expect(observations[0]).toMatchObject({
+		outputComplete: true,
+		outputDigest: digest(full),
+		exitCode: 0,
+	});
+});
+test.each([
+	["no-record", null],
+	["wrong-command", { command: "other" }],
+	["wrong-session", { metadata: { sessionID: "other" } }],
+	["wrong-workspace", { cwd: tmpdir() }],
+	["old-record", { time: { started: 99 } }],
+	["running-record", { status: "running" }],
+] as const)(
+	"%s never trusts a model-visible output path",
+	async (name, changes) => {
+		let reads = 0,
+			now = 100;
+		const { capture, observations } = fixture({
+			now: () => now,
+			readFullOutput: async () => {
+				reads++;
+				return `prefix${tail}`;
+			},
+		});
+		const path = join(workspace, "sh_native.out");
+		capture.arm("ses_host", workspace, prepared);
+		await capture.observeToolBefore(before());
+		now = 200;
+		if (changes) {
+			capture.observeShellEvent(shellEvent(path, changes));
+			if (name !== "running-record") capture.observeShellEvent(exited());
+		}
+		await capture.observeToolAfter(spilled(path));
+		expect(reads).toBe(0);
+		expect(observations[0]?.outputComplete).toBe(false);
+	},
+);
+test("secure output reader rejects symlinks, unrelated files, and oversized output", async () => {
+	const dataHome = join(workspace, "reader-data"),
+		directory = join(dataHome, "opencode", "shell", "abc123");
+	await mkdir(directory, { recursive: true });
+	const valid = join(directory, "sh_valid.out");
+	await writeFile(valid, "complete");
+	expect(await readHostToolOutput(valid, dataHome)).toBe("complete");
+	const outside = join(workspace, "outside.out");
+	await writeFile(outside, "secret");
+	expect(await readHostToolOutput(outside, dataHome)).toBeNull();
+	if (process.platform !== "win32") {
+		const link = join(directory, "sh_link.out");
+		await symlink(outside, link);
+		expect(await readHostToolOutput(link, dataHome)).toBeNull();
+	}
+	const huge = join(directory, "sh_huge.out");
+	await writeFile(huge, Buffer.alloc(8 * 1024 * 1024 + 1));
+	expect(await readHostToolOutput(huge, dataHome)).toBeNull();
+});
 
-test("emits one source-bound receipt after observation persistence", async () => {
+test("receipts become available only after source-bound observation persistence", async () => {
+	const receipts: unknown[] = [];
+	let accept: ((value: ValidationObservation) => void) | undefined;
+	let pending: ObservedValidation | undefined;
 	const origin = {
-		hostSessionId: "host",
+		hostSessionId: "ses_host",
 		sessionId: "flow",
 		authority: "user",
-		assistantId: "manager",
-		assertions: prepared.assertions,
+		assistantId: "msg_assistant",
+		featureId: prepared.featureId,
+		runId: prepared.runId,
+		sourceDigest: prepared.sourceDigest,
 		command: prepared.command,
 		scope: prepared.scope,
 		hostPlatform: prepared.hostPlatform,
 		intent: prepared.intent,
-		featureId: prepared.featureId,
-		runId: prepared.runId,
-		sourceDigest: SOURCE,
+		assertions: prepared.assertions,
 	};
-	const receipts: AutoValidationReceipt[] = [];
-	let accept!: (observation: ValidationObservation) => void;
-	let pending: ObservedValidation | undefined;
-	const capture = new ValidationCaptureCoordinator({
-		randomId: () => "armed-capture",
-		persistObservation: (_workspace, input) => {
-			pending = input;
+	const { capture } = fixture({
+		persistObservation: async (_workspace, observation) => {
+			pending = observation;
 			return new Promise((resolve) => {
 				accept = resolve;
 			});
@@ -90,711 +539,107 @@ test("emits one source-bound receipt after observation persistence", async () =>
 			receipts.push(receipt);
 		},
 	});
-	const command = prepared.command;
-	capture.arm("host", "/workspace", prepared, origin);
-	await capture.observeToolBefore(
-		{ tool: "bash", sessionID: "host", callID: "bash" },
-		{ args: { command } },
-	);
-	const output = {
-		title: "check",
-		output: "passed",
-		metadata: { exit: 0, truncated: false },
-	};
-	const input = {
-		tool: "bash",
-		sessionID: "host",
-		callID: "bash",
-		args: { command },
-	};
-	const completing = capture.observeToolAfter(input, output);
-	await Promise.resolve();
+	capture.arm("ses_host", workspace, prepared, origin);
+	await capture.observeToolBefore(before());
+	const completion = capture.observeToolAfter(after());
+	for (let step = 0; step < 10 && !pending; step++) await Promise.resolve();
 	expect(receipts).toEqual([]);
-	if (!pending) throw new Error("Observation persistence did not start.");
-	const observed = persistedObservation(pending, 4);
-	accept(observed);
-	expect(await completing).toEqual(observed);
-	expect(receipts).toEqual([
-		{ origin, captureId: "armed-capture", observation: observed },
-	]);
+	if (!pending || !accept)
+		throw new Error("Observation persistence did not start.");
+	const observation = persisted(pending);
+	accept(observation);
+	await completion;
+	expect(receipts).toEqual([{ origin, captureId: "capture-1", observation }]);
 	expect(pending).not.toHaveProperty("origin");
-	expect(await capture.observeToolAfter(input, output)).toBeNull();
-	expect(receipts).toHaveLength(1);
 });
 
-test("a continuation diagnostic failure cannot erase a durable observation", async () => {
-	const origin = {
-		hostSessionId: "host",
-		sessionId: "flow",
-		authority: "user",
-		assistantId: "manager",
-		assertions: prepared.assertions,
-		command: prepared.command,
-		scope: prepared.scope,
-		hostPlatform: prepared.hostPlatform,
-		intent: prepared.intent,
-		featureId: prepared.featureId,
-		runId: prepared.runId,
-		sourceDigest: SOURCE,
-	};
-	const capture = new ValidationCaptureCoordinator({
-		randomId: () => "accepted-capture",
-		persistObservation: async (_workspace, input) =>
-			persistedObservation(input),
-		onRecorded: () => {
-			throw new Error("diagnostic sink unavailable");
-		},
-		onReceiptError: () => {
-			throw new Error("warning sink unavailable");
+test("a nonzero completed shell vetoes a passing receipt", async () => {
+	const { capture } = fixture();
+	capture.arm("ses_host", workspace, prepared);
+	await capture.observeToolBefore(before());
+	const completed = after({
+		exit: 7,
+		truncated: false,
+		status: "completed",
+		output: "failed",
+	});
+	await capture.observeToolAfter(completed);
+	const content =
+		completed.status === "completed" ? completed.result.content : undefined;
+	const text =
+		typeof content === "string"
+			? content
+			: content
+					?.filter((part) => part.type === "text")
+					.map((part) => part.text)
+					.join("\n");
+	expect(text).toContain('"passed":false');
+});
+
+test("competing shell-before callbacks cannot replace the first native call", async () => {
+	let release: (() => void) | undefined;
+	const { capture, observations } = fixture({
+		readSession: async (id) => {
+			await new Promise<void>((resolve) => {
+				release = resolve;
+			});
+			return { id, agent: "build", location: { directory: workspace } };
 		},
 	});
-	const command = prepared.command;
-	capture.arm("host", "/workspace", prepared, origin);
-	await capture.observeToolBefore(
-		{ tool: "bash", sessionID: "host", callID: "bash" },
-		{ args: { command } },
-	);
-	const output = {
-		title: "check",
-		output: "passed",
-		metadata: { exit: 0, truncated: false },
-	};
-	const result = await capture.observeToolAfter(
-		{ tool: "bash", sessionID: "host", callID: "bash", args: { command } },
-		output,
-	);
-	expect(result?.id).toBe("accepted-capture");
-	expect(output.output).toContain('"passed":true');
-	expect(output.output).toContain('"recordedRevision":4');
+	capture.arm("ses_host", workspace, prepared);
+	const first = capture.observeToolBefore(before());
+	await capture.observeToolBefore(before({ id: CallID.make("second") }));
+	if (!release) throw new Error("First native identity read did not start.");
+	release();
+	await first;
+	expect(
+		await capture.observeToolAfter(
+			after(undefined, {}, { id: CallID.make("second") }),
+		),
+	).toBeNull();
+	expect(observations).toEqual([]);
+	capture.clear();
 });
 
-test("reads only bounded OpenCode tool-output files", async () => {
-	const dataHome = await mkdtemp(join(tmpdir(), "flow-host-output-"));
-	try {
-		const directory = join(dataHome, "opencode", "tool-output");
-		await mkdir(directory, { recursive: true });
-		const path = join(directory, "tool_ABC123");
-		await writeFile(path, "complete cargo output\n");
-		expect(await readHostToolOutput(path, dataHome)).toBe(
-			"complete cargo output\n",
-		);
-		const textPath = join(directory, "tool_ABC123.txt");
-		await writeFile(textPath, "complete text output\n");
-		expect(await readHostToolOutput(textPath, dataHome)).toBe(
-			"complete text output\n",
-		);
-		const otherExtension = join(directory, "tool_ABC123.log");
-		await writeFile(otherExtension, "unsupported output\n");
-		expect(await readHostToolOutput(otherExtension, dataHome)).toBeNull();
-		const outside = join(dataHome, "tool_outside");
-		await writeFile(outside, "not host output\n");
-		await symlink(outside, join(directory, "tool_link"));
-		expect(
-			await readHostToolOutput(join(directory, "tool_link"), dataHome),
-		).toBeNull();
-		expect(await readHostToolOutput(outside, dataHome)).toBeNull();
-	} finally {
-		await rm(dataHome, { recursive: true, force: true });
-	}
-});
-
-test("binds a truncated Bash view to the host's full output file", async () => {
-	const path = "/isolated/opencode/tool-output/tool_ABC123";
-	const full = `test start\n${"case passed\n".repeat(100)}test result: ok\n`;
-	const visible = `...output truncated...\n\nFull output saved to: ${path}\n\n${full.slice(-150)}`;
-	let persisted: ObservedValidation | null = null;
-	const coordinator = new ValidationCaptureCoordinator({
-		readFullOutput: async (requested) => (requested === path ? full : null),
-		persistObservation: async (_workspace, input) => {
-			persisted = input;
-			return persistedObservation(input);
-		},
-	});
-	coordinator.arm("session", "/workspace", prepared);
-	await coordinator.observeToolBefore(
-		{ tool: "bash", sessionID: "session", callID: "bash-1" },
-		{ args: { command: prepared.command } },
-	);
-	const output = {
-		title: "gate",
-		output: visible,
-		metadata: { exit: 0, truncated: true, outputPath: path },
-	};
-	await coordinator.observeToolAfter(
-		{
-			tool: "bash",
-			sessionID: "session",
-			callID: "bash-1",
-			args: { command: prepared.command },
-		},
-		output,
-	);
-	const fullDigest = `sha256:${createHash("sha256").update(full).digest("hex")}`;
-	expect(persisted).toMatchObject({
-		exitCode: 0,
-		outputComplete: true,
-		outputDigest: fullDigest,
-	});
-	expect(output.output).toContain(`"fullOutputDigest":"${fullDigest}"`);
-});
-
-test("keeps truncated validation ineligible when the host file cannot be bound", async () => {
-	const path = "/isolated/opencode/tool-output/tool_ABC123";
-	for (const [visible, full] of [
-		[
-			`...output truncated...\n\nFull output saved to: ${path}\n\n${"tail".repeat(20)}`,
-			"different output",
-		],
-		[
-			`Full output saved to: ${path}\n\n${"tail".repeat(20)}`,
-			"tail".repeat(40),
-		],
-	] as const) {
-		let persisted: ObservedValidation | null = null;
-		const coordinator = new ValidationCaptureCoordinator({
+test.each([
+	["one final LF omitted from the native display", "\n", true],
+	["no final LF", "", true],
+	["extra final LF", "\n\n", false],
+	["changed trailing whitespace", " \n", false],
+	["changed output suffix", "different\n", false],
+] as const)(
+	"managed output matching preserves exact bytes with %s",
+	async (_name, ending, expectedComplete) => {
+		const rendered = "native-smoke-output\n".repeat(2000).slice(0, -1);
+		const full = `${"native-smoke-output\n".repeat(18000)}${rendered}${ending}`;
+		const path = join(workspace, "sh_native.out");
+		let now = 100;
+		const { capture, observations } = fixture({
+			now: () => now,
 			readFullOutput: async () => full,
-			persistObservation: async (_workspace, input) => {
-				persisted = input;
-				return persistedObservation(input);
-			},
 		});
-		coordinator.arm("session", "/workspace", prepared);
-		await coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session", callID: "bash-1" },
-			{ args: { command: prepared.command } },
-		);
-		await coordinator.observeToolAfter(
-			{
-				tool: "bash",
-				sessionID: "session",
-				callID: "bash-1",
-				args: { command: prepared.command },
-			},
-			{
-				title: "gate",
-				output: visible,
-				metadata: { exit: 0, truncated: true, outputPath: path },
-			},
-		);
-		expect(persisted).toMatchObject({ exitCode: 0, outputComplete: false });
-	}
-});
-
-/**
- * Runs one capture to completion and returns what was persisted.
- *
- * Written as a helper because the interesting variable is only ever the report and
- * when it was written; everything else about the capture is the same each time.
- */
-async function capture(options: {
-	prepared: PreparedValidation;
-	priorReport?: { text: string; modifiedMs: number } | null;
-	readReport?: (
-		workspace: string,
-		relativePath: string,
-	) => Promise<{ text: string; modifiedMs: number } | null>;
-	armedAt: number;
-	observedAt?: number;
-	onOutput?: (output: string) => void;
-}): Promise<ObservedValidation> {
-	let persisted: ObservedValidation | null = null;
-	let now = options.armedAt;
-	let reportRead = 0;
-	const coordinator = new ValidationCaptureCoordinator({
-		randomId: () => "capture-1",
-		now: () => now,
-		...(options.readReport || options.priorReport
-			? {
-					readReport: async (workspace, relativePath) => {
-						if (reportRead++ === 0) return options.priorReport ?? null;
-						return options.readReport?.(workspace, relativePath) ?? null;
-					},
-				}
-			: {}),
-		persistObservation: (_workspace, input) => {
-			persisted = input;
-			return Promise.resolve(persistedObservation(input));
-		},
-	});
-	coordinator.arm("session", "/workspace", options.prepared);
-	await coordinator.observeToolBefore(
-		{ tool: "bash", sessionID: "session", callID: "bash-1" },
-		{ args: { command: options.prepared.command } },
-	);
-	now = options.observedAt ?? options.armedAt + 1_000;
-	const output = {
-		title: "gate",
-		output: "1 pass",
-		metadata: { exit: 0, truncated: false },
-	};
-	await coordinator.observeToolAfter(
-		{
-			tool: "bash",
-			sessionID: "session",
-			callID: "bash-1",
-			args: { command: options.prepared.command },
-		},
-		output,
-	);
-	options.onOutput?.(output.output);
-	if (!persisted) throw new Error("Nothing was persisted.");
-	return persisted;
-}
-
-describe("observing declared assertions from the command's own report", () => {
-	const declared: PreparedValidation = {
-		...prepared,
-		assertions: ["on Windows"],
-		resultsPath: "junit.xml",
-	};
-	test("zero exit cannot label skipped, failed or absent named proof as passed", async () => {
-		for (const report of [
-			REPORT.replace("/>", "><skipped/></testcase>"),
-			REPORT.replace("/>", "><failure/></testcase>"),
-			null,
-		]) {
-			let marker = "";
-			const observed = await capture({
-				prepared: declared,
-				armedAt: 1_000,
-				readReport: async () =>
-					report === null ? null : { text: report, modifiedMs: 2_000 },
-				onOutput: (output) => {
-					marker = output;
-				},
-			});
-			expect(observed.exitCode).toBe(0);
-			expect(marker).toContain('"passed":false,"observed":false');
-		}
-	});
-
-	test("records what the report says when the command wrote it", async () => {
-		const observed = await capture({
-			prepared: declared,
-			armedAt: 1_000,
-			readReport: async () => ({ text: REPORT, modifiedMs: 2_000 }),
-		});
-		expect(observed.observedAssertions).toEqual([
-			{ name: "on Windows", status: "passed" },
-		]);
-		expect(observed.resultsPath).toBe("junit.xml");
-	});
-
-	test("ignores a report that does not postdate the arming", async () => {
-		// The path is the one half of this a caller supplies, so a report left from an
-		// earlier run — or committed by hand — would otherwise discharge an entry no
-		// command produced anything for. Exit zero is unchanged; the claim is not.
-		//
-		// The equal case is the one that was open: mtime granularity is a whole second on
-		// some filesystems, so "same millisecond as arming" is not a hypothetical width.
-		for (const modifiedMs of [4_999, 5_000]) {
-			const observed = await capture({
-				prepared: declared,
-				armedAt: 5_000,
-				readReport: async () => ({ text: REPORT, modifiedMs }),
-			});
-			expect(observed.observedAssertions).toEqual([
-				{ name: "on Windows", status: "absent" },
-			]);
-			expect(observed.exitCode).toBe(0);
-		}
-	});
-
-	test("ignores an unchanged report and a timestamp after command observation", async () => {
-		const stale = { text: REPORT, modifiedMs: 1_500 };
-		for (const options of [
-			{ priorReport: stale, readReport: async () => stale },
-			{
-				priorReport: null,
-				readReport: async () => ({ text: REPORT, modifiedMs: 2_001 }),
-			},
-		]) {
-			const observed = await capture({
-				prepared: declared,
-				armedAt: 1_000,
-				observedAt: 2_000,
-				...options,
-			});
-			expect(observed.observedAssertions).toEqual([
-				{ name: "on Windows", status: "absent" },
-			]);
-		}
-	});
-
-	test("reaches the same absence when no report is named or none can be read", async () => {
-		for (const options of [
-			{ prepared: { ...declared, resultsPath: undefined }, armedAt: 1 },
-			{ prepared: declared, armedAt: 1, readReport: async () => null },
-			{
-				prepared: declared,
-				armedAt: 1,
-				readReport: () =>
-					Promise.reject(
-						Object.assign(new Error("unreadable"), { code: "EACCES" }),
-					),
-			},
-		]) {
-			const observed = await capture(options);
-			expect(observed.observedAssertions).toEqual([
-				{ name: "on Windows", status: "absent" },
-			]);
-		}
-	});
-
-	test("records nothing when the plan declared no names for this command", async () => {
-		const observed = await capture({ prepared, armedAt: 1 });
-		expect(observed.observedAssertions).toBeUndefined();
-	});
-});
-
-describe("OpenCode validation capture", () => {
-	test("captures the exact next Bash command and persists its structured observation directly", async () => {
-		const calls: Array<{
-			workspace: string;
-			input: ObservedValidation;
-		}> = [];
-		const coordinator = new ValidationCaptureCoordinator({
-			randomId: () => "capture-1",
-			persistObservation: (workspace, input) => {
-				calls.push({ workspace, input });
-				return Promise.resolve(persistedObservation(input));
-			},
-		});
-
-		expect(
-			coordinator.arm("opencode-session-1", "/workspace", prepared),
-		).toEqual({ captureId: "capture-1", expiresInMs: 15 * 60 * 1_000 });
-		coordinator.observeToolBefore(
-			{ tool: "read", sessionID: "opencode-session-1", callID: "read-1" },
-			{ args: { path: "package.json" } },
-		);
-		expect(coordinator.pendingCount()).toBe(1);
-
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
-			{ args: { command: prepared.command } },
-		);
-		const output = {
-			title: "Focused tests",
-			output: "3 pass\n0 fail",
-			metadata: { exit: 0, truncated: false },
-		};
-		const result = await coordinator.observeToolAfter(
-			{
-				tool: "bash",
-				sessionID: "opencode-session-1",
-				callID: "bash-1",
-				args: { command: prepared.command },
-			},
+		capture.arm("ses_host", workspace, prepared);
+		await capture.observeToolBefore(before());
+		now = 200;
+		capture.observeShellEvent(shellEvent(path));
+		capture.observeShellEvent(exited());
+		const output = `${rendered}\n\n[showing lines 18001-20000 of 20000; full output saved to ${path}]`;
+		const completed = after({
+			exit: 0,
+			truncated: true,
+			status: "completed",
 			output,
-		);
-
-		expect(result).toEqual(
-			expect.objectContaining({
-				id: "capture-1",
-				exitCode: 0,
-				outputComplete: true,
-				recordedRevision: 4,
-			}),
-		);
-		expect(calls).toHaveLength(1);
-		expect(calls[0]).toMatchObject({
-			workspace: "/workspace",
-			input: {
-				captureId: "capture-1",
-				featureId: "runtime-kernel",
-				runId: "run-1",
-				command: prepared.command,
-				scope: "focused",
-				sourceDigest: SOURCE,
-				exitCode: 0,
-				outputComplete: true,
-			},
 		});
-		expect(calls[0]?.input.outputDigest).toMatch(/^sha256:[a-f0-9]{64}$/);
-		expect(output.output).toContain(
-			'[flow-validation] {"id":"capture-1","scope":"focused","intent":"pass","passed":true,"observed":false,"recordedRevision":4}',
-		);
-		expect(output.output).not.toContain("/workspace");
-		expect(coordinator.pendingCount()).toBe(0);
-	});
-
-	test("cancels when the next Bash command does not exactly match", async () => {
-		let persisted = false;
-		const coordinator = new ValidationCaptureCoordinator({
-			randomId: () => "capture-mismatch",
-			persistObservation: (_workspace, input) => {
-				persisted = true;
-				return Promise.resolve(persistedObservation(input));
-			},
-		});
-		coordinator.arm("opencode-session-1", "/workspace", prepared);
-
-		await expect(
-			coordinator.observeToolBefore(
-				{
-					tool: "bash",
-					sessionID: "opencode-session-1",
-					callID: "bash-wrong",
-				},
-				{ args: { command: `${prepared.command} --watch` } },
-			),
-		).rejects.toBeInstanceOf(ValidationCaptureError);
-		expect(coordinator.pendingCount()).toBe(0);
-		expect(persisted).toBe(false);
-	});
-
-	test("expires an unstarted capture after the arming window", () => {
-		let now = 1_000;
-		let persisted = false;
-		const coordinator = new ValidationCaptureCoordinator({
-			now: () => now,
-			randomId: () => "capture-unstarted",
-			persistObservation: (_workspace, input) => {
-				persisted = true;
-				return Promise.resolve(persistedObservation(input));
-			},
-		});
-		coordinator.arm("opencode-session-1", "/workspace", prepared);
-
-		now += 15 * 60 * 1_000 + 1;
-		expect(coordinator.pendingCount()).toBe(0);
-		expect(persisted).toBe(false);
-	});
-
-	test("persists a started capture when its after-hook arrives after the original arming window", async () => {
-		let now = 1_000;
-		const observations: ObservedValidation[] = [];
-		const coordinator = new ValidationCaptureCoordinator({
-			now: () => now,
-			randomId: () => "capture-started",
-			persistObservation: (_workspace, input) => {
-				observations.push(input);
-				return Promise.resolve(persistedObservation(input));
-			},
-		});
-		expect(
-			coordinator.arm("opencode-session-1", "/workspace", prepared),
-		).toEqual({ captureId: "capture-started", expiresInMs: 15 * 60 * 1_000 });
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
-			{ args: { command: prepared.command } },
-		);
-
-		now += 15 * 60 * 1_000 + 1;
-		const output = {
-			title: "Late validation",
-			output: "1 pass",
-			metadata: { exit: 0, truncated: false },
-		};
-		expect(
-			await coordinator.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: "opencode-session-1",
-					callID: "bash-1",
-					args: { command: prepared.command },
-				},
-				output,
-			),
-		).toEqual(expect.objectContaining({ id: "capture-started", exitCode: 0 }));
-		expect(observations).toHaveLength(1);
-		expect(output.output).toContain('"passed":true');
-		expect(coordinator.pendingCount()).toBe(0);
-	});
-
-	test("keeps a started capture until the existing cancellation path resolves it", () => {
-		let now = 1_000;
-		const coordinator = new ValidationCaptureCoordinator({
-			now: () => now,
-			randomId: () => "capture-started",
-			persistObservation: (_workspace, input) =>
-				Promise.resolve(persistedObservation(input)),
-		});
-		coordinator.arm("opencode-session-1", "/workspace", prepared);
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
-			{ args: { command: prepared.command } },
-		);
-
-		now += 15 * 60 * 1_000 + 1;
-		expect(coordinator.pendingCount()).toBe(1);
-		expect(() =>
-			coordinator.arm("opencode-session-1", "/workspace", prepared),
-		).toThrow("already has an armed validation command");
-		expect(coordinator.cancel("opencode-session-1")).toBe(true);
-		expect(coordinator.pendingCount()).toBe(0);
-	});
-
-	test("allows only one armed capture per workspace", () => {
-		const coordinator = new ValidationCaptureCoordinator({
-			randomId: () => "capture-workspace",
-			persistObservation: (_workspace, input) =>
-				Promise.resolve(persistedObservation(input)),
-		});
-		coordinator.arm("opencode-session-1", "/workspace", prepared);
-		expect(() =>
-			coordinator.arm("opencode-session-2", "/workspace", prepared),
-		).toThrow("workspace already has an armed validation command");
-		expect(
-			coordinator.arm("opencode-session-2", "/other-workspace", prepared),
-		).toMatchObject({ captureId: "capture-workspace" });
-	});
-
-	test("records an ineligible observation when the host reports no exit code or no completeness", async () => {
-		// Flow must stay usable on a host that reports either fact differently.
-		// Throwing here would lose the observation entirely; recording it ineligible
-		// keeps the evidence durable and can never satisfy a gate.
-		const cases = [
-			{
-				name: "no exit code",
-				metadata: { truncated: false },
-				exitCode: null,
-				outputComplete: true,
-				ineligibleReason: "exit-code-unavailable",
-			},
-			{
-				name: "no completeness flag",
-				metadata: { exit: 0 },
-				exitCode: 0,
-				outputComplete: false,
-				ineligibleReason: "output-completeness-unknown",
-			},
-		] as const;
-
-		for (const item of cases) {
-			const observations: ObservedValidation[] = [];
-			const coordinator = new ValidationCaptureCoordinator({
-				randomId: () => `capture-${item.ineligibleReason}`,
-				persistObservation: (_workspace, input) => {
-					observations.push(input);
-					return Promise.resolve(persistedObservation(input));
-				},
-			});
-			coordinator.arm("opencode-session-1", "/workspace", prepared);
-			coordinator.observeToolBefore(
-				{ tool: "bash", sessionID: "opencode-session-1", callID: "bash-1" },
-				{ args: { command: prepared.command } },
-			);
-			const output = {
-				title: "Unknown",
-				output: "ok",
-				metadata: item.metadata,
+		if (completed.status === "completed")
+			completed.result = {
+				...completed.result,
+				content: [{ type: "text", text: output }],
 			};
-			const recorded = await coordinator.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: "opencode-session-1",
-					callID: "bash-1",
-					args: { command: prepared.command },
-				},
-				output,
-			);
-
-			expect(observations, item.name).toEqual([
-				expect.objectContaining({
-					exitCode: item.exitCode,
-					outputComplete: item.outputComplete,
-					ineligibleReason: item.ineligibleReason,
-				}),
-			]);
-			expect(recorded?.ineligibleReason, item.name).toBe(item.ineligibleReason);
-			expect(output.output, item.name).toContain('"passed":false');
-			expect(output.output, item.name).toContain(item.ineligibleReason);
-			expect(coordinator.pendingCount()).toBe(0);
-		}
-	});
-
-	test("persists failed and incomplete observations without presenting either as passed", async () => {
-		const cases = [
-			{
-				name: "failed",
-				metadata: { exit: 1, truncated: false },
-				exitCode: 1,
-				outputComplete: true,
-			},
-			{
-				name: "incomplete",
-				metadata: { exit: 0, truncated: true },
-				exitCode: 0,
-				outputComplete: false,
-			},
-		] as const;
-
-		for (const item of cases) {
-			const observations: ObservedValidation[] = [];
-			const coordinator = new ValidationCaptureCoordinator({
-				randomId: () => `capture-${item.name}`,
-				persistObservation: (_workspace, input) => {
-					observations.push(input);
-					return Promise.resolve(persistedObservation(input));
-				},
-			});
-			coordinator.arm(`session-${item.name}`, "/workspace", prepared);
-			coordinator.observeToolBefore(
-				{
-					tool: "bash",
-					sessionID: `session-${item.name}`,
-					callID: `bash-${item.name}`,
-				},
-				{ args: { command: prepared.command } },
-			);
-			const output = {
-				title: item.name,
-				output: `${item.name} output`,
-				metadata: item.metadata,
-			};
-			await coordinator.observeToolAfter(
-				{
-					tool: "bash",
-					sessionID: `session-${item.name}`,
-					callID: `bash-${item.name}`,
-					args: { command: prepared.command },
-				},
-				output,
-			);
-
-			expect(observations).toEqual([
-				expect.objectContaining({
-					captureId: `capture-${item.name}`,
-					exitCode: item.exitCode,
-					outputComplete: item.outputComplete,
-				}),
-			]);
-			expect(output.output).toContain('"passed":false');
-		}
-	});
-
-	test("marks a source-drifted observation ineligible", async () => {
-		const coordinator = new ValidationCaptureCoordinator({
-			randomId: () => "capture-drifted",
-			persistObservation: (_workspace, input) =>
-				Promise.resolve({
-					...persistedObservation(input),
-					ineligibleReason: "source-drift",
-				}),
+		await capture.observeToolAfter(completed);
+		expect(observations[0]).toMatchObject({
+			exitCode: 0,
+			outputComplete: expectedComplete,
+			outputDigest: digest(expectedComplete ? full : output),
 		});
-		coordinator.arm("session-drifted", "/workspace", prepared);
-		coordinator.observeToolBefore(
-			{ tool: "bash", sessionID: "session-drifted", callID: "bash-drifted" },
-			{ args: { command: prepared.command } },
-		);
-		const output = {
-			title: "Drifted",
-			output: "ok",
-			metadata: { exit: 0, truncated: false },
-		};
-		await coordinator.observeToolAfter(
-			{
-				tool: "bash",
-				sessionID: "session-drifted",
-				callID: "bash-drifted",
-				args: { command: prepared.command },
-			},
-			output,
-		);
-		expect(output.output).toContain(
-			'"passed":false,"observed":false,"recordedRevision":4,"ineligibleReason":"source-drift"',
-		);
-	});
-});
+	},
+);

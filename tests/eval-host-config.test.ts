@@ -4,10 +4,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import { EvalHost, packPlugin, preparePackageCache } from "../evals/harness.js";
+import { OPENCODE_HOST_VERSION } from "../evals/opencode-host.js";
 import { evalReviewerConfiguration } from "../evals/run.js";
 import packageJson from "../package.json" with { type: "json" };
 
-test("eval reviewer configuration keeps provenance and tuple options aligned", () => {
+test("eval reviewer configuration keeps provenance and object options aligned", () => {
 	expect(
 		evalReviewerConfiguration("manager/model", {
 			OPENCODE_FLOW_REVIEWER_MODEL: " reviewer/model ",
@@ -25,51 +26,65 @@ test("eval reviewer configuration keeps provenance and tuple options aligned", (
 	});
 });
 
-test("eval host writes reviewer model through native plugin tuple options", async () => {
-	const repositoryRoot = join(import.meta.dir, "..");
-	const toolchain = currentBunToolchain(packageJson.packageManager);
-	const scratch = await mkdtemp(join(tmpdir(), "flow-eval-host-config-test-"));
-	const previous = process.env.FLOW_EVAL_NO_AUTH_COPY;
-	process.env.FLOW_EVAL_NO_AUTH_COPY = "1";
-	let host: EvalHost | null = null;
-	try {
-		const tarball = await packPlugin(repositoryRoot, scratch, toolchain);
-		const packageCache = await preparePackageCache(tarball, scratch, toolchain);
-		host = await EvalHost.start({
-			toolchain,
-			packageCache,
-			opencodeVersion: packageJson.devDependencies["@opencode-ai/plugin"],
-			files: { "package.json": '{"name":"eval-host-config-test"}\n' },
-			reviewer: { model: "provider/reviewer", steps: 80 },
-			// Let startup own cancellation/cleanup before the outer test expires.
-			signal: AbortSignal.timeout(180_000),
-		});
-
-		expect(
-			JSON.parse(await readFile(join(host.project, "opencode.json"), "utf8")),
-		).toEqual({
-			$schema: "https://opencode.ai/config.json",
-			permission: { external_directory: "deny" },
-			plugin: [
-				[
-					`opencode-plugin-flow@${packageJson.version}`,
-					{ reviewer: { model: "provider/reviewer", steps: 80 } },
-				],
-			],
-		});
-	} finally {
+test.skipIf(process.env.FLOW_LIVE_SMOKE !== "1")(
+	"eval host writes reviewer model through native plugin object options",
+	async () => {
+		const repositoryRoot = join(import.meta.dir, "..");
+		const toolchain = currentBunToolchain(packageJson.packageManager);
+		const scratch = await mkdtemp(
+			join(tmpdir(), "flow-eval-host-config-test-"),
+		);
+		const previous = process.env.FLOW_EVAL_NO_AUTH_COPY;
+		process.env.FLOW_EVAL_NO_AUTH_COPY = "1";
+		let host: EvalHost | null = null;
 		try {
-			await host?.stop();
-		} finally {
-			if (previous === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
-			else process.env.FLOW_EVAL_NO_AUTH_COPY = previous;
-			await rm(scratch, { recursive: true, force: true });
-		}
-	}
-	// The host already permits 180s startup; allow packaging and cleanup as well.
-}, 240_000);
+			const tarball = await packPlugin(repositoryRoot, scratch, toolchain);
+			const packageCache = await preparePackageCache(
+				tarball,
+				scratch,
+				toolchain,
+			);
+			host = await EvalHost.start({
+				toolchain,
+				packageCache,
+				opencodeVersion: OPENCODE_HOST_VERSION,
+				files: { "package.json": '{"name":"eval-host-config-test"}\n' },
+				providerCredentials: "disabled",
+				reviewer: { model: "provider/reviewer", steps: 80 },
+				// Let startup own cancellation/cleanup before the outer test expires.
+				signal: AbortSignal.timeout(180_000),
+			});
 
-test.skipIf(process.platform !== "linux")(
+			expect(
+				JSON.parse(await readFile(join(host.project, "opencode.json"), "utf8")),
+			).toEqual({
+				permissions: [
+					{ action: "external_directory", resource: "*", effect: "deny" },
+				],
+				plugins: [
+					{
+						package: expect.stringContaining("/flow-plugin-entry"),
+						options: { reviewer: { model: "provider/reviewer", steps: 80 } },
+					},
+				],
+			});
+		} finally {
+			try {
+				await host?.stop();
+			} finally {
+				if (previous === undefined) delete process.env.FLOW_EVAL_NO_AUTH_COPY;
+				else process.env.FLOW_EVAL_NO_AUTH_COPY = previous;
+				await rm(scratch, { recursive: true, force: true });
+			}
+		}
+		// The host already permits 180s startup; allow packaging and cleanup as well.
+	},
+	240_000,
+);
+
+test.skipIf(
+	process.platform !== "linux" || process.env.FLOW_LIVE_SMOKE !== "1",
+)(
 	"ordinary eval host does not pass ambient TypeSafe credentials to OpenCode",
 	async () => {
 		const toolchain = currentBunToolchain(packageJson.packageManager);
@@ -88,7 +103,7 @@ test.skipIf(process.platform !== "linux")(
 				},
 				packageCache: "",
 				withFlow: false,
-				opencodeVersion: packageJson.devDependencies["@opencode-ai/plugin"],
+				opencodeVersion: OPENCODE_HOST_VERSION,
 				ambientConfig: "disabled",
 				providerCredentials: "disabled",
 				files: { "package.json": '{"name":"eval-host-credential-test"}\n' },

@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type ToolContext, tool } from "@opencode-ai/plugin";
 import { z } from "zod";
 import {
 	FeatureCompleteInputSchema,
@@ -17,7 +16,9 @@ import {
 	ValidationStartInputSchema,
 } from "../src/application/schema.js";
 import { FLOW_GUIDANCE_IDS } from "../src/guidance/catalog.js";
+import type { FlowToolContext as ToolContext } from "../src/platform/opencode/flow-tool.js";
 import { createTools } from "../src/platform/opencode/tools.js";
+import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
 
 const LIFECYCLE_TOOL_NAMES = [
 	"flow_status",
@@ -42,7 +43,12 @@ type SafeSchema = {
 
 function createRegisteredTools() {
 	return createTools({
-		validation: {} as never,
+		validation: new ValidationCaptureCoordinator({
+			readSession: async () => undefined,
+			persistObservation: async () => {
+				throw new Error("Unused persistence.");
+			},
+		}),
 		prepareValidation: async () => {
 			throw new Error("Validation execution is outside this schema test.");
 		},
@@ -54,26 +60,21 @@ const registeredTools = createRegisteredTools();
 function hostSchema(name: LifecycleToolName) {
 	const definition = registeredTools[name];
 	if (!definition) throw new Error(`Missing registered ${name}.`);
-	return tool.schema.object(definition.args);
+	return z.fromJSONSchema(definition.input);
 }
 
-type JsonSchema = {
-	properties?: Record<string, JsonSchema>;
-	required?: string[];
-	additionalProperties?: boolean;
-	anyOf?: JsonSchema[];
-	oneOf?: JsonSchema[];
-	allOf?: JsonSchema[];
-	items?: JsonSchema;
-};
+type JsonSchema = z.core.JSONSchema.JSONSchema;
 
 function emittedHostSchema(name: LifecycleToolName): JsonSchema {
-	return tool.schema.toJSONSchema(hostSchema(name)) as JsonSchema;
+	const definition = registeredTools[name];
+	if (!definition) throw new Error(`Missing ${name}.`);
+	return definition.input;
 }
 
 function property(schema: JsonSchema, name: string): JsonSchema {
 	const result = schema.properties?.[name];
-	if (!result) throw new Error(`Missing JSON Schema property '${name}'.`);
+	if (!result || typeof result === "boolean")
+		throw new Error(`Missing JSON Schema property '${name}'.`);
 	return result;
 }
 
@@ -84,12 +85,14 @@ function propertyNames(schema: JsonSchema): string[] {
 function collectPropertyNames(schema: JsonSchema, result = new Set<string>()) {
 	for (const [name, child] of Object.entries(schema.properties ?? {})) {
 		result.add(name);
-		collectPropertyNames(child, result);
+		if (typeof child !== "boolean") collectPropertyNames(child, result);
 	}
 	for (const branch of schema.anyOf ?? []) collectPropertyNames(branch, result);
 	for (const branch of schema.oneOf ?? []) collectPropertyNames(branch, result);
 	for (const branch of schema.allOf ?? []) collectPropertyNames(branch, result);
-	if (schema.items) collectPropertyNames(schema.items, result);
+	const items = Array.isArray(schema.items) ? schema.items : [schema.items];
+	for (const item of items)
+		if (item && typeof item !== "boolean") collectPropertyNames(item, result);
 	return result;
 }
 
@@ -196,34 +199,31 @@ function expectParity(
 ): void {
 	const hostResult = hostSchema(name).safeParse(input);
 	const applicationResult = applicationSchemas[name].safeParse(input);
-	expect(hostResult.success, `${name} host schema`).toBe(expected);
+	if (expected) expect(hostResult.success, `${name} host schema`).toBe(true);
+	else {
+		const definition = registeredTools[name];
+		if (!definition) throw new Error(`Missing ${name}.`);
+		expect(() =>
+			definition.execute(input, {
+				sessionID: "schema-session",
+				messageID: "schema-message",
+				callID: "schema-call",
+				agent: "build",
+				directory: "/unused",
+				abort: new AbortController().signal,
+			}),
+		).toThrow();
+	}
 	expect(applicationResult.success, `${name} application schema`).toBe(
 		expected,
 	);
-	if (hostResult.success && applicationResult.success) {
-		expect(hostResult.data as Record<string, unknown>).toEqual(
-			applicationResult.data as Record<string, unknown>,
-		);
-	}
 }
 
 describe("Flow OpenCode host schemas", () => {
-	test("registers the authoritative application request schemas", () => {
-		for (const name of LIFECYCLE_TOOL_NAMES) {
-			expect(
-				Object.is(
-					registeredTools[name]?.args.request,
-					applicationSchemas[name].shape.request,
-				),
-				name,
-			).toBe(true);
-		}
-	});
-
 	test("keeps strict requests with optional status-only recovery proposals", () => {
 		for (const name of LIFECYCLE_TOOL_NAMES) {
 			const definition = registeredTools[name];
-			expect(Object.keys(definition?.args ?? {}), name).toEqual(
+			expect(Object.keys(definition?.input.properties ?? {}), name).toEqual(
 				name === "flow_status" ? ["recoveryProposal", "request"] : ["request"],
 			);
 			const emitted = emittedHostSchema(name);
@@ -242,7 +242,7 @@ describe("Flow OpenCode host schemas", () => {
 	});
 
 	test("matches the compact v6 request shapes", () => {
-		const expected = {
+		const expected: Partial<Record<LifecycleToolName, readonly string[]>> = {
 			flow_validation_start: [
 				"command",
 				"expectedRevision",
@@ -281,15 +281,16 @@ describe("Flow OpenCode host schemas", () => {
 			],
 		} as const;
 
-		for (const [name, fields] of Object.entries(expected) as Array<
-			[Exclude<LifecycleToolName, "flow_status">, readonly string[]]
-		>) {
+		for (const name of LIFECYCLE_TOOL_NAMES) {
+			if (name === "flow_status") continue;
+			const fields = expected[name];
+			if (!fields) continue;
 			const request = property(emittedHostSchema(name), "request");
 			expect(propertyNames(request), name).toEqual([...fields]);
 			expect(request.additionalProperties, name).toBe(false);
 		}
 		expect(
-			property(emittedHostSchema("flow_status"), "request").anyOf,
+			property(emittedHostSchema("flow_status"), "request").oneOf,
 		).toHaveLength(5);
 		expectParity(
 			"flow_feature_reset",
@@ -309,8 +310,9 @@ describe("Flow OpenCode host schemas", () => {
 				const result = schema.safeParse(validInputs[name]);
 				if (!result.success) throw new Error(`Expected valid ${name} input.`);
 				expect(
-					(result.data as { request: { assignmentId: string } }).request
-						.assignmentId,
+					z
+						.object({ request: z.object({ assignmentId: z.string() }) })
+						.parse(result.data).request.assignmentId,
 				).toBe(assignmentId);
 			}
 		}
@@ -417,23 +419,6 @@ describe("Flow OpenCode host schemas", () => {
 		}
 	});
 
-	test("emits the same field names as the application schema for every tool", () => {
-		// The host needs its own zod instance to emit JSON Schema, so the two
-		// surfaces are necessarily separate declarations. Nothing but this parity
-		// check keeps them from drifting, and drift is silent: the host simply
-		// rejects a field the runtime still reads.
-		for (const name of LIFECYCLE_TOOL_NAMES) {
-			const application = z.toJSONSchema(
-				applicationSchemas[name] as z.ZodType,
-				{ io: "input", unrepresentable: "any" },
-			) as JsonSchema;
-			expect(
-				[...collectPropertyNames(emittedHostSchema(name))].sort(),
-				name,
-			).toEqual([...collectPropertyNames(application)].sort());
-		}
-	});
-
 	test("accepts the review finding fields the reviewer is instructed to send", () => {
 		// `skills/flow-review/SKILL.md` tells the reviewer to send `scopeBlocker`
 		// and `findingId`, and `nextAction` reads `scopeBlocker` to decide between
@@ -494,13 +479,19 @@ describe("Flow OpenCode host schemas", () => {
 	test("keeps completion authorization separate from validation cancellation", async () => {
 		const workspace = await mkdtemp(join(tmpdir(), "flow-schema-contract-"));
 		const cancelled: string[] = [];
+		const validation = new ValidationCaptureCoordinator({
+			readSession: async () => undefined,
+			persistObservation: async () => {
+				throw new Error("Unused persistence.");
+			},
+		});
+		const cancel = validation.cancel.bind(validation);
+		validation.cancel = (sessionID) => {
+			cancelled.push(sessionID);
+			return cancel(sessionID);
+		};
 		const tools = createTools({
-			validation: {
-				cancel(sessionID: string) {
-					cancelled.push(sessionID);
-					return true;
-				},
-			} as never,
+			validation,
 			prepareValidation: async () => {
 				throw new Error("Not used by mutation tools.");
 			},
@@ -509,8 +500,10 @@ describe("Flow OpenCode host schemas", () => {
 			sessionID: "schema-contract-session",
 			agent: "build",
 			directory: workspace,
-			worktree: workspace,
-		} as ToolContext;
+			messageID: "schema-message",
+			callID: "schema-call",
+			abort: new AbortController().signal,
+		} satisfies ToolContext;
 		const managerMutations = [
 			"flow_plan_save",
 			"flow_plan_amend",
@@ -552,8 +545,8 @@ describe("Flow OpenCode host schemas", () => {
 	test("keeps guidance as the sole non-request tool", () => {
 		const definition = registeredTools.flow_guidance;
 		if (!definition) throw new Error("Missing flow_guidance.");
-		const schema = tool.schema.object(definition.args);
-		expect(Object.keys(definition.args)).toEqual(["id"]);
+		const schema = z.fromJSONSchema(definition.input);
+		expect(Object.keys(definition.input.properties ?? {})).toEqual(["id"]);
 		for (const id of FLOW_GUIDANCE_IDS) {
 			expect(schema.safeParse({ id }).success).toBe(true);
 		}

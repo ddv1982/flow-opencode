@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { createFlowService } from "../src/application/flow-service.js";
 import {
 	type DecisionProvider,
@@ -11,6 +11,14 @@ import {
 } from "../src/application/recovery-policy.js";
 import { createJevDecisionProvider } from "../src/infrastructure/jev-decision-provider.js";
 import { parseRecoveryCommand } from "../src/platform/opencode/command-hook.js";
+import { continuationCommands } from "./fixtures/continuation-commands.js";
+import { verifiedContinuationOrigin } from "./fixtures/verified-continuation-origin.js";
+
+const cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+	for (const dispose of cleanups.splice(0)) await dispose();
+});
+
 import {
 	approveSession,
 	deterministicEnvironment,
@@ -34,7 +42,7 @@ const profile: RecoveryProfile = {
 	suitability: 0.95,
 };
 const context = {
-	hostSessionId: "host",
+	hostSessionId: "ses_host",
 	messageId: "assistant",
 	agent: "build",
 };
@@ -120,9 +128,9 @@ async function setup(
 		});
 	}
 	const controller = new RecoveryController(custom, { profiles: [profile] });
-	controller.activate("host", { mode, maxCalls: 6, maxUsd: 0.05 });
-	controller.observeMessage("host", "user", false);
-	controller.observeAssistant("host", "assistant", "user");
+	controller.activate("ses_host", { mode, maxCalls: 6, maxUsd: 0.05 });
+	controller.observeMessage("ses_host", "user", false);
+	controller.observeAssistant("ses_host", "assistant", "user");
 	const flow = createFlowService(repository, env, controller.guard(context));
 	const proposal = () => ({
 		id: "proposal",
@@ -172,9 +180,6 @@ describe("process-local recovery", () => {
 		const { AutoDriveCoordinator } = await import(
 			"../src/platform/opencode/auto-drive.js"
 		);
-		const { createCommandHook } = await import(
-			"../src/platform/opencode/command-hook.js"
-		);
 		let assessments = 0;
 		const s = await setup("shadow", {
 			assess(packet, options) {
@@ -191,11 +196,11 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 		const firstReservedUsd = (
-			s.controller.snapshot("host") as {
+			s.controller.snapshot("ses_host") as {
 				reservedUsd: number;
 			}
 		).reservedUsd;
-		expect(s.controller.snapshot("host")).toMatchObject({
+		expect(s.controller.snapshot("ses_host")).toMatchObject({
 			mode: "shadow",
 			remainingCalls: 5,
 			reservedUsd: firstReservedUsd,
@@ -213,49 +218,39 @@ describe("process-local recovery", () => {
 			},
 			prompt: async () => {},
 		});
-		const hook = createCommandHook({
+		const commands = await continuationCommands({
 			autoDrive: auto,
 			recovery: s.controller,
 			flow: s.flow,
-			assertOperational() {},
 		});
-		const metadata = await auto.activate("host");
+		cleanups.push(commands.dispose);
+		const metadata = await auto.activate("ses_host");
 		await auto.observeMessage(
-			"host",
+			"ses_host",
 			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
 			[{ synthetic: true, metadata }],
 			"auto-start",
 		);
-		s.controller.observeMessage("host", "auto-start", true);
-		await auto.onIdle("host");
+		s.controller.observeMessage("ses_host", "auto-start", true);
+		await auto.onIdle("ses_host");
 		await auto.observeMessage(
-			"host",
+			"ses_host",
 			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
 			[{ text: "Continue this repair" }],
 			"reply",
 		);
-		s.controller.observeMessage("host", "reply", false);
-		const output = { parts: [] } as Parameters<typeof hook>[1];
-		await hook(
-			{
-				command: "flow-run",
-				sessionID: "host",
-				arguments: "Continue this repair",
-			},
-			output,
+		s.controller.observeMessage("ses_host", "reply", false);
+		await commands.execute("flow-run", "Continue this repair");
+		const native = await commands.native.toolContext(
+			"flow_status",
+			{},
+			"ses_host",
 		);
-		await auto.observeMessage(
-			"host",
-			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
-			output.parts,
-			"run-command",
-		);
-		s.controller.observeMessage("host", "run-command", false);
-		s.controller.observeAssistant("host", "resumed-assistant", "run-command");
+		await commands.lifecycle.beforeTool(native);
 		const resumedFlow = createFlowService(
 			s.repository,
 			s.env,
-			s.controller.guard({ ...context, messageId: "resumed-assistant" }),
+			s.controller.guard({ ...context, messageId: native.messageID }),
 		);
 		const first = s.proposal();
 		const response = await resumedFlow.status({
@@ -271,7 +266,7 @@ describe("process-local recovery", () => {
 		});
 		expect(response.status).toBe("ok");
 		expect(assessments).toBe(2);
-		expect(s.controller.snapshot("host")).toMatchObject({
+		expect(s.controller.snapshot("ses_host")).toMatchObject({
 			mode: "shadow",
 			remainingCalls: 4,
 			reservedUsd: firstReservedUsd * 2,
@@ -316,7 +311,7 @@ describe("process-local recovery", () => {
 	});
 	test("production rejects delegated activation and command parsing strips only explicit options", () => {
 		expect(() =>
-			new RecoveryController(provider).activate("host", {
+			new RecoveryController(provider).activate("ses_host", {
 				mode: "delegated",
 				maxCalls: 3,
 				maxUsd: 0.01,
@@ -433,7 +428,7 @@ describe("process-local recovery", () => {
 	test("cancellation fences original manager lineage including changed operation ids", async () => {
 		const s = await setup();
 		const mutation = await recommend(s);
-		s.controller.revoke("host");
+		s.controller.revoke("ses_host");
 		expect((await apply(s, mutation)).status).toBe("error");
 		expect(
 			(
@@ -442,8 +437,8 @@ describe("process-local recovery", () => {
 				})
 			).status,
 		).toBe("error");
-		s.controller.observeMessage("host", "new-user", false);
-		s.controller.observeAssistant("host", "new-assistant", "new-user");
+		s.controller.observeMessage("ses_host", "new-user", false);
+		s.controller.observeAssistant("ses_host", "new-assistant", "new-user");
 		const manual = createFlowService(
 			s.repository,
 			s.env,
@@ -465,7 +460,7 @@ describe("process-local recovery", () => {
 			request: { view: "compact" },
 			recoveryProposal: s.proposal(),
 		});
-		s.controller.revoke("host");
+		s.controller.revoke("ses_host");
 		const request = {
 			request: {
 				operationId: "abandon-after-stop",
@@ -478,8 +473,8 @@ describe("process-local recovery", () => {
 		expect((await s.flow.sessionClose(request)).status).toBe("error");
 		expect(s.repository.session?.id).toBe(session.id);
 		expect(s.repository.archives.size).toBe(0);
-		s.controller.observeMessage("host", "fresh-user", false);
-		s.controller.observeAssistant("host", "fresh-assistant", "fresh-user");
+		s.controller.observeMessage("ses_host", "fresh-user", false);
+		s.controller.observeAssistant("ses_host", "fresh-assistant", "fresh-user");
 		const directed = createFlowService(
 			s.repository,
 			s.env,
@@ -590,7 +585,7 @@ describe("process-local recovery", () => {
 			).status,
 		).toBe("ok");
 		s.controller.guard(context).retireClosedSession(session.id);
-		s.controller.observeMessage("host", "ordinary-user", false);
+		s.controller.observeMessage("ses_host", "ordinary-user", false);
 		const ordinary = { ...session, id: "ordinary-next-session" };
 		expect(() =>
 			s.controller
@@ -627,7 +622,7 @@ describe("process-local recovery", () => {
 		const other = await setup("shadow");
 		const ordinary = other.repository.session;
 		if (!ordinary) throw new Error("Fixture session missing.");
-		other.controller.revoke("host");
+		other.controller.revoke("ses_host");
 		expect(() =>
 			other.controller
 				.guard({ ...context, messageId: "synthetic-continuation" })
@@ -637,7 +632,7 @@ describe("process-local recovery", () => {
 					expectedRevision: ordinary.revision,
 				}),
 		).toThrow("fresh real user direction");
-		other.controller.observeMessage("host", "ordinary-user", false);
+		other.controller.observeMessage("ses_host", "ordinary-user", false);
 		expect(() =>
 			other.controller
 				.guard({ ...context, messageId: "synthetic-continuation" })
@@ -667,20 +662,29 @@ describe("process-local recovery", () => {
 			kind: "completed" as const,
 			summary: "Done",
 		};
-		s.controller.revoke("host");
+		s.controller.revoke("ses_host");
 		expect(() =>
 			s.controller.guard(context).checkClose(session, request),
 		).toThrow("fresh real user direction");
-		s.controller.observeMessage("host", "ordinary-user", false);
-		s.controller.observeAssistant("host", "ordinary-first", "ordinary-user");
+		s.controller.observeMessage("ses_host", "ordinary-user", false);
+		s.controller.observeAssistant(
+			"ses_host",
+			"ordinary-first",
+			"ordinary-user",
+		);
 		expect(() =>
 			s.controller
 				.guard({ ...context, messageId: "ordinary-first" })
 				.checkClose(session, request),
 		).not.toThrow();
-		s.controller.observeMessage("host", "ordinary-continuation", true, true);
+		s.controller.observeMessage(
+			"ses_host",
+			"ordinary-continuation",
+			true,
+			true,
+		);
 		s.controller.observeAssistant(
-			"host",
+			"ses_host",
 			"ordinary-next",
 			"ordinary-continuation",
 		);
@@ -689,9 +693,9 @@ describe("process-local recovery", () => {
 				.guard({ ...context, messageId: "ordinary-next" })
 				.checkClose(session, request),
 		).not.toThrow();
-		s.controller.observeMessage("host", "untrusted-continuation", true);
+		s.controller.observeMessage("ses_host", "untrusted-continuation", true);
 		s.controller.observeAssistant(
-			"host",
+			"ses_host",
 			"untrusted-next",
 			"untrusted-continuation",
 		);
@@ -987,7 +991,7 @@ test("completed inspect features are not eligible retry targets", async () => {
 
 test("recovery snapshots are visible only to their host", async () => {
 	const s = await setup("shadow");
-	expect(s.controller.snapshot("host")).toMatchObject({ mode: "shadow" });
+	expect(s.controller.snapshot("ses_host")).toMatchObject({ mode: "shadow" });
 	expect(s.controller.snapshot("other-host")).toEqual({ mode: "off" });
 	expect(
 		s.controller.guard({ ...context, hostSessionId: "other-host" }).snapshot(),
@@ -1166,15 +1170,19 @@ test("expired advice stops prompting while automatic retry safeguards remain", a
 		profiles: [profile],
 		now: () => now,
 	});
-	controller.activate("host", { mode: "shadow", maxCalls: 2, maxUsd: 0.01 });
-	controller.observeMessage("host", "old-user", false);
-	controller.observeAssistant("host", "old-assistant", "old-user");
+	controller.activate("ses_host", {
+		mode: "shadow",
+		maxCalls: 2,
+		maxUsd: 0.01,
+	});
+	controller.observeMessage("ses_host", "old-user", false);
+	controller.observeAssistant("ses_host", "old-assistant", "old-user");
 	expect(
-		controller.proposalPrompt("host", "flow", 10, "await-user-direction"),
+		controller.proposalPrompt("ses_host", "flow", 10, "await-user-direction"),
 	).not.toBeNull();
 	now = 60 * 60 * 1000;
 	expect(
-		controller.proposalPrompt("host", "flow", 11, "await-user-direction"),
+		controller.proposalPrompt("ses_host", "flow", 11, "await-user-direction"),
 	).toBeNull();
 	expect(controller.snapshot()).toMatchObject({
 		mode: "off",
@@ -1196,8 +1204,8 @@ test("expired advice stops prompting while automatic retry safeguards remain", a
 			.guard({ ...context, messageId: "old-assistant" })
 			.check(session, null, mutation),
 	).toThrow("explicit user direction");
-	controller.observeMessage("host", "new-user", false);
-	controller.observeAssistant("host", "new-assistant", "new-user");
+	controller.observeMessage("ses_host", "new-user", false);
+	controller.observeAssistant("ses_host", "new-assistant", "new-user");
 	const flow = createFlowService(
 		s.repository,
 		s.env,
@@ -1264,13 +1272,13 @@ test("a new invocation cannot erase the third failed-review limit", async () => 
 		verdict: "failed",
 		findings: finding ? [finding] : [],
 	});
-	s.controller.activate("host", {
+	s.controller.activate("ses_host", {
 		mode: "delegated",
 		maxCalls: 6,
 		maxUsd: 0.05,
 	});
-	s.controller.observeMessage("host", "new-user", false);
-	s.controller.observeAssistant("host", "assistant", "new-user");
+	s.controller.observeMessage("ses_host", "new-user", false);
+	s.controller.observeAssistant("ses_host", "assistant", "new-user");
 	expect(
 		(
 			await s.flow.status({
@@ -1356,23 +1364,28 @@ test("registered tools share the controller across file-backed service instances
 			},
 			prompt: async (host, _text, delivery, metadata) => {
 				prompts++;
-				const user = `recovery-turn-${prompts}`;
-				ctx.messageID = `assistant-${prompts}`;
+				const user = `msg_recovery-turn-${prompts}`;
+				ctx.messageID = `msg_assistant-${prompts}`;
 				await auto.observeMessage(
 					host,
 					delivery,
 					[{ type: "text", synthetic: true, metadata }],
 					user,
 				);
-				auto.observeHostMessage(host, {
-					id: ctx.messageID,
-					role: "assistant",
-					parentID: user,
-				});
+				await verifiedContinuationOrigin(
+					auto,
+					host,
+					user,
+					ctx.messageID,
+					delivery,
+				);
 				s.controller.observeMessage(host, user, true, true);
 				s.controller.observeAssistant(host, ctx.messageID, user);
 			},
 		});
+		const { ValidationCaptureCoordinator } = await import(
+			"../src/platform/opencode/validation-capture.js"
+		);
 		const leadership = registerFlowPluginInstance(directory, {
 			packageName: "opencode-plugin-flow",
 			version: "test",
@@ -1383,11 +1396,14 @@ test("registered tools share the controller across file-backed service instances
 		const tools = guardTools(
 			createTools({
 				recovery: s.controller,
-				validation: {
-					cancel() {
-						return true;
-					},
-				} as never,
+				validation: new ValidationCaptureCoordinator({
+					readSession: async (id) => ({
+						id,
+						agent: "build",
+						location: { directory },
+					}),
+					persistObservation: persistWorkspaceValidation,
+				}),
 				prepareValidation: async () => {
 					throw new Error("not used");
 				},
@@ -1396,40 +1412,35 @@ test("registered tools share the controller across file-backed service instances
 			auto,
 			async (id) => ({
 				id,
-				directory,
-				...(id === "reviewer-child" ? { parentID: "host" } : {}),
+				agent: id === "reviewer-child" ? "flow-reviewer" : "build",
+				location: { directory },
+				...(id === "reviewer-child" ? { parentID: "ses_host" } : {}),
 			}),
 		);
 		const ctx = {
-			sessionID: "host",
-			messageID: "assistant",
+			sessionID: "ses_host",
+			messageID: "msg_assistant",
+			callID: "call_manager",
 			agent: "build",
 			directory,
-			worktree: directory,
 			abort: new AbortController().signal,
-			metadata() {},
-			async ask() {},
 		};
-		const metadata = await auto.activate("host");
+		const metadata = await auto.activate("ses_host");
 		await auto.observeMessage(
-			"host",
+			"ses_host",
 			{ agent: "build", model: { providerID: "test", modelID: "manager" } },
 			[{ type: "text", synthetic: true, metadata }],
 			"user",
 		);
-		auto.observeHostMessage("host", {
-			id: "assistant",
-			role: "assistant",
-			parentID: "user",
-		});
-		await auto.onIdle("host");
+		await verifiedContinuationOrigin(auto, "ses_host", "user", "msg_assistant");
+		await auto.onIdle("ses_host");
 		expect(prompts).toBe(1);
 		const status = tools.flow_status,
 			reset = tools.flow_feature_reset,
 			complete = tools.flow_feature_complete;
 		if (!status || !reset || !complete) throw new Error("tools");
 		const otherHostStatus = JSON.parse(
-			String(
+			JSON.stringify(
 				await status.execute(
 					{ request: { view: "compact" } },
 					{ ...ctx, sessionID: "other-host", messageID: "other-assistant" },
@@ -1440,7 +1451,7 @@ test("registered tools share the controller across file-backed service instances
 		expect(otherHostStatus.workflowData.recovery).toEqual({ mode: "off" });
 		const before = (await loadSession(directory))?.revision;
 		const advice = JSON.parse(
-			String(
+			JSON.stringify(
 				await status.execute(
 					{ request: { view: "compact" }, recoveryProposal: s.proposal() },
 					ctx,
@@ -1452,7 +1463,7 @@ test("registered tools share the controller across file-backed service instances
 		const mutation = advice.workflowData.recovery.recommended;
 		expect(
 			JSON.parse(
-				String(
+				JSON.stringify(
 					await reset.execute(
 						{ request: mutation.request },
 						{ ...ctx, sessionID: "other" },
@@ -1462,14 +1473,14 @@ test("registered tools share the controller across file-backed service instances
 		).toBe("error");
 		expect(
 			JSON.parse(
-				String(await reset.execute({ request: mutation.request }, ctx)),
+				JSON.stringify(await reset.execute({ request: mutation.request }, ctx)),
 			).status,
 		).toBe("ok");
 		const after = await loadSession(directory);
 		expect(after?.runs.filter((run) => run.state === "active")).toHaveLength(1);
 		expect(
 			JSON.parse(
-				String(
+				JSON.stringify(
 					await complete.execute(
 						{
 							request: {
@@ -1502,7 +1513,8 @@ test("registered tools share the controller across file-backed service instances
 			},
 		};
 		expect(
-			JSON.parse(String(await reviewTool.execute(reviewInput, ctx))).status,
+			JSON.parse(JSON.stringify(await reviewTool.execute(reviewInput, ctx)))
+				.status,
 		).toBe("error");
 		const prepared = await prepareWorkspaceValidation(directory, {
 			expectedRevision: after.revision,
@@ -1518,7 +1530,7 @@ test("registered tools share the controller across file-backed service instances
 			outputComplete: true,
 		});
 		const reviewed = JSON.parse(
-			String(
+			JSON.stringify(
 				await reviewTool.execute(
 					{
 						request: {
@@ -1546,7 +1558,8 @@ test("registered tools share the controller across file-backed service instances
 			},
 		};
 		expect(
-			JSON.parse(String(await complete.execute(completion, ctx))).status,
+			JSON.parse(JSON.stringify(await complete.execute(completion, ctx)))
+				.status,
 		).toBe("error");
 		const reviewer = {
 			...ctx,
@@ -1554,17 +1567,13 @@ test("registered tools share the controller across file-backed service instances
 			agent: "flow-reviewer",
 			messageID: "reviewer-result",
 		};
-		auto.observeHostMessage("host", {
-			id: reviewer.messageID,
-			role: "assistant",
-			parentID: "recovery-turn-1",
-		});
+
 		const result = JSON.parse(
-			String(await complete.execute(completion, reviewer)),
+			JSON.stringify(await complete.execute(completion, reviewer)),
 		);
 		expect(result.status).toBe("ok");
 		expect(result.workflowData.projection.nextAction).toBe("flow_run_start");
-		await auto.onIdle("host");
+		await auto.onIdle("ses_host");
 		expect(prompts).toBe(2);
 		expect(
 			(await loadSession(directory))?.runs.findLast(
@@ -1819,9 +1828,6 @@ test("plain auto in another host rejects the previous host's pending grant", asy
 	const { AutoDriveCoordinator } = await import(
 		"../src/platform/opencode/auto-drive.js"
 	);
-	const { createCommandHook } = await import(
-		"../src/platform/opencode/command-hook.js"
-	);
 	const auto = new AutoDriveCoordinator({
 		recovery: s.controller,
 		readProjection: async () => ({
@@ -1832,28 +1838,21 @@ test("plain auto in another host rejects the previous host's pending grant", asy
 		}),
 		prompt: async () => {},
 	});
-	await auto.activate("host");
-	const hook = createCommandHook({
+	await auto.activate("ses_host");
+	const commands = await continuationCommands({
 		autoDrive: auto,
 		recovery: s.controller,
 		flow: s.flow,
-		assertOperational() {},
 	});
-	const replacement = hook(
-		{
-			command: "flow-auto",
-			sessionID: "other-host",
-			arguments: "Continue goal",
-		},
-		{ parts: [] } as Parameters<typeof hook>[1],
-	);
+	cleanups.push(commands.dispose);
+	await commands.execute("flow-auto", "Continue goal", "ses_other-host");
+
 	expect(s.controller.snapshot()).toMatchObject({
 		mode: "off",
 		automation: { active: true },
 		advice: { configured: false, attempted: false },
 	});
 	expect((await apply(s, mutation)).status).toBe("error");
-	await replacement;
 });
 
 for (const [dimension, values] of [
@@ -1910,7 +1909,7 @@ for (const [dimension, values] of [
 			},
 		});
 		expect(response.workflowData.recovery).not.toHaveProperty("recommended");
-		expect(s.controller.snapshot("host")).toMatchObject({
+		expect(s.controller.snapshot("ses_host")).toMatchObject({
 			last: response.workflowData.recovery,
 		});
 	});

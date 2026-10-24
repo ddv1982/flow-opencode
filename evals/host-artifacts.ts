@@ -315,10 +315,12 @@ export async function stageHostArtifacts(input: {
 			env: { PATH: input.directory },
 			maxBuffer: 100000,
 		});
-		if (
-			probe.status !== 0 ||
-			probe.stdout.trim() !== input.expected[key].version
-		)
+		const registeredVersion = input.expected[key].version;
+		const versionOutput =
+			key === "opencode" && /^2\./.test(registeredVersion)
+				? `opencode v${registeredVersion}`
+				: registeredVersion;
+		if (probe.status !== 0 || probe.stdout.trim() !== versionOutput)
 			throw new Error(
 				`Artifact ${key} version differs from registered version.`,
 			);

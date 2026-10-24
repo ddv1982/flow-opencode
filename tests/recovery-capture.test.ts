@@ -9,24 +9,20 @@ import {
 	rename,
 	rm,
 	symlink,
-	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import type { ToolContext } from "@opencode-ai/plugin";
+import { join } from "node:path";
 import { z } from "zod";
 import {
 	CapturingRecoveryController,
 	RawRecoveryCaptureSchema,
 } from "../evals/recovery-decisions/capture.js";
-import CapturePlugin from "../evals/recovery-decisions/capture-plugin.js";
 import { importSnapshot } from "../evals/recovery-decisions/dataset.js";
 import { datasetDigest } from "../evals/recovery-decisions/schema.js";
 import {
 	RecoveryController,
 	RecoveryProposalSchema,
 } from "../src/application/recovery-policy.js";
-import FlowPlugin from "../src/index.js";
 import { frozenCampaignFixture } from "./recovery-campaign-support.js";
 
 const roots: string[] = [];
@@ -226,83 +222,38 @@ test("concurrent reservations cap records while retaining rejected proposal inpu
 	expect(new Set((await records(f.directory)).map((r) => r.id)).size).toBe(128);
 });
 
-function pluginContext(workspace: string) {
-	return {
-		directory: workspace,
-		worktree: workspace,
-		project: {},
-		serverUrl: new URL("http://localhost"),
-		$: {},
-		experimental_workspace: { register() {} },
-		client: {
-			app: { log() {} },
-			session: {
-				message: async () => ({ data: undefined }),
-				get: async (input: { path: { id: string } }) => ({
-					data: { id: input.path.id, directory: workspace },
-				}),
-			},
+test("native capture setup forwards reviewer options and injects the capturing controller", async () => {
+	const root = await mkdtemp(join(tmpdir(), "native-capture-setup-"));
+	roots.push(root);
+	const workspace = join(root, "workspace");
+	await mkdir(workspace);
+	const child = Bun.spawn(
+		[
+			process.execPath,
+			"tests/fixtures/opencode-v2-capture-setup.ts",
+			workspace,
+			join(root, "captures"),
+		],
+		{
+			cwd: join(import.meta.dir, ".."),
+			stdout: "pipe",
+			stderr: "pipe",
+			env: { PATH: process.env.PATH, HOME: root },
 		},
-	} as unknown as Parameters<typeof FlowPlugin>[0];
-}
-function toolContext(workspace: string): ToolContext {
-	return {
-		directory: workspace,
-		worktree: workspace,
-		sessionID: "host",
-		messageID: "assistant",
-		agent: "build",
-		abort: new AbortController().signal,
-		metadata() {},
-		async ask() {},
-	};
-}
-test("actual opt-in flow_status captures exact workspace inputs; ordinary plugin does not", async () => {
-	const f = await setup();
-	for (const [name, bytes] of Object.entries(f.fixture.files)) {
-		await mkdir(dirname(join(f.workspace, name)), { recursive: true });
-		await writeFile(join(f.workspace, name), bytes);
-	}
-	for (const args of [
-		["init", "--initial-branch=main"],
-		["add", "."],
-	])
-		expect(Bun.spawnSync(["git", "-C", f.workspace, ...args]).exitCode).toBe(0);
-	const ordinary = await FlowPlugin(pluginContext(f.workspace));
-	try {
-		await ordinary.tool?.flow_status?.execute(
-			{ request: { view: "compact" }, recoveryProposal: f.proposal },
-			toolContext(f.workspace),
-		);
-		expect(await readdir(f.root)).toEqual(["workspace"]);
-	} finally {
-		await ordinary.dispose?.();
-	}
-	const hooks = await CapturePlugin(pluginContext(f.workspace), {
-		captureDirectory: f.directory,
-		reviewer: { model: "provider/independent-reviewer", steps: 80 },
+	);
+	const [exitCode, output, error] = await Promise.all([
+		child.exited,
+		new Response(child.stdout).text(),
+		new Response(child.stderr).text(),
+	]);
+	expect({ exitCode, error }).toEqual({ exitCode: 0, error: "" });
+	expect(JSON.parse(output)).toEqual({
+		pluginId: "flow-eval-capture",
+		forwarded: {
+			reviewer: { model: "provider/independent-reviewer", steps: 80 },
+		},
+		capturing: true,
 	});
-	try {
-		const config: Parameters<NonNullable<typeof hooks.config>>[0] = {};
-		await hooks.config?.(config);
-		expect(config.agent?.["flow-reviewer"]).toMatchObject({
-			model: "provider/independent-reviewer",
-			steps: 80,
-		});
-		const result = await hooks.tool?.flow_status?.execute(
-			{ request: { view: "compact" }, recoveryProposal: f.proposal },
-			toolContext(f.workspace),
-		);
-		expect(result).toContain("explicit active recovery command");
-		const [record] = await records(f.directory);
-		expect(record?.payload).toEqual({
-			session: f.session,
-			sourceDigest: f.sourceDigest,
-			proposal: f.proposal,
-		});
-	} finally {
-		await hooks.dispose?.();
-	}
 });
 
 test("encoded record and total byte bounds are enforced before dispatch", async () => {

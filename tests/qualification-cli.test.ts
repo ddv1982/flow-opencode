@@ -1,9 +1,8 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { canonicalJson } from "../evals/canonical-json.js";
 import { mapStrings } from "../evals/cassette.js";
 import {
@@ -31,6 +30,7 @@ import {
 	releaseCatalog,
 	releaseGraderBundle,
 	releaseHostConfigSha256,
+	releaseHostPolicy,
 	releaseScenarioCatalog,
 } from "../evals/release-policy.js";
 import { replayCassette } from "../evals/replay.js";
@@ -43,18 +43,41 @@ import {
 import { scenarioStepInstruction } from "../evals/scenario-steps.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
-import { prepareCanary, recordCanary } from "../scripts/eval-canary.js";
+import {
+	CANARY_MAX_AGE_MS,
+	canaryRecordSha256,
+	deriveCanaryResult,
+	parseCanaryRecord,
+} from "../scripts/eval-canary.js";
 import { materializeQualificationArchive } from "../scripts/materialize-qualification.js";
 import { decisionRecordFor, qualifyV2 } from "../scripts/qualify-release.js";
 import { assertQualificationBundle } from "../scripts/release-metadata.js";
-import { assuranceProjection } from "../src/application/delivery.js";
-import { SessionSchema } from "../src/application/schema.js";
-import { operationInputDigest } from "../src/domain/operation.js";
 
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
-test("current release defaults include three autonomous attempts", () => {
-	expect(packageJson.version).toBe("9.6.0");
+test("current release defaults retain 17 cases across two providers and three autonomous attempts", () => {
+	expect(packageJson.version).toBe("10.0.0");
+	const scenarios = releaseScenarios(packageJson.version);
+	const catalog = releaseCatalog(packageJson.version);
+	expect(scenarios).toHaveLength(17);
+	expect([...new Set(catalog.map((row) => row.minProviders))]).toEqual([2]);
+	const plan = campaignPlanFor({
+		models: ["openai/fixture-manager", "anthropic/fixture-manager"],
+		scenarios,
+		sampling: { kind: "release" },
+		opencodeVersion: releaseHostPolicy(packageJson.version).opencodeVersion,
+	});
+	expect(plan.cells.filter((cell) => cell.schedule === "primary")).toHaveLength(
+		144,
+	);
+	expect(
+		plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
+	).toHaveLength(34);
+	expect(
+		[
+			...new Set(plan.cells.map((cell) => cell.managerModel?.routeProvider)),
+		].sort(),
+	).toEqual(["anthropic", "openai"]);
 	expect(
 		attemptsForScenario("auto-two-features-evidence", { kind: "release" }),
 	).toBe(3);
@@ -97,47 +120,86 @@ const FIXED_ROLES = [
 	"canary-transcript",
 ] as const;
 
-function repairedCanarySession() {
-	const session = JSON.parse(
-		readFileSync(
-			join(import.meta.dir, "../evals/canary/artifacts/8.1.2-session.json"),
-			"utf8",
-		),
-	) as {
-		id: string;
-		closure: {
-			kind: "completed";
-			summary: string;
-			operationId: string;
-			recordedRevision: number;
-		};
-		operations: Array<{ id: string; inputDigest: string }>;
-		runs: Array<{
-			validations: Array<{
-				observedAssertions?: Array<{ status: string }>;
-			}>;
-		}>;
-	};
-	for (const run of session.runs) {
-		for (const validation of run.validations) {
-			for (const assertion of validation.observedAssertions ?? []) {
-				assertion.status = "passed";
-			}
-		}
-	}
-	const closureOperation = session.operations.find(
-		(operation) => operation.id === session.closure.operationId,
+async function historicalCanaryFixture(input: {
+	readonly bundle: Awaited<ReturnType<typeof readQualificationBundle>>;
+	readonly root: string;
+	readonly recordedAt: Date;
+	readonly hostVersion?: string;
+}) {
+	const retainedFile = input.bundle.files.find(
+		(file) => file.ref.role === "canary-record",
 	);
-	if (!closureOperation)
-		throw new Error("Canary closure operation is missing.");
-	closureOperation.inputDigest = operationInputDigest({
-		operationId: session.closure.operationId,
-		expectedRevision: session.closure.recordedRevision - 1,
-		sessionId: session.id,
-		kind: session.closure.kind,
-		summary: session.closure.summary,
-	});
-	return SessionSchema.parse(session);
+	if (!retainedFile) throw new Error("Historical canary record is absent.");
+	const retained = parseCanaryRecord(
+		JSON.parse(retainedFile.bytes.toString("utf8")),
+	);
+	if (!retained.ok) throw new Error(retained.issues.join("; "));
+	const record = retained.value;
+	expect(record.artifact.packageVersion).toBe("9.5.0");
+	const directory = join(input.root, "evals/canary");
+	const artifacts = { ...record.artifacts };
+	const evidence = new Map<string, unknown>();
+	for (const [kind, role] of [
+		["installation", "canary-installation"],
+		["session", "canary-session"],
+		["transcript", "canary-transcript"],
+	] as const) {
+		const reference = record.artifacts[kind];
+		const file = input.bundle.files.find((file) => file.ref.role === role);
+		if (!reference || !file)
+			throw new Error(`Historical ${kind} evidence is absent.`);
+		expect(
+			`sha256:${createHash("sha256").update(file.bytes).digest("hex")}`,
+		).toBe(reference.sha256);
+		expect(file.bytes.byteLength).toBe(reference.bytes);
+		const value = JSON.parse(file.bytes.toString("utf8"));
+		if (kind === "transcript" && input.hostVersion)
+			value.info.version = input.hostVersion;
+		const bytes =
+			kind === "transcript" && input.hostVersion
+				? Buffer.from(canonicalJson(value))
+				: file.bytes;
+		evidence.set(kind, value);
+		artifacts[kind] = {
+			path: reference.path,
+			sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+			bytes: bytes.byteLength,
+		};
+		const path = join(directory, reference.path);
+		await mkdir(dirname(path), { recursive: true });
+		await writeFile(path, bytes);
+	}
+	const derived = input.hostVersion
+		? deriveCanaryResult({
+				packageVersion: record.artifact.packageVersion,
+				artifactSha256: record.artifactSha256,
+				tarballSha256: record.artifact.tarballSha256,
+				preparedSha256: record.preparedSha256,
+				pluginEntrySha256: record.pluginEntrySha256,
+				installation: evidence.get("installation"),
+				session: evidence.get("session"),
+				transcript: evidence.get("transcript"),
+			})
+		: record;
+	const { recordSha256: _retainedHash, ...retainedBase } = record;
+	const base = {
+		...retainedBase,
+		status: derived.status,
+		checks: derived.checks,
+		actors: [...derived.actors],
+		hostConfigSha256: derived.hostConfigSha256,
+		recordedAt: input.recordedAt.toISOString(),
+		expiresAt: new Date(
+			input.recordedAt.getTime() + CANARY_MAX_AGE_MS,
+		).toISOString(),
+		artifacts,
+	};
+	const value = { ...base, recordSha256: canaryRecordSha256(base) };
+	const parsed = parseCanaryRecord(value);
+	if (!parsed.ok) throw new Error(parsed.issues.join("; "));
+	const path = join(directory, "9.5.0.json");
+	await writeFile(path, canonicalJson(value));
+	return { path, record: parsed.value };
 }
 
 function retainedReplayOutcome(
@@ -229,81 +291,6 @@ function inspectionAuditOutcome(): Outcome {
 		assistantMessages: 0,
 		durationMs: 0,
 		providerError: null,
-	};
-}
-
-function canaryTranscript(input: {
-	readonly fixture: string;
-	readonly packageVersion: string;
-	readonly pluginEntrySha256: string;
-	readonly session: ReturnType<typeof repairedCanarySession>;
-}) {
-	const call = (tool: string, output: unknown = {}) => ({
-		type: "tool",
-		tool,
-		state: { status: "completed", input: {}, output },
-	});
-	return {
-		info: {
-			directory: input.fixture,
-			version: RELEASE_HOST_POLICY.opencodeVersion,
-		},
-		messages: [
-			{
-				info: {
-					role: "assistant",
-					agent: "build",
-					providerID: "fixture-provider",
-					modelID: "fixture-manager",
-					sessionID: "ses_manager1",
-				},
-				parts: [
-					call("flow_status", {
-						workflowData: {
-							runtimeIdentity: {
-								packageVersion: input.packageVersion,
-								pluginEntrySha256: input.pluginEntrySha256,
-							},
-						},
-					}),
-					call("flow_plan_save"),
-					call("flow_validation_start"),
-					call("flow_review_start"),
-					{
-						type: "tool",
-						tool: "task",
-						state: {
-							status: "completed",
-							input: { subagent_type: "flow-reviewer" },
-							output: {},
-							metadata: {
-								model: {
-									providerID: "fixture-provider",
-									modelID: "fixture-reviewer",
-								},
-								parentSessionId: "ses_manager1",
-								sessionId: "ses_reviewer1",
-							},
-						},
-					},
-					call("flow_session_close", {
-						workflowData: {
-							delivery: { assurance: assuranceProjection(input.session) },
-						},
-					}),
-				],
-			},
-			{
-				info: {
-					role: "assistant",
-					agent: "flow-reviewer",
-					providerID: "fixture-provider",
-					modelID: "fixture-reviewer",
-					sessionID: "ses_reviewer1",
-				},
-				parts: [],
-			},
-		],
 	};
 }
 
@@ -562,29 +549,9 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 		});
 		expect(report.attempts).toHaveLength(58);
 
-		const preparedDirectory = join(temporary, "prepared-canary");
-		await mkdir(preparedDirectory, { recursive: true });
-		const prepared = await prepareCanary({
-			repositoryRoot,
-			artifactPath,
-			expectedArtifact: artifact,
-			outputDirectory: preparedDirectory,
-			preparedAt: recordedAt,
-		});
-		const session = repairedCanarySession();
-		const canaryRoot = join(temporary, "canary-root");
-		const canary = await recordCanary({
-			repositoryRoot: canaryRoot,
-			prepared,
-			preparedDirectory,
-			operator: "qualification-test",
-			session,
-			transcript: canaryTranscript({
-				fixture: join(preparedDirectory, "fixture"),
-				packageVersion: artifact.packageVersion,
-				pluginEntrySha256: prepared.pluginEntrySha256,
-				session,
-			}),
+		const canary = await historicalCanaryFixture({
+			bundle: historical,
+			root: join(temporary, "canary-root"),
 			recordedAt,
 		});
 		expect(canary.record.status).toBe("passed");
@@ -596,29 +563,16 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 		});
 		if (diagnostic.decision.verdict !== "VERIFIED")
 			throw new Error(JSON.stringify(diagnostic.decision.reasons));
-		const currentHostTranscript = canaryTranscript({
-			fixture: join(preparedDirectory, "fixture"),
-			packageVersion: artifact.packageVersion,
-			pluginEntrySha256: prepared.pluginEntrySha256,
-			session,
-		});
-		const oldHostTranscript = {
-			...currentHostTranscript,
-			info: { ...currentHostTranscript.info, version: "1.18.6" },
-		};
-		const oldHostCanary = await recordCanary({
-			repositoryRoot: join(temporary, "old-host-canary-root"),
-			prepared,
-			preparedDirectory,
-			operator: "qualification-test",
-			session,
-			transcript: oldHostTranscript,
+		const oldHostCanary = await historicalCanaryFixture({
+			bundle: historical,
+			root: join(temporary, "old-host-canary-root"),
 			recordedAt,
+			hostVersion: "1.18.6",
 		});
 		expect(oldHostCanary.record.status).toBe("failed");
 		const rejected = Bun.spawn(
 			[
-				"bun",
+				process.execPath,
 				"run",
 				"qualify",
 				"--",
@@ -642,7 +596,7 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 		const bundlesDirectory = join(temporary, "bundles");
 		const qualified = Bun.spawn(
 			[
-				"bun",
+				process.execPath,
 				"run",
 				"qualify",
 				"--",
@@ -758,7 +712,7 @@ test("qualifies and seals a historical 9.5 exact-artifact fixture campaign throu
 		);
 		const metadata = Bun.spawn(
 			[
-				"bun",
+				process.execPath,
 				"run",
 				join(repositoryRoot, "scripts/release-metadata.ts"),
 				"--tag",

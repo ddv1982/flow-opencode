@@ -1,0 +1,846 @@
+{
+  "baseSHA": "de4be508451c25564fc4bfb4911fa056d10ce3f3",
+  "pageCount": 45,
+  "canonicalAuthority": "Repository README and docs. URLs have local target verification only until post-release public readback.",
+  "pages": [
+    {
+      "oldPage": "Home.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/Home",
+      "oldTitle": "Flow plugin for OpenCode",
+      "oldSha256": "448f35e136fd68e291dd71476a559424f6555b4fb7f4e27a815759a68a756859",
+      "oldLines": 46,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/index.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/quickstart.md"
+      ],
+      "editReason": "Replace seven-tool and removed source-layout overview with v2-only entry points, install-once picker guidance, upgrade closure, and canonical docs ownership. Remove video and caption links whose repository targets are absent.",
+      "sourceEvidence": [],
+      "updatedSha256": "12dfffd340a1fee2268048fff341ca20dd7d1dd63678d7a23c4f89acd97484f2",
+      "newLines": 17,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "_Sidebar.md",
+      "wikiURL": null,
+      "oldTitle": "[Flow plugin for OpenCode](overview)",
+      "oldSha256": "77cb839610ba0e17391120d1018174c8da57bce68368da0d814467d68a2730e8",
+      "oldLines": 82,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/index.md"
+      ],
+      "editReason": "Flatten navigation into a few current groups. Keep every existing page reachable and relabel retired installer pages around bundled guidance and native package installation.",
+      "sourceEvidence": [],
+      "updatedSha256": "120b921f37967069baf2a13d4939f020a9681dc0244649be298e393300c58e0f",
+      "newLines": 59,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true,
+      "publicReadbackSurface": "Rendered sidebar on the published wiki. This is a navigation file, not a separate content page."
+    },
+    {
+      "oldPage": "api--flow-tools.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/api--flow-tools",
+      "oldTitle": "Flow tools",
+      "oldSha256": "e581922c36c95b72913a346b3d84554f063ed334c8dd94b7a3bf92387bc4c964",
+      "oldLines": 40,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#tools",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Replace seven old handlers and JSON-string adapter claims with eleven native tools, nested requests, current identity checks, and read-only exact completion replay.",
+      "sourceEvidence": [
+        "src/platform/opencode/tools.ts"
+      ],
+      "updatedSha256": "6cf85bfc76fe4da7d56c60f73dce6285748aa43d73836e88683173425de9c5c0",
+      "newLines": 19,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "api--open-code-commands.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/api--open-code-commands",
+      "oldTitle": "OpenCode commands",
+      "oldSha256": "080fb2637ffb96b3f13b0fea9306b92b69753565f8224e4e7baf2a217d8b336d",
+      "oldLines": 32,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#commands",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#commands"
+      ],
+      "editReason": "Retain five lifecycle commands while adding picker navigation and native coding-model distinction. Remove V1 preflight and sync-warning instructions.",
+      "sourceEvidence": [],
+      "updatedSha256": "c68d5affdbe5fe5f9470bf44e0809cbbea75aff43cbcfdaa7cfa17692ca1bf0d",
+      "newLines": 16,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "api.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/api",
+      "oldTitle": "API",
+      "oldSha256": "fa7e708df6c3dcc2578fdde514542084b9683548c2568782f310bc53b2a1d37f",
+      "oldLines": 17,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#opencode-surface"
+      ],
+      "editReason": "Correct obsolete seven-tool and npm-binary inventory. Distinguish eleven tools, five lifecycle commands, four guides, three roles, and the extra terminal picker.",
+      "sourceEvidence": [],
+      "updatedSha256": "a59e225907d770ed6d2600bd611044fc6e2a603cce272d9dc5fb6315c9f495c1",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "background--skills-first-adr.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/background--skills-first-adr",
+      "oldTitle": "Skills-first ADR",
+      "oldSha256": "8bd84ff8c007e9372300f5183d430ab10c23e1ac01043ea94f2f5b385338f8b9",
+      "oldLines": 29,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0001-skills-first-flow-architecture.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md"
+      ],
+      "editReason": "Preserve ADR 0001 date and enduring guidance/runtime split. Label seven-tool and managed-skill details historical and link superseding current decisions.",
+      "sourceEvidence": [],
+      "updatedSha256": "432661803b704445369ea044db22e35b83f0b342db0774b870022ef5e44cfa18",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "background.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/background",
+      "oldTitle": "Background",
+      "oldSha256": "672839a3f246046d5add84f8b99d3de4d111017bfccacc7aef868afc253bc9d4",
+      "oldLines": 15,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0001-skills-first-flow-architecture.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/index.md"
+      ],
+      "editReason": "Preserve the June skills-first origin while linking superseding Session v5 and native v2 decisions. Separate historical qualification from active runtime support.",
+      "sourceEvidence": [],
+      "updatedSha256": "8da8b1dae2c8546c93a19064b90d605b3540c6232bf9dd7c5f280a791fddc7fb",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "by-the-numbers.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/by-the-numbers",
+      "oldTitle": "By the numbers",
+      "oldSha256": "e2576380d3026c82aca430f40562f86112a8288739f9006c1953cbba1826ab31",
+      "oldLines": 77,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#source-layout",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#opencode-surface"
+      ],
+      "editReason": "Keep useful July source, test, line, commit, and bot-attribution numbers explicitly labeled as the original historical snapshot. Remove stale current rankings and link current inventories.",
+      "sourceEvidence": [],
+      "updatedSha256": "ec8792fe88e7862bf6474321fb901b1c0bc09bfd5564fff46e06fefe628618b4",
+      "newLines": 17,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "cleanup-opportunities.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/cleanup-opportunities",
+      "oldTitle": "Cleanup opportunities",
+      "oldSha256": "f58528a7b3968bdb7c90b8c3dea9a93dfffbbd5ee0a467867b3254d60c1feb67",
+      "oldLines": 29,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md#guardrail",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#bumping-the-pinned-host",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#change-discipline"
+      ],
+      "editReason": "Label old v4 hotspots and no-TODO snapshot historical instead of current backlog. Replace obsolete extraction suggestions with current canonical simplification and dependency discipline.",
+      "sourceEvidence": [],
+      "updatedSha256": "31477e2505c641e4831825ddbbe86d415661f3fc19cdc04ca62fdfc6ae89d2a0",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "deployment.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/deployment",
+      "oldTitle": "Deployment",
+      "oldSha256": "f63c2ca437ef9a0ca70027958cf52a47698f571c4734fbed00a17e4050b47ae1",
+      "oldLines": 51,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#release",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/release-qualification.md"
+      ],
+      "editReason": "Replace obsolete release diagram and multi-Node CI claims with frozen exact-artifact qualification, v2 two-provider profile, existing publish identity gates, and partial-publication recovery.",
+      "sourceEvidence": [],
+      "updatedSha256": "02f7a3892db566a4574c2e7ba1fd7be58f6d2dac6b673d8ceb3d4f34231e39cb",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features--execution-and-completion.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features--execution-and-completion",
+      "oldTitle": "Execution and completion",
+      "oldSha256": "bd88719487633ec6d02e8b6cdae5dd97003569934ae35c3cdb03fcbecb150608",
+      "oldLines": 67,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md#assurance-at-close",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Remove manager-proxy verdicts and two-pass final review. Explain current one-run/one-review completion, fresh retries, inspection scope, and assurance limits.",
+      "sourceEvidence": [],
+      "updatedSha256": "78a1348558b03210cb585341cc20ce559db2ff2c681a73c1b6d28a602ceb5761",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features--flow-loop.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features--flow-loop",
+      "oldTitle": "Flow loop",
+      "oldSha256": "02ea94c88d98507d8c8c2a8fc6e5fd88220678aba9d30cf2fd9cda654577d89b",
+      "oldLines": 71,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/automatic-continuation.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/quickstart.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md"
+      ],
+      "editReason": "Replace legacy completion-payload loop with reviewer-owned submission, explicit goal authority, current close delivery, and process-local continuation recovery.",
+      "sourceEvidence": [],
+      "updatedSha256": "dc965658f7313b996941dccdeea913c68e7c83dcb8f85993292ecb78d8ca7d57",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features--managed-skills.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features--managed-skills",
+      "oldTitle": "Managed skills",
+      "oldSha256": "bb62cf779766edf0cd91c64f4cbeab040f9dce2b33af9dde15779fbe2d0ddc03",
+      "oldLines": 57,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#guides"
+      ],
+      "editReason": "Preserve the URL but replace marker, backup, startup sync, doctor, and uninstall instructions with four embedded guides and native package installation.",
+      "sourceEvidence": [
+        "src/guidance/catalog.ts"
+      ],
+      "updatedSha256": "cb63e876113d57fbed0e2a27c9f035615d5b5546f4cf77839c3f033ad94e3a76",
+      "newLines": 7,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features--parallel-orchestration.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features--parallel-orchestration",
+      "oldTitle": "Parallel orchestration",
+      "oldSha256": "1c3196ec00998397d13f8e64b79f842c62dc526e1fab37fdeb6c94a7f061eeb7",
+      "oldLines": 53,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0006-bounded-intra-feature-waves.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#model-driven-wave-evidence",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#bounded-worker-waves"
+      ],
+      "editReason": "Replace retired specialized workers and unrestricted fan-out with one bounded flow-worker role, one active feature, audited slice boundaries, and manager-owned convergence.",
+      "sourceEvidence": [],
+      "updatedSha256": "5a1842d79e2e4100e04bfb02db831f8cda81eb32f47d946ebf61d20717547182",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features--planning-and-approval.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features--planning-and-approval",
+      "oldTitle": "Planning and approval",
+      "oldSha256": "f23344fc671395a9e772fa388d7f3fab2bb4c373057f3e59065a3250a4224578",
+      "oldLines": 54,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Replace legacy plan-policy schemas with immutable feature DAG, unified evidence, inspection intent, optional planner advice, and constrained prerequisite amendments.",
+      "sourceEvidence": [],
+      "updatedSha256": "475e4ee4ccb9f51fe5c6746fb989347bf2b74a722f03ddf4e1bfded3437afefe",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features--review-and-validation.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features--review-and-validation",
+      "oldTitle": "Review and validation",
+      "oldSha256": "7ec084c7708157ef30ae40145e63f7d0a3f56e9423dfcc87717a662ff756fa59",
+      "oldLines": 54,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Remove caller-authored success and old review payloads. Explain native host observations, exact broad gate, paged review evidence, and source-binding recovery.",
+      "sourceEvidence": [],
+      "updatedSha256": "05168dc2bc9396ac131fa909b1c5f8453c11c51084a95f1f9f08933f9f8f8e2d",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "features.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/features",
+      "oldTitle": "Features",
+      "oldSha256": "260da776a8753b6631eba9d844e54de1234c070b90409032f1f5e46888c3649d",
+      "oldLines": 22,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#how-flow-works",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md"
+      ],
+      "editReason": "Replace obsolete feature source trees with capability navigation. Distinguish current bundled guidance and bounded waves from retired installer and worker machinery.",
+      "sourceEvidence": [],
+      "updatedSha256": "0419fde99a70000de398d2615eb89ca709478b0f7349a0786846eaf2b6483d06",
+      "newLines": 12,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "fun-facts.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/fun-facts",
+      "oldTitle": "Fun facts",
+      "oldSha256": "6e5966fd70346be82a933a4078289d558d93d96f53c97d6104d03eacbfe8e67b",
+      "oldLines": 21,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0001-skills-first-flow-architecture.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#bumping-the-pinned-host"
+      ],
+      "editReason": "Preserve verified same-day plugin/reviewer origins and label old longest-file and TODO scans historical. Replace outdated host-validator rationale with current host pin evidence.",
+      "sourceEvidence": [],
+      "updatedSha256": "dba740ea34e7df1c8015fcaa50992abadecfac43d6ac5c727d3a4c55f9533a4c",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "how-to-contribute--debugging.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/how-to-contribute--debugging",
+      "oldTitle": "Debugging",
+      "oldSha256": "263041732a94513f4c285546a99bf81f1c1767e9b65d54e42914f9cf5a5d6c63",
+      "oldLines": 34,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md#flow-reports-that-the-project-lock-is-busy"
+      ],
+      "editReason": "Remove 4.2.0 doctor and generated-instruction repair. Link native loading recovery and current validation, source-stale review, close-collision, and lock procedures.",
+      "sourceEvidence": [],
+      "updatedSha256": "06b5316899cc598d4eaf70e25ec807ef07a9b3bba0e57a991adf5c881fc6c1d4",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "how-to-contribute--development-workflow.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/how-to-contribute--development-workflow",
+      "oldTitle": "Development workflow",
+      "oldSha256": "52992adcc1c4aa9863503550bdbac176c010e61eb7ed2cf96dc2739194a6ffeb",
+      "oldLines": 37,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#change-discipline",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#local-setup",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#release",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#source-layout"
+      ],
+      "editReason": "Replace obsolete ownership table, old CI matrix, and retired commit skill with pinned setup, inward source ownership, and canonical change discipline.",
+      "sourceEvidence": [],
+      "updatedSha256": "f3013ec87da666e3e5b8e70b09bc03ef70661e0a6ff64eb2d7fb950c28db605b",
+      "newLines": 14,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "how-to-contribute--patterns-and-conventions.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/how-to-contribute--patterns-and-conventions",
+      "oldTitle": "Patterns and conventions",
+      "oldSha256": "96317d95219c492a09f0f4b7f5548c9664af79cdeff0cfee14cc404c6dd8fa82",
+      "oldLines": 29,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/architecture/allowed-cross-layer-dependencies.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#change-discipline"
+      ],
+      "editReason": "Replace obsolete API and generated-projection details with inward layers, one run aggregate, causal operations, host evidence, and reviewer-owned results.",
+      "sourceEvidence": [],
+      "updatedSha256": "6fd2858dfbf0338ddc4667a83ec1a3ddfb946068fb0d4374271f96c74fac0514",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "how-to-contribute--testing.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/how-to-contribute--testing",
+      "oldTitle": "Testing",
+      "oldSha256": "f7bd55017889625a36ce878151f672ce6eb74bddd3901593e5dd2f99413fe723",
+      "oldLines": 30,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#local-setup",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#model-driven-auto-continuation-evidence",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#model-driven-wave-evidence",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/release-qualification.md"
+      ],
+      "editReason": "Replace old distribution/CLI tests and host matrix with actual current suites, packed real-host policy, current platform coverage, and manual model evidence requirements.",
+      "sourceEvidence": [
+        ".github/workflows/ci.yml",
+        "package.json"
+      ],
+      "updatedSha256": "85fcfd89570eba050cac38d04404bc4098258f51b3f06b0576ace8b7dbdf55f8",
+      "newLines": 16,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "how-to-contribute--tooling.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/how-to-contribute--tooling",
+      "oldTitle": "Tooling",
+      "oldSha256": "ad3ee00e86b58b21d07c1a2e53093c9cdf648748facaffb5840e15dac425532c",
+      "oldLines": 39,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/release-qualification.md#running-it"
+      ],
+      "editReason": "Remove copied script definitions and retired doctor/sync/uninstall CLI. Retain useful command purposes and link maintained package/toolchain and qualification instructions.",
+      "sourceEvidence": [
+        "package.json"
+      ],
+      "updatedSha256": "d98a268d49c75d5e75e19d5c7a6e09ee9422b68c24f3cef3c977bd833662e9a5",
+      "newLines": 17,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "how-to-contribute.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/how-to-contribute",
+      "oldTitle": "How to contribute",
+      "oldSha256": "8be335be986eab157135f62e10f2ecfca75ea89427ebf3eade826c05cc3afb5b",
+      "oldLines": 26,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/architecture/allowed-cross-layer-dependencies.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md"
+      ],
+      "editReason": "Remove retired distribution and commit-skill ownership. Link current development and contracts, preserve focused-then-broad verification, and separate model evidence from deterministic tests.",
+      "sourceEvidence": [],
+      "updatedSha256": "af69fcc7766b90ae605cb08d435f9729c9793d6cd62beb5a0648795399597d23",
+      "newLines": 13,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "lore.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/lore",
+      "oldTitle": "Lore",
+      "oldSha256": "f5009b04920f6323729581febca6f308f439b610175c91f99f55523255ee3e77",
+      "oldLines": 59,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0001-skills-first-flow-architecture.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0005-flow-v6-session-v5-simplicity-first.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md"
+      ],
+      "editReason": "Preserve selected verified origin, reviewer, CI, persistence, v4 release, and simplification milestones with actual commit links. Remove stale operational paths and still-active payload claims.",
+      "sourceEvidence": [],
+      "updatedSha256": "3e2c49f0a18dd013e7b06e35b5caf070f966f08b42c59aec02a069ee7d716d3c",
+      "newLines": 15,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "overview--architecture.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/overview--architecture",
+      "oldTitle": "Architecture",
+      "oldSha256": "81e9e36b6364630191a7676372c09525d6260ac6a8ec46be1a107f194948e302",
+      "oldLines": 71,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/architecture/allowed-cross-layer-dependencies.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#source-layout"
+      ],
+      "editReason": "Replace removed runtime/adapters/distribution graph with inward domain, application, infrastructure, and native v2 platform ownership. Drop uncurrent size claims.",
+      "sourceEvidence": [],
+      "updatedSha256": "0883e334bc8fad7da72f1ec371c341af7ba36ce0cffe6cc9cbdd2650e930b8ff",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "overview--getting-started.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/overview--getting-started",
+      "oldTitle": "Getting started",
+      "oldSha256": "6b0f0fbab7d3a385042c30430c6eaee7691183bf1479a1cafc547635c66cb594",
+      "oldLines": 53,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#local-setup",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/quickstart.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md#flow-commands-are-missing"
+      ],
+      "editReason": "Remove 4.2.0 install and retired skill sync. Link the exact canonical native setup, show install-once picker behavior, and require active-state closure before version changes.",
+      "sourceEvidence": [],
+      "updatedSha256": "383bbf356006198eee06bb7621b259fe44a1e54601a8b159855d59d8d061e78c",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "overview--glossary.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/overview--glossary",
+      "oldTitle": "Glossary",
+      "oldSha256": "7354329bb2daf33e02ee504979cff7bbb86424323960d440bc4a13bff574a716",
+      "oldLines": 23,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Replace legacy targeted validation, final-review payload, generated instruction, and skill-sync vocabulary with Session v5 run, evidence, bundled guidance, and preference terms.",
+      "sourceEvidence": [],
+      "updatedSha256": "e42ec8793d34b3f9a4ba197f32be345d64a2c3b75a5f3bd4c5bc3a03179fd865",
+      "newLines": 18,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "overview.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/overview",
+      "oldTitle": "Flow plugin for OpenCode",
+      "oldSha256": "1c76b2e3edb6f036293dd90472291ffc20655120eccc9f73e049adeea499b8b7",
+      "oldLines": 42,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/index.md"
+      ],
+      "editReason": "Replace duplicated generated v4 manual with a bounded product overview and explicit v2 compatibility limits. Remove absent video targets and obsolete source map.",
+      "sourceEvidence": [],
+      "updatedSha256": "27a14b0903fdba5a87de86a5f1bfa1e14b69c038fd85ef611441276ae013595c",
+      "newLines": 12,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "primitives--session-plan-feature.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/primitives--session-plan-feature",
+      "oldTitle": "Session, plan, and feature",
+      "oldSha256": "f083df613a67f3fb0016e9b0d75c1d4c69101497aeeaed81e621e9cc696a65ad",
+      "oldLines": 50,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md#terminal-recovery-and-inspection-outcomes",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5"
+      ],
+      "editReason": "Replace persisted version 2, mutable feature-status history, and timestamps with Session v5 features/runs, immutable baselines, derived progress, and terminal disposition.",
+      "sourceEvidence": [],
+      "updatedSha256": "5d334022a3820b125746eb928c24239ee3ef7f343ae08136f6cf17e3bafcc97b",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "primitives--validation-and-review.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/primitives--validation-and-review",
+      "oldTitle": "Validation and review",
+      "oldSha256": "a8937f5d20782331245f4a2f241f584b310f71c8a6bddfdeb2fc37d9420777e0",
+      "oldLines": 50,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0014-one-evidence-record.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0017-inspection-gate-outcome.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Replace old validation summaries and manager-recorded feature/final reviews with host observations, unified evidence, typed pass/observe intent, and reviewer submission.",
+      "sourceEvidence": [],
+      "updatedSha256": "92bdf7dacd32a3e6890e13a87f6e15584ebd4f6b8237ca49065971fec72c4d05",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "primitives.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/primitives",
+      "oldTitle": "Primitives",
+      "oldSha256": "3aeae81ea7c708de3b1a0221b9be2d83dadf4c02b4a67b00f77a7f2f999e1b6c",
+      "oldLines": 18,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5"
+      ],
+      "editReason": "Replace legacy completion/final-review type list with the canonical Session v5 run aggregate and links to exact contract and guarantee tiers.",
+      "sourceEvidence": [],
+      "updatedSha256": "55da799da74005656e33d9b3d1203a4432381e7bd0bb22d8454811a7a86bc36c",
+      "newLines": 8,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "reference--configuration.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/reference--configuration",
+      "oldTitle": "Configuration",
+      "oldSha256": "0b81bed94cfcf4dc2b1d1af9a29ee354d7a3a52611493fb28f1c04a6adf842f0",
+      "oldLines": 43,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#opencode-surface",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/quickstart.md#select-flow-models"
+      ],
+      "editReason": "Remove V1 config injection and experimental compaction setup. Use plugins/object options and source-verified project/global/base reviewer precedence, reset, variant, steps, server storage, and the selected Typesafe key environment variable.",
+      "sourceEvidence": [
+        "src/application/model-preferences.ts",
+        "src/application/model-preferences-schema.ts",
+        "src/platform/opencode/model-picker.ts",
+        "src/platform/opencode/model-preferences.ts",
+        "src/infrastructure/fs/model-preference-store.ts",
+        "src/config-shared.ts",
+        "src/tui.ts",
+        "src/platform/opencode/typesafe-key-env.ts"
+      ],
+      "updatedSha256": "e2cd0c2c90bf4a8c8a5496781f0ebac3abac90ee4e6fd7c5c880c167360b5dc2",
+      "newLines": 26,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "reference--data-models.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/reference--data-models",
+      "oldTitle": "Data models",
+      "oldSha256": "c007c1b6e04c5f2a38926ff9bf01fbaf932266adcb564ab2de9733b12e18e6de",
+      "oldLines": 44,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/validation-and-review.md"
+      ],
+      "editReason": "Remove obsolete version 2 field tables and WorkerResult/FinalReview protocols. Explain Session v5 runs, unified evidence, derived status and delivery, and current schema locations.",
+      "sourceEvidence": [
+        "src/domain/session.ts",
+        "src/application/schema.ts"
+      ],
+      "updatedSha256": "04c50dd28b935730f9d70b380e3c04735790a6b048f972f3340c198fce38325a",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "reference--dependencies.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/reference--dependencies",
+      "oldTitle": "Dependencies",
+      "oldSha256": "2283558e9386b555ca30a71e0660244402b33ae3c81622e0b57d7915aa90efdf",
+      "oldLines": 36,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#bumping-the-pinned-host"
+      ],
+      "editReason": "Replace OpenCode 1 peer range and stale dependency pins with tested v2 range, exact manifest ownership, current toolchain, and compatibility-check support limits.",
+      "sourceEvidence": [
+        "package.json",
+        ".github/workflows/opencode-compatibility.yml"
+      ],
+      "updatedSha256": "e8b4ac98118ddb2c275f696c82665026f3e74242cb6546823e6bf80eca830526",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "reference--source-map.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/reference--source-map",
+      "oldTitle": "Source map",
+      "oldSha256": "7b2b77586ed27c283a6e88238a496187ca80b489b4c8aa272da5b945ce04b132",
+      "oldLines": 41,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/architecture/allowed-cross-layer-dependencies.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#source-layout"
+      ],
+      "editReason": "Replace removed runtime/adapters/distribution/CLI paths with the actual current source census and preference ownership locations.",
+      "sourceEvidence": [
+        "source-census.json"
+      ],
+      "updatedSha256": "9d6ac595ff746200f8ac3e237e7f10d66d4cf60571e3abe44d5053983dca888b",
+      "newLines": 20,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "reference.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/reference",
+      "oldTitle": "Reference",
+      "oldSha256": "711f99cc391adad5aa3258f0d56e0d187bac954ebd24bc9da4de01732d9aa93e",
+      "oldLines": 14,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/index.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md"
+      ],
+      "editReason": "Replace duplicated reference-manual framing with short lookup links and authoritative documentation ownership.",
+      "sourceEvidence": [],
+      "updatedSha256": "6f3caaa5ba667373b52e0b5bf203393e816d3cc0698da7296d1dea499a0dc4e7",
+      "newLines": 10,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "security.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/security",
+      "oldTitle": "Security",
+      "oldSha256": "1afb0810311908f2459d556cc20d1b460953abface5e25c2ecd2cdf89c27f46a",
+      "oldLines": 38,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#recovery-advice-development-preview",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/guarantees.md#threat-model",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#persistence"
+      ],
+      "editReason": "Remove managed-skill marker guarantees and incorrect manager-only completion. Preserve filesystem and reviewer boundaries while stating host trust, unsandboxed manager, worker path limits, and optional external recovery advice.",
+      "sourceEvidence": [],
+      "updatedSha256": "315d90606179112d193cb40660b8dc37a560f00f45e5d58b2e9d157e26aff97e",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems--cli-and-package.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems--cli-and-package",
+      "oldTitle": "CLI and package",
+      "oldSha256": "aad298f8009459b58fa37e0b9cf7acfd42334922e40242a572aa51ad5e2a3ff7",
+      "oldLines": 52,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/release-qualification.md"
+      ],
+      "editReason": "Retain the URL but remove bin and build:cli claims. Explain server and terminal exports, automatic picker load, one native install, and exact package identity through release.",
+      "sourceEvidence": [
+        "package.json",
+        "src/index.ts",
+        "src/tui.ts"
+      ],
+      "updatedSha256": "3ce0128dce798af5e93d51949279f502e225f1663df00eeea41cb3401a3dee30",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems--opencode-adapter.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems--opencode-adapter",
+      "oldTitle": "OpenCode adapter",
+      "oldSha256": "71029f9c48a7df48ecb26f8ca72e003653534ae128e09e8c5059196edae31ab4",
+      "oldLines": 52,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/adr/0018-opencode-v2-only.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#source-layout",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#opencode-surface"
+      ],
+      "editReason": "Replace V1 preflight/config/compaction hooks with native v2 transforms, exact request attribution, checked compaction, server preferences, and duplicate-instance failure.",
+      "sourceEvidence": [
+        "src/platform/opencode/plugin-composition.ts",
+        "src/platform/opencode/tools.ts",
+        "src/tui.ts"
+      ],
+      "updatedSha256": "ae3355ef3ec9675068e3e1c0c07aaa1eeab2ccfe86e1e85aac10f76203c5c4cd",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems--runtime-state-machine.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems--runtime-state-machine",
+      "oldTitle": "Runtime state machine",
+      "oldSha256": "45c6ef909b89cce3cde46830f0608dd865b8dc5d1eeaab04535eefb5d2e86c54",
+      "oldLines": 62,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#causality-and-idempotency",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5"
+      ],
+      "editReason": "Replace legacy API/transitions paths and version 2 lifecycle with domain/application boundaries, revision causality, exact replay, and derived status.",
+      "sourceEvidence": [],
+      "updatedSha256": "6251f7a71983e5db75f40c1d4e29b1b4dad5cb7f39d6be351783e4018acc437b",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems--schema-and-json.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems--schema-and-json",
+      "oldTitle": "Schema and JSON",
+      "oldSha256": "adb80b6f33c322964abb85d9ddc694f13e7be625fcd094afd8351fe484b6e5e5",
+      "oldLines": 49,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/architecture/allowed-cross-layer-dependencies.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#session-v5",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md#session-state-is-unreadable"
+      ],
+      "editReason": "Replace obsolete schema locations and host validator coupling with domain values, application schemas, strict filesystem JSON, and v2 boundary JSON Schema.",
+      "sourceEvidence": [
+        "src/application/schema.ts"
+      ],
+      "updatedSha256": "c4407449d138a5b36547f4427321112488dae36235c94e3931a60d381499c192",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems--skill-distribution.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems--skill-distribution",
+      "oldTitle": "Skill distribution",
+      "oldSha256": "a6bdc5e463ff8c92a8b10aeda37f9827ef6a7a2e7b27deeb658cdb88c9883470",
+      "oldLines": 51,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/README.md#install",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#distribution-and-release",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md#flow-commands-are-missing"
+      ],
+      "editReason": "Retain the URL as a current bundled-guidance explanation. Remove skill-root copying, marker manifests, setup-health sync, and retired maintenance CLI procedures.",
+      "sourceEvidence": [],
+      "updatedSha256": "678962124cb5be759e03a311916fac5d086cc799ad7754c4828a03353f8282d2",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems--workspace-persistence.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems--workspace-persistence",
+      "oldTitle": "Workspace persistence",
+      "oldSha256": "daa6c607c42b70c65f573f52ee6d9dd70e780b7ba84419ac51f980177f8bddc9",
+      "oldLines": 54,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/maintainer-contract.md#persistence",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/troubleshooting.md#status-shows-a-closed-session-still-awaiting-archive-publication"
+      ],
+      "editReason": "Remove generated instructions and age-based stale-lock ownership. State canonical v5 persistence, absent-PID/token reclamation, no-overwrite archive, and exact close recovery.",
+      "sourceEvidence": [
+        "src/infrastructure/fs/session-lock.ts",
+        "src/infrastructure/fs/workspace-paths.ts"
+      ],
+      "updatedSha256": "67dba175263baf929734367e08e998bb0c47f231d5e96bc1679de34601d4dadb",
+      "newLines": 9,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    },
+    {
+      "oldPage": "systems.md",
+      "wikiURL": "https://github.com/ddv1982/flow-opencode/wiki/systems",
+      "oldTitle": "Systems",
+      "oldSha256": "9820082973c70ce31bf395966f9bde8e853dbfffff7b50a9d68859afb4387828",
+      "oldLines": 29,
+      "currentCanonicalTargets": [
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/architecture/allowed-cross-layer-dependencies.md",
+        "https://github.com/ddv1982/flow-opencode/blob/main/docs/development.md#source-layout"
+      ],
+      "editReason": "Replace removed directory taxonomy with current system navigation and canonical inward ownership. Retain historical distribution and CLI page URLs with current labels.",
+      "sourceEvidence": [],
+      "updatedSha256": "cde052e20cc7a7f47056425487850e052344a65717ce7fab3857c13182931f85",
+      "newLines": 12,
+      "existingPageURLPreserved": true,
+      "readBeforeEdit": true
+    }
+  ]
+}

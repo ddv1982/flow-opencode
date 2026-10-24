@@ -1,6 +1,9 @@
-# Flow Plugin for OpenCode
+# Flow Plugin for OpenCode v2
 
-`opencode-plugin-flow` gives OpenCode a durable workflow for coding work that
+`opencode-plugin-flow` requires OpenCode 2.1.4. Later 2.x releases are supported
+after passing the compatibility check. OpenCode 1.x is unsupported.
+
+Flow gives OpenCode a durable workflow for coding work that
 benefits from an approved plan and an independent review:
 
 ```text
@@ -35,49 +38,62 @@ change is expensive and you read the review.
 
 ## Install
 
-Install the exact npm release through OpenCode:
+Install OpenCode v2 and the exact Flow release:
 
-```bash
-opencode plugin opencode-plugin-flow@9.6.0 --global --force
+```sh
+npm install -g @opencode/cli@2.1.4
+opencode2 --version
+opencode2 plugin add opencode-plugin-flow@10.0.0
 ```
 
-Omit `--global` for project scope. Version pins are exact and never update on
-their own; to update, rerun the command with the new version.
+The version command must report `opencode v2.1.4` or a later tested 2.x version.
+Flow selects HTTP transport for provider, model, and variant settings while loaded.
+This keeps model requests observable for continuation and validation attribution.
+The v2 package provides both `opencode` and `opencode2`. Use `opencode2` when an
+older `opencode` executable remains on your PATH. The plugin command installs
+Flow globally. Exact pins stay fixed until you install another version.
 
-Manual setup needs this entry in both `opencode.json` and `tui.json`:
+For project scope, add this entry to the project's `opencode.json`:
 
 ```json
 {
-  "plugin": ["opencode-plugin-flow@9.6.0"]
+  "plugins": ["opencode-plugin-flow@10.0.0"]
 }
 ```
 
-`/flow-models` selects planning and review. Saving reloads the server; finish other projects first.
-Project preferences take precedence. Selection makes no model call.
+Install Flow once. Its server package loads the terminal picker automatically.
+`/flow-models` selects planning and review without a model call. Finish active
+work before saving. Project preferences take precedence over global choices.
 
 Planning defaults to the manager. A selected read-only specialist drafts advice.
 The manager checks and saves the plan, shows the model handoff, and owns approval
 and implementation. `/models` selects the coding model.
 
-`opencode.json` reviewer options:
+Set plugin defaults:
 
 ```json
 {
-  "plugin": [["opencode-plugin-flow@9.6.0", {
-    "reviewer": { "model": "provider/model", "steps": 80 }
-  }]]
+  "plugins": [{
+    "package": "opencode-plugin-flow@10.0.0",
+    "options": {
+      "reviewer": { "model": "provider/model", "steps": 80 },
+      "typesafeApiKeyEnv": "MY_TYPESAFE_KEY"
+    }
+  }]
 }
 ```
 
-Picker preferences take priority. Otherwise tuple settings override
-`OPENCODE_FLOW_REVIEWER_MODEL`,
-`OPENCODE_FLOW_REVIEWER_STEPS`, and `OPENCODE_FLOW_REVIEWER_VARIANT`.
-`reviewer.variant` requires an explicit model. `/flow-status` shows requested
-settings; only successful reviews confirm availability.
+Global picker choices override reviewer defaults. Project `modelPreferences`
+options override global choices. Choosing Use default restores the role's
+configured behavior. Otherwise reviewer options override
+`OPENCODE_FLOW_REVIEWER_MODEL`, `OPENCODE_FLOW_REVIEWER_STEPS`, and
+`OPENCODE_FLOW_REVIEWER_VARIANT`. `reviewer.variant` requires an explicit model.
+An explicit picker selection uses that model's default reasoning.
+`/flow-status` shows requested settings. Successful review confirms availability.
 
-[OpenCode](https://opencode.ai/docs/plugins/) owns installation and configuration.
-Restart after manual changes. Remove the plugin entry to disable Flow; duplicate
-copies fail closed until one remains.
+[OpenCode v2](https://opencode.ai/v2/docs/plugins/) owns installation and
+configuration. Restart after manual changes. Remove the plugin entry to disable
+Flow. Duplicate copies fail closed until one remains.
 
 **Changing versions.** Finish or explicitly close any active session first, in
 either direction. Flow opens only Session v5 active state, and an older build
@@ -100,9 +116,11 @@ validate against the real workspace, obtain an independent review — and keeps
 going through every runnable feature without handing back between them, until it
 can close the session.
 
-Continuation between features needs a host that reports assistant message
-parentage. Flow says so plainly when it detects a host that does not: the lifecycle
-still works, one `/flow-run` at a time.
+Automatic continuation binds each assistant's tools to the inputs its model
+request consumed. Unattributed tools are refused. Interruption, source drift, or
+conflicting input stops the affected lease. A stale unmatched callback cannot
+stop a fresh invocation. Run `/flow-status` to inspect the pause,
+then use `/flow-run` manually or `/flow-auto` within the existing approved scope.
 
 Send `/flow-auto stop` or `/flow-auto cancel` in the same OpenCode session to
 revoke only the in-process continuation. That does not close, defer, abandon, or
@@ -212,8 +230,11 @@ and [bounded waves](docs/adr/0006-bounded-intra-feature-waves.md).
 
 ## Recovery advice development preview
 
-With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow advice, six attempts and
-$0.02. Without the key or with `--recovery=off`, advice is off.
+With a key, `/flow-auto` defaults to shadow advice, six attempts and $0.02.
+`options.typesafeApiKeyEnv` names the server variable (default `TYPESAFE_API_KEY`).
+Never put the key in options. Custom names never fall back. Missing/blank keys,
+invalid names and `--recovery=off` disable advice. Restart the server after
+environment changes if needed.
 
 ```text
 /flow-auto --recovery=shadow --recovery-calls=6 --recovery-usd=0.02 <goal>

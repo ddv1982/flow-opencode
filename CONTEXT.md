@@ -53,7 +53,8 @@ projection. It repeats the exact next action and recovery direction without
 adding persisted state or authority.
 
 **Reviewer configuration**: A process-local model and step selection resolved
-once when the plugin loads. Native tuple options override environment fallbacks.
+when the plugin loads or model preferences change. Project model preferences
+override global picker choices. Plugin object options override environment fallbacks.
 Status reports the requested selection but cannot prove model availability.
 
 **Bounded wave**: An optional ephemeral cohort of two or three `flow-worker`
@@ -137,7 +138,7 @@ The root manager owns slice selection, integration, evidence acceptance,
 authoritative validation, review dispatch, reset, closure, and every lifecycle
 mutation except reviewer-result submission. It may delegate exact disjoint
 contributions to `flow-worker`, then audits assigned versus changed paths.
-Workers cannot run Bash, edit `.flow` or `.git` metadata paths, use Flow tools,
+Workers cannot run Shell, edit `.flow` or `.git` metadata paths, use Flow tools,
 delegate again, or approve work. `flow-reviewer` remains independent and
 workspace-read-only; its sole lifecycle mutation is submitting its own pending
 result. Status may quarantine unreadable Flow state as fail-closed recovery

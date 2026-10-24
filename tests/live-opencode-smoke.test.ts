@@ -1,52 +1,65 @@
-import { describe, expect, spyOn, test } from "bun:test";
-import { spawn } from "node:child_process";
+import { expect, test } from "bun:test";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
+	cp,
 	lstat,
 	mkdir,
 	mkdtemp,
+	readdir,
 	readFile,
+	realpath,
 	rm,
 	writeFile,
 } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+import type {
+	OpenCodeClient,
+	SessionMessageAssistantTool,
+} from "@opencode/client";
+import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import {
-	currentBunToolchain,
-	runPinnedBunSync,
-} from "../evals/bun-toolchain.js";
-import { packPlugin, terminateChildProcessTree } from "../evals/harness.js";
+	packPlugin,
+	preparePackageCache,
+	terminateChildProcessTree,
+} from "../evals/harness.js";
+import {
+	extractObservedModelIdentity,
+	isRecord,
+} from "../evals/host-observation.js";
+import {
+	installedOpenCodePluginEntry,
+	listNativeMessages,
+	listNativeSessions,
+	OPENCODE_HOST_VERSION,
+	OpenCodeStartup,
+	openCodeInvocation,
+} from "../evals/opencode-host.js";
+import { packedPackageManifest, tarballSha256 } from "../evals/provenance.js";
 import packageJson from "../package.json" with { type: "json" };
-import {
-	buildHostEvidenceCapabilities,
-	collectFieldObservations,
-	type EndpointAttempt,
-	HOST_METADATA_CONTRACT,
-} from "../scripts/probe-opencode-eval-metadata.js";
 import { FLOW_CORE_AGENTS } from "../src/config-shared.js";
+import { runPackedReviewerReturn } from "./fixtures/opencode-v2-reviewer-return.js";
+import { localScriptedProvider } from "./fixtures/opencode-v2-scripted-provider.js";
+import { proveNativeUsage } from "./fixtures/opencode-v2-usage-proof.js";
+import {
+	junitFixtureFiles,
+	packedValidationPlan,
+	runPackedValidationCases,
+} from "./fixtures/opencode-v2-validation-cases.js";
 
-// This test deliberately proves only the host boundary. Domain and persistence
-// behavior belongs in fast deterministic tests; the live smoke verifies that a
-// packed release loads in a real OpenCode process with the intended commands
-// and hidden-agent isolation. Actual model-driven fan-out is deliberately not
-// part of this smoke: it would require provider credentials and would make a
-// deterministic package/host compatibility gate depend on model behavior.
 const LIVE = process.env.FLOW_LIVE_SMOKE === "1";
-const PINNED_OPENCODE_VERSION =
-	packageJson.devDependencies["@opencode-ai/plugin"];
-const OPENCODE_VERSION =
-	process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim() || PINNED_OPENCODE_VERSION;
-const STARTUP_TIMEOUT_MS = 180_000;
-const REQUEST_TIMEOUT_MS = 120_000;
-
+const VERSION =
+	process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim() || OPENCODE_HOST_VERSION;
 const EXPECTED_COMMANDS = [
 	"flow-auto",
 	"flow-plan",
 	"flow-review",
 	"flow-run",
 	"flow-status",
-] as const;
-
+];
 const EXPECTED_TOOLS = [
 	"flow_feature_complete",
 	"flow_feature_reset",
@@ -59,104 +72,7 @@ const EXPECTED_TOOLS = [
 	"flow_session_close",
 	"flow_status",
 	"flow_validation_start",
-] as const;
-
-const EXPECTED_AGENTS = ["flow-reviewer", "flow-worker"] as const;
-
-type PermissionRule = {
-	permission: string;
-	pattern: string;
-	action: "ask" | "allow" | "deny";
-};
-
-type ResolvedAgent = {
-	name: string;
-	mode?: "subagent" | "primary" | "all";
-	model?: { providerID: string; modelID: string };
-	variant?: string;
-	steps?: number;
-	permission?: PermissionRule[];
-};
-
-function wildcardMatches(input: string, pattern: string): boolean {
-	const expression = pattern
-		.replace(/[.+^${}()|[\]\\]/g, "\\$&")
-		.replaceAll("*", ".*")
-		.replaceAll("?", ".");
-	return new RegExp(`^${expression}$`, "s").test(input);
-}
-
-function permissionFor(
-	rules: readonly PermissionRule[],
-	permission: string,
-	pattern = "*",
-): PermissionRule["action"] {
-	for (let index = rules.length - 1; index >= 0; index -= 1) {
-		const rule = rules[index];
-		if (
-			rule &&
-			wildcardMatches(permission, rule.permission) &&
-			wildcardMatches(pattern, rule.pattern)
-		) {
-			return rule.action;
-		}
-	}
-	return "ask";
-}
-
-async function fetchJson(url: string, timeout = REQUEST_TIMEOUT_MS) {
-	let response: Response | undefined;
-	try {
-		response = await fetch(url, { signal: AbortSignal.timeout(timeout) });
-		if (!response.ok) throw new Error();
-		return await response.json();
-	} catch (error) {
-		// Neither response bodies nor native error messages are safe diagnostics.
-		const reason =
-			response && !response.ok
-				? `HTTP ${response.status}`
-				: error instanceof Error &&
-						["TimeoutError", "AbortError", "SyntaxError", "TypeError"].includes(
-							error.name,
-						)
-					? error.name
-					: "Error";
-		throw new Error(`GET ${new URL(url).pathname} failed (${reason}).`);
-	}
-}
-
-async function waitForCommands(
-	baseUrl: string,
-	deadline: number,
-): Promise<Array<{ name: string }>> {
-	for (;;) {
-		const beforeProbe = deadline - Date.now();
-		if (beforeProbe <= 0)
-			throw new Error("OpenCode startup deadline expired at /global/health.");
-		let healthy = false;
-		try {
-			const health = (await fetchJson(
-				`${baseUrl}/global/health`,
-				Math.min(3_000, beforeProbe),
-			)) as {
-				healthy?: boolean;
-			};
-			healthy = health.healthy === true;
-		} catch {
-			// The process is still starting.
-		}
-		const remaining = deadline - Date.now();
-		if (healthy) {
-			if (remaining <= 0)
-				throw new Error("OpenCode startup deadline expired before /command.");
-			// Global health does not wait for project/plugin initialization.
-			return (await fetchJson(`${baseUrl}/command`, remaining)) as Array<{
-				name: string;
-			}>;
-		}
-		if (remaining > 0) await Bun.sleep(Math.min(500, remaining));
-	}
-}
+];
 
 async function availablePort(): Promise<number> {
 	const server = createServer();
@@ -165,764 +81,760 @@ async function availablePort(): Promise<number> {
 		server.listen(0, "127.0.0.1", resolve);
 	});
 	const address = server.address();
-	if (!address || typeof address === "string") {
-		throw new Error("Could not reserve a local port.");
-	}
+	if (!address || typeof address === "string")
+		throw new Error("No loopback port");
 	await new Promise<void>((resolve, reject) =>
 		server.close((error) => (error ? reject(error) : resolve())),
 	);
 	return address.port;
 }
 
-describe("live smoke readiness deadlines", () => {
-	for (const mode of [
-		"ready",
-		"late-health",
-		"unhealthy",
-		"command-timeout",
-	] as const) {
-		test(`R19-01 shares one startup budget: ${mode}`, async () => {
-			let now = mode === "unhealthy" ? 179_750 : 0;
-			const budgets: number[] = [];
-			const clock = spyOn(Date, "now").mockImplementation(() => now);
-			const timeout = AbortSignal.timeout;
-			const deadlines = spyOn(AbortSignal, "timeout").mockImplementation(
-				(ms) => {
-					budgets.push(ms);
-					return timeout(ms);
-				},
-			);
-			const sleep = spyOn(Bun, "sleep").mockImplementation(async (ms) => {
-				if (typeof ms !== "number") throw new Error("Expected numeric delay");
-				now += ms;
-			});
-			const requests = spyOn(globalThis, "fetch").mockImplementation(
-				Object.assign(
-					async (input: Parameters<typeof fetch>[0]) => {
-						if (String(input).endsWith("/global/health")) {
-							if (mode === "unhealthy")
-								return Response.json({ healthy: false });
-							now =
-								mode === "late-health"
-									? 180_000
-									: mode === "command-timeout"
-										? 40_000
-										: 10_000;
-							return Response.json({ healthy: true });
-						}
-						if (mode === "command-timeout")
-							throw new DOMException("private diagnostic", "TimeoutError");
-						now = 155_000;
-						return Response.json([{ name: "flow-status" }]);
-					},
-					{ preconnect: fetch.preconnect },
-				),
-			);
-			try {
-				const ready = waitForCommands("http://127.0.0.1:1234", 180_000);
-				if (mode === "ready") {
-					expect(await ready).toEqual([{ name: "flow-status" }]);
-					await fetchJson("http://127.0.0.1:1234/agent");
-					expect(budgets).toEqual([3_000, 170_000, 120_000]);
-					expect(requests).toHaveBeenCalledTimes(3);
-				} else if (mode === "command-timeout") {
-					await expect(ready).rejects.toThrow(
-						"GET /command failed (TimeoutError).",
-					);
-					expect(budgets).toEqual([3_000, 140_000]);
-					expect(requests).toHaveBeenCalledTimes(2);
-				} else {
-					await expect(ready).rejects.toThrow(
-						mode === "late-health" ? "before /command" : "at /global/health",
-					);
-					expect(budgets).toEqual([mode === "late-health" ? 3_000 : 250]);
-					expect(requests).toHaveBeenCalledTimes(1);
-					if (mode === "unhealthy") expect(sleep).toHaveBeenCalledWith(250);
-				}
-			} finally {
-				requests.mockRestore();
-				sleep.mockRestore();
-				deadlines.mockRestore();
-				clock.mockRestore();
-			}
-		});
-	}
+async function tools(
+	client: OpenCodeClient,
+	sessionID: string,
+): Promise<SessionMessageAssistantTool[]> {
+	return (await listNativeMessages(client, sessionID)).flatMap((message) =>
+		message.type === "assistant"
+			? message.content.filter((content) => content.type === "tool")
+			: [],
+	);
+}
 
-	for (const kind of ["http", "json", "network"] as const) {
-		test(`R19-01 identifies ${kind} failure without exposing response/server text`, async () => {
-			const requests = spyOn(globalThis, "fetch").mockImplementation(
-				Object.assign(
-					async () => {
-						if (kind === "network") throw new TypeError("private diagnostic");
-						return new Response("private diagnostic", {
-							status: kind === "http" ? 503 : 200,
-						});
-					},
-					{ preconnect: fetch.preconnect },
-				),
-			);
-			try {
-				const expected =
-					kind === "http"
-						? "HTTP 503"
-						: kind === "json"
-							? "SyntaxError"
-							: "TypeError";
-				await expect(
-					fetchJson("http://127.0.0.1:1234/command?token=private"),
-				).rejects.toThrow(`GET /command failed (${expected}).`);
-				expect(requests).toHaveBeenCalledTimes(1);
-			} finally {
-				requests.mockRestore();
-			}
-		});
+async function verifyInstalledCandidate(
+	tarball: string,
+	installed: string,
+	root: string,
+): Promise<void> {
+	const expected = join(root, "expected-package");
+	await mkdir(expected);
+	const extracted = spawnSync("tar", ["-xzf", tarball, "-C", expected], {
+		encoding: "utf8",
+	});
+	if (extracted.status !== 0)
+		throw new Error("Could not inspect candidate archive");
+	const packageRoot = join(expected, "package");
+	const files = (await readdir(packageRoot, { recursive: true })).sort();
+	for (const file of files) {
+		const entry = await lstat(join(packageRoot, file));
+		if (entry.isDirectory()) continue;
+		if (!entry.isFile())
+			throw new Error("Candidate contains an unsupported non-file entry");
+		expect(await readFile(join(installed, file))).toEqual(
+			await readFile(join(packageRoot, file)),
+		);
 	}
+	const installedFiles = (await readdir(installed, { recursive: true }))
+		.filter(
+			(path) => path !== "node_modules" && !path.startsWith("node_modules/"),
+		)
+		.sort();
+	expect(installedFiles).toEqual(files);
+}
+
+const save = {
+	request: {
+		operationId: "smoke-save",
+		expectedRevision: 0,
+		goal: "Verify the installed V2 package",
+		plan: packedValidationPlan,
+	},
+};
+
+test("reserved native permissions retain the planner boundary", () => {
+	const rules = FLOW_CORE_AGENTS["flow-planner"].permissions;
+	const effect = (action: string) =>
+		rules.filter((rule) => rule.action === "*" || rule.action === action).at(-1)
+			?.effect;
+	expect(
+		[
+			"shell",
+			"subagent",
+			"flow_plan_save",
+			"flow_plan_approve",
+			"flow_run_start",
+			"flow_review_start",
+			"flow_feature_complete",
+		].map(effect),
+	).toEqual(["deny", "deny", "deny", "deny", "deny", "deny", "deny"]);
+	expect(["read", "glob", "grep"].map(effect)).toEqual([
+		"allow",
+		"allow",
+		"allow",
+	]);
 });
 
-function observed(
-	endpoint: EndpointAttempt["endpoint"],
-	response: unknown,
-): EndpointAttempt {
-	return { kind: "observed", endpoint, response };
-}
-
-function createdSession(version = PINNED_OPENCODE_VERSION): EndpointAttempt {
-	return observed(HOST_METADATA_CONTRACT.endpoints.createSession, {
-		id: "session",
-		version,
-	});
-}
-
-function answeredModel(modelID = "model", providerID = "provider") {
-	return {
-		info: {
-			role: "assistant",
-			time: { created: 1, completed: 2 },
-			model: { providerID, modelID },
-		},
-	};
-}
-
-function reviewerChild(id = "child", parentID = "parent") {
-	return { agent: "flow-reviewer", id, parentID };
-}
-
-type EvidenceInput = Parameters<typeof buildHostEvidenceCapabilities>[0];
-
-function evidence(overrides: Partial<EvidenceInput> = {}) {
-	return buildHostEvidenceCapabilities({
-		opencodeVersion: PINNED_OPENCODE_VERSION,
-		generatedAt: "2026-08-24T00:00:00.000Z",
-		parentSessionId: "parent",
-		endpointResponses: [createdSession()],
-		childSessions: observed(HOST_METADATA_CONTRACT.endpoints.childSessions, [
-			reviewerChild(),
-		]),
-		parentMessages: observed(HOST_METADATA_CONTRACT.endpoints.parentMessages, [
-			answeredModel("manager"),
-		]),
-		childMessages: [
-			{
-				sessionId: "child",
-				messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
-					answeredModel("reviewer"),
-				]),
-			},
-		],
-		...overrides,
-	});
-}
-
-describe("OpenCode eval metadata probe", () => {
-	test("pins the current host, endpoints, and reviewer bound", () => {
-		expect(HOST_METADATA_CONTRACT.hostVersion).toBe("1.18.31");
-		expect(HOST_METADATA_CONTRACT.endpoints).toEqual({
-			agents: "GET /agent",
-			createSession: "POST /session",
-			dispatchReview: "POST /session/:id/command",
-			parentMessages: "GET /session/:id/message",
-			childSessions: "GET /session/:id/children",
-			childMessages: "GET /session/:child_id/message",
-		});
-		expect(HOST_METADATA_CONTRACT.limits).toEqual({
-			requestTimeoutMs: 120_000,
-			reviewerSteps: 8,
-		});
-	});
-
-	test("redacts compound sensitive keys but keeps identity field labels", () => {
-		const fields = collectFieldObservations({
-			info: {
-				model: { providerID: "provider-secret", modelID: "model-secret" },
-			},
-			parts: [
-				{
-					apiKey: "secret",
-					accessToken: "secret",
-					promptText: "secret",
-					toolOutput: "secret",
-					credential: "secret",
+test.skipIf(!LIVE)(
+	"packed candidate executes allowed and denied native custom calls with a local provider",
+	async () => {
+		const root = await mkdtemp(join(tmpdir(), "flow-v2-packed-smoke-"));
+		const project = join(root, "project");
+		const receipt = join(root, "receipt.jsonl");
+		const provider = localScriptedProvider();
+		const startup = new OpenCodeStartup();
+		let child: ChildProcess | undefined;
+		const validationEvidence: unknown[] = [];
+		try {
+			const toolchain = currentBunToolchain(packageJson.packageManager);
+			const tarball =
+				process.env.FLOW_LIVE_SMOKE_TARBALL ??
+				(await packPlugin(join(import.meta.dir, ".."), root, toolchain));
+			const manifest = await packedPackageManifest(tarball);
+			expect(manifest.version).toBe(packageJson.version);
+			const archiveDigest = await tarballSha256(tarball);
+			const cache =
+				process.env.FLOW_LIVE_SMOKE_PACKAGE_CACHE ??
+				(await preparePackageCache(tarball, root, toolchain));
+			const installed = join(root, "installed");
+			await cp(cache, installed, { recursive: true });
+			const pluginDirectory = join(
+				installed,
+				"node_modules",
+				"opencode-plugin-flow",
+			);
+			await verifyInstalledCandidate(tarball, pluginDirectory, root);
+			const installedManifest: unknown = JSON.parse(
+				await readFile(join(pluginDirectory, "package.json"), "utf8"),
+			);
+			if (!isRecord(installedManifest))
+				throw new Error("Invalid installed candidate manifest");
+			expect(installedManifest.version).toBe(manifest.version);
+			expect(installedManifest.exports).toEqual({
+				".": {
+					types: "./dist/index.d.ts",
+					import: "./dist/index.js",
+					default: "./dist/index.js",
 				},
-			],
-		});
-		expect(fields).toEqual([
-			{ path: "info", kind: "object" },
-			{ path: "info.model", kind: "object" },
-			{ path: "info.model.modelID", kind: "string" },
-			{ path: "info.model.providerID", kind: "string" },
-			{ path: "parts", kind: "array" },
-			{ path: "parts[]", kind: "object" },
-		]);
-	});
+				"./tui": { types: "./dist/tui.d.ts", import: "./dist/tui.js" },
+			});
+			await mkdir(project);
+			await writeFile(join(project, "README.md"), "Local V2 smoke fixture\n");
+			await writeFile(
+				join(project, ".gitignore"),
+				"/.flow/\n/opencode.json\n/.opencode/\n",
+			);
+			for (const [name, content] of Object.entries(junitFixtureFiles))
+				await writeFile(join(project, name), content, { mode: 0o755 });
 
-	test("records completed parent and reviewer identities and raw parent linkage as labels", () => {
-		const capabilities = evidence({
-			parentSessionId: "ses_parent_raw",
-			childSessions: observed(HOST_METADATA_CONTRACT.endpoints.childSessions, [
-				reviewerChild("ses_child_raw", "ses_parent_raw"),
-			]),
-			parentMessages: observed(
-				HOST_METADATA_CONTRACT.endpoints.parentMessages,
-				[answeredModel("manager-secret", "provider-secret")],
-			),
-			childMessages: [
-				{
-					sessionId: "ses_child_raw",
-					messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
-						answeredModel("reviewer-secret", "provider-secret"),
-					]),
-				},
-			],
-		});
-		expect(capabilities.capabilities).toMatchObject({
-			hostVersion: {
-				kind: "observed",
-				matchesRequested: true,
-				fieldPath: "version",
-			},
-			parentManagerModelIdentity: {
-				kind: "observed",
-				actors: [
-					{
-						actor: "parent-1",
-						fieldPaths: ["[].info.model.modelID", "[].info.model.providerID"],
-					},
+			for (const args of [
+				["init", "--initial-branch=main"],
+				["add", "README.md", ".gitignore", ...Object.keys(junitFixtureFiles)],
+				[
+					"-c",
+					"user.name=Smoke",
+					"-c",
+					"user.email=smoke@example.invalid",
+					"-c",
+					"commit.gpgSign=false",
+					"commit",
+					"-m",
+					"fixture",
 				],
-			},
-			childReviewerModelIdentity: {
-				kind: "observed",
-				actors: [
+			]) {
+				const result = spawnSync(
+					"git",
+					["-c", "core.hooksPath=/dev/null", ...args],
 					{
-						actor: "child-1",
-						fieldPaths: ["[].info.model.modelID", "[].info.model.providerID"],
+						cwd: project,
+						encoding: "utf8",
+						env: {
+							PATH: toolchain.environment.PATH,
+							GIT_CONFIG_NOSYSTEM: "1",
+							GIT_CONFIG_GLOBAL: "/dev/null",
+						},
 					},
-				],
-			},
-			childLineage: {
-				kind: "observed",
-				links: [
-					{
-						parent: "parent-1",
-						child: "child-1",
-						fieldPaths: ["[].id", "[].parentID"],
-					},
-				],
-			},
-		});
-		expect(capabilities).toMatchObject({
-			unsupportedClaims: [],
-			result: { kind: "complete" },
-		});
-		expect(JSON.stringify(capabilities)).not.toMatch(
-			/ses_(parent|child)_raw|provider-secret|reviewer-secret/,
-		);
-	});
-
-	for (const scenario of [
-		{
-			name: "host-version-mismatch",
-			overrides: { endpointResponses: [createdSession("9.9.9")] },
-			result: "host-version-mismatch",
-		},
-		{
-			name: "parent-model-field-unavailable",
-			overrides: {
-				parentMessages: observed(
-					HOST_METADATA_CONTRACT.endpoints.parentMessages,
-					[{ info: { role: "assistant", time: { completed: 2 } } }],
-				),
-			},
-			result: "required-capability-unavailable",
-			unsupported: ["parent-manager-model-identity"],
-		},
-		{
-			name: "child-model-field-unavailable",
-			overrides: {
-				childMessages: [
-					{
-						sessionId: "child",
-						messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
-							{ info: { role: "assistant", time: { completed: 2 } } },
-						]),
-					},
-				],
-			},
-			result: "required-capability-unavailable",
-			unsupported: ["child-reviewer-model-identity"],
-		},
-		{
-			name: "endpoint-failure",
-			overrides: {
-				childSessions: {
-					kind: "endpoint-failure" as const,
-					endpoint: HOST_METADATA_CONTRACT.endpoints.childSessions,
-				},
-				parentMessages: {
-					kind: "endpoint-failure" as const,
-					endpoint: HOST_METADATA_CONTRACT.endpoints.parentMessages,
-				},
-				childMessages: [],
-			},
-			result: "endpoint-failure",
-			unsupported: [],
-		},
-		{
-			name: "review-command-failure",
-			overrides: {
-				endpointResponses: [
-					createdSession(),
-					{
-						kind: "endpoint-failure" as const,
-						endpoint: HOST_METADATA_CONTRACT.endpoints.dispatchReview,
-					},
-				],
-			},
-			result: "endpoint-failure",
-			unsupported: [],
-		},
-		{
-			name: "mismatched-reviewer-parent",
-			overrides: {
-				childSessions: observed(
-					HOST_METADATA_CONTRACT.endpoints.childSessions,
-					[reviewerChild("child", "different-parent")],
-				),
-				childMessages: [],
-			},
-			result: "reviewer-child-not-observed",
-			unsupported: ["child-reviewer-model-identity", "child-session-lineage"],
-			lineage: "parent-mismatch",
-		},
-		{
-			name: "non-reviewer-child",
-			overrides: {
-				childSessions: observed(
-					HOST_METADATA_CONTRACT.endpoints.childSessions,
-					[{ agent: "flow-worker", id: "child", parentID: "parent" }],
-				),
-				childMessages: [],
-			},
-			result: "reviewer-child-not-observed",
-			unsupported: [],
-			lineage: "reviewer-child-not-observed",
-		},
-		{
-			name: "unanswered-reviewer",
-			overrides: {
-				childMessages: [
-					{
-						sessionId: "child",
-						messages: observed(HOST_METADATA_CONTRACT.endpoints.childMessages, [
-							{
-								info: {
-									role: "user",
-									model: { providerID: "provider", modelID: "reviewer" },
-								},
-							},
-						]),
-					},
-				],
-			},
-			result: "model-did-not-answer",
-		},
-		{
-			name: "failed-parent-message",
-			overrides: {
-				parentMessages: observed(
-					HOST_METADATA_CONTRACT.endpoints.parentMessages,
-					[
+				);
+				if (result.status !== 0)
+					throw new Error(
+						"Could not prepare isolated smoke fixture repository",
+					);
+			}
+			const pluginEntry = await installedOpenCodePluginEntry(
+				pluginDirectory,
+				join(root, "flow-plugin-entry"),
+			);
+			const fixture = join(root, "fixture");
+			await mkdir(fixture);
+			await writeFile(
+				join(fixture, "index.ts"),
+				`export { default } from ${JSON.stringify(pathToFileURL(join(import.meta.dir, "fixtures/opencode-v2-smoke-plugin.ts")).href)};\n`,
+			);
+			await writeFile(
+				join(project, "opencode.json"),
+				JSON.stringify({
+					plugins: [
+						{ package: pluginEntry },
 						{
-							info: {
-								error: { name: "ProviderError" },
-								model: { providerID: "provider", modelID: "manager" },
+							package: fixture,
+							options: { baseURL: provider.baseURL, receipt },
+						},
+					],
+					permissions: [{ action: "*", resource: "*", effect: "allow" }],
+				}),
+			);
+			for (const directory of [
+				"home",
+				"config",
+				"data",
+				"cache",
+				"state",
+				"tmp",
+			])
+				await mkdir(join(root, directory));
+			const port = await availablePort();
+			const args = ["serve", "--hostname", "127.0.0.1", "--port", String(port)];
+			const invocation = process.env.FLOW_OPENCODE_SMOKE_EXECUTABLE
+				? { command: process.env.FLOW_OPENCODE_SMOKE_EXECUTABLE, args }
+				: openCodeInvocation(args, VERSION);
+			const launch = () =>
+				spawn(invocation.command, invocation.args, {
+					cwd: project,
+					detached: process.platform !== "win32",
+					stdio: ["ignore", "pipe", "pipe"],
+					env: {
+						PATH: toolchain.environment.PATH,
+						HOME: join(root, "home"),
+						XDG_CONFIG_HOME: join(root, "config"),
+						XDG_DATA_HOME: join(root, "data"),
+						XDG_CACHE_HOME: join(root, "cache"),
+						XDG_STATE_HOME: join(root, "state"),
+						TMPDIR: join(root, "tmp"),
+					},
+				});
+			child = launch();
+			child.stdout?.on("data", (chunk) => startup.consume(String(chunk)));
+			child.stderr?.on("data", (chunk) =>
+				startup.consume(String(chunk), "stderr"),
+			);
+			let client: OpenCodeClient | null = null;
+			const deadline = Date.now() + 180000;
+			let spawnError: Error | undefined;
+			child.once("error", (error) => {
+				spawnError = error;
+			});
+			while (Date.now() < deadline) {
+				if (spawnError) throw spawnError;
+				if (child.exitCode !== null)
+					throw new Error(`OpenCode exited before readiness. ${startup.log}`);
+				client = startup.client(`http://127.0.0.1:${port}`, project);
+				if (client) {
+					const info = await client.server.info({
+						signal: AbortSignal.timeout(3000),
+					});
+					expect(info.version).toBe(VERSION);
+					break;
+				}
+				await Bun.sleep(50);
+			}
+			if (!client)
+				throw new Error(
+					`OpenCode did not publish private startup authentication. ${startup.log}`,
+				);
+			startup.clear();
+			const request = () => ({ signal: AbortSignal.timeout(30000) });
+			const rootSession = await client.session.create(
+				{
+					title: "Packed smoke root",
+					agent: "build",
+					model: { providerID: "flow-smoke", id: "catalog-model" },
+					location: { directory: project },
+				},
+				request(),
+			);
+			await client.session.prompt(
+				{ sessionID: rootSession.id, text: "FLOW_SMOKE_USAGE_ONLY" },
+				request(),
+			);
+			await client.session.wait({ sessionID: rootSession.id }, request());
+			validationEvidence.push({
+				kind: "usage",
+				...(await proveNativeUsage(client, rootSession.id, project)),
+			});
+
+			await client.session.command(
+				{ sessionID: rootSession.id, name: "flow-smoke-inventory", text: "" },
+				request(),
+			);
+			expect(
+				(
+					await client.command.list(
+						{ location: { directory: project } },
+						request(),
+					)
+				).data
+					.map((command) => command.name)
+					.filter(
+						(name) =>
+							name.startsWith("flow-") && name !== "flow-smoke-inventory",
+					)
+					.sort(),
+			).toEqual(EXPECTED_COMMANDS);
+			const agents = (
+				await client.agent.list({ location: { directory: project } }, request())
+			).data;
+			expect(
+				agents.find((agent) => agent.id === "flow-planner"),
+			).toBeUndefined();
+			for (const id of ["flow-worker", "flow-reviewer"])
+				expect(agents.find((agent) => agent.id === id)?.hidden).toBe(true);
+			const nativeRoot = await client.session.get(
+				{ sessionID: rootSession.id },
+				request(),
+			);
+			expect(nativeRoot.parentID).toBeUndefined();
+			expect(await realpath(nativeRoot.location.directory)).toBe(
+				await realpath(project),
+			);
+			const primaryClient = client;
+			const dispatch = async (
+				agent: string,
+				actions: { tool: string; input: Record<string, unknown> }[],
+			) => {
+				const session =
+					agent === "build"
+						? rootSession
+						: await primaryClient.session.create(
+								{
+									title: agent,
+									parentID: rootSession.id,
+									agent,
+									model: { providerID: "flow-smoke", id: "catalog-model" },
+									location: { directory: project },
+								},
+								request(),
+							);
+				const priorCalls = await tools(primaryClient, session.id);
+				await primaryClient.session.prompt(
+					{
+						sessionID: session.id,
+						text: `FLOW_SMOKE_ACTIONS ${JSON.stringify(actions)}`,
+					},
+					request(),
+				);
+				await primaryClient.session.wait({ sessionID: session.id }, request());
+				return {
+					session,
+					calls: (await tools(primaryClient, session.id)).slice(
+						priorCalls.length,
+					),
+				};
+			};
+			const denied = await dispatch("flow-worker", [
+				{ tool: "flow_plan_save", input: save },
+				{ tool: "flow_feature_complete", input: { request: {} } },
+			]);
+			expect(denied.calls.length).toBeGreaterThan(0);
+			for (const call of denied.calls) {
+				if (call.state.status === "error") continue;
+				expect(call.state.status).toBe("completed");
+				if (call.state.status !== "completed")
+					throw new Error("Denied native call did not settle");
+				const text = call.state.content
+					.filter((item) => item.type === "text")
+					.map((item) => item.text)
+					.join("\n");
+				expect(JSON.parse(text)).toMatchObject({ status: "error" });
+			}
+			expect(
+				await lstat(join(project, ".flow/session.json")).then(
+					() => true,
+					() => false,
+				),
+			).toBe(false);
+			const reviewer = await dispatch("flow-reviewer", [
+				{ tool: "flow_status", input: { request: { view: "compact" } } },
+			]);
+			expect(
+				reviewer.calls.map((call) => [call.name, call.state.status]),
+			).toEqual([["flow_status", "completed"]]);
+			const allowed = await dispatch("build", [
+				{ tool: "flow_plan_save", input: save },
+			]);
+			expect(
+				allowed.calls
+					.filter((call) => call.name === "flow_plan_save")
+					.map((call) => call.state.status),
+			).toEqual(["completed"]);
+			const savedCall = allowed.calls.find(
+				(call) => call.name === "flow_plan_save",
+			);
+			if (savedCall?.state.status !== "completed")
+				throw new Error("Manager plan save did not complete");
+			expect(
+				JSON.parse(
+					savedCall.state.content
+						.filter((item) => item.type === "text")
+						.map((item) => item.text)
+						.join("\n"),
+				),
+			).toMatchObject({ status: "ok" });
+
+			const durable: unknown = JSON.parse(
+				await readFile(join(project, ".flow/session.json"), "utf8"),
+			);
+			if (!isRecord(durable)) throw new Error("No durable Flow session");
+			expect(durable.goal).toBe("Verify the installed V2 package");
+			expect(
+				extractObservedModelIdentity(
+					await listNativeMessages(client, rootSession.id),
+				),
+			).toEqual({
+				kind: "observed",
+				value: { providerID: "flow-smoke", modelID: "catalog-model" },
+			});
+			expect(
+				(await listNativeSessions(client, project))
+					.filter((session) => session.parentID === rootSession.id)
+					.map((session) => session.id)
+					.sort(),
+			).toEqual([denied.session.id, reviewer.session.id].sort());
+			const validationResult = await runPackedValidationCases(
+				project,
+				dispatch,
+				validationEvidence,
+			);
+			await runPackedReviewerReturn(
+				project,
+				client,
+				rootSession.id,
+				dispatch,
+				validationEvidence,
+			);
+
+			try {
+				const errorSession = await client.session.create(
+					{
+						title: "Provider failure control",
+						agent: "build",
+						model: { providerID: "flow-smoke", id: "catalog-model" },
+						location: { directory: project },
+					},
+					request(),
+				);
+				await client.session.prompt(
+					{ sessionID: errorSession.id, text: "FLOW_SMOKE_PROVIDER_ERROR" },
+					request(),
+				);
+				await client.session.wait({ sessionID: errorSession.id }, request());
+				validationEvidence.push({
+					kind: "provider-error",
+					messages: (await listNativeMessages(client, errorSession.id)).map(
+						(message) => ({
+							id: message.id,
+							type: message.type,
+							time: message.time,
+							...(message.type === "assistant" ? { error: message.error } : {}),
+						}),
+					),
+					requests: provider.requests.map(({ model, scenario }) => ({
+						model,
+						scenario,
+					})),
+				});
+
+				expect(
+					(await listNativeMessages(client, errorSession.id)).some(
+						(message) =>
+							message.type === "assistant" &&
+							message.error?.message.includes("Local scripted provider error"),
+					),
+				).toBe(true);
+			} catch (error) {
+				validationResult.failures.push(
+					error instanceof Error ? error : new Error(String(error)),
+				);
+			}
+			try {
+				const cancelSession = await client.session.create(
+					{
+						title: "Cancellation control",
+						agent: "build",
+						model: { providerID: "flow-smoke", id: "catalog-model" },
+						location: { directory: project },
+					},
+					request(),
+				);
+				await client.session.prompt(
+					{ sessionID: cancelSession.id, text: "FLOW_SMOKE_DELAY" },
+					request(),
+				);
+				const cancelDeadline = Date.now() + 5000;
+				let running = false;
+				while (Date.now() < cancelDeadline) {
+					running = (await listNativeMessages(client, cancelSession.id)).some(
+						(message) =>
+							message.type === "assistant" &&
+							message.time.completed === undefined,
+					);
+					if (running) break;
+					await Bun.sleep(10);
+				}
+				expect(running).toBe(true);
+				expect(
+					(
+						await client.session.interrupt(
+							{ sessionID: cancelSession.id, resume: false },
+							request(),
+						)
+					).interrupted,
+				).toBe(true);
+				await client.session.wait({ sessionID: cancelSession.id }, request());
+				expect(
+					(await listNativeMessages(client, cancelSession.id))
+						.filter((message) => message.type === "assistant")
+						.map((message) => message.error?.type),
+				).toContain("aborted");
+
+				await client.session.compact(
+					{ sessionID: cancelSession.id },
+					request(),
+				);
+				await client.session.wait({ sessionID: cancelSession.id }, request());
+				expect(
+					(await listNativeMessages(client, cancelSession.id))
+						.filter((message) => message.type === "compaction")
+						.map((message) => message.status),
+				).toEqual(["completed"]);
+				validationEvidence.push({
+					kind: "cancel-compaction",
+					sessionID: cancelSession.id,
+					outcome: (
+						await client.session.get({ sessionID: cancelSession.id }, request())
+					).outcome,
+					messages: await listNativeMessages(client, cancelSession.id),
+				});
+			} catch (error) {
+				validationResult.failures.push(
+					error instanceof Error ? error : new Error(String(error)),
+				);
+			}
+
+			const records = (await readFile(receipt, "utf8"))
+				.trim()
+				.split("\n")
+				.map((line) => JSON.parse(line))
+				.filter(isRecord);
+			expect(
+				records
+					.filter((row) => row.kind === "inventory")
+					.flatMap((row) => row.tools)
+					.filter(
+						(tool: unknown) =>
+							typeof tool === "string" && tool.startsWith("flow_"),
+					)
+					.sort(),
+			).toEqual(EXPECTED_TOOLS);
+			expect(
+				records
+					.filter(
+						(row) =>
+							row.kind === "tool" &&
+							row.tool === "flow_plan_save" &&
+							row.status === "completed" &&
+							isRecord(row.application) &&
+							row.application.status === "ok",
+					)
+					.map((row) => row.sessionID),
+			).toEqual([rootSession.id]);
+			expect(provider.requests.every((row) => row.model === "wire-model")).toBe(
+				true,
+			);
+			expect(provider.requests.length).toBeGreaterThan(0);
+			await writeFile(
+				join(project, "opencode.json"),
+				JSON.stringify({
+					plugins: [
+						{
+							package: fixture,
+							options: { baseURL: provider.baseURL, receipt },
+						},
+						{
+							package: pluginEntry,
+							options: {
+								modelPreferences: {
+									planning: {
+										kind: "model",
+										model: { providerID: "flow-smoke", id: "catalog-model" },
+									},
+								},
 							},
 						},
 					],
-				),
-			},
-			result: "model-did-not-answer",
-		},
-	] as const) {
-		test(`reports ${scenario.name}`, () => {
-			const capabilities = evidence(scenario.overrides);
-			expect(capabilities.result).toEqual({
-				kind: "inconclusive",
-				reason: scenario.result,
-			});
-			if (scenario.unsupported)
-				expect(capabilities.unsupportedClaims).toEqual(scenario.unsupported);
-			if (scenario.lineage)
-				expect(capabilities.capabilities.childLineage).toMatchObject({
-					kind: "unobserved",
-					reason: scenario.lineage,
-				});
-		});
-	}
-});
-
-describe("live OpenCode smoke configuration", () => {
-	test("uses the pinned host unless compatibility monitoring overrides it", () => {
-		expect(PINNED_OPENCODE_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
-		expect(
-			process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim()
-				? OPENCODE_VERSION
-				: PINNED_OPENCODE_VERSION,
-		).toBe(OPENCODE_VERSION);
-		expect(EXPECTED_COMMANDS).toHaveLength(5);
-		expect(EXPECTED_TOOLS).toHaveLength(11);
-		expect(EXPECTED_AGENTS).toHaveLength(2);
-	});
-});
-
-describe.skipIf(!LIVE)(`live OpenCode ${OPENCODE_VERSION} smoke`, () => {
-	test(
-		"loads the packed plugin and enforces the small public surface",
-		async () => {
-			const repositoryRoot = join(import.meta.dir, "..");
-			const toolchain = currentBunToolchain(packageJson.packageManager);
-			const scratch = await mkdtemp(join(tmpdir(), "flow-live-smoke-"));
-			const childHome = join(scratch, "home");
-			const childCache = join(scratch, "cache");
-			const project = join(scratch, "project");
-			await mkdir(childHome, { recursive: true });
-			await mkdir(join(project, ".opencode"), { recursive: true });
-
-			const tarball = await packPlugin(repositoryRoot, scratch, toolchain);
-			expect((await lstat(tarball)).isFile()).toBe(true);
-
-			// Populate OpenCode's exact-version package cache from the candidate
-			// tarball so the documented config exercises these exact package bytes.
-			const packageCache = join(
-				childCache,
-				"opencode",
-				"packages",
-				`opencode-plugin-flow@${packageJson.version}`,
-			);
-			await mkdir(packageCache, { recursive: true });
-			await writeFile(
-				join(packageCache, "package.json"),
-				`${JSON.stringify({ dependencies: { "opencode-plugin-flow": `file:${tarball}` } }, null, 2)}\n`,
-				"utf8",
-			);
-			const install = runPinnedBunSync(toolchain, ["install"], {
-				cwd: packageCache,
-			});
-			expect(install.status, `${install.stdout}\n${install.stderr}`).toBe(0);
-			await writeFile(
-				join(project, "opencode.json"),
-				`${JSON.stringify(
-					{
-						plugin: [
-							[
-								`opencode-plugin-flow@${packageJson.version}`,
-								{
-									reviewer: {
-										model: "flow-probe/model",
-										variant: "high",
-										steps: 80,
-									},
-								},
-							],
-						],
-					},
-					null,
-					2,
-				)}\n`,
-				"utf8",
-			);
-
-			const globalConfig = join(
-				childHome,
-				".config",
-				"opencode",
-				"opencode.json",
-			);
-			await mkdir(join(childHome, ".config", "opencode"), { recursive: true });
-			await writeFile(
-				globalConfig,
-				JSON.stringify({
-					agent: {
-						"fixture-other": {
-							options: { reference: "{env:FLOW_PICKER_FIXTURE}" },
-						},
-					},
+					permissions: [{ action: "*", resource: "*", effect: "allow" }],
 				}),
 			);
-			const port = await availablePort();
-			const baseUrl = `http://127.0.0.1:${port}`;
-			const startupDeadline = Date.now() + STARTUP_TIMEOUT_MS;
-			const server = spawn(
-				toolchain.executable,
-				[
-					"x",
-					`opencode-ai@${OPENCODE_VERSION}`,
-					"serve",
-					"--port",
-					String(port),
-					"--hostname",
-					"127.0.0.1",
-				],
-				{
-					cwd: project,
-					detached: process.platform !== "win32",
-					env: {
-						...toolchain.environment,
-						HOME: childHome,
-						OPENCODE_TEST_HOME: childHome,
-						FLOW_PICKER_FIXTURE: "fixture-resolved-value",
-						XDG_CACHE_HOME: childCache,
-						XDG_CONFIG_HOME: join(childHome, ".config"),
-						XDG_DATA_HOME: join(childHome, ".local", "share"),
-						XDG_STATE_HOME: join(childHome, ".local", "state"),
-					},
-					stdio: "ignore",
-				},
+			await terminateChildProcessTree(child);
+			startup.clear();
+			child = launch();
+			child.stdout?.on("data", (chunk) => startup.consume(String(chunk)));
+			child.stderr?.on("data", (chunk) =>
+				startup.consume(String(chunk), "stderr"),
 			);
-
-			try {
-				const commands = await waitForCommands(baseUrl, startupDeadline);
-				expect(
-					commands
-						.map((command) => command.name)
-						.filter((name) => name.startsWith("flow-"))
-						.sort(),
-				).toEqual([...EXPECTED_COMMANDS].sort());
-
-				const toolIds = (await fetchJson(
-					`${baseUrl}/experimental/tool/ids`,
-				)) as string[];
-				expect(
-					toolIds.filter((name) => name.startsWith("flow_")).sort(),
-				).toEqual([...EXPECTED_TOOLS].sort());
-
-				const agents = (await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[];
-				const flowAgents = agents.filter((agent) =>
-					agent.name.startsWith("flow-"),
-				);
-				expect(flowAgents.map((agent) => agent.name).sort()).toEqual([
-					...EXPECTED_AGENTS,
-				]);
-				const reviewer = flowAgents.find(
-					(agent) => agent.name === "flow-reviewer",
-				);
-				if (!reviewer) throw new Error("Flow reviewer was not registered.");
-				expect(reviewer.mode).toBe("subagent");
-				expect(reviewer.steps).toBe(80);
-				expect(reviewer.model).toEqual({
-					providerID: "flow-probe",
-					modelID: "model",
-				});
-				expect(reviewer.variant).toBe("high");
-				for (const reader of ["read", "glob", "grep"]) {
-					expect(toolIds).toContain(reader);
-					expect(
-						permissionFor(
-							reviewer.permission ?? [],
-							reader,
-							"src/unchanged.ts",
-						),
-					).toBe("allow");
-				}
-				for (const permission of [
-					"edit",
-					"bash",
-					"external_directory",
-					"skill",
-					"task",
-				]) {
-					expect(permissionFor(reviewer.permission ?? [], permission)).toBe(
-						"deny",
-					);
-				}
-				const reviewerAllowedTools = new Set([
-					"flow_status",
-					"flow_feature_complete",
-				]);
-				for (const toolId of EXPECTED_TOOLS) {
-					expect(permissionFor(reviewer.permission ?? [], toolId)).toBe(
-						reviewerAllowedTools.has(toolId) ? "allow" : "deny",
-					);
-				}
-
-				const worker = flowAgents.find((agent) => agent.name === "flow-worker");
-				if (!worker) throw new Error("Flow worker was not registered.");
-				expect(worker.mode).toBe("subagent");
-				expect(
-					permissionFor(worker.permission ?? [], "edit", "src/index.ts"),
-				).toBe("allow");
-				for (const protectedPath of [
-					".flow",
-					".flow/session.json",
-					".git",
-					".git/config",
-				]) {
-					expect(
-						permissionFor(worker.permission ?? [], "edit", protectedPath),
-					).toBe("deny");
-				}
-				expect(permissionFor(worker.permission ?? [], "bash", "bun test")).toBe(
-					"deny",
-				);
-				for (const permission of [
-					"external_directory",
-					"skill",
-					"task",
-					"flow_status",
-					"flow_plan_save",
-					"flow_feature_complete",
-				]) {
-					expect(permissionFor(worker.permission ?? [], permission)).toBe(
-						"deny",
-					);
-				}
-				// Exercise the real global preference API and config reload without
-				// creating a session, submitting a prompt, or calling a provider.
-				for (const selected of ["flow-probe/selected", ""]) {
-					const response = await fetch(`${baseUrl}/global/config`, {
-						method: "PATCH",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({
-							agent: {
-								"flow-reviewer": { options: { flowReviewerModel: selected } },
-							},
-						}),
-						signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-					});
-					expect(response.ok).toBe(true);
-					const expected = selected ? "selected" : "model";
-					let refreshed: ResolvedAgent | undefined;
-					const deadline = Date.now() + 5000;
-					do {
-						refreshed = (
-							(await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[]
-						).find((agent) => agent.name === "flow-reviewer");
-						if (refreshed?.model?.modelID === expected) break;
-						await Bun.sleep(50);
-					} while (Date.now() < deadline);
-					expect(refreshed?.model).toEqual({
-						providerID: "flow-probe",
-						modelID: expected,
-					});
-					expect(refreshed?.steps).toBe(80);
-					expect(refreshed?.variant ?? null).toBe(selected ? null : "high");
-					expect(await readFile(globalConfig, "utf8")).toContain(
-						"{env:FLOW_PICKER_FIXTURE}",
-					);
-				}
-				for (const selected of ["flow-probe/planning", ""]) {
-					const response = await fetch(`${baseUrl}/global/config`, {
-						method: "PATCH",
-						headers: { "Content-Type": "application/json" },
-						body: JSON.stringify({
-							agent: {
-								"flow-planner": { options: { flowPlanningModel: selected } },
-							},
-						}),
-						signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-					});
-					expect(response.ok).toBe(true);
-					let planner: ResolvedAgent | undefined;
-					const deadline = Date.now() + 5000;
-					do {
-						planner = (
-							(await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[]
-						).find((agent) => agent.name === "flow-planner");
-						if (selected ? planner?.model?.modelID === "planning" : !planner)
-							break;
-						await Bun.sleep(50);
-					} while (Date.now() < deadline);
-					expect(planner?.model ?? null).toEqual(
-						selected ? { providerID: "flow-probe", modelID: "planning" } : null,
-					);
-					if (!selected) expect(planner).toBeUndefined();
-					if (planner) {
-						for (const permission of [
-							"edit",
-							"bash",
-							"task",
-							"skill",
-							"mcp_workspace_delete",
-							"custom_deploy",
-							"external_directory",
-							...EXPECTED_TOOLS,
-						])
-							expect(permissionFor(planner?.permission ?? [], permission)).toBe(
-								"deny",
-							);
-						for (const permission of ["read", "glob", "grep"])
-							expect(permissionFor(planner.permission ?? [], permission)).toBe(
-								"allow",
-							);
-					}
-					const reviewer = (
-						(await fetchJson(`${baseUrl}/agent`)) as ResolvedAgent[]
-					).find((agent) => agent.name === "flow-reviewer");
-					expect(reviewer?.model).toEqual({
-						providerID: "flow-probe",
-						modelID: "model",
-					});
-				}
-
-				await expect(lstat(join(project, ".flow"))).rejects.toMatchObject({
-					code: "ENOENT",
-				});
-			} finally {
-				await terminateChildProcessTree(server);
-				await rm(scratch, { recursive: true, force: true });
+			let restarted: OpenCodeClient | null = null;
+			const restartDeadline = Date.now() + 30000;
+			while (Date.now() < restartDeadline) {
+				if (child.exitCode !== null)
+					throw new Error("Configured planner host exited before readiness");
+				restarted = startup.client(`http://127.0.0.1:${port}`, project);
+				if (restarted) break;
+				await Bun.sleep(20);
 			}
-		},
-		STARTUP_TIMEOUT_MS + 2 * REQUEST_TIMEOUT_MS,
-	);
-});
+			if (!restarted)
+				throw new Error("Configured planner host did not become ready");
+			client = restarted;
+			expect((await client.server.info(request())).version).toBe(VERSION);
+			const ready = await client.session.create(
+				{
+					title: "Configured planner readiness",
+					agent: "build",
+					location: { directory: project },
+				},
+				request(),
+			);
+			const configuredPlugins = await client.plugin.list(
+				{ location: { directory: project } },
+				request(),
+			);
+			validationEvidence.push({
+				kind: "configured-plugins",
+				plugins: configuredPlugins.data,
+			});
+			expect(
+				configuredPlugins.data.filter(
+					(plugin) => plugin.state.status === "failed",
+				),
+			).toEqual([]);
+			await client.session.command(
+				{ sessionID: ready.id, name: "flow-smoke-inventory", text: "" },
+				request(),
+			);
+			await client.session.remove({ sessionID: ready.id }, request());
+			const preferenceSnapshot = await client.rpc.call(
+				{
+					rpcID: "flow.model-preferences",
+					method: "read",
+					input: {},
+					location: { directory: project },
+				},
+				request(),
+			);
+			validationEvidence.push({
+				kind: "planner-rpc",
+				snapshot: preferenceSnapshot.output,
+			});
+			const configuredAgents = (
+				await client.agent.list({ location: { directory: project } }, request())
+			).data;
 
-test("planning policy denies arbitrary custom mutations and allows only workspace readers", () => {
-	const rules: PermissionRule[] = Object.entries(
-		FLOW_CORE_AGENTS["flow-planner"].permission,
-	).flatMap(([permission, value]) =>
-		typeof value === "string"
-			? [
-					{
-						permission,
-						pattern: "*",
-						action: value as PermissionRule["action"],
-					},
-				]
-			: Object.entries(value).map(([pattern, action]) => ({
-					permission,
-					pattern,
-					action: action as PermissionRule["action"],
-				})),
-	);
-	for (const permission of [
-		"mcp_workspace_delete",
-		"custom_deploy",
-		"edit",
-		"bash",
-		"task",
-		"flow_plan_save",
-		"external_directory",
-	])
-		expect(permissionFor(rules, permission)).toBe("deny");
-	for (const permission of ["read", "glob", "grep"])
-		expect(permissionFor(rules, permission)).toBe("allow");
-});
+			const configuration: unknown = await client.config.get(
+				{ location: { directory: project } },
+				request(),
+			);
+			validationEvidence.push({
+				kind: "planner-configuration",
+				choices: Array.isArray(configuration)
+					? configuration.filter(isRecord).flatMap((entry) =>
+							isRecord(entry.info) && Array.isArray(entry.info.plugins)
+								? entry.info.plugins
+										.filter(isRecord)
+										.filter((plugin) => plugin.package === pluginEntry)
+										.map((plugin) => plugin.options)
+								: [],
+						)
+					: [],
+				planners: configuredAgents
+					.filter((agent) => agent.id.includes("planner"))
+					.map((agent) => ({ id: agent.id, model: agent.model })),
+			});
+
+			expect(
+				configuredAgents.find((agent) => agent.id === "flow-planner"),
+			).toMatchObject({
+				hidden: true,
+				model: { providerID: "flow-smoke", id: "catalog-model" },
+			});
+
+			validationEvidence.push({
+				kind: "configured-planner",
+				planner: configuredAgents.find((agent) => agent.id === "flow-planner")
+					?.model,
+			});
+			expect(
+				(await client.session.get({ sessionID: rootSession.id }, request()))
+					.model,
+			).toEqual({
+				providerID: "flow-smoke",
+				id: "catalog-model",
+				variant: "default",
+			});
+			expect(await tarballSha256(tarball)).toBe(archiveDigest);
+			if (validationResult.failures.length)
+				throw new AggregateError(
+					validationResult.failures,
+					"Packed native validation gates failed",
+				);
+		} finally {
+			if (process.env.FLOW_LIVE_SMOKE_EVIDENCE_DIR) {
+				const destination = process.env.FLOW_LIVE_SMOKE_EVIDENCE_DIR;
+				await mkdir(destination, { recursive: true, mode: 0o700 });
+				await writeFile(
+					join(destination, "validation.json"),
+					JSON.stringify(
+						{ hostVersion: VERSION, cases: validationEvidence },
+						null,
+						2,
+					),
+					{ mode: 0o600 },
+				);
+				await writeFile(
+					join(destination, "flow.log"),
+					startup.log
+						.split("\n")
+						.filter((line) => line.startsWith("[opencode-plugin-flow]"))
+						.join("\n"),
+					{ mode: 0o600 },
+				);
+				const shellRoot = join(root, "data/opencode/shell");
+				const shellOutputs: {
+					original: string;
+					retained: string;
+					sha256: string;
+					bytes: number;
+				}[] = [];
+				for (const path of await readdir(shellRoot, { recursive: true }).catch(
+					() => [],
+				)) {
+					if (!/^([a-f0-9]+)\/sh_[a-zA-Z0-9]+\.out$/.test(path)) continue;
+					const original = join(shellRoot, path);
+					const bytes = await readFile(original);
+					const retained = join(destination, "shell-output", path);
+					await mkdir(join(retained, ".."), { recursive: true, mode: 0o700 });
+					await writeFile(retained, bytes, { mode: 0o600 });
+					shellOutputs.push({
+						original,
+						retained,
+						sha256: `sha256:${createHash("sha256").update(bytes).digest("hex")}`,
+						bytes: bytes.length,
+					});
+				}
+				await writeFile(
+					join(destination, "shell-output.json"),
+					JSON.stringify(shellOutputs, null, 2),
+					{ mode: 0o600 },
+				);
+
+				await readFile(receipt, "utf8").then(
+					(bytes) =>
+						writeFile(join(destination, "native-receipt.jsonl"), bytes, {
+							mode: 0o600,
+						}),
+					() => {},
+				);
+			}
+			startup.clear();
+			if (child) await terminateChildProcessTree(child);
+			await provider.server.stop(true);
+			await rm(root, { recursive: true, force: true });
+		}
+	},
+	240000,
+);

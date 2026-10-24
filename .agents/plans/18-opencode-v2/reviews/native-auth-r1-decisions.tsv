@@ -1,0 +1,11 @@
+ts	phase	decision	why	evidence	result
+2026-10-24T10:00:00Z	scope	Read the repo and write only under /tmp/flow-v2-native-auth-review-r1	Parent forbade repo writes, git, real accounts, and pid 76572	review brief	held
+2026-10-24T10:20:00Z	hypothesis	Treat the aborted-primary bind as a hypothesis until a hook continuation is observed	prove-it-works and separate-before-serializing-shared-state	native PluginHooks.trigger plus Effect.promise	later hook skipped
+2026-10-24T10:28:00Z	repro	File broker dispose as P2	Identity failure and DELETE failure both skip rm while the recorded pid is alive	/tmp/flow-v2-native-auth-review-r1/repro-results.json brokerLiveIdentityFailure and brokerDeleteFailure	P2
+2026-10-24T10:28:00Z	repro	File host dispose as P3	EISDIR from configuration rm leaves the attachment directory	repro-results.json hostDispose	P3
+2026-10-24T10:28:00Z	repro	File duplicate method key as P3 fail-closed	One registration and zero relay calls	repro-results.json clientCollapse	P3
+2026-10-24T10:28:00Z	repro	Withdraw concurrent source resolve	maxResolveDepth is 1 across 26 entries	repro-results.json sourceStress	withdrawn
+2026-10-24T10:31:00Z	hook	Do not file Request rebinding on abort	auth-end ran and flow did not	/tmp/flow-v2-native-auth-review-r1/hook-results.json	not a finding
+2026-10-24T10:31:00Z	tests	Accept scoped offline results and leave the live canary skipped	FLOW_CANARY_NATIVE_AUTH_LIVE was unset	bun test 49 pass, 1 skip, 0 fail, 205 expect	recorded
+2026-10-24T10:34:02Z	hashes	Separate two test-file hashes from production	boundary-discipline. Parent named a portability correction	final-hashes.json productionDrift empty	test-only drift
+2026-10-24T10:34:02Z	limits	No release approval and no comment verdict	Delegates forbidden. Built-in paid qualification absent	D verification.json modelGenerationRequests 0	bounded fail on P2
