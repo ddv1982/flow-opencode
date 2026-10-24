@@ -7,7 +7,7 @@
     "path": "/tmp/flow-v2-candidate-stream-lifetime/opencode-plugin-flow-10.0.0.tgz",
     "sha256": "e8d85c5339d1aa058493088a61a6410b5785a6462f65aed09b73de01ef6dd7d9",
     "unpackedManifestSha256": "ce2b3bf96a6cf3e57c987df65d8da3ae97abbcd4b20294266841b6c3d2088985",
-    "status": "PENDING commit/push preflight and a new explicit paid-smoke authorization. Core R9/evaluator R2 passed. Final macOS/Linux4744 checks, exact packed119 both platforms, recovery, continuation, picker and unwrapped Responses compatibility pass. No publication.",
+    "status": "Implementation checks and corrected-package pre-push smoke PASS. Dependency PRs #195/#196 merged. Wait for green main, then publish the implementation PR for Sentry review and clear findings and CI. Further paid runs on hold. No v2 push or release.",
     "sourceBinding": "/tmp/flow-v2-candidate-stream-lifetime/source-binding.json"
   },
   "verification": {
@@ -486,5 +486,28 @@
       "status": "HOLD. Actual-account pre-push planning smoke failed. Responses logical-completion cancellation mechanism demonstrated; diagnostics implementation and core design in progress. Actual paid cause unresolved.",
       "sourceBinding": "/tmp/flow-v2-candidate-r8/review-source-binding.json"
     }
-  ]
+  ],
+  "deliveryOrder": {
+    "operatorDirective": "Dependency merges, green main, v2 implementation PR and Sentry review, green implementation, then separately approved paid release qualification.",
+    "integratedMain": "b348552dcc03c5d58aa5410de2de66bf05ce1f89",
+    "dependencyPRs": [
+      195,
+      196
+    ],
+    "mainCI": "BLOCKED: dependency-audit finds four high advisories in unchanged v1 Zod/TOML dependencies; v2 audit passes. Other main jobs still running when observed.",
+    "implementationPR": "not published",
+    "paidQualification": "deferred; not authorized",
+    "furtherPaidRuns": "on hold",
+    "completedCorrectedSmoke": {
+      "result": "PASS",
+      "authorization": "/tmp/flow-v2-prepush-e8d85c53-20261024/approval.json",
+      "resultReceipt": "/tmp/flow-v2-prepush-e8d85c53-20261024/result.json",
+      "dispatchesConsumed": 2,
+      "dispatchesRemaining": 0,
+      "replay": "1/1 MATCH"
+    },
+    "originalPaidFailure": "Retained unchanged; historical cause unresolved.",
+    "mainAuditLog": "/tmp/flow-v2-release-order-20261024/main-dependency-audit.log",
+    "v2AuditLog": "/tmp/flow-v2-release-order-20261024/v2-current-audit.log"
+  }
 }

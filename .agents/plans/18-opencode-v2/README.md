@@ -14,8 +14,18 @@ Evaluator diagnostics and the core request-lifetime correction are implemented.
 The new exact package passes macOS/Linux packed smoke, recovery, picker, and
 unwrapped Responses compatibility. Four test fixtures now model the pre-dispatch
 read, and final macOS and Linux checks each pass 4,744 tests. Evaluator R2 and
-core R9 reviews passed. Commit and pre-push gates remain.
-The actual paid cause remains unresolved. No push or release occurred.
+core R9 reviews passed. Commit and pre-push gates passed at the reviewed snapshot.
+A separately approved two-dispatch smoke on the corrected package passed its
+route probe and plan-only case. Both dispatches are consumed. The original paid
+failure remains unresolved and unchanged. No v2 push or release occurred.
+
+The operator changed delivery order before release qualification. Dependency
+PRs [#195](https://github.com/ddv1982/flow-opencode/pull/195) and
+[#196](https://github.com/ddv1982/flow-opencode/pull/196) are merged after independent
+verification. Wait for green main, then push the implementation PR for Sentry
+review. Clear findings and CI before preparing paid qualification. Further paid
+runs are on hold. Qualification evidence, publication, and wiki publication remain
+later release steps.
 Current execution evidence is recorded in [execution.md](execution.md).
 Research is recorded in [research.md](research.md). Decisions are recorded in
 [decisions.tsv](decisions.tsv).

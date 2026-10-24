@@ -4,6 +4,25 @@ The user authorized implementation on 2026-10-24.
 The integration branch is `feat/opencode-v2`, based on
 `8103f1cd42e1b4d111f25d2a311935d4e41fb997`.
 
+## Current delivery order
+
+The operator requested dependency merges and code review before paid release
+qualification. PRs #195 and #196 are merged after independent pin and workflow
+verification. Their combined main commit is
+`b348552dcc03c5d58aa5410de2de66bf05ce1f89`.
+
+1. Wait for the merged main commit to pass hosted CI.
+2. Integrate those updates, run contribution checks, and open the v2 implementation
+   PR for Sentry review.
+3. Resolve review findings and pass the implementation PR's CI before merging.
+4. Prepare a concrete release qualification budget for separate approval.
+5. Follow the existing qualification, canary, evidence, and publication gates.
+
+The corrected package's separately approved pre-push smoke passed its route
+probe and plan-only case. Its two dispatches are consumed. Replay reproduced the
+one retained cassette. This smoke does not qualify a release, and the original
+failed smoke remains unchanged. Further paid runs are on hold.
+
 ## Completion gate
 
 Flow 10.0.0 loads on the pinned OpenCode 2 host. Its commands, tools,
