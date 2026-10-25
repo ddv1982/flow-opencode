@@ -25,6 +25,7 @@ export type NativeAccountConnection = {
 export type ChildOptions = {
 	connection: NativeAccountConnection;
 	lease: string;
+	models: readonly string[];
 };
 
 export class NativeAuthError extends Error {
@@ -230,6 +231,7 @@ export function parseChildOptions(value: unknown): ChildOptions {
 	return {
 		connection: parseConnection(value.connection),
 		lease: capability(value.lease),
+		models: parseApprovedModels(value.models),
 	};
 }
 export function parseSelection(value: unknown): {
@@ -286,6 +288,172 @@ export const NativeAccountRpc = Rpc.define({
 			output: { type: "object" },
 		},
 		close: { input: empty, output: empty },
+	},
+	events: {},
+});
+
+export type ReadinessModel = {
+	providerID: string;
+	id: string;
+	variant?: string;
+};
+export const READINESS_REASONS = [
+	"profile-unapproved",
+	"selection-changed",
+	"source-unavailable",
+	"credential-invalid",
+	"credential-unresolved",
+	"credential-stale",
+	"route-unsettled",
+	"metadata-unavailable",
+	"readiness-deadline",
+	"readiness-cancelled",
+	"readiness-unavailable",
+] as const;
+export type ReadinessReason = (typeof READINESS_REASONS)[number];
+export type ReadinessResult =
+	| { version: 1; state: "ready" }
+	| { version: 1; state: "not-ready"; reason: ReadinessReason };
+function keys(value: Record<string, unknown>, allowed: readonly string[]) {
+	if (Object.keys(value).some((key) => !allowed.includes(key))) refuse();
+}
+export function parseApprovedModels(value: unknown): readonly string[] {
+	if (
+		!Array.isArray(value) ||
+		value.length === 0 ||
+		value.length > 256 ||
+		!value.every(
+			(model) =>
+				typeof model === "string" &&
+				model.length <= 512 &&
+				/^[^\s/]+\/[^\s]+$/.test(model),
+		)
+	)
+		refuse();
+	providersForModels(value);
+	return Object.freeze([...new Set(value)]);
+}
+export function parseReadinessInput(value: unknown): {
+	models: ReadinessModel[];
+	timeoutMs: number;
+} {
+	if (!object(value)) refuse();
+	keys(value, ["models", "timeoutMs"]);
+	if (
+		!Array.isArray(value.models) ||
+		value.models.length === 0 ||
+		value.models.length > 256 ||
+		typeof value.timeoutMs !== "number" ||
+		!Number.isInteger(value.timeoutMs) ||
+		value.timeoutMs <= 0 ||
+		value.timeoutMs > 15000
+	)
+		refuse();
+	const models = value.models.map((model: unknown): ReadinessModel => {
+		if (!object(model)) refuse();
+		keys(model, ["providerID", "id", "variant"]);
+		if (
+			!identifier(model.providerID) ||
+			typeof model.id !== "string" ||
+			!model.id ||
+			model.id.length > 512 ||
+			/\s/.test(model.id) ||
+			(model.variant !== undefined &&
+				(typeof model.variant !== "string" || model.variant.length > 256))
+		)
+			refuse();
+		return {
+			providerID: model.providerID,
+			id: model.id,
+			...(model.variant === undefined ? {} : { variant: model.variant }),
+		};
+	});
+	return { models, timeoutMs: value.timeoutMs };
+}
+export function parseReadinessResult(value: unknown): ReadinessResult {
+	if (!object(value) || value.version !== 1) refuse();
+	if (value.state === "ready") {
+		keys(value, ["version", "state"]);
+		return { version: 1, state: "ready" };
+	}
+	keys(value, ["version", "state", "reason"]);
+	if (
+		value.state !== "not-ready" ||
+		!READINESS_REASONS.some((reason) => reason === value.reason)
+	)
+		refuse();
+	return {
+		version: 1,
+		state: "not-ready",
+		reason: value.reason as ReadinessReason,
+	};
+}
+export async function boundedNativeAuth<T>(
+	signal: AbortSignal,
+	operation: () => Promise<T>,
+): Promise<T> {
+	if (signal.aborted) refuse();
+	let onAbort = () => {};
+	const aborted = new Promise<never>((_resolve, reject) => {
+		onAbort = () => reject(new NativeAuthError());
+		signal.addEventListener("abort", onAbort, { once: true });
+	});
+	try {
+		const result = await Promise.race([operation(), aborted]);
+		if (signal.aborted) refuse();
+		return result;
+	} finally {
+		signal.removeEventListener("abort", onAbort);
+	}
+}
+export const NativeAccountReadinessRpc = Rpc.define({
+	id: "flow.native-account-readiness",
+	methods: {
+		ready: {
+			input: {
+				type: "object",
+				properties: {
+					models: {
+						type: "array",
+						minItems: 1,
+						maxItems: 256,
+						items: {
+							type: "object",
+							properties: {
+								providerID: { type: "string" },
+								id: { type: "string" },
+								variant: { type: "string" },
+							},
+							required: ["providerID", "id"],
+							additionalProperties: false,
+						},
+					},
+					timeoutMs: { type: "integer", minimum: 1, maximum: 15000 },
+				},
+				required: ["models", "timeoutMs"],
+				additionalProperties: false,
+			},
+			output: {
+				oneOf: [
+					{
+						type: "object",
+						properties: { version: { const: 1 }, state: { const: "ready" } },
+						required: ["version", "state"],
+						additionalProperties: false,
+					},
+					{
+						type: "object",
+						properties: {
+							version: { const: 1 },
+							state: { const: "not-ready" },
+							reason: { type: "string", enum: READINESS_REASONS },
+						},
+						required: ["version", "state", "reason"],
+						additionalProperties: false,
+					},
+				],
+			},
+		},
 	},
 	events: {},
 });

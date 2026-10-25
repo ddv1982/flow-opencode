@@ -2494,6 +2494,26 @@ export class EvalHost {
 							);
 						}
 					}
+					if (host.nativeAuthHost && options.nativeAuthentication) {
+						await host.nativeAuthHost.requireReady(host.client, {
+							directory: project,
+							models: [
+								...options.nativeAuthentication.models.map((model) =>
+									nativeModel(model),
+								),
+								...(options.reviewer?.model
+									? [
+											nativeModel(
+												options.reviewer.model,
+												options.reviewer.variant,
+											),
+										]
+									: []),
+							],
+							timeoutMs: Math.min(15000, deadline - Date.now()),
+							...(options.signal ? { signal: options.signal } : {}),
+						});
+					}
 					if (options.requestBudget) {
 						const receipt = JSON.parse(
 							await readFile(join(scratch, "budget-ready.json"), "utf8"),
@@ -2683,6 +2703,13 @@ export class EvalHost {
 		},
 	): Promise<string | null> {
 		await this.verifyArtifacts();
+		checkCancellation(this.signal);
+		await this.nativeAuthHost?.requireReady(this.client, {
+			directory: this.project,
+			models: [nativeModel(model, options?.variant)],
+			...(this.signal ? { signal: this.signal } : {}),
+		});
+		checkCancellation(this.signal);
 		const sessionId = await this.createSession(`flow-eval probe ${model}`);
 		let usage = normalizeStudyUsage({ tokens: {}, costUsd: null });
 		try {
@@ -2810,6 +2837,12 @@ export class EvalHost {
 		checkCancellation(this.signal);
 		await this.verifyArtifacts();
 		checkCancellation(this.signal);
+		await this.nativeAuthHost?.requireReady(this.client, {
+			directory: this.project,
+			models: [nativeModel(model, options.variant)],
+			...(this.signal ? { signal: this.signal } : {}),
+		});
+		checkCancellation(this.signal);
 		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "command" });
 		await this.nativeRequest((request) =>
@@ -2858,6 +2891,12 @@ export class EvalHost {
 		this.commandAbortObservation = undefined;
 		checkCancellation(this.signal);
 		await this.verifyArtifacts();
+		checkCancellation(this.signal);
+		await this.nativeAuthHost?.requireReady(this.client, {
+			directory: this.project,
+			models: [nativeModel(model, options.variant)],
+			...(this.signal ? { signal: this.signal } : {}),
+		});
 		checkCancellation(this.signal);
 		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "prompt" });

@@ -398,6 +398,13 @@ async function launchCanary(
 					{ signal },
 				);
 		}
+		if (attachment)
+			await attachment.requireReady(client, {
+				directory,
+				models: [requestedModel],
+				timeoutMs: Math.min(15000, deadline - Date.now()),
+				signal,
+			});
 		phase = "execution";
 		const manager = await client.session.create(
 			{
