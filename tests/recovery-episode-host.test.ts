@@ -163,6 +163,87 @@ async function setup(end: "quiet" | "escalated" = "quiet") {
 	};
 }
 
+test("native credential inheritance freezes the selected snapshot and preserves rotation delivery", async () => {
+	const f = await setup();
+	await expect(
+		createEpisodeHostDriver({
+			...f.options,
+			host: { ...f.options.host, providerCredentials: "inherit" },
+		}),
+	).rejects.toThrow("explicit credentialHandoff");
+	expect(f.starts).toBe(0);
+	const credential = {
+		id: "credential_fixture",
+		integrationID: "test",
+		label: "Local fixture",
+		active: true,
+		value: { type: "key" as const, key: "synthetic-before" },
+	};
+	const entries = [credential];
+	const rotations: unknown[] = [];
+	const handoff = {
+		entries,
+		onStop: async (value: unknown) => {
+			rotations.push(value);
+		},
+	};
+	await expect(
+		createEpisodeHostDriver({
+			...f.options,
+			host: {
+				...f.options.host,
+				providerCredentials: "disabled",
+				credentialHandoff: handoff,
+			},
+		}),
+	).rejects.toThrow("Native credentials are disabled");
+	const factory = f.options.hostFactory;
+	if (!factory) throw new Error("Missing fixture host factory");
+	const driver = await createEpisodeHostDriver({
+		...f.options,
+		host: {
+			...f.options.host,
+			providerCredentials: "inherit",
+			credentialHandoff: handoff,
+		},
+		hostFactory: async (options) => {
+			const host = await factory(options);
+			return {
+				...host,
+				async stop() {
+					await host.stop();
+					await options.credentialHandoff?.onStop({
+						before: options.credentialHandoff.entries,
+						after: [
+							{
+								...credential,
+								value: { type: "key", key: "synthetic-after" },
+							},
+						],
+					});
+				},
+			};
+		},
+	});
+	credential.value.key = "synthetic-mutated-after-registration";
+	await driver.prepare(new AbortController().signal);
+	expect(f.startOptions?.credentialHandoff?.entries[0]?.value).toEqual({
+		type: "key",
+		key: "synthetic-before",
+	});
+	await driver.stop();
+	expect(rotations).toEqual([
+		{
+			before: [
+				{ ...entries[0], value: { type: "key", key: "synthetic-before" } },
+			],
+			after: [
+				{ ...entries[0], value: { type: "key", key: "synthetic-after" } },
+			],
+		},
+	]);
+});
+
 test("host adapter binds actual seeded files, manager request, exact completion and idempotent stop", async () => {
 	const f = await setup(),
 		driver = await createEpisodeHostDriver(f.options);
@@ -176,7 +257,6 @@ test("host adapter binds actual seeded files, manager request, exact completion 
 	expect(f.startOptions).toMatchObject({
 		ambientConfig: "disabled",
 		reviewerEnvironment: "disabled",
-		nativeLlm: false,
 		withFlow: true,
 	});
 	await driver.run({
@@ -663,7 +743,11 @@ test("live source driver binds credential policy and preserves runtime scope whi
 	const driver = await createEpisodeHostDriver(f.options);
 	const inherited = await createEpisodeHostDriver({
 		...f.options,
-		host: { ...f.options.host, providerCredentials: "inherit" },
+		host: {
+			...f.options.host,
+			providerCredentials: "inherit",
+			credentialHandoff: { entries: [], onStop: async () => {} },
+		},
 	});
 	expect(driver.origin).toBe("live");
 	expect(driver.harnessDigest).not.toBe(inherited.harnessDigest);

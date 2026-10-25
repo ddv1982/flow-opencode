@@ -1,4 +1,7 @@
-import { expect, test } from "bun:test";
+import { afterEach, expect, test } from "bun:test";
+import type { SessionMessageInfo } from "@opencode/client";
+import { Agent, Model, Provider } from "@opencode/plugin";
+import { Session } from "@opencode/schema/session";
 import { createFlowService } from "../src/application/flow-service.js";
 import type {
 	DecisionAdvice,
@@ -6,8 +9,23 @@ import type {
 } from "../src/application/ports/decision-provider.js";
 import { RecoveryController } from "../src/application/recovery-policy.js";
 import { createJevDecisionProvider } from "../src/infrastructure/jev-decision-provider.js";
-import { AutoDriveCoordinator } from "../src/platform/opencode/auto-drive.js";
-import { createCommandHook } from "../src/platform/opencode/command-hook.js";
+import { CompactionBoundary } from "../src/platform/opencode/auto-compaction.js";
+import {
+	AutoDriveCoordinator,
+	FLOW_AUTO_METADATA_KEY,
+} from "../src/platform/opencode/auto-drive.js";
+import { InputAdmissions } from "../src/platform/opencode/input-admission.js";
+import { continuationCommands } from "./fixtures/continuation-commands.js";
+import {
+	fixtureAutomaticPrompt,
+	verifiedContinuationOrigin,
+} from "./fixtures/verified-continuation-origin.js";
+
+const cleanups: Array<() => Promise<void>> = [];
+afterEach(async () => {
+	for (const dispose of cleanups.splice(0)) await dispose();
+});
+
 import {
 	approveSession,
 	deterministicEnvironment,
@@ -21,6 +39,11 @@ import {
 	startReviewedRun,
 	submitReview,
 } from "./runtime-test-support.js";
+
+function requiredSession(repository: MemorySessionRepository) {
+	if (!repository.session) throw new Error("Missing active test session.");
+	return repository.session;
+}
 
 async function failedTwice(
 	count = 2,
@@ -38,9 +61,9 @@ async function failedTwice(
 	let findingId: string | undefined;
 	for (let i = 0; i < count; i++) {
 		if (i) await resetFeatureRun(manual, repository, FEATURE, "first-retry");
-		await startReviewedRun(manual, repository, { suffix: "failure-" + i });
+		await startReviewedRun(manual, repository, { suffix: `failure-${i}` });
 		await submitReview(manual, repository, {
-			suffix: "failure-" + i,
+			suffix: `failure-${i}`,
 			summary: "Guard missing",
 			verdict: "failed",
 			findings: [
@@ -79,37 +102,37 @@ test.each(["off", "no-key", "shadow"] as const)(
 				revision: revision(s.repository),
 				nextAction: "await-user-direction",
 			}),
-			prompt: async () => {},
+			prompt: fixtureAutomaticPrompt(
+				() => auto,
+				async () => {},
+			),
 		});
-		const hook = createCommandHook({
+		const commands = await continuationCommands({
 			autoDrive: auto,
 			recovery: controller,
 			flow: s.manual,
-			assertOperational() {},
 			defaultRecovery: () => null,
 		});
+		cleanups.push(commands.dispose);
 		const settings =
 			mode === "shadow"
 				? "--recovery=shadow --recovery-calls=6 --recovery-usd=0.02 "
 				: mode === "off"
 					? "--recovery=off "
 					: "";
-		await hook(
-			{
-				command: "flow-auto",
-				sessionID: "host",
-				arguments: settings + "Continue approved goal",
-			},
-			{ parts: [] },
+		await commands.execute("flow-auto", `${settings}Continue approved goal`);
+		const native = await commands.native.toolContext(
+			"flow_status",
+			{},
+			"ses_host",
 		);
-		controller.observeMessage("host", "original-user", false);
-		controller.observeAssistant("host", "manager", "original-user");
+		await commands.lifecycle.verifyTool(native, "flow");
 		const guarded = createFlowService(
 			s.repository,
 			s.env,
 			controller.guard({
-				hostSessionId: "host",
-				messageId: "manager",
+				hostSessionId: "ses_host",
+				messageId: native.messageID,
 				agent: "build",
 			}),
 		);
@@ -141,17 +164,17 @@ function automatic(
 		{ now },
 	);
 	controller.activate(
-		"host",
+		"ses_host",
 		mode === "off" ? null : { mode: "shadow", maxCalls: 6, maxUsd: 0.02 },
 	);
-	controller.observeMessage("host", "original", false);
+	controller.observeMessage("ses_host", "original", false);
 	const service = (id: string, parent: string) => {
-		controller.observeAssistant("host", id, parent);
+		controller.observeAssistant("ses_host", id, parent);
 		return createFlowService(
 			s.repository,
 			s.env,
 			controller.guard({
-				hostSessionId: "host",
+				hostSessionId: "ses_host",
 				messageId: id,
 				agent: "build",
 			}),
@@ -188,9 +211,13 @@ test("configured shadow without key reports unavailable without claiming an atte
 	const controller = new RecoveryController(
 		createJevDecisionProvider(() => undefined),
 	);
-	controller.activate("host", { mode: "shadow", maxCalls: 6, maxUsd: 0.02 });
-	controller.observeMessage("host", "original", false);
-	controller.observeAssistant("host", "manager", "original");
+	controller.activate("ses_host", {
+		mode: "shadow",
+		maxCalls: 6,
+		maxUsd: 0.02,
+	});
+	controller.observeMessage("ses_host", "original", false);
+	controller.observeAssistant("ses_host", "manager", "original");
 	expect(controller.snapshot()).toMatchObject({
 		advice: { configured: true, attempted: false, outcome: "not-attempted" },
 	});
@@ -198,7 +225,7 @@ test("configured shadow without key reports unavailable without claiming an atte
 		s.repository,
 		s.env,
 		controller.guard({
-			hostSessionId: "host",
+			hostSessionId: "ses_host",
 			messageId: "manager",
 			agent: "build",
 		}),
@@ -238,11 +265,15 @@ test.each(["trusted-continuation", "expiry"] as const)(
 			},
 		};
 		const controller = new RecoveryController(provider, { now: () => now });
-		controller.activate("host", { mode: "shadow", maxCalls: 6, maxUsd: 0.02 });
-		controller.observeMessage("host", "original", false);
-		controller.observeAssistant("host", "manager", "original");
+		controller.activate("ses_host", {
+			mode: "shadow",
+			maxCalls: 6,
+			maxUsd: 0.02,
+		});
+		controller.observeMessage("ses_host", "original", false);
+		controller.observeAssistant("ses_host", "manager", "original");
 		const guard = controller.guard({
-			hostSessionId: "host",
+			hostSessionId: "ses_host",
 			messageId: "manager",
 			agent: "build",
 		});
@@ -258,7 +289,8 @@ test.each(["trusted-continuation", "expiry"] as const)(
 		if (boundary === "expiry") {
 			now = 2 * 60 * 60 * 1000;
 			controller.snapshot();
-		} else controller.observeMessage("host", "authenticated-next", true, true);
+		} else
+			controller.observeMessage("ses_host", "authenticated-next", true, true);
 		expect(signal?.aborted).toBe(true);
 		release({
 			kind: "answered",
@@ -277,12 +309,12 @@ test.each(["trusted-continuation", "expiry"] as const)(
 			advice: { attemptsReserved: 1 },
 		});
 		const parent = boundary === "expiry" ? "original" : "authenticated-next";
-		controller.observeAssistant("host", "next-manager", parent);
+		controller.observeAssistant("ses_host", "next-manager", parent);
 		const protectedFlow = createFlowService(
 			s.repository,
 			s.env,
 			controller.guard({
-				hostSessionId: "host",
+				hostSessionId: "ses_host",
 				messageId: "next-manager",
 				agent: "build",
 			}),
@@ -316,7 +348,7 @@ test.each(["off", "shadow"] as const)(
 			},
 		});
 		expect(reset.status).toBe("ok");
-		a.controller.observeMessage("host", "continuation", true, true);
+		a.controller.observeMessage("ses_host", "continuation", true, true);
 		const started = await a.service("start", "continuation").runStart({
 			request: {
 				operationId: "first-auto-start",
@@ -336,7 +368,7 @@ test.each(["off", "shadow"] as const)(
 	async (mode) => {
 		const s = await failedTwice();
 		const a = automatic(s, mode);
-		a.controller.observeMessage("host", "fresh-user", false);
+		a.controller.observeMessage("ses_host", "fresh-user", false);
 		const flow = a.service("fresh-manager", "fresh-user");
 		const resetRequest = {
 			operationId: "manual-extra-reset",
@@ -421,7 +453,7 @@ test.each(["off", "shadow"] as const)(
 	async (mode) => {
 		const s = await failedTwice();
 		const a = automatic(s, mode);
-		a.controller.observeMessage("host", "original", false);
+		a.controller.observeMessage("ses_host", "original", false);
 		const original = a.service("original-manager", "original");
 		expect(
 			(
@@ -434,7 +466,7 @@ test.each(["off", "shadow"] as const)(
 				})
 			).status,
 		).toBe("error");
-		a.controller.observeMessage("host", "untrusted", true);
+		a.controller.observeMessage("ses_host", "untrusted", true);
 		expect(
 			(
 				await a.service("untrusted-manager", "untrusted").featureReset({
@@ -446,7 +478,7 @@ test.each(["off", "shadow"] as const)(
 				})
 			).status,
 		).toBe("error");
-		a.controller.observeMessage("host", "trusted-continuation", true, true);
+		a.controller.observeMessage("ses_host", "trusted-continuation", true, true);
 		expect(
 			(
 				await a
@@ -463,7 +495,7 @@ test.each(["off", "shadow"] as const)(
 		expect(
 			a.controller
 				.guard({
-					hostSessionId: "host",
+					hostSessionId: "ses_host",
 					messageId: "trusted-manager",
 					agent: "build",
 				})
@@ -488,7 +520,7 @@ test.each(["off", "shadow"] as const)(
 				})
 			).status,
 		).toBe("error");
-		a.controller.observeMessage("host", "approved-scope-user", false);
+		a.controller.observeMessage("ses_host", "approved-scope-user", false);
 		expect(
 			(
 				await a
@@ -540,20 +572,20 @@ test.each(["off", "shadow"] as const)(
 				featureId: FEATURE,
 			},
 		});
-		a.controller.revoke("host");
+		a.controller.revoke("ses_host");
 		expect(
 			(
 				await old.sessionClose({
 					request: {
 						operationId: "old-close",
 						expectedRevision: revision(s.repository),
-						sessionId: s.repository.session!.id,
+						sessionId: requiredSession(s.repository).id,
 						kind: "deferred",
 					},
 				})
 			).status,
 		).toBe("error");
-		a.controller.observeMessage("host", "fresh-close-user", false);
+		a.controller.observeMessage("ses_host", "fresh-close-user", false);
 		expect(
 			(
 				await a
@@ -562,7 +594,7 @@ test.each(["off", "shadow"] as const)(
 						request: {
 							operationId: "fresh-close",
 							expectedRevision: revision(s.repository),
-							sessionId: s.repository.session!.id,
+							sessionId: requiredSession(s.repository).id,
 							kind: "deferred",
 						},
 					})
@@ -585,7 +617,7 @@ test.each(["off", "shadow"] as const)(
 			},
 		});
 		s.repository.session = {
-			...s.repository.session!,
+			...requiredSession(s.repository),
 			goal: "Replacement goal",
 		};
 		const result = await flow.featureReset({
@@ -674,7 +706,7 @@ test.each(["off", "shadow"] as const)(
 					request: {
 						operationId: "close-repaired",
 						expectedRevision: revision(s.repository),
-						sessionId: s.repository.session!.id,
+						sessionId: requiredSession(s.repository).id,
 						kind: "completed",
 					},
 				})
@@ -744,7 +776,7 @@ for (const scopeBlocker of [false, true]) {
 	});
 }
 
-test("simulated missing parentage fails closed for auto but fresh manual flow-run still starts", async () => {
+test("unmatched native requests fail closed and fresh flow-run restores a verified origin", async () => {
 	const s = await failedTwice(0);
 	const controller = new RecoveryController({
 		async assess() {
@@ -759,84 +791,57 @@ test("simulated missing parentage fails closed for auto but fresh manual flow-ru
 			revision: revision(s.repository),
 			nextAction: "flow_run_start",
 		}),
-		prompt: async () => {},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async () => {},
+		),
 	});
-	const hook = createCommandHook({
+	const commands = await continuationCommands({
 		autoDrive: auto,
 		recovery: controller,
 		flow: s.manual,
-		assertOperational() {},
-		defaultRecovery: () => null,
 	});
-	auto.observeHostMessage("host", {
-		id: "unsupported-assistant",
-		role: "assistant",
-	});
-	const parts: Parameters<typeof hook>[1] = { parts: [] };
-	await hook(
-		{
-			command: "flow-auto",
-			sessionID: "host",
-			arguments: "Continue approved goal",
-		},
-		parts,
-	);
-	expect(JSON.stringify(parts)).toContain(
-		"automatic mutations cannot be attributed",
-	);
-	controller.observeMessage("host", "auto-user", false);
+	cleanups.push(commands.dispose);
+	await commands.execute("flow-auto", "Continue approved goal");
 	const unavailable = createFlowService(
 		s.repository,
 		s.env,
 		controller.guard({
-			hostSessionId: "host",
-			messageId: "unparented",
+			hostSessionId: "ses_host",
+			messageId: "msg_unattributed",
 			agent: "build",
 		}),
 	);
-	expect(
-		(
-			await unavailable.runStart({
-				request: {
-					operationId: "unattributed-start",
-					expectedRevision: revision(s.repository),
-					featureId: FEATURE,
-				},
-			})
-		).status,
-	).toBe("error");
-	await hook(
-		{
-			command: "flow-run",
-			sessionID: "host",
-			arguments: "Continue approved goal",
-		},
-		{ parts: [] },
+	const request = {
+		operationId: "unattributed-start",
+		expectedRevision: revision(s.repository),
+		featureId: FEATURE,
+	};
+	expect((await unavailable.runStart({ request })).status).toBe("error");
+	await commands.execute("flow-run", "Continue approved goal");
+	const native = await commands.native.toolContext(
+		"flow_run_start",
+		{},
+		"ses_host",
 	);
-	controller.observeMessage("host", "manual-user", false);
+	await commands.lifecycle.verifyTool(native, "flow");
 	const manual = createFlowService(
 		s.repository,
 		s.env,
 		controller.guard({
-			hostSessionId: "host",
-			messageId: "manual-unparented",
+			hostSessionId: "ses_host",
+			messageId: native.messageID,
 			agent: "build",
 		}),
 	);
 	expect(
 		(
 			await manual.runStart({
-				request: {
-					operationId: "manual-start",
-					expectedRevision: revision(s.repository),
-					featureId: FEATURE,
-				},
+				request: { ...request, operationId: "manual-start" },
 			})
 		).status,
 	).toBe("ok");
-	expect(controller.snapshot()).toMatchObject({
-		automation: { active: false },
-	});
+	expect(controller.snapshot()).toMatchObject({ automation: { active: true } });
 });
 
 test.each(["success", "failure"] as const)(
@@ -844,7 +849,7 @@ test.each(["success", "failure"] as const)(
 	async (outcome) => {
 		const s = await failedTwice();
 		const a = automatic(s, "off");
-		const id = s.repository.session!.id,
+		const id = requiredSession(s.repository).id,
 			current = revision(s.repository);
 		let projection = {
 			sessionId: id,
@@ -863,67 +868,71 @@ test.each(["success", "failure"] as const)(
 			recovery: a.controller,
 			createToken: () => "fixed-old-token",
 			readProjection: async () => projection,
-			prompt: async (host, _text, delivery, metadata) => {
-				count++;
-				if (count === 1) {
-					await driver.observeMessage(
-						host,
-						delivery,
-						[{ type: "text", synthetic: true, metadata }],
-						"first-handback",
-					);
-					a.controller.observeMessage(host, "first-handback", true, true);
-					return;
-				}
-				lateMetadata = metadata;
-				started();
-				await new Promise<void>((resolve, reject) => {
-					release = () =>
-						outcome === "failure"
-							? reject(new Error("Obsolete prompt failed"))
-							: resolve();
-				});
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				async (host, _text, delivery, metadata) => {
+					count++;
+					if (count === 1) {
+						await driver.observeMessage(
+							host,
+							delivery,
+							[{ type: "text", synthetic: true, metadata }],
+							"first-handback",
+						);
+						a.controller.observeMessage(host, "first-handback", true, true);
+						return;
+					}
+					lateMetadata = metadata;
+					started();
+					await new Promise<void>((resolve, reject) => {
+						release = () =>
+							outcome === "failure"
+								? reject(new Error("Obsolete prompt failed"))
+								: resolve();
+					});
+				},
+				true,
+			),
 		});
 		const delivery = {
 			agent: "build",
 			model: { providerID: "fixture", modelID: "scripted" },
 		};
-		const initial = await driver.activate("host");
+		const initial = await driver.activate("ses_host");
 		await driver.observeMessage(
-			"host",
+			"ses_host",
 			delivery,
 			[{ type: "text", synthetic: true, metadata: initial }],
 			"original",
 		);
-		await driver.onIdle("host");
+		await driver.onIdle("ses_host");
 		projection = {
 			sessionId: id,
 			status: "blocked",
 			revision: current,
 			nextAction: "await-user-direction",
 		};
-		const idle = driver.onIdle("host");
+		const idle = driver.onIdle("ses_host");
 		await pending;
 		await driver.observeMessage(
-			"host",
+			"ses_host",
 			delivery,
 			[{ type: "text", text: "Retry the approved task once" }],
 			"fresh-user",
 		);
-		a.controller.observeMessage("host", "fresh-user", false);
+		a.controller.observeMessage("ses_host", "fresh-user", false);
 		const observed = await driver.observeMessage(
-			"host",
+			"ses_host",
 			delivery,
 			[{ type: "text", synthetic: true, metadata: lateMetadata }],
 			"late-handback",
 		);
 		if (observed === "accepted-continuation")
-			a.controller.observeMessage("host", "late-handback", true, true);
+			a.controller.observeMessage("ses_host", "late-handback", true, true);
 		release();
 		await idle;
 		expect(observed).toBe("stale-continuation");
-		expect(driver.compactionContext("host")).not.toBeNull();
+		expect(driver.compactionContext("ses_host")).not.toBeNull();
 		const fresh = a.service("fresh-manager", "fresh-user");
 		const reset = {
 			operationId: "fresh-race-reset",
@@ -943,7 +952,7 @@ test.each(["success", "failure"] as const)(
 				})
 			).status,
 		).toBe("ok");
-		expect(s.repository.session!.runs).toHaveLength(3);
+		expect(requiredSession(s.repository).runs).toHaveLength(3);
 		await recordObservedValidation(s.repository, {
 			captureId: "race-third-pass",
 		});
@@ -956,8 +965,9 @@ test.each(["success", "failure"] as const)(
 				packet: { summary: "Independent retry review", riskLenses: [] },
 			},
 		});
-		const findingId =
-			s.repository.session!.runs[0]!.reviews[0]!.result!.findings[0]!.findingId;
+		const findingId = requiredSession(s.repository).runs[0]?.reviews[0]?.result
+			?.findings[0]?.findingId;
+		if (!findingId) throw new Error("Missing source-owned finding.");
 		await submitReview(s.manual, s.repository, {
 			suffix: "race-third-failed",
 			summary: "Guard still missing",
@@ -998,41 +1008,45 @@ test("obsolete initial prompt failure preserves a renewed checkpoint reply", asy
 			revision: 0,
 			nextAction: "flow_plan_save",
 		}),
-		prompt: async (host, _text, delivery, metadata) => {
-			initialMetadata = metadata;
-			await driver.observeMessage(
-				host,
-				delivery,
-				[{ type: "text", synthetic: true, metadata }],
-				"initial-route",
-			);
-			started();
-			await new Promise<void>((_resolve, reject) => {
-				release = () => reject(new Error("Obsolete initial prompt failed"));
-			});
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => driver,
+			async (host, _text, delivery, metadata) => {
+				initialMetadata = metadata;
+				await driver.observeMessage(
+					host,
+					delivery,
+					[{ type: "text", synthetic: true, metadata }],
+					"initial-route",
+				);
+				started();
+				await new Promise<void>((_resolve, reject) => {
+					release = () => reject(new Error("Obsolete initial prompt failed"));
+				});
+			},
+			true,
+		),
 	});
 	const delivery = {
 		agent: "build",
 		model: { providerID: "fixture", modelID: "scripted" },
 	};
-	const metadata = await driver.activate("host");
+	const metadata = await driver.activate("ses_host");
 	await driver.observeMessage(
-		"host",
+		"ses_host",
 		delivery,
 		[{ type: "text", synthetic: true, metadata }],
 		"original",
 	);
-	const idle = driver.onIdle("host");
+	const idle = driver.onIdle("ses_host");
 	await pending;
 	await driver.observeMessage(
-		"host",
+		"ses_host",
 		delivery,
 		[{ type: "text", text: "Use the clarified approved goal" }],
 		"fresh-user",
 	);
 	const observed = await driver.observeMessage(
-		"host",
+		"ses_host",
 		delivery,
 		[{ type: "text", synthetic: true, metadata: initialMetadata }],
 		"late-initial",
@@ -1040,7 +1054,7 @@ test("obsolete initial prompt failure preserves a renewed checkpoint reply", asy
 	release();
 	await idle;
 	expect(observed).toBe("stale-continuation");
-	expect(driver.compactionContext("host")).not.toBeNull();
+	expect(driver.compactionContext("ses_host")).not.toBeNull();
 });
 
 test.each([
@@ -1062,59 +1076,136 @@ test.each([
 				nextAction:
 					failures === 1 ? "flow_feature_reset" : "await-user-direction",
 			}),
-			prompt: async () => {},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				async () => {},
+			),
 		});
 		const delivery = {
 			agent: "build",
 			model: { providerID: "fixture", modelID: "scripted" },
 		};
-		const metadata = await driver.activate("host");
+		const metadata = await driver.activate("ses_host");
 		await driver.observeMessage(
-			"host",
+			"ses_host",
 			delivery,
 			[{ type: "text", synthetic: true, metadata }],
 			"original",
 		);
-		driver.observeHostMessage("host", {
-			id: "manager",
-			role: "assistant",
-			parentID: "original",
-		});
-		driver.observeHostPart("host", {
-			type: "compaction",
-			messageID: "compaction",
-			auto: true,
-		});
-		const summary = {
-			id: "summary",
-			role: "assistant",
-			parentID: "compaction",
-			summary: true,
+		await verifiedContinuationOrigin(
+			driver,
+			"ses_host",
+			"original",
+			"msg_manager",
+			delivery,
+		);
+		const epoch = driver.captureAuthority("ses_host");
+		if (!epoch) throw new Error("Missing admitted automatic epoch.");
+		const running = {
+			type: "compaction" as const,
+			id: "msg_compaction",
+			status: "running" as const,
+			reason: "auto" as const,
+			summary: "Summary is not fresh direction",
+			time: { created: 0 },
 		};
-		driver.observeHostMessage("host", summary);
-		driver.observeHostMessage("host", {
-			id: "original",
-			role: "user",
-			summary: { diffs: [] },
+		const host = Session.ID.make("ses_host");
+		const nativeAgent = Agent.ID.make(delivery.agent);
+		const nativeModel = {
+			providerID: Provider.ID.make(delivery.model.providerID),
+			id: Model.ID.make(delivery.model.modelID),
+		};
+		const token = metadata[FLOW_AUTO_METADATA_KEY];
+		if (typeof token !== "string")
+			throw new Error("Missing exact admitted token.");
+		const payload = {
+			text: "Source-bound fixture request",
+			metadata: { [FLOW_AUTO_METADATA_KEY]: token },
+		};
+		const inputs = new InputAdmissions({
+			assertOpen: () => {},
+			authority: () => driver.captureAuthority(host),
+			authorityCurrent: (authority) => driver.isAuthorityCurrent(authority),
+			observeReal: async () => {},
 		});
-		driver.observeHostMessage("host", summary);
-		driver.observeHostMessage("host", { id: "successor", role: "user" });
-		driver.observeHostMessage("host", {
-			id: "original",
-			role: "user",
-			summary: { diffs: [] },
+		const reservation = inputs.reserve(host, "original");
+		const admission = inputs.register(reservation, { type: "user", payload });
+		await inputs.accept(
+			admission,
+			{
+				sessionID: host,
+				id: "original",
+				type: "user",
+				payload,
+				time: { created: 0 },
+				delivery: "queue",
+			},
+			async () =>
+				inputs.makeOrigin(host, "original", delivery, true, reservation.epoch),
+		);
+		const native: SessionMessageInfo[] = [
+			{ type: "user", id: "original", ...payload, time: { created: 0 } },
+			running,
+		];
+		const context = {
+			sessionID: host,
+			agent: nativeAgent,
+			model: nativeModel,
+			system: [],
+			options: {},
+			tools: {},
+			messages: [{ role: "user" as const, id: "original", content: [] }],
+		};
+		const boundary = new CompactionBoundary({
+			inputs,
+			readNative: async () => structuredClone(native),
+			readSelected: async () => ({
+				id: host,
+				agent: nativeAgent,
+				model: nativeModel,
+				projectID: "test",
+				location: { directory: process.cwd() },
+				time: { created: 0, updated: 0 },
+				cost: 0,
+				tokens: {
+					input: 0,
+					output: 0,
+					reasoning: 0,
+					cache: { read: 0, write: 0 },
+				},
+			}),
+			captureReplacement: () => ({
+				check: () => {},
+				supersede: () => {},
+				current: () => true,
+			}),
+			failure: () => {},
+			hasActivePrimary: () => false,
+			guidance: () => driver.compactionContext(host),
+			observe: (host, origin, source, id) => {
+				if (
+					origin.authority &&
+					!driver.isAuthorityCurrent(origin.authority, id)
+				)
+					driver.observeCompaction(host, origin.authority, source, id);
+			},
 		});
-		driver.observeHostPart("host", {
-			type: "text",
-			messageID: "successor",
-			synthetic: true,
-			metadata: { compaction_continue: true },
-		});
-		driver.observeCompaction("host");
-		expect(driver.compactionContext("host")).not.toBeNull();
+		const checked = await boundary.admit(context);
+		expect(await boundary.admit(context)).toBe(checked);
+		native.splice(0, native.length, { ...running, status: "completed" });
+		const completed = {
+			...context,
+			messages: [{ role: "user" as const, id: checked.id, content: [] }],
+		};
+		const origin = boundary.completed(completed, native);
+		expect(boundary.completed(completed, native)).toBe(origin);
+		expect(origin?.authority).toEqual(epoch);
+		inputs.clear();
+
+		expect(driver.compactionContext("ses_host")).not.toBeNull();
 		const before = revision(state.repository);
 		const result = await authority
-			.service("successor-manager", "successor")
+			.service("successor-manager", "msg_compaction")
 			.featureReset({
 				request: {
 					operationId: "after-native-compaction",

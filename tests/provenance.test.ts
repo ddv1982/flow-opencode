@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -97,7 +97,7 @@ function unsafeTarball(path: string): Promise<void> {
 }
 
 describe("eval provenance", () => {
-	test("forwards requested variants to both native host endpoints without changing wait policy", async () => {
+	test("selects the requested variant before each native dispatch without changing wait policy", async () => {
 		const previousAuthorization = process.env.FLOW_EVAL_AUTHORIZATION;
 		const authorization = await directory();
 		await authorizePaidRun(authorization, {
@@ -108,31 +108,31 @@ describe("eval provenance", () => {
 			expiresAt: new Date(Date.now() + 60000).toISOString(),
 		});
 		process.env.FLOW_EVAL_AUTHORIZATION = authorization;
-		const posted: Array<{ path: string; body: Record<string, unknown> }> = [];
+		const posted: Array<{ method: string; input: unknown }> = [];
 		const waited: object[] = [];
-		const requests = spyOn(globalThis, "fetch").mockImplementation(
-			Object.assign(
-				async (
-					url: Parameters<typeof fetch>[0],
-					init?: Parameters<typeof fetch>[1],
-				) => {
-					posted.push({
-						path: new URL(String(url)).pathname,
-						body: JSON.parse(String(init?.body)),
-					});
-					return Response.json({});
-				},
-				{ preconnect: fetch.preconnect },
-			),
-		);
+		const capture = (method: string) => async (input: unknown) => {
+			posted.push({ method, input: structuredClone(input) });
+		};
 		const host = Reflect.construct(EvalHost, [
 			"/unused",
 			"/unused",
 		]) as EvalHost;
+		Reflect.set(host, "nativeClient", {
+			session: {
+				get: async () => ({
+					id: "session",
+					agent: "build",
+					location: { directory: "/unused" },
+				}),
+				switchModel: capture("switchModel"),
+				command: capture("command"),
+				prompt: capture("prompt"),
+			},
+			message: { list: async () => ({ data: [], cursor: {} }) },
+		});
 		Object.assign(host, {
-			baseUrl: "http://127.0.0.1:1",
 			waitForQuiet: async (
-				_sessionId: string,
+				_sessionID: string,
 				options: { request: { settled: Promise<void> } },
 			) => {
 				waited.push(options);
@@ -152,36 +152,39 @@ describe("eval provenance", () => {
 			await host.runPrompt("session", "task", "route/model");
 			expect(posted).toEqual([
 				{
-					path: "/session/session/command",
-					body: {
-						command: "flow-auto",
-						arguments: "task",
-						model: "route/model",
-						variant: "high",
+					method: "switchModel",
+					input: {
+						sessionID: "session",
+						model: { providerID: "route", id: "model", variant: "high" },
 					},
 				},
 				{
-					path: "/session/session/message",
-					body: {
-						model: { providerID: "route", modelID: "model" },
-						variant: "low",
-						parts: [{ type: "text", text: "task" }],
-					},
+					method: "command",
+					input: { sessionID: "session", name: "flow-auto", text: "task" },
 				},
 				{
-					path: "/session/session/message",
-					body: {
-						model: { providerID: "route", modelID: "model" },
-						parts: [{ type: "text", text: "task" }],
+					method: "switchModel",
+					input: {
+						sessionID: "session",
+						model: { providerID: "route", id: "model", variant: "low" },
 					},
 				},
+				{ method: "prompt", input: { sessionID: "session", text: "task" } },
+				{
+					method: "switchModel",
+					input: {
+						sessionID: "session",
+						model: { providerID: "route", id: "model" },
+					},
+				},
+				{ method: "prompt", input: { sessionID: "session", text: "task" } },
 			]);
+			expect(waited).toHaveLength(3);
 			expect(waited[0]).toHaveProperty("quietMs", 25);
 			expect(waited[1]).toHaveProperty("quietMs", 35);
 			for (const options of waited)
 				expect(options).not.toHaveProperty("variant");
 		} finally {
-			requests.mockRestore();
 			if (previousAuthorization === undefined)
 				delete process.env.FLOW_EVAL_AUTHORIZATION;
 			else process.env.FLOW_EVAL_AUTHORIZATION = previousAuthorization;
@@ -214,7 +217,7 @@ describe("eval provenance", () => {
 		).not.toHaveProperty("variant");
 	});
 
-	test("retains host model fields when the variant and provider facts are unavailable", () => {
+	test("retains native model identity when variant and provider facts are unavailable", () => {
 		const actor = extractObservedActor({
 			role: "reviewer",
 			sessions: [
@@ -222,12 +225,9 @@ describe("eval provenance", () => {
 					id: "reviewer",
 					messages: [
 						{
-							info: {
-								role: "assistant",
-								time: { completed: 2 },
-								providerID: "route",
-								modelID: "model",
-							},
+							type: "assistant",
+							time: { completed: 2 },
+							model: { providerID: "route", id: "model" },
 						},
 					],
 				},
@@ -243,28 +243,17 @@ describe("eval provenance", () => {
 		expect(hostActorObservation(actor).model).not.toHaveProperty("family");
 	});
 
-	test("keeps completed-assistant variant observations separate from model identity", () => {
-		const messages = [
-			{
-				info: {
-					role: "assistant",
-					time: { completed: 2 },
-					providerID: "route",
-					modelID: "model",
-					variant: "high",
-				},
-			},
-			{
-				info: {
-					role: "assistant",
-					time: { completed: 3 },
-					model: { providerID: "route", modelID: "model", variant: "high" },
-				},
-			},
-		];
+	test("keeps completed native variant observations separate from model identity", () => {
+		const message = (completed: number, variant: string) => ({
+			type: "assistant",
+			time: { completed },
+			model: { providerID: "route", id: "model", variant },
+		});
 		const actor = extractObservedActor({
 			role: "manager",
-			sessions: [{ id: "parent", messages }],
+			sessions: [
+				{ id: "parent", messages: [message(2, "high"), message(3, "high")] },
+			],
 		});
 		expect(hostActorObservation(actor)).toEqual({
 			model: {
@@ -276,13 +265,7 @@ describe("eval provenance", () => {
 		const conflicting = extractObservedActor({
 			role: "manager",
 			sessions: [
-				{
-					id: "parent",
-					messages: [
-						messages[0],
-						{ info: { ...messages[0]?.info, variant: "low" } },
-					],
-				},
+				{ id: "parent", messages: [message(2, "high"), message(3, "low")] },
 			],
 		});
 		expect(hostActorObservation(conflicting)).toEqual({
@@ -291,17 +274,21 @@ describe("eval provenance", () => {
 		});
 	});
 
-	test("does not promote requested, errored, or incomplete variants to observations", () => {
-		for (const info of [
-			{ role: "user", time: { completed: 2 }, model: { variant: "high" } },
-			{ role: "assistant", time: { created: 1 }, variant: "high" },
-			{ role: "assistant", time: { completed: 2 }, error: {}, variant: "high" },
-		]) {
-			expect(extractObservedVariant([{ info }])).toEqual({
+	test("does not promote requested, errored, or incomplete native variants", () => {
+		for (const message of [
+			{ type: "user", time: { completed: 2 }, model: { variant: "high" } },
+			{ type: "assistant", time: { created: 1 }, model: { variant: "high" } },
+			{
+				type: "assistant",
+				time: { completed: 2 },
+				error: {},
+				model: { variant: "high" },
+			},
+		])
+			expect(extractObservedVariant([message])).toEqual({
 				kind: "unobserved",
 				reason: "no-completed-assistant",
 			});
-		}
 		expect(extractObservedVariant(null)).toEqual({
 			kind: "unobserved",
 			reason: "endpoint-failure",
@@ -309,26 +296,25 @@ describe("eval provenance", () => {
 		expect(
 			extractObservedVariant([
 				{
-					info: { role: "assistant", time: { completed: 2 }, variant: "high" },
+					type: "assistant",
+					time: { completed: 2 },
+					model: { variant: "high" },
 				},
-				{ info: { role: "assistant", time: { completed: 3 } } },
+				{ type: "assistant", time: { completed: 3 }, model: {} },
 			]),
 		).toEqual({ kind: "unobserved", reason: "field-unavailable" });
 	});
 
-	test("does not label missing variant evidence as a model identity conflict", () => {
+	test("does not label missing native variants as a model identity conflict", () => {
 		const actor = extractObservedActor({
 			role: "manager",
 			sessions: [
 				{
 					id: "parent",
-					messages: ["first", "second"].map((modelID) => ({
-						info: {
-							role: "assistant",
-							time: { completed: 2 },
-							providerID: "route",
-							modelID,
-						},
+					messages: ["first", "second"].map((id) => ({
+						type: "assistant",
+						time: { completed: 2 },
+						model: { providerID: "route", id },
 					})),
 				},
 			],

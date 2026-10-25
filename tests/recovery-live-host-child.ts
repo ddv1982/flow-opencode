@@ -10,6 +10,7 @@ import {
 	syncProviderCredentialsBack,
 } from "../evals/harness.js";
 import { captureHostArtifacts } from "../evals/host-artifacts.js";
+import { OPENCODE_HOST_VERSION } from "../evals/opencode-host.js";
 import {
 	createRequestBudget,
 	type EpisodeReservationScope,
@@ -170,7 +171,7 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 			toolchain,
 			frozenTreatmentBundle,
 			packageCache: root,
-			opencodeVersion: "1.18.31",
+			opencodeVersion: OPENCODE_HOST_VERSION,
 			files: { "result.txt": "unchanged\n" },
 			providerCredentials: "disabled",
 			recoveryTreatment: { origin: "live", arm },
@@ -182,7 +183,6 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 			},
 			ambientConfig: "disabled",
 			reviewerEnvironment: "disabled",
-			nativeLlm: false,
 		};
 		if (mode === "admission") {
 			assert(options.requestBudget);
@@ -253,7 +253,7 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 				packageCache: null,
 			},
 			bunVersion: Bun.version,
-			opencodeVersion: "1.18.31",
+			opencodeVersion: OPENCODE_HOST_VERSION,
 		});
 		const host = await EvalHost.start({
 			...options,
@@ -268,8 +268,8 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 				"utf8",
 			);
 			const config = JSON.parse(configText);
-			assert.equal(config.plugin.length, 1);
-			const [entry, args] = config.plugin[0];
+			assert.equal(config.plugins.length, 1);
+			const { package: entry, options: args } = config.plugins[0];
 			assert.equal(args.origin, "live");
 			assert.equal(args.treatment, undefined);
 			assert.equal(args.budget.scope.arm, arm);
@@ -297,7 +297,7 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 			assert.equal(
 				ready.pluginEntrySha256,
 				createHash("sha256")
-					.update(await readFile(fileURLToPath(entry)))
+					.update(await readFile(join(entry, "index.js")))
 					.digest("hex"),
 			);
 			assert.equal(budget.origin, "live");
@@ -316,24 +316,7 @@ for (const managerModel of ["openai/gpt-6-sol", "xai/grok-4.6"] as const) {
 					arm === "manager-plus-jev",
 				);
 			}
-			try {
-				const auth = JSON.parse(
-					await readFile(
-						join(scratch, "home", ".local", "share", "opencode", "auth.json"),
-						"utf8",
-					),
-				);
-				assert.deepEqual(auth, {});
-			} catch (error) {
-				if (
-					!(
-						error instanceof Error &&
-						"code" in error &&
-						error.code === "ENOENT"
-					)
-				)
-					throw error;
-			}
+			assert.deepEqual(await host.client.credential.list(), []);
 			assert.equal((await requestBudgetStatus(directory)).consumed, 0);
 			assert.deepEqual(host.artifactIdentity, identity);
 			records.push({

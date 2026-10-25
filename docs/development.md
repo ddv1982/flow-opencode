@@ -23,26 +23,32 @@ bun run build
 bun run package:smoke
 ```
 
-The opt-in real-host check launches the pinned `opencode-ai` package through
-`bunx`. It requires registry access or a populated Bun cache, not a
-separately installed OpenCode binary:
+The opt-in real-host check launches the exact `@opencode/cli` host selected in
+`evals/opencode-host.ts`. It uses temporary configuration and local scripted
+provider responses. Registry access or a populated package cache is required.
+The user's installed OpenCode binary is not the smoke host.
 
-```bash
+```sh
 bun run smoke:live
 ```
 
 ### Bumping the pinned host
 
-`@opencode-ai/plugin` and `zod` are on `.github/dependabot.yml`'s ignore list,
-so they are raised by hand. The plugin pin is also the host version
-`smoke:live` launches, so bumping it puts a new host under test:
+The plugin, client, schema, and Zod dependencies are deliberately pinned. Update
+their package and lockfile entries together when their contracts change.
+The host launcher and release policy have independent explicit pins. SDK
+package metadata does not choose the qualification host.
 
-1. Move the `devDependencies` pin, and `peerDependencies` if the new version
-   falls outside the declared range.
-2. Run `bun run check`, then `bun run smoke:live` for the real host.
+1. Probe the selected host's native registration, identity, permissions, output,
+   prompt admission, compaction, and terminal behavior.
+2. Update the ordinary host pin and the prospective release policy. Keep retained
+   release pins and policy hashes unchanged.
+3. Run frozen install, `bun run check`, replay, audit, and packed live smoke.
+4. Qualify changed package bytes through the full release process.
 
-Widen the peer range only for a smoke-tested host; a wider range makes a
-compatibility claim no check has run.
+The peer range permits installation on 2.x. Support claims cover tested hosts.
+The weekly workflow resolves the latest stable 2.x and reports compatibility
+outside the blocking pinned-host CI check.
 
 ## Source layout
 
@@ -55,7 +61,7 @@ compatibility claim no check has run.
   (cross-process session lock), `fs/workspace.ts` (session file protocol).
 - `src/platform/opencode/` owns OpenCode hooks, host schemas, commands, tools,
   validation capture, and the duplicate-runtime guard: `command-hook.ts`
-  (slash-command hook), `tool-guard.ts` (leadership and auto-drive guard
+  (native command registration), `tool-guard.ts` (leadership and auto-drive guard
   around the tools), `auto-drive-decision.ts` (pure idle-routing decision,
   `decideOnIdle`, run by `auto-drive.ts`), `plugin.ts` (wiring only).
 - `src/guidance/`, `skills/`, and prompt surfaces own concise workflow judgment.
@@ -68,7 +74,8 @@ ports; the OpenCode platform composes outer layers.
 
 There is no distribution/activation subsystem, cache inventory, repair
 journal, or Flow-owned installer: OpenCode installs and loads the npm package
-from its native plugin command and configuration.
+from its native plugin command and configuration. Flow model preferences live
+in a separate plugin-owned file and reload role transforms across instances.
 
 ## Change discipline
 
@@ -110,7 +117,7 @@ when available, with sanitized evidence of:
 
 - worker start/end times with a positive common overlap;
 - assigned versus changed paths and any scope drift;
-- permission prompts or denials and worker Bash calls; and
+- permission prompts or denials and worker Shell calls; and
 - reviewer-owned `flow_feature_complete` submission.
 
 Every wave-behavior change needs this evidence when marked verified, but it is
@@ -151,9 +158,10 @@ Follow the [frozen-candidate sequence](release-qualification.md#running-it):
 finish fixes and dependency updates, pass deterministic checks, approve paid
 evals.
 `bun run qualify -- --campaign-dir <dir> --canary <record>` seals the
-policy grid, canary and grader evidence. Versions 9.1.0, 9.2.0, 9.3.0 and 9.4.0 use
-GPT-6 Sol only under explicit exceptions. Other versions require two providers. Commit that
-bundle before tagging; never substitute interrupted results for qualification.
+policy grid, canary and grader evidence. Exact 10.0.0 pins `openai/gpt-6.1-sol`.
+See [model policy](release-qualification.md#the-qualification-bar) for historical
+exceptions and later defaults. Commit the bundle before tagging;
+interrupted results cannot qualify.
 
 Release tags use `v<package-version>`. Blocking release checks: the normal
 repository gate, package smoke, packed live OpenCode smoke, package integrity

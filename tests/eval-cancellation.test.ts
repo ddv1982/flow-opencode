@@ -258,6 +258,11 @@ describe("real runner cancellation reports without provider spend", () => {
 					});
 					if (mode.startsWith("provider-poll-")) {
 						expect(
+							result.events.filter(
+								(name) => name === "actual-command-boundary",
+							),
+						).toHaveLength(1);
+						expect(
 							result.events.filter((name) => name === "actual-progress-poll"),
 						).toHaveLength(1);
 						expect(

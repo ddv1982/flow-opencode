@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import draft from "../.agents/plans/18-opencode-v2/qualification-dispatch-draft.json" with {
+	type: "json",
+};
 import { hostConfigSha256 } from "../evals/provenance.js";
 import {
 	assertExactReleaseCatalog,
@@ -21,6 +24,7 @@ import {
 	releaseScenarios,
 	reserveJobsFor,
 } from "../evals/run.js";
+import { scenarioStepCatalog } from "../evals/scenario-steps.js";
 import { SCENARIOS } from "../evals/scenarios.js";
 import packageJson from "../package.json" with { type: "json" };
 
@@ -187,7 +191,8 @@ describe("release eval sampling", () => {
 		for (const [configured, expectedCode] of [
 			["openai/gpt-6.1-sol", 0],
 			["openai/gpt-6-sol", 1],
-			["openai/gpt-6.1-sol,xai/grok-4.6", 1],
+			["openai/gpt-6.1-sol,xai/grok-4.7", 1],
+			["openai/gpt-6.1-sol,openai/gpt-6-sol", 1],
 			["xai/grok-4.6", 1],
 		] as const) {
 			const child = Bun.spawn(
@@ -205,7 +210,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol`,
+					"Release 10.0.0 requires exactly openai/gpt-6.1-sol with its canonical direct-route identity.",
 				);
 		}
 	});
@@ -344,18 +349,16 @@ describe("release eval sampling", () => {
 		).toHaveLength(57);
 	});
 
-	test("current 9.6 candidate retains all seventeen cases on its OpenAI-only grid", () => {
-		const scenarios = releaseScenarios();
+	test("preserves the 9.6 candidate with all seventeen cases on its OpenAI-only grid", () => {
+		const scenarios = releaseScenarios("9.6.0");
 		expect(scenarios).toHaveLength(17);
-		expect(
-			releaseCatalog(packageJson.version).every(
-				(row) => row.minProviders === 1,
-			),
-		).toBe(true);
+		expect(releaseCatalog("9.6.0").every((row) => row.minProviders === 1)).toBe(
+			true,
+		);
 		const plan = campaignPlanFor({
 			models: ["openai/gpt-6.1-sol"],
 			scenarios,
-			sampling: { kind: "release", packageVersion: packageJson.version },
+			sampling: { kind: "release", packageVersion: "9.6.0" },
 			opencodeVersion: "1.18.31",
 		});
 		expect(plan.stoppingRule.count).toBe(72);
@@ -368,10 +371,30 @@ describe("release eval sampling", () => {
 			campaignPlanFor({
 				models: ["openai/gpt-6-sol"],
 				scenarios,
-				sampling: { kind: "release", packageVersion: packageJson.version },
+				sampling: { kind: "release", packageVersion: "9.6.0" },
 				opencodeVersion: "1.18.31",
 			}),
 		).toThrow("openai/gpt-6.1-sol");
+	});
+
+	test("schedules the current OpenAI-only seventeen-case grid", () => {
+		const scenarios = releaseScenarios(packageJson.version);
+		expect(scenarios).toHaveLength(17);
+		const plan = campaignPlanFor({
+			models: ["openai/gpt-6.1-sol"],
+			scenarios,
+			sampling: { kind: "release", packageVersion: packageJson.version },
+			opencodeVersion: "2.1.4",
+		});
+		expect(plan.stoppingRule.count).toBe(72);
+		expect(plan.budget.maxAttempts).toBe(89);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(17);
+		expect(
+			plan.cells.filter((cell) => cell.schedule === "primary"),
+		).toHaveLength(72);
+		expect(
+			plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
+		).toHaveLength(17);
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -436,7 +459,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects release grids outside the canonical OpenAI route", async () => {
+	test("rejects current release grids outside the canonical OpenAI pin", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -459,7 +482,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol`,
+				"Release 10.0.0 requires exactly openai/gpt-6.1-sol with its canonical direct-route identity.",
 			);
 		}
 	});
@@ -498,4 +521,49 @@ describe("release eval sampling", () => {
 		expect(exitCode).toBe(2);
 		expect(stderr).toContain("--model requires a value");
 	});
+});
+
+test("current qualification draft counts actual scenario steps without authorizing a campaign", () => {
+	const policies = releaseCatalog("10.0.0");
+	const scenarios = releaseScenarios("10.0.0");
+	const cases = policies.map((policy) => {
+		const scenario = scenarios.find(
+			(scenario) => scenario.id === policy.caseId,
+		);
+		if (!scenario) throw new Error(`Missing scenario ${policy.caseId}.`);
+		const steps = scenario.steps.map(scenarioStepCatalog);
+		return {
+			caseId: policy.caseId,
+			stepsPerAttempt: steps.length,
+			primaryAttemptsPerModel: policy.minScoredAttempts,
+			primaryDispatchesPerModel: policy.minScoredAttempts * steps.length,
+			reserveDispatchesPerModel: steps.length,
+		};
+	});
+	expect(draft.status).toBe("draft-not-authorized");
+	expect(draft.packageVersion).toBe("10.0.0");
+	expect(draft.modelSet).toEqual(["openai/gpt-6.1-sol"]);
+	expect(draft.managerModels).toBe(1);
+	expect(draft.cases).toEqual(cases);
+	expect(cases.reduce((sum, row) => sum + row.primaryAttemptsPerModel, 0)).toBe(
+		72,
+	);
+	expect(cases).toHaveLength(17);
+	const primary = cases.reduce(
+		(sum, row) => sum + row.primaryDispatchesPerModel,
+		0,
+	);
+	const reserves = cases.reduce(
+		(sum, row) => sum + row.reserveDispatchesPerModel,
+		0,
+	);
+	expect(primary).toBe(90);
+	expect(reserves).toBe(23);
+	expect(draft.primaryDispatches).toBe(primary);
+	expect(draft.reserveDispatches).toBe(reserves);
+	expect(draft.routeProbes).toBe(1);
+	expect(draft.plannedDispatches).toBe(91);
+	expect(draft.plannedDispatches).toBe(primary + draft.routeProbes);
+	expect(draft.totalDispatchLimit).toBe(114);
+	expect(draft.totalDispatchLimit).toBe(primary + reserves + draft.routeProbes);
 });

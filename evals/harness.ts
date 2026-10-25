@@ -35,6 +35,11 @@ import { createServer } from "node:net";
 import { homedir, tmpdir } from "node:os";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import type {
+	CredentialEntry,
+	OpenCodeClient,
+	SessionInfo,
+} from "@opencode/client";
 import packageJson from "../package.json" with { type: "json" };
 import { consumePaidDispatch } from "../scripts/paid-budget.js";
 import { isArtifactPath } from "../src/domain/artifact.js";
@@ -47,6 +52,8 @@ import {
 	attemptFailure,
 	EvaluationPhaseError,
 	evaluationPhase,
+	type NativeExecutionFailure,
+	nativeExecutionFailure,
 	preservePrimaryFailure,
 	providerFailure,
 } from "./failure-origin.js";
@@ -80,9 +87,28 @@ import {
 	type HostAbortObservation,
 	HostAbortObservationSchema,
 	type HostTrace,
+	type NativeExecutionScope,
 	type NativeToolProvenance,
+	nativeExecution,
 	nativeToolProvenance,
 } from "./host-trace.js";
+import { HTTP_TRANSPORT_PLUGIN_ID } from "./http-transport-plugin.js";
+import {
+	connectNativeAccountSource,
+	type NativeAuthentication,
+	type NativeAuthHost,
+} from "./native-auth/host.js";
+import {
+	type EvalMessage,
+	installedOpenCodePluginEntry,
+	listNativeMessages,
+	listNativeSessions,
+	nativeModel,
+	OpenCodeStartup,
+	openCodeInvocation,
+	projectEvalMessage,
+	validateOpenCodeVersion,
+} from "./opencode-host.js";
 import {
 	exactPackageVersion,
 	packedPackageManifest,
@@ -136,7 +162,7 @@ async function abortable<T>(
 }
 
 /** What OpenCode names the error it stamps on a message an abort killed. */
-const ABORT_ERROR_NAME = "MessageAbortedError";
+const ABORT_ERROR_NAME = "aborted";
 const STALLED_MS = 3 * 60_000;
 
 /** A single tool invocation observed in the transcript. */
@@ -165,7 +191,7 @@ export type ObservedToolCall = {
 	readonly output: unknown;
 	readonly rawOutput: string;
 	/**
-	 * Host-reported metadata for the call: for Bash, the `exit` code and the
+	 * Host-reported metadata for the call: for shell, the `exit` code and the
 	 * truncation flag the validation capture hook reads. Recorded because those two
 	 * fields decide whether an observation can ever be eligible.
 	 */
@@ -330,7 +356,7 @@ export type Outcome = {
 	readonly hostTrace?: HostTrace | undefined;
 	/** Ordered `flow_*` calls only — the workflow's observable spine. */
 	readonly flowCalls: readonly ObservedToolCall[];
-	/** Every tool call, including host tools like bash/edit/task. */
+	/** Every tool call, including host tools like shell/edit/subagent. */
 	readonly allCalls: readonly ObservedToolCall[];
 	/** Actor identity observations from completed, non-error assistant messages. */
 	readonly actors?: readonly ObservedActor[];
@@ -366,6 +392,7 @@ export type Outcome = {
 	readonly assistantMessages: number;
 	readonly durationMs: number;
 	readonly providerError: AttemptFailure<"provider"> | null;
+	readonly nativeFailure: NativeExecutionFailure | null;
 	readonly providerErrorObservation?: ProviderErrorObservation | null;
 };
 
@@ -1183,42 +1210,6 @@ export async function terminateChildProcessTree(
  * defect or a dead server, and the status alone has never been enough to tell
  * those apart from a scenario's own output.
  */
-async function fetchJson(
-	url: string,
-	timeout = REQUEST_TIMEOUT_MS,
-	signal?: AbortSignal,
-): Promise<unknown> {
-	const deadline = AbortSignal.timeout(timeout);
-	const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
-	return abortable(requestSignal, async () => {
-		const response = await fetch(url, { signal: requestSignal });
-		if (!response.ok) {
-			throw new Error(
-				`GET ${url} failed with ${response.status}: ${await response.text()}`,
-			);
-		}
-		return response.json();
-	});
-}
-
-/** `fetchJson` for the requests that drive a session, with the same error rule. */
-async function postJson(
-	url: string,
-	body: unknown,
-	options: { readonly signal?: AbortSignal } = {},
-): Promise<unknown> {
-	const signal = options.signal ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-	return abortable(signal, async () => {
-		const response = await fetch(url, {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(body),
-			signal,
-		});
-		return postJsonResponse(url, response);
-	});
-}
-
 async function postJsonResponse(url: string, response: Response) {
 	if (!response.ok) {
 		throw new Error(
@@ -1301,26 +1292,12 @@ export function pendingCallLabel(part: {
 	return `${label} (${line.length > 120 ? `${line.slice(0, 117)}...` : line})`;
 }
 
-/**
- * Whether an error on an assistant message is one this harness caused.
- *
- * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
- * escalation nothing here answers, or a deadline — and OpenCode stamps
- * `MessageAbortedError` on the message it killed. Reporting that as a host error
- * put 88 false alarms in front of the 4 real timeouts across 408 recorded runs,
- * because escalating is the designed end of six scenarios.
- *
- * Attributed by the flag rather than by session id: aborting a parent kills its
- * reviewer subtask too, and that child's abort has the same cause. It takes the
- * flag as an argument because with no abort issued, an abort error is real news —
- * something outside this process ended the turn.
- */
 export function isSelfAbortError(
 	error: unknown,
 	selfAborted: boolean,
 ): boolean {
 	if (!selfAborted || !error || typeof error !== "object") return false;
-	return (error as { name?: unknown }).name === ABORT_ERROR_NAME;
+	return isRecord(error) && error.type === ABORT_ERROR_NAME;
 }
 
 export function isWedged(
@@ -1579,7 +1556,7 @@ function providerErrorObservation(
 		record.data && typeof record.data === "object"
 			? (record.data as Record<string, unknown>)
 			: undefined;
-	const name = data?.name ?? record.name;
+	const name = data?.name ?? record.type ?? record.name;
 	const message = data?.message ?? record.message;
 	if (typeof name !== "string" || !name.trim()) return null;
 	return {
@@ -1651,59 +1628,18 @@ export async function preparePackageCache(
 	return cache;
 }
 
-/**
- * One message as the host's HTTP API returns it, narrowed to what scoring reads.
- *
- * Declared rather than imported because it is another process's wire format, and a
- * host upgrade that drops a field should surface here as a scoring change to think
- * about — not as a type error in a dependency, and not as a silent zero.
- */
-type MessageEntry = {
-	info: {
-		id?: string;
-		sessionID?: string;
-		parentID?: string;
-		summary?: unknown;
-		role: string;
-		agent?: string;
-		model?: { providerID?: unknown; modelID?: unknown };
-		providerID?: unknown;
-		modelID?: unknown;
-		time?: { created: number; completed?: number };
-		error?: unknown;
-		cost?: number;
-		tokens?: {
-			input: number;
-			output: number;
-			reasoning: number;
-			cache?: { read: number; write: number };
-		};
-	};
-	parts: {
-		id?: string;
-		sessionID?: string;
-		callID?: string;
-		messageID?: string;
-		type: string;
-		tool?: string;
-		text?: string;
-		time?: { start?: number; end?: number };
-		synthetic?: boolean;
-		auto?: boolean;
-		metadata?: Record<string, unknown>;
-		state?: {
-			raw?: string;
-			time?: { start?: number; end?: number };
-			status: string;
-			input?: Record<string, unknown>;
-			output?: string;
-			error?: string;
-			metadata?: Record<string, unknown>;
-		};
-	}[];
-};
+type MessageEntry = EvalMessage;
 
-type OwnedProgressSession = { id: string; messages: readonly MessageEntry[] };
+type OwnedProgressSession = {
+	id: string;
+	messages: readonly MessageEntry[];
+	metadata?: SessionInfo;
+};
+type NativeCommandObservation = {
+	scope: NativeExecutionScope;
+	metadata: SessionInfo | null;
+	stop: "observing" | "question-escalated";
+};
 function isProgressId(value: unknown): value is string {
 	return (
 		typeof value === "string" &&
@@ -1720,6 +1656,7 @@ function activeProgressSnapshot(
 	const active: string[] = [];
 	const messageIds = new Set<string>();
 	const partIds = new Set<string>();
+	const toolCallIds = new Set<string>();
 	for (const session of sessions) {
 		for (const entry of session.messages) {
 			const message = entry.info.id;
@@ -1730,13 +1667,12 @@ function activeProgressSnapshot(
 			)
 				throw new Error("Owned progress transcript is malformed.");
 			messageIds.add(message);
-			for (const part of entry.parts) {
+			for (const [partIndex, part] of entry.parts.entries()) {
 				if (
-					!isProgressId(part.id) ||
 					!isProgressId(part.type) ||
 					part.sessionID !== session.id ||
 					part.messageID !== message ||
-					partIds.has(part.id)
+					partIds.has(canonicalJson([message, partIndex]))
 				)
 					throw new Error("Owned progress transcript is malformed.");
 				if (
@@ -1749,18 +1685,28 @@ function activeProgressSnapshot(
 						))
 				)
 					throw new Error("Owned progress tool is malformed.");
-				partIds.add(part.id);
+				if (part.type === "tool") {
+					const callKey = canonicalJson([session.id, message, part.callID]);
+					if (toolCallIds.has(callKey))
+						throw new Error("Owned progress tool is malformed.");
+					toolCallIds.add(callKey);
+				}
+				partIds.add(canonicalJson([message, partIndex]));
 			}
 			const messageKey = canonicalJson([session.id, message]);
 			if (
-				entry.info.role !== "assistant" ||
+				(entry.native.type !== "assistant" &&
+					!(
+						entry.native.type === "compaction" &&
+						entry.native.status === "running"
+					)) ||
 				entry.info.time?.completed !== undefined
 			)
 				completedMessages.add(messageKey);
 			if (completedMessages.has(messageKey)) continue;
 			active.push(canonicalJson([messageKey, "assistant"]));
-			for (const part of entry.parts) {
-				const key = canonicalJson([session.id, message, part.id]);
+			for (const [partIndex, part] of entry.parts.entries()) {
+				const key = canonicalJson([session.id, message, partIndex]);
 				const terminal =
 					part.time?.end !== undefined ||
 					(part.type === "tool" &&
@@ -1815,20 +1761,6 @@ type SessionMessages = ObservedSession & {
 	readonly messages: readonly MessageEntry[] | null;
 };
 
-/**
- * One throwaway OpenCode host, over one fixture repository, for one attempt.
- *
- * The isolation is the measurement. Every host gets its own port, its own XDG
- * directories, its own scratch copy of the plugin and of `auth.json`, and its own
- * git fixture — so nothing an attempt does can reach the developer's sessions, and
- * nothing about the developer's machine can explain a result. `stop()` is what
- * makes that true rather than aspirational, and it is why the credential sync has
- * to happen before the scratch directory goes.
- *
- * Constructed through `start` rather than `new`, because a host is only meaningful
- * once the server is listening and the fixture is committed, and a half-booted one
- * would be scored as a failed attempt.
- */
 export type EvalReviewerOptions = Readonly<{
 	model?: string;
 	variant?: string;
@@ -1841,24 +1773,20 @@ export class EvalHost {
 	private retainReviewDocument = false;
 	private serverLog = "";
 	private baseUrl = "";
-	/**
-	 * When this harness last aborted a session itself, or 0 if it never did.
-	 *
-	 * Both abort sites in `runCommand` are Flow ending a wait it cannot win — an
-	 * escalation nothing here answers, or a deadline. OpenCode stamps
-	 * `MessageAbortedError` on the message it killed, and reporting that as a host
-	 * error puts 88 false alarms in front of the 4 real timeouts across 408
-	 * recorded runs: escalating is the designed end of six scenarios, so almost
-	 * every one of them carried it.
-	 *
-	 * A timestamp rather than a flag, because a scenario runs several commands
-	 * against one host: a message an abort killed was created before that abort,
-	 * so an abort error on a message created *after* the last one this harness
-	 * issued is real news — something outside this process ended a later turn —
-	 * and a bare flag would have swallowed it for the rest of the attempt.
-	 */
+	private nativeClient: OpenCodeClient | null = null;
+	get client(): OpenCodeClient {
+		if (!this.nativeClient) throw new Error("OpenCode client is not ready.");
+		return this.nativeClient;
+	}
 	private lastSelfAbortAt = 0;
 	private commandAbortObservation: HostAbortObservation | undefined;
+	private readonly nativeCommands = new Map<string, NativeCommandObservation>();
+	private polledNativeFailure: {
+		sessionId: string;
+		failure: NativeExecutionFailure;
+		sessions: readonly OwnedProgressSession[];
+		childrenComplete: boolean;
+	} | null = null;
 	private readonly escalationQuestions = new Map<string, EpisodeQuestion>();
 	escalationQuestion(sessionId: string): EpisodeQuestion {
 		const question = this.escalationQuestions.get(sessionId);
@@ -1891,7 +1819,19 @@ export class EvalHost {
 	}
 	readonly project: string;
 	private readonly scratch: string;
-	private credentialPaths: CredentialSync | null = null;
+	private credentialHandoff:
+		| {
+				before: readonly CredentialEntry[];
+				onStop: (input: {
+					before: readonly CredentialEntry[];
+					after: readonly CredentialEntry[];
+				}) => Promise<void>;
+		  }
+		| undefined;
+	private nativeAuthSource:
+		| ReturnType<typeof connectNativeAccountSource>
+		| undefined;
+	private nativeAuthHost: NativeAuthHost | undefined;
 	private polledProviderFailure: {
 		sessionId: string;
 		messages: MessageEntry[];
@@ -1917,16 +1857,24 @@ export class EvalHost {
 		packageCache: string;
 		packageVersion?: string;
 		reviewerEnvironment?: "inherit" | "disabled";
-		nativeLlm?: false;
 		ambientConfig?: "inherit" | "disabled";
 		opencodeVersion: string;
+		opencodeExecutable?: string;
 		files: Readonly<Record<string, string>>;
 		retainReviewDocument?: boolean;
-		/** Configures the hidden reviewer through the same native tuple users set. */
+		/** Configures the hidden reviewer through the native plugin options. */
 		reviewer?: EvalReviewerOptions;
 		/** False creates the paired benchmark's ordinary OpenCode control host. */
 		withFlow?: boolean;
 		providerCredentials?: "inherit" | "disabled";
+		nativeAuthentication?: NativeAuthentication;
+		credentialHandoff?: {
+			entries: readonly CredentialEntry[];
+			onStop: (input: {
+				before: readonly CredentialEntry[];
+				after: readonly CredentialEntry[];
+			}) => Promise<void>;
+		};
 		recoveryTreatment?: RecoveryTreatment;
 		requestBudget?: {
 			scope?: EpisodeReservationScope;
@@ -1936,11 +1884,14 @@ export class EvalHost {
 		};
 		signal?: AbortSignal;
 	}): Promise<EvalHost> {
+		checkCancellation(options.signal);
+		validateOpenCodeVersion(options.opencodeVersion);
 		if (options.frozenArtifacts) {
-			const { signal, ...configuration } = options;
+			const { signal, credentialHandoff, ...configuration } = options;
 			options = {
 				...structuredClone(configuration),
 				...(signal ? { signal } : {}),
+				...(credentialHandoff ? { credentialHandoff } : {}),
 			};
 		}
 		if (options.requestBudget)
@@ -2034,8 +1985,8 @@ export class EvalHost {
 				)
 			)
 				throw new Error("Invalid host request budget.");
-			if (options.opencodeVersion !== "1.18.31")
-				throw new Error("Request gate is verified only for OpenCode 1.18.31.");
+			if (options.opencodeVersion !== "2.1.4")
+				throw new Error("Request gate is verified only for OpenCode 2.1.4.");
 		}
 		const version = exactPackageVersion(
 			options.packageVersion ?? packageJson.version,
@@ -2051,6 +2002,7 @@ export class EvalHost {
 			const childCache = join(scratch, "cache");
 			const childData = join(childHome, ".local", "share");
 			await mkdir(childHome, { recursive: true });
+			await mkdir(join(scratch, "tmp"));
 			await mkdir(join(project, ".opencode"), { recursive: true });
 			const gitConfig = join(scratch, "gitconfig");
 			const gitHooks = join(scratch, "git-hooks");
@@ -2069,9 +2021,21 @@ export class EvalHost {
 			};
 			delete environment.FLOW_EVAL_AUTHORIZATION;
 			delete environment.TYPESAFE_API_KEY;
-			if (options.requestBudget) {
-				environment.OPENCODE_EXPERIMENTAL_WEBSOCKETS = "false";
-				environment.OPENCODE_EXPERIMENTAL_NATIVE_LLM = "false";
+			delete environment.FLOW_EVAL_NATIVE_AUTH;
+			if (options.nativeAuthentication) {
+				for (const name of Object.keys(environment))
+					if (name.startsWith("OPENCODE_")) delete environment[name];
+				const configurationDirectory = join(childHome, ".config", "opencode");
+				await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });
+				await writeFile(
+					join(configurationDirectory, "opencode.json"),
+					JSON.stringify({
+						warming: false,
+						update: "disable",
+						share: "disabled",
+					}),
+					{ mode: 0o600 },
+				);
 			}
 
 			if (options.ambientConfig === "disabled" || options.requestBudget) {
@@ -2082,19 +2046,51 @@ export class EvalHost {
 				])
 					delete environment[name];
 			}
-			host.credentialPaths =
-				options.providerCredentials === "disabled" || simulationTreatment
-					? null
-					: await evaluationPhase("host", "credential-copy-failed", true, () =>
-							carryProviderCredentials(
-								childData,
-								liveTreatment
-									? options.requestBudget?.managerModel === "openai/gpt-6-sol"
-										? "openai"
-										: "xai"
-									: undefined,
-							),
-						);
+			if (options.nativeAuthentication) {
+				if (
+					options.credentialHandoff ||
+					options.providerCredentials === "disabled" ||
+					simulationTreatment
+				)
+					throw new Error(
+						"Native authentication requires exclusive credential ownership.",
+					);
+				host.nativeAuthSource = connectNativeAccountSource(
+					options.nativeAuthentication.configuration,
+				);
+				host.nativeAuthHost = await host.nativeAuthSource.prepareHost({
+					directory: join(scratch, "native-auth"),
+					models: options.nativeAuthentication.models,
+					...(options.signal ? { signal: options.signal } : {}),
+				});
+				await writeFile(
+					join(childHome, ".config", "opencode", "opencode.json"),
+					JSON.stringify({
+						warming: false,
+						update: "disable",
+						share: "disabled",
+						plugins: [host.nativeAuthHost.plugin],
+					}),
+					{ mode: 0o600 },
+				);
+				options = {
+					...options,
+					providerCredentials: "inherit",
+					credentialHandoff: host.nativeAuthHost.credentialHandoff,
+				};
+			}
+			if (
+				options.credentialHandoff &&
+				(options.providerCredentials === "disabled" || simulationTreatment)
+			)
+				throw new Error("Native credentials are disabled for this host.");
+			if (
+				options.providerCredentials === "inherit" &&
+				!options.credentialHandoff
+			)
+				throw new Error(
+					"V2 credential inheritance requires an explicit native credentialHandoff; auth.json is unsupported.",
+				);
 
 			// Flow derives source identity from git, so the fixture must be a repo.
 			for (const [relative, contents] of Object.entries(options.files)) {
@@ -2194,19 +2190,28 @@ export class EvalHost {
 				);
 			}
 			checkCancellation(options.signal);
-			let pluginEntry = `opencode-plugin-flow@${version}`;
+			let pluginEntry =
+				options.withFlow !== false && !options.recoveryTreatment
+					? await installedOpenCodePluginEntry(
+							join(
+								childCache,
+								"opencode",
+								"packages",
+								`opencode-plugin-flow@${version}`,
+								"node_modules",
+								"opencode-plugin-flow",
+							),
+							join(scratch, "flow-plugin-entry"),
+						)
+					: "";
 			let treatmentBundleDigest: string | undefined;
 			if (options.recoveryTreatment) {
 				if (frozenTreatmentBundle) {
-					const destination = join(
-						scratch,
-						"treatment",
-						"live-treatment-plugin.js",
-					);
+					const destination = join(scratch, "treatment", "index.js");
 					await mkdir(dirname(destination), { recursive: true });
 					await writeFile(destination, frozenTreatmentBundle.bytes);
 					checkCancellation(options.signal);
-					pluginEntry = pathToFileURL(destination).href;
+					pluginEntry = dirname(destination);
 					treatmentBundleDigest = frozenTreatmentBundle.sha256;
 				} else {
 					const built = await Bun.build({
@@ -2228,84 +2233,81 @@ export class EvalHost {
 					checkCancellation(options.signal);
 					if (!built.success || !built.outputs[0])
 						throw new Error("Evaluation treatment bundle failed.");
-					pluginEntry = pathToFileURL(built.outputs[0].path).href;
+					await rename(
+						built.outputs[0].path,
+						join(scratch, "treatment", "index.js"),
+					);
+					pluginEntry = join(scratch, "treatment");
 					treatmentBundleDigest = createHash("sha256")
-						.update(await readFile(built.outputs[0].path))
+						.update(await readFile(join(scratch, "treatment", "index.js")))
 						.digest("hex");
 				}
 			}
 
-			const reviewer = options.reviewer;
-			const configuredPlugin = options.recoveryTreatment
-				? [
-						pluginEntry,
-						{
-							...(liveTreatment
-								? { origin: "live" }
-								: { treatment: options.recoveryTreatment }),
-							budget: options.requestBudget,
-							readyPath: join(scratch, "treatment-ready.json"),
-							budgetReadyPath: join(scratch, "budget-ready.json"),
-						},
-					]
-				: reviewer &&
-						(reviewer.model !== undefined ||
-							reviewer.variant !== undefined ||
-							reviewer.steps !== undefined)
-					? [pluginEntry, { reviewer }]
-					: pluginEntry;
+			const budgetEntry = join(scratch, "budget-plugin");
+			if (options.requestBudget && !liveTreatment) {
+				await mkdir(budgetEntry);
+				await writeFile(
+					join(budgetEntry, "index.ts"),
+					`export { default } from ${JSON.stringify(pathToFileURL(fileURLToPath(new URL("./recovery-decisions/budget-plugin.ts", import.meta.url))).href)};\n`,
+				);
+			}
+
+			const pluginOptions = options.recoveryTreatment
+				? {
+						...(liveTreatment
+							? { origin: "live" }
+							: { treatment: options.recoveryTreatment }),
+						budget: options.requestBudget,
+						readyPath: join(scratch, "treatment-ready.json"),
+						budgetReadyPath: join(scratch, "budget-ready.json"),
+					}
+				: options.reviewer
+					? { reviewer: options.reviewer }
+					: {};
+			const httpTransportEntry = join(scratch, HTTP_TRANSPORT_PLUGIN_ID);
+			if (options.withFlow === false) {
+				await mkdir(httpTransportEntry);
+				await writeFile(
+					join(httpTransportEntry, "index.ts"),
+					`export { default } from ${JSON.stringify(pathToFileURL(fileURLToPath(new URL("./http-transport-plugin.ts", import.meta.url))).href)};\n`,
+				);
+			}
+			const plugins = [
+				...(options.requestBudget && !liveTreatment
+					? [
+							{
+								package: budgetEntry,
+								options: {
+									directory: options.requestBudget.directory,
+									authorizationDigest:
+										options.requestBudget.authorizationDigest,
+									...(options.requestBudget.scope
+										? { scope: options.requestBudget.scope }
+										: {}),
+									readyPath: join(scratch, "budget-ready.json"),
+									...(simulationTreatment
+										? {
+												simulationScript:
+													options.recoveryTreatment?.origin === "simulation"
+														? options.recoveryTreatment.script
+														: undefined,
+											}
+										: {}),
+								},
+							},
+						]
+					: []),
+				...(options.withFlow === false
+					? [{ package: httpTransportEntry }]
+					: [{ package: pluginEntry, options: pluginOptions }]),
+			];
+			const permissions = releaseHostPermissions(version);
+			if (permissions !== undefined && !Array.isArray(permissions))
+				throw new Error("Active evals require a V2 host permission policy.");
 			await writeFile(
 				join(project, "opencode.json"),
-				`${JSON.stringify(
-					{
-						...(releaseHostPermissions(version)
-							? { permission: releaseHostPermissions(version) }
-							: {}),
-						plugin: [
-							...(options.requestBudget && !liveTreatment
-								? [
-										[
-											pathToFileURL(
-												fileURLToPath(
-													new URL(
-														"./recovery-decisions/budget-plugin.ts",
-														import.meta.url,
-													),
-												),
-											).href,
-											{
-												directory: resolve(options.requestBudget.directory),
-												...(options.requestBudget.scope
-													? { scope: options.requestBudget.scope }
-													: {}),
-												authorizationDigest:
-													options.requestBudget.authorizationDigest,
-												readyPath: join(scratch, "budget-ready.json"),
-												...(options.recoveryTreatment?.origin === "simulation"
-													? {
-															simulationScript:
-																options.recoveryTreatment.script,
-														}
-													: {}),
-											},
-										],
-									]
-								: []),
-							...(options.withFlow === false ? [] : [configuredPlugin]),
-						],
-						...(options.requestBudget
-							? {
-									model: options.requestBudget.managerModel,
-									small_model: options.requestBudget.managerModel,
-									enabled_providers: [
-										options.requestBudget.managerModel.split("/")[0],
-									],
-								}
-							: {}),
-					},
-					null,
-					2,
-				)}\n`,
+				`${JSON.stringify({ plugins, ...(permissions ? { permissions } : {}) }, null, 2)}\n`,
 				"utf8",
 			);
 
@@ -2319,69 +2321,85 @@ export class EvalHost {
 					host.baseUrl = `http://127.0.0.1:${port}`;
 					await host.verifyArtifacts();
 					checkCancellation(options.signal);
-					host.server = spawn(
-						host.artifacts?.paths.opencode ?? options.toolchain.executable,
-						[
-							...(host.artifacts
-								? []
-								: ["x", `opencode-ai@${options.opencodeVersion}`]),
-							"serve",
-							"--port",
-							String(port),
-							"--hostname",
-							"127.0.0.1",
-						],
-						{
-							cwd: project,
-							detached: process.platform !== "win32",
-							env: {
-								...environment,
-								...(jevKey ? { TYPESAFE_API_KEY: jevKey } : {}),
-								...(options.nativeLlm === false
-									? { OPENCODE_EXPERIMENTAL_NATIVE_LLM: "false" }
-									: {}),
-								...(options.reviewerEnvironment === "disabled"
-									? {
-											OPENCODE_FLOW_REVIEWER_MODEL: "",
-											OPENCODE_FLOW_REVIEWER_VARIANT: "",
-											OPENCODE_FLOW_REVIEWER_STEPS: "",
-										}
-									: {}),
-								HOME: childHome,
-								XDG_CACHE_HOME: childCache,
-								XDG_CONFIG_HOME: join(childHome, ".config"),
-								XDG_DATA_HOME: childData,
-								XDG_STATE_HOME: join(childHome, ".local", "state"),
-							},
-							stdio: ["ignore", "pipe", "pipe"],
+					const args = [
+						"serve",
+						"--hostname",
+						"127.0.0.1",
+						"--port",
+						String(port),
+					];
+					const invocation = host.artifacts
+						? { command: host.artifacts.paths.opencode, args }
+						: options.opencodeExecutable
+							? { command: options.opencodeExecutable, args }
+							: openCodeInvocation(args, options.opencodeVersion);
+					host.server = spawn(invocation.command, invocation.args, {
+						cwd: project,
+						detached: process.platform !== "win32",
+						env: {
+							...environment,
+							...(jevKey ? { TYPESAFE_API_KEY: jevKey } : {}),
+							...(options.reviewerEnvironment === "disabled"
+								? {
+										OPENCODE_FLOW_REVIEWER_MODEL: "",
+										OPENCODE_FLOW_REVIEWER_VARIANT: "",
+										OPENCODE_FLOW_REVIEWER_STEPS: "",
+									}
+								: {}),
+							HOME: childHome,
+							TMPDIR: join(scratch, "tmp"),
+							XDG_CACHE_HOME: childCache,
+							XDG_CONFIG_HOME: join(childHome, ".config"),
+							XDG_DATA_HOME: childData,
+							XDG_STATE_HOME: join(childHome, ".local", "state"),
 						},
-					);
-					const record = (chunk: unknown) => {
-						host.serverLog += String(chunk);
+						stdio: ["ignore", "pipe", "pipe"],
+					});
+					const startup = new OpenCodeStartup();
+					let loggedBytes = 0;
+					const record = (chunk: unknown, stream: string) => {
+						startup.consume(String(chunk), stream);
+						const safe = startup.log;
+						host.serverLog += safe.slice(loggedBytes);
+						loggedBytes = safe.length;
 					};
-					host.server.stdout?.on("data", record);
-					host.server.stderr?.on("data", record);
+					host.server.stdout?.on("data", (chunk) => record(chunk, "stdout"));
+					host.server.stderr?.on("data", (chunk) => record(chunk, "stderr"));
 					let spawnError: Error | undefined;
 					host.server.once("error", (error) => {
 						spawnError = error;
 					});
 
 					const deadline = Date.now() + STARTUP_TIMEOUT_MS;
+					const versionMismatch = new Error(
+						"OpenCode reports an unexpected version.",
+					);
 					for (;;) {
 						checkCancellation(options.signal);
 						if (spawnError) throw spawnError;
 						try {
-							const health = (await fetchJson(
-								`${host.baseUrl}/global/health`,
-								3_000,
-								options.signal,
-							)) as {
-								healthy?: boolean;
-							};
-							if (health.healthy) break;
+							const client = startup.client(host.baseUrl, project);
+							if (client) {
+								const healthSignal = AbortSignal.any([
+									...(options.signal ? [options.signal] : []),
+									AbortSignal.timeout(3000),
+								]);
+								const health = await abortable(healthSignal, () =>
+									client.server.info({ signal: healthSignal }),
+								);
+								if (health.version !== options.opencodeVersion)
+									throw versionMismatch;
+								host.nativeClient = client;
+								startup.clear();
+								break;
+							}
 						} catch (error) {
-							if (error instanceof CampaignCancelled) throw error;
-							// still starting
+							if (
+								error instanceof CampaignCancelled ||
+								error === versionMismatch ||
+								(options.signal?.aborted && error === options.signal.reason)
+							)
+								throw error;
 						}
 						if (Date.now() > deadline) {
 							throw new Error(
@@ -2390,15 +2408,92 @@ export class EvalHost {
 						}
 						await abortable(options.signal, () => Bun.sleep(500));
 					}
-					const ready = (await host.post(
-						`${host.baseUrl}/session`,
-						{ title: "flow-eval readiness" },
+					const ready = await host.nativeRequest(
+						(request) =>
+							host.client.session.create(
+								{
+									title: "flow-eval readiness",
+									location: { directory: project },
+								},
+								request,
+							),
+						options.signal ?? null,
 						Math.max(1, deadline - Date.now()),
-					)) as { id?: unknown };
-					if (typeof ready.id !== "string" || !ready.id) {
-						throw new Error("OpenCode readiness session had no id.");
-					}
+					);
 					await host.deleteSession(ready.id);
+					await host.nativeRequest(
+						(request) =>
+							host.client.config.get(
+								{ location: { directory: project } },
+								request,
+							),
+						options.signal ?? null,
+						Math.max(1, deadline - Date.now()),
+					);
+					const expectedPlugins = new Set(
+						await Promise.all(
+							[
+								...(host.nativeAuthHost ? [host.nativeAuthHost.plugin] : []),
+								...plugins,
+							].map((plugin) => realpath(plugin.package)),
+						),
+					);
+					for (;;) {
+						checkCancellation(options.signal);
+						if (Date.now() >= deadline)
+							throw new Error(
+								"Native evaluation plugins did not become active before the startup deadline.",
+							);
+						const observed = await host.nativeRequest(
+							(request) =>
+								host.client.plugin.list(
+									{ location: { directory: project } },
+									request,
+								),
+							options.signal ?? null,
+							Math.max(1, deadline - Date.now()),
+						);
+						const active = new Set<string>();
+						for (const plugin of observed.data) {
+							if (plugin.source.type !== "local") continue;
+							const path = await realpath(plugin.source.path);
+							const entry = expectedPlugins.has(path)
+								? path
+								: /[/\\]index\.(?:ts|js)$/.test(path) &&
+										expectedPlugins.has(dirname(path))
+									? dirname(path)
+									: null;
+							if (!entry) continue;
+							if (plugin.state.status === "failed")
+								throw new Error(
+									"An expected native evaluation plugin failed to load.",
+								);
+							active.add(entry);
+						}
+						if ([...expectedPlugins].every((path) => active.has(path))) break;
+						await abortable(options.signal, () =>
+							Bun.sleep(Math.min(20, Math.max(1, deadline - Date.now()))),
+						);
+					}
+					if (options.credentialHandoff) {
+						const before = structuredClone(options.credentialHandoff.entries);
+						host.credentialHandoff = {
+							before,
+							onStop: options.credentialHandoff.onStop,
+						};
+						for (const entry of before) {
+							await host.client.credential.create(
+								{
+									id: entry.id,
+									integrationID: entry.integrationID,
+									label: entry.label,
+									value: entry.value,
+									activate: entry.active,
+								},
+								host.requestOptions(),
+							);
+						}
+					}
 					if (options.requestBudget) {
 						const receipt = JSON.parse(
 							await readFile(join(scratch, "budget-ready.json"), "utf8"),
@@ -2453,27 +2548,38 @@ export class EvalHost {
 								"Treatment did not initialize with the expected identity.",
 							);
 						if (simulationTreatment) {
-							const auth = await fetch(
-								`${host.baseUrl}/auth/${options.requestBudget?.managerModel.split("/")[0]}`,
+							const integrationID =
+								options.requestBudget?.managerModel.split("/")[0];
+							if (!integrationID)
+								throw new Error(
+									"Simulation manager integration is unavailable.",
+								);
+							const integration = await host.client.integration.get(
+								{ integrationID },
+								host.requestOptions(),
+							);
+							const method = integration.data.methods.find(
+								(method) => method.type === "oauth",
+							);
+							if (method?.type !== "oauth")
+								throw new Error(
+									"Simulation requires a native OAuth integration method.",
+								);
+							await host.client.credential.create(
 								{
-									method: "PUT",
-									headers: { "content-type": "application/json" },
-									body: JSON.stringify({
+									integrationID,
+									label: "Isolated simulated evaluation",
+									activate: true,
+									value: {
 										type: "oauth",
+										methodID: method.id,
 										access: "simulation-access",
 										refresh: "simulation-refresh",
 										expires: Date.now() + 3600000,
-									}),
-									signal: options.signal
-										? AbortSignal.any([
-												options.signal,
-												AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-											])
-										: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+									},
 								},
+								host.requestOptions(),
 							);
-							if (!auth.ok)
-								throw new Error("Simulation credential installation failed.");
 						}
 					}
 					checkCancellation(options.signal);
@@ -2499,16 +2605,26 @@ export class EvalHost {
 		}
 	}
 
-	private post(
-		url: string,
-		body: unknown,
+	private requestOptions(signal = this.signal, timeout = REQUEST_TIMEOUT_MS) {
+		return {
+			signal: AbortSignal.any([
+				...(signal ? [signal] : []),
+				AbortSignal.timeout(timeout),
+			]),
+		};
+	}
+
+	private nativeRequest<T>(
+		operation: (options: { signal: AbortSignal }) => Promise<T>,
+		signal: AbortSignal | null = this.signal ?? null,
 		timeout = REQUEST_TIMEOUT_MS,
-	): Promise<unknown> {
-		return postJson(url, body, {
-			signal: this.signal
-				? AbortSignal.any([this.signal, AbortSignal.timeout(timeout)])
+	): Promise<T> {
+		const options = {
+			signal: signal
+				? AbortSignal.any([signal, AbortSignal.timeout(timeout)])
 				: AbortSignal.timeout(timeout),
-		});
+		};
+		return abortable(options.signal, () => operation(options));
 	}
 
 	get log(): string {
@@ -2535,22 +2651,18 @@ export class EvalHost {
 	async catalogProfiles(): Promise<
 		Array<{ model: string; variants: string[] | null }>
 	> {
-		const listed = (await fetchJson(
-			`${this.baseUrl}/config/providers`,
-			REQUEST_TIMEOUT_MS,
-			this.signal,
-		)) as {
-			providers?: { id: string; models?: Record<string, unknown> }[];
-		};
-		return (listed.providers ?? []).flatMap((provider) =>
-			Object.entries(provider.models ?? {}).map(([modelId, config]) => {
-				const variants =
-					isRecord(config) && isRecord(config.variants)
-						? Object.keys(config.variants)
-						: null;
-				return { model: `${provider.id}/${modelId}`, variants };
-			}),
+		const listed = await this.nativeRequest((options) =>
+			this.client.model.list(
+				{ location: { directory: this.project } },
+				options,
+			),
 		);
+		return listed.data
+			.filter((model) => model.enabled)
+			.map((model) => ({
+				model: `${model.providerID}/${model.id}`,
+				variants: model.variants.map((variant) => variant.id),
+			}));
 	}
 
 	/**
@@ -2577,19 +2689,29 @@ export class EvalHost {
 			checkCancellation(this.signal);
 			await consumePaidDispatch({ model, kind: "probe" });
 			options?.onDispatch?.();
-			const reply = (await this.post(
-				`${this.baseUrl}/session/${sessionId}/message`,
-				{
-					// `/session/:id/message` takes a split model, unlike `/command`,
-					// which takes the joined string.
-					model: splitModel(model),
-					...(options?.variant === undefined
-						? {}
-						: { variant: options.variant }),
-					system: "Reply with the single word OK. Call no tools.",
-					parts: [{ type: "text", text: "ping" }],
-				},
-			)) as MessageEntry;
+			await this.nativeRequest((request) =>
+				this.client.session.switchModel(
+					{ sessionID: sessionId, model: nativeModel(model, options?.variant) },
+					request,
+				),
+			);
+			await this.nativeRequest((request) =>
+				this.client.session.prompt(
+					{
+						sessionID: sessionId,
+						text: "Reply with the single word OK. Call no tools.",
+					},
+					request,
+				),
+			);
+			await this.nativeRequest((request) =>
+				this.client.session.wait({ sessionID: sessionId }, request),
+			);
+			const entries = await this.messages(sessionId, this.signal);
+			const reply = entries.findLast(
+				(entry) => entry.native.type === "assistant",
+			);
+			if (!reply) throw new Error("Model probe produced no assistant message.");
 			const tokens = reply.info?.tokens;
 			usage = normalizeStudyUsage({
 				tokens: tokens
@@ -2622,20 +2744,49 @@ export class EvalHost {
 	}
 
 	private async deleteSession(sessionId: string): Promise<void> {
-		const signal = AbortSignal.timeout(ABORT_TIMEOUT_MS);
-		await abortable(signal, () =>
-			fetch(`${this.baseUrl}/session/${sessionId}`, {
-				method: "DELETE",
-				signal,
-			}),
+		await this.nativeRequest(
+			(options) =>
+				this.client.session.remove({ sessionID: sessionId }, options),
+			null,
+			ABORT_TIMEOUT_MS,
 		).catch(() => {});
 	}
 
 	async createSession(title: string): Promise<string> {
-		const session = (await this.post(`${this.baseUrl}/session`, { title })) as {
-			id: string;
-		};
+		const session = await this.nativeRequest((options) =>
+			this.client.session.create(
+				{ title, agent: "build", location: { directory: this.project } },
+				options,
+			),
+		);
 		return session.id;
+	}
+
+	private async commandObservation(
+		sessionId: string,
+	): Promise<NativeCommandObservation> {
+		if (this.polledNativeFailure?.sessionId === sessionId)
+			this.polledNativeFailure = null;
+		let metadata: SessionInfo | null = null;
+		try {
+			const observed = await this.nativeRequest((options) =>
+				this.client.session.get({ sessionID: sessionId }, options),
+			);
+			if (isRecord(observed) && observed.id === sessionId) metadata = observed;
+		} catch (error) {
+			if (this.signal?.aborted && error === this.signal.reason) throw error;
+		}
+		const messages = await this.messages(sessionId, this.signal);
+		const last = messages.at(-1);
+		if (last && !isProgressId(last.info.id))
+			throw new Error("Native command boundary is malformed.");
+		const observation: NativeCommandObservation = {
+			metadata,
+			scope: { sessionId, afterMessageId: last?.info.id ?? null },
+			stop: "observing",
+		};
+		this.nativeCommands.set(sessionId, observation);
+		return observation;
 	}
 
 	/**
@@ -2661,19 +2812,25 @@ export class EvalHost {
 		checkCancellation(this.signal);
 		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "command" });
-		const { variant, ...waitOptions } = options;
+		await this.nativeRequest((request) =>
+			this.client.session.switchModel(
+				{ sessionID: sessionId, model: nativeModel(model, options.variant) },
+				request,
+			),
+		);
+		const { variant: _variant, ...waitOptions } = options;
+		const observation = await this.commandObservation(sessionId);
 		return runSessionRequest({
 			signal: this.signal,
 			waitOwnsCancellation: true,
 			onCancelled: () => this.abortSession(sessionId),
-			post: postSessionJson,
-			url: `${this.baseUrl}/session/${sessionId}/command`,
-			body: {
-				command,
-				arguments: args,
-				model,
-				...(variant === undefined ? {} : { variant }),
-			},
+			post: (_url, _body, request) =>
+				this.client.session.command(
+					{ sessionID: sessionId, name: command, text: args },
+					{ signal: request.signal },
+				),
+			url: this.baseUrl,
+			body: null,
 			onRejected: (message) => {
 				this.serverLog += `\ncommand POST rejected: ${message}`;
 			},
@@ -2681,6 +2838,7 @@ export class EvalHost {
 				this.waitForQuiet(sessionId, {
 					...waitOptions,
 					request,
+					observation,
 				}),
 		});
 	}
@@ -2703,18 +2861,25 @@ export class EvalHost {
 		checkCancellation(this.signal);
 		this.escalationQuestions.delete(sessionId);
 		await consumePaidDispatch({ model, kind: "prompt" });
-		const { variant, ...waitOptions } = options;
+		await this.nativeRequest((request) =>
+			this.client.session.switchModel(
+				{ sessionID: sessionId, model: nativeModel(model, options.variant) },
+				request,
+			),
+		);
+		const { variant: _variant, ...waitOptions } = options;
+		const observation = await this.commandObservation(sessionId);
 		return runSessionRequest({
 			signal: this.signal,
 			waitOwnsCancellation: true,
 			onCancelled: () => this.abortSession(sessionId),
-			post: postSessionJson,
-			url: `${this.baseUrl}/session/${sessionId}/message`,
-			body: {
-				model: splitModel(model),
-				...(variant === undefined ? {} : { variant }),
-				parts: [{ type: "text", text: prompt }],
-			},
+			post: (_url, _body, request) =>
+				this.client.session.prompt(
+					{ sessionID: sessionId, text: prompt },
+					{ signal: request.signal },
+				),
+			url: this.baseUrl,
+			body: null,
 			onRejected: (message) => {
 				this.serverLog += `\nmessage POST rejected: ${message}`;
 			},
@@ -2722,6 +2887,7 @@ export class EvalHost {
 				this.waitForQuiet(sessionId, {
 					...waitOptions,
 					request,
+					observation,
 				}),
 		});
 	}
@@ -2733,6 +2899,7 @@ export class EvalHost {
 			timeoutMs?: number;
 			stalledMs?: number;
 			request: SessionRequest;
+			observation: NativeCommandObservation;
 		},
 	): Promise<CommandEnd> {
 		this.commandAbortObservation = undefined;
@@ -2741,6 +2908,8 @@ export class EvalHost {
 		const completedParts = new Set<string>();
 		let activitySignature = "";
 		let lastSessions: readonly OwnedProgressSession[] = [];
+		let rootMessages: readonly MessageEntry[] = [];
+		let treeComplete = false;
 		let observedAt = startedAt;
 		const quietMs = options.quietMs ?? 25_000;
 		const timeoutMs = options.timeoutMs ?? 20 * 60_000;
@@ -2764,10 +2933,48 @@ export class EvalHost {
 		let pending: string[] = [];
 		let ownedPending: string[] = [];
 		let suspendedMs = 0;
-		const abortWait = async () => {
-			const aborting = this.abortSession(sessionId);
-			options.request.cancel();
-			await aborting;
+		const pinNativeFailure = (): NativeExecutionFailure | null => {
+			if (
+				options.observation.stop === "question-escalated" ||
+				this.polledProviderFailure?.sessionId === sessionId
+			)
+				return null;
+			const rootTrace = collectHostTrace({
+				runnerRootSessionIds: [sessionId],
+				directory: this.project,
+				sessionMetadata: options.observation.metadata
+					? [options.observation.metadata]
+					: [],
+				sessionMessages: [
+					{ sessionId, messages: rootMessages.map((entry) => entry.native) },
+				],
+				childrenComplete: true,
+			});
+			const failure = nativeExecutionFailure(
+				nativeExecution(rootTrace, [options.observation.scope]),
+			);
+			if (failure)
+				this.polledNativeFailure = {
+					sessionId,
+					failure,
+					sessions: structuredClone(lastSessions),
+					childrenComplete: treeComplete,
+				};
+			return failure;
+		};
+		const abortWait = async (inspectNative = true) => {
+			const failure = inspectNative ? pinNativeFailure() : null;
+			const cleanup = async () => {
+				const aborting = this.abortSession(sessionId);
+				options.request.cancel();
+				await aborting;
+			};
+			if (failure)
+				return preservePrimaryFailure(
+					() => Promise.reject(new EvaluationPhaseError(failure, undefined)),
+					cleanup,
+				);
+			await cleanup();
 		};
 		const suspensionNote = () =>
 			suspendedMs > 0
@@ -2791,6 +2998,7 @@ export class EvalHost {
 							entry.info,
 							part,
 							partIndex,
+							entry.native,
 						);
 						if (!native || !part.tool || !isRecord(part.state.input)) return;
 						pending.push({
@@ -2841,184 +3049,208 @@ export class EvalHost {
 					suspensionNote(),
 			);
 		};
-		for (;;) {
-			const before = Date.now();
-			let accountedInPoll = 0;
-			const accountPollElapsed = () => {
-				const elapsed = Date.now() - before;
-				if (elapsed < suspendFloor) return;
-				const credit = Math.min(
-					Math.max(0, elapsed - accountedInPoll),
-					timeoutMs - suspendedMs,
-				);
-				accountedInPoll = elapsed;
-				suspendedMs += credit;
-				deadline += credit;
-				settledAt += credit;
-				changedAt += credit;
-			};
-			await abortable(this.signal, () => Bun.sleep(poll));
-			const delivery = options.request.state();
-			if (delivery?.kind === "rejected") {
-				throw delivery.error;
-			}
-			const messages = (await this.messages(
-				sessionId,
-				this.signal,
-			)) as MessageEntry[];
-			const failed = messages.find(
-				(entry) =>
-					entry.info.role === "assistant" &&
-					entry.info.error &&
-					!isSelfAbortError(
-						entry.info.error,
-						this.lastSelfAbortAt > 0 &&
-							(entry.info.time?.created === undefined ||
-								entry.info.time.created <= this.lastSelfAbortAt),
-					),
-			);
-			if (failed) {
-				const failure = providerFailure(failed.info.error);
-				// Preserve the evidence before aborting the host. Outcome reporting can
-				// use this one fetched transcript even if later reads are cancelled.
-				this.polledProviderFailure = {
-					sessionId,
-					messages,
-					failure,
-					observation: providerErrorObservation(failed.info.error, sessionId),
+		try {
+			for (;;) {
+				treeComplete = false;
+				const before = Date.now();
+				let accountedInPoll = 0;
+				const accountPollElapsed = () => {
+					const elapsed = Date.now() - before;
+					if (elapsed < suspendFloor) return;
+					const credit = Math.min(
+						Math.max(0, elapsed - accountedInPoll),
+						timeoutMs - suspendedMs,
+					);
+					accountedInPoll = elapsed;
+					suspendedMs += credit;
+					deadline += credit;
+					settledAt += credit;
+					changedAt += credit;
 				};
-				await abortWait();
-				throw new EvaluationPhaseError(failure, failed.info.error);
-			}
-			accountPollElapsed();
-			const remaining = deadline - Date.now();
-			if (remaining < 0) await failDeadline();
-			if (remaining === 0) continue;
-			const observerDeadline = AbortSignal.timeout(remaining);
-			let sessions: readonly {
-				id: string;
-				messages: readonly MessageEntry[];
-			}[];
-			try {
-				sessions = await this.ownedProgressSessions(
+				await abortable(this.signal, () => Bun.sleep(poll));
+				const delivery = options.request.state();
+				if (delivery?.kind === "rejected") {
+					throw delivery.error;
+				}
+				const messages = (await this.messages(
 					sessionId,
-					messages,
-					AbortSignal.any([
-						...(this.signal ? [this.signal] : []),
-						observerDeadline,
-					]),
+					this.signal,
+				)) as MessageEntry[];
+				rootMessages = messages;
+				lastSessions = [
+					{
+						id: sessionId,
+						messages,
+						...(options.observation.metadata
+							? { metadata: options.observation.metadata }
+							: {}),
+					},
+					...lastSessions.filter((session) => session.id !== sessionId),
+				];
+				const failed = messages.find(
+					(entry) =>
+						(entry.native.type === "assistant" ||
+							entry.native.type === "compaction") &&
+						entry.info.error &&
+						!isSelfAbortError(
+							entry.info.error,
+							this.lastSelfAbortAt > 0 &&
+								(entry.info.time?.created === undefined ||
+									entry.info.time.created <= this.lastSelfAbortAt),
+						),
 				);
-			} catch (error) {
+				if (failed) {
+					const failure = providerFailure(failed.info.error);
+					this.polledProviderFailure = {
+						sessionId,
+						messages,
+						failure,
+						observation: providerErrorObservation(failed.info.error, sessionId),
+					};
+					await abortWait(false);
+					throw new EvaluationPhaseError(failure, failed.info.error);
+				}
 				accountPollElapsed();
-				if (this.signal?.aborted && error === this.signal.reason) throw error;
-				if (observerDeadline.aborted && error === observerDeadline.reason) {
-					if (Date.now() < deadline) continue;
+				const remaining = deadline - Date.now();
+				if (remaining < 0) await failDeadline();
+				if (remaining === 0) continue;
+				const observerDeadline = AbortSignal.timeout(remaining);
+				let sessions: readonly OwnedProgressSession[];
+				try {
+					sessions = await this.ownedProgressSessions(
+						sessionId,
+						messages,
+						AbortSignal.any([
+							...(this.signal ? [this.signal] : []),
+							observerDeadline,
+						]),
+						options.observation.metadata,
+					);
+				} catch (error) {
+					accountPollElapsed();
+					if (this.signal?.aborted && error === this.signal.reason) throw error;
+					if (observerDeadline.aborted && error === observerDeadline.reason) {
+						if (Date.now() < deadline) continue;
+						await failDeadline();
+					}
+					await abortWait();
+					throw error;
+				}
+				accountPollElapsed();
+				lastSessions = sessions;
+				treeComplete = true;
+				observedAt = Date.now();
+				let nextActivity: string;
+				try {
+					nextActivity = activeProgressSnapshot(
+						sessions,
+						completedMessages,
+						completedParts,
+					);
+				} catch (error) {
+					await abortWait();
+					throw error;
+				}
+				const ownedMessages = sessions.flatMap((session) => session.messages);
+				pending = messages.flatMap((entry) =>
+					entry.parts
+						.filter(
+							(part) =>
+								part.type === "tool" &&
+								part.state?.status &&
+								part.state.status !== "completed" &&
+								part.state.status !== "error",
+						)
+						.map((part) => pendingCallLabel(part)),
+				);
+				ownedPending = ownedMessages.flatMap((entry) =>
+					entry.parts
+						.filter(
+							(part) =>
+								part.type === "tool" &&
+								part.state?.status &&
+								part.state.status !== "completed" &&
+								part.state.status !== "error",
+						)
+						.map((part) => pendingCallLabel(part)),
+				);
+				const busy =
+					delivery?.kind === "pending" ||
+					ownedPending.length > 0 ||
+					ownedMessages.some(
+						(entry) =>
+							(entry.native.type === "assistant" &&
+								!entry.native.time.completed) ||
+							(entry.native.type === "compaction" &&
+								entry.native.status === "running"),
+					);
+				const counts = sessions
+					.map((session) => ({
+						id: session.id,
+						messages: session.messages.length,
+						parts: session.messages.reduce(
+							(total, entry) => total + entry.parts.length,
+							0,
+						),
+					}))
+					.toSorted((left, right) => left.id.localeCompare(right.id));
+				const next = `${ownedMessages.length}:${ownedMessages.reduce((total, entry) => total + entry.parts.length, 0)}:${JSON.stringify(counts)}`;
+				const changed = nextActivity !== activitySignature;
+				activitySignature = nextActivity;
+				signature = next;
+				if (changed) changedAt = Date.now();
+				if (changed || busy) settledAt = Date.now();
+				else if (Date.now() - settledAt >= quietMs) {
+					if (pinNativeFailure()) await abortWait();
+					return "quiet";
+				}
+				const unansweredQuestionReachedQuiet =
+					onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs;
+				if (unansweredQuestionReachedQuiet) {
+					const captured = EpisodeQuestionSchema.safeParse({
+						sessionId,
+						calls: messages.flatMap((entry) =>
+							entry.parts
+								.filter(
+									(part) =>
+										part.type === "tool" &&
+										part.tool === "question" &&
+										(part.state?.status === "running" ||
+											part.state?.status === "pending"),
+								)
+								.map((part) => ({
+									messageId: part.messageID ?? entry.info.id,
+									callId: part.callID,
+									input: part.state?.input,
+								})),
+						),
+					});
+					if (captured.success)
+						this.escalationQuestions.set(sessionId, captured.data);
+					options.observation.stop = "question-escalated";
+					await abortWait(false);
+					return "escalated";
+				}
+				const stalled = Date.now() - changedAt;
+				if (isWedged(ownedPending, stalled, stalledMs)) {
+					captureAbort("stall");
+					await abortWait();
+					throw new Error(
+						`Scenario had no observed activity for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
+					);
+				}
+				if (Date.now() > deadline) {
 					await failDeadline();
 				}
+			}
+		} catch (error) {
+			if (
+				!(error instanceof EvaluationPhaseError) &&
+				options.request.state().kind !== "rejected" &&
+				pinNativeFailure()
+			)
 				await abortWait();
-				throw error;
-			}
-			accountPollElapsed();
-			lastSessions = sessions;
-			observedAt = Date.now();
-			let nextActivity: string;
-			try {
-				nextActivity = activeProgressSnapshot(
-					sessions,
-					completedMessages,
-					completedParts,
-				);
-			} catch (error) {
-				await abortWait();
-				throw error;
-			}
-			const ownedMessages = sessions.flatMap((session) => session.messages);
-			pending = messages.flatMap((entry) =>
-				entry.parts
-					.filter(
-						(part) =>
-							part.type === "tool" &&
-							part.state?.status &&
-							part.state.status !== "completed" &&
-							part.state.status !== "error",
-					)
-					.map((part) => pendingCallLabel(part)),
-			);
-			ownedPending = ownedMessages.flatMap((entry) =>
-				entry.parts
-					.filter(
-						(part) =>
-							part.type === "tool" &&
-							part.state?.status &&
-							part.state.status !== "completed" &&
-							part.state.status !== "error",
-					)
-					.map((part) => pendingCallLabel(part)),
-			);
-			const busy =
-				delivery?.kind === "pending" ||
-				ownedPending.length > 0 ||
-				ownedMessages.some(
-					(entry) =>
-						entry.info.role === "assistant" && !entry.info.time?.completed,
-				);
-			const counts = sessions
-				.map((session) => ({
-					id: session.id,
-					messages: session.messages.length,
-					parts: session.messages.reduce(
-						(total, entry) => total + entry.parts.length,
-						0,
-					),
-				}))
-				.toSorted((left, right) => left.id.localeCompare(right.id));
-			const next = `${ownedMessages.length}:${ownedMessages.reduce((total, entry) => total + entry.parts.length, 0)}:${JSON.stringify(counts)}`;
-			const changed = nextActivity !== activitySignature;
-			activitySignature = nextActivity;
-			signature = next;
-			if (changed) changedAt = Date.now();
-			if (changed || busy) settledAt = Date.now();
-			else if (Date.now() - settledAt >= quietMs) return "quiet";
-			// A pending question keeps `busy` true forever, so the quiet window above
-			// can never close and only the deadline ends the wait. Nothing here answers
-			// questions, so that state is terminal rather than slow: four recorded
-			// attempts each burned their full twenty minutes producing nothing after the
-			// model asked.
-			if (onlyAwaitingAnswer(pending) && Date.now() - changedAt >= quietMs) {
-				const captured = EpisodeQuestionSchema.safeParse({
-					sessionId,
-					calls: messages.flatMap((entry) =>
-						entry.parts
-							.filter(
-								(part) =>
-									part.type === "tool" &&
-									part.tool === "question" &&
-									(part.state?.status === "running" ||
-										part.state?.status === "pending"),
-							)
-							.map((part) => ({
-								messageId: part.messageID ?? entry.info.id,
-								callId: part.callID,
-								input: part.state?.input,
-							})),
-					),
-				});
-				if (captured.success)
-					this.escalationQuestions.set(sessionId, captured.data);
-				await abortWait();
-				return "escalated";
-			}
-			const stalled = Date.now() - changedAt;
-			if (isWedged(ownedPending, stalled, stalledMs)) {
-				captureAbort("stall");
-				await abortWait();
-				throw new Error(
-					`Scenario had no observed activity for ${stalledMs}ms. ${wedgeNote(stalled)}${suspensionNote()}`,
-				);
-			}
-			if (Date.now() > deadline) {
-				await failDeadline();
-			}
+			throw error;
 		}
 	}
 
@@ -3026,60 +3258,46 @@ export class EvalHost {
 		root: string,
 		messages: readonly MessageEntry[],
 		signal: AbortSignal,
-	): Promise<readonly { id: string; messages: readonly MessageEntry[] }[]> {
+		rootMetadata: SessionInfo | null,
+	): Promise<readonly OwnedProgressSession[]> {
+		const listed = await this.nativeRequest(
+			(options) =>
+				listNativeSessions(this.client, this.project, options.signal),
+			signal ?? null,
+		);
 		const ids = [root];
 		const known = new Set(ids);
 		for (const parent of ids) {
-			const children = await fetchJson(
-				`${this.baseUrl}/session/${encodeURIComponent(parent)}/children`,
-				REQUEST_TIMEOUT_MS,
-				signal,
-			);
-			if (!Array.isArray(children))
-				throw new Error("Owned progress children response is malformed.");
-			for (const child of children) {
-				if (!isRecord(child)) continue;
-				const id = nonEmptyString(child.id);
+			for (const child of listed) {
 				if (
-					!id ||
-					id.length > 256 ||
-					/\s/.test(id) ||
-					child.parentID !== parent ||
-					child.directory !== this.project ||
-					known.has(id)
+					child?.parentID !== parent ||
+					!isProgressId(child.id) ||
+					typeof child.location?.directory !== "string" ||
+					known.has(child.id) ||
+					(await realpath(child.location.directory)) !==
+						(await realpath(this.project))
 				)
 					continue;
 				if (known.size >= 128)
 					throw new Error("Owned progress tree exceeds 128 sessions.");
-				known.add(id);
-				ids.push(id);
+				known.add(child.id);
+				ids.push(child.id);
 			}
 		}
-		const sessions = [{ id: root, messages }];
+		const sessions: OwnedProgressSession[] = [
+			{
+				id: root,
+				messages,
+				...(rootMetadata ? { metadata: rootMetadata } : {}),
+			},
+		];
 		for (const id of ids.slice(1)) {
-			const entries = await fetchJson(
-				`${this.baseUrl}/session/${encodeURIComponent(id)}/message`,
-				REQUEST_TIMEOUT_MS,
-				signal,
-			);
-			if (
-				!Array.isArray(entries) ||
-				entries.some(
-					(entry) =>
-						!isRecord(entry) ||
-						!isRecord(entry.info) ||
-						entry.info.sessionID !== id ||
-						!Array.isArray(entry.parts) ||
-						entry.parts.some(
-							(part) =>
-								!isRecord(part) ||
-								part.sessionID !== id ||
-								typeof part.type !== "string",
-						),
-				)
-			)
-				throw new Error("Owned progress transcript is malformed.");
-			sessions.push({ id, messages: entries as MessageEntry[] });
+			const metadata = listed.find((session) => session.id === id);
+			sessions.push({
+				id,
+				messages: await this.messages(id, signal),
+				...(metadata ? { metadata } : {}),
+			});
 		}
 		return sessions;
 	}
@@ -3094,24 +3312,38 @@ export class EvalHost {
 	 */
 	private async abortSession(sessionId: string): Promise<void> {
 		this.lastSelfAbortAt = Date.now();
-		await postJson(
-			`${this.baseUrl}/session/${sessionId}/abort`,
-			{},
-			{
-				signal: AbortSignal.timeout(ABORT_TIMEOUT_MS),
-			},
+		const observation = this.nativeCommands.get(sessionId);
+		if (observation)
+			observation.scope = {
+				...observation.scope,
+				abort: {
+					requestedAt: this.lastSelfAbortAt,
+					priorFailure:
+						this.polledNativeFailure?.sessionId === sessionId ||
+						this.polledProviderFailure?.sessionId === sessionId,
+				},
+			};
+		await this.nativeRequest(
+			(options) =>
+				this.client.session.interrupt(
+					{ sessionID: sessionId, resume: false },
+					options,
+				),
+			null,
+			ABORT_TIMEOUT_MS,
 		).catch(() => {});
 	}
 
 	private async messages(
 		sessionId: string,
 		signal?: AbortSignal,
-	): Promise<unknown> {
-		return fetchJson(
-			`${this.baseUrl}/session/${sessionId}/message`,
-			REQUEST_TIMEOUT_MS,
-			signal,
-		);
+	): Promise<MessageEntry[]> {
+		return (
+			await this.nativeRequest(
+				(options) => listNativeMessages(this.client, sessionId, options.signal),
+				signal ?? null,
+			)
+		).map((message) => projectEvalMessage(message, sessionId));
 	}
 
 	/**
@@ -3134,46 +3366,43 @@ export class EvalHost {
 		readonly endpointFailed: boolean;
 		readonly metadata: readonly unknown[];
 	}> {
-		const metadata: unknown[] = [];
+		let listed: SessionInfo[];
+		try {
+			listed = await this.nativeRequest(
+				(options) =>
+					listNativeSessions(this.client, this.project, options.signal),
+				signal ?? null,
+			);
+		} catch (error) {
+			if (signal?.aborted) throw error;
+			return { sessions: [], endpointFailed: true, metadata: [] };
+		}
 		const known = new Set(sessionIds);
 		const found: ObservedSession[] = [];
-		let endpointFailed = false;
-		let frontier = [...sessionIds];
-		while (frontier.length > 0) {
-			const next: string[] = [];
-			for (const parent of frontier) {
-				checkCancellation(signal);
-				let children: unknown;
-				try {
-					children = await fetchJson(
-						`${this.baseUrl}/session/${parent}/children`,
-						REQUEST_TIMEOUT_MS,
-						signal,
-					);
-				} catch (error) {
-					if (signal?.aborted && error === signal.reason) throw error;
-					endpointFailed = true;
+		const metadata: SessionInfo[] = [];
+		const frontier = [...sessionIds];
+		for (const parent of frontier) {
+			for (const child of listed) {
+				if (
+					child.parentID !== parent ||
+					known.has(child.id) ||
+					(await realpath(child.location.directory)) !==
+						(await realpath(this.project))
+				)
 					continue;
-				}
-				if (!Array.isArray(children)) endpointFailed = true;
-				for (const child of Array.isArray(children) ? children : []) {
-					metadata.push(child);
-					if (!isRecord(child)) continue;
-					const id = nonEmptyString(child.id);
-					if (!id || known.has(id)) continue;
-					const childSession: ObservedSession = {
-						id,
-						agent: nonEmptyString(child.agent),
-						parentID: nonEmptyString(child.parentID),
-					};
-					known.add(id);
-					found.push(childSession);
-					next.push(id);
-				}
+				if (known.size >= 128)
+					throw new Error("Outcome tree exceeds 128 sessions.");
+				known.add(child.id);
+				frontier.push(child.id);
+				metadata.push(child);
+				found.push({
+					id: child.id,
+					agent: child.agent ?? null,
+					parentID: child.parentID ?? null,
+				});
 			}
-			frontier = next;
 		}
-		return { sessions: found, endpointFailed, metadata };
+		return { sessions: found, endpointFailed: false, metadata };
 	}
 
 	/**
@@ -3201,20 +3430,52 @@ export class EvalHost {
 			sessionIds.includes(this.polledProviderFailure.sessionId)
 				? this.polledProviderFailure
 				: null;
-		if (!polled) checkCancellation(signal);
-		const descendantResult = polled
-			? { sessions: [], endpointFailed: false, metadata: [] }
-			: await this.descendantSessions(sessionIds, signal);
-		if (!polled) checkCancellation(signal);
+		const nativePin =
+			!polled &&
+			this.polledNativeFailure &&
+			sessionIds.includes(this.polledNativeFailure.sessionId)
+				? this.polledNativeFailure
+				: null;
+		let nativeFailure = nativePin?.failure ?? null;
+		const pinned = polled !== null || nativePin !== null;
+		if (!pinned) checkCancellation(signal);
+		const descendantResult = nativePin
+			? {
+					sessions: nativePin.sessions.flatMap((session) =>
+						session.metadata && !sessionIds.includes(session.id)
+							? [
+									{
+										id: session.id,
+										agent: session.metadata.agent ?? null,
+										parentID: session.metadata.parentID ?? null,
+									},
+								]
+							: [],
+					),
+					endpointFailed: !nativePin.childrenComplete,
+					metadata: nativePin.sessions.flatMap((session) =>
+						session.metadata ? [session.metadata] : [],
+					),
+				}
+			: polled
+				? { sessions: [], endpointFailed: false, metadata: [] }
+				: await this.descendantSessions(sessionIds, signal);
+		if (!pinned) checkCancellation(signal);
 		const nativeSessionMetadata: unknown[] = [...descendantResult.metadata];
-		let rootMetadataComplete = !polled;
-		if (!polled) {
+		let rootMetadataComplete = nativePin
+			? sessionIds.every((id) =>
+					nativePin.sessions.some(
+						(session) => session.id === id && session.metadata !== undefined,
+					),
+				)
+			: !polled;
+		if (!pinned) {
 			for (const sessionId of sessionIds) {
 				try {
-					const metadata = await fetchJson(
-						`${this.baseUrl}/session/${encodeURIComponent(sessionId)}`,
-						REQUEST_TIMEOUT_MS,
-						signal,
+					const metadata = await this.nativeRequest(
+						(options) =>
+							this.client.session.get({ sessionID: sessionId }, options),
+						signal ?? null,
 					);
 					if (!isRecord(metadata) || metadata.id !== sessionId)
 						rootMetadataComplete = false;
@@ -3233,17 +3494,23 @@ export class EvalHost {
 		const ordered = sessionRecords.map((session) => session.id);
 		const messages: { sessionIndex: number; entry: MessageEntry }[] = [];
 		const sessionMessages: SessionMessages[] = [];
+		let messagesComplete = true;
 		for (const [sessionIndex, sessionId] of ordered.entries()) {
 			if (polled && sessionId !== polled.sessionId) continue;
-			let entries: MessageEntry[] | null;
+			let entries: readonly MessageEntry[] | null;
 			try {
-				entries = polled
-					? polled.messages
-					: ((await this.messages(sessionId, signal)) as MessageEntry[]);
+				entries = nativePin
+					? (nativePin.sessions.find((session) => session.id === sessionId)
+							?.messages ?? null)
+					: polled
+						? polled.messages
+						: ((await this.messages(sessionId, signal)) as MessageEntry[]);
 			} catch (error) {
 				// Reduce transcripts already fetched before deciding whether cancellation
 				// can discard this attempt. An earlier provider error still counts.
-				if (signal?.aborted && error === signal.reason) break;
+				messagesComplete = false;
+				if (nativeFailure || (signal?.aborted && error === signal.reason))
+					break;
 				throw new EvaluationPhaseError(
 					attemptFailure("host", "session-messages-read-failed", error, true),
 					error,
@@ -3253,6 +3520,30 @@ export class EvalHost {
 			if (session) sessionMessages.push({ ...session, messages: entries });
 			if (entries) {
 				for (const entry of entries) messages.push({ sessionIndex, entry });
+				const observation = this.nativeCommands.get(sessionId);
+				if (
+					sessionIds.includes(sessionId) &&
+					observation?.stop !== "question-escalated"
+				) {
+					const metadata = nativeSessionMetadata.find(
+						(candidate) => isRecord(candidate) && candidate.id === sessionId,
+					);
+					const scope = observation?.scope;
+					nativeFailure ??= nativeExecutionFailure(
+						nativeExecution(
+							collectHostTrace({
+								runnerRootSessionIds: [sessionId],
+								directory: this.project,
+								sessionMetadata: metadata ? [metadata] : [],
+								sessionMessages: [
+									{ sessionId, messages: entries.map((entry) => entry.native) },
+								],
+								childrenComplete: true,
+							}),
+							scope ? [scope] : [],
+						),
+					);
+				}
 			}
 		}
 		messages.sort(
@@ -3284,7 +3575,11 @@ export class EvalHost {
 		let guidanceSequence = 0;
 
 		for (const { sessionIndex, entry } of messages) {
-			if (entry.info.role === "assistant") {
+			if (
+				entry.info.role === "assistant" ||
+				(entry.native.type === "compaction" &&
+					entry.native.status !== "running")
+			) {
 				assistantMessages += 1;
 				const used = entry.info.tokens;
 				const messageCost = reportedCost(
@@ -3353,7 +3648,7 @@ export class EvalHost {
 					finalText = part.text ?? finalText;
 				}
 				if (part.type !== "tool" || !part.tool) continue;
-				const raw = part.state?.output ?? part.state?.error ?? "";
+				const raw = part.state?.output || part.state?.error || "";
 				let parsed: unknown = raw;
 				try {
 					parsed = JSON.parse(raw);
@@ -3365,14 +3660,14 @@ export class EvalHost {
 					entry.info,
 					part,
 					partIndex,
+					entry.native,
 				);
 				allCalls.push({
 					...(native ? { native } : {}),
 					tool: part.tool,
 					sessionIndex,
 					agent: entry.info.agent ?? "",
-					status:
-						(part.state?.status as ObservedToolCall["status"]) ?? "pending",
+					status: part.state?.status ?? "pending",
 					input: part.state?.input ?? {},
 					output: parsed,
 					rawOutput: raw,
@@ -3407,7 +3702,14 @@ export class EvalHost {
 					(candidate) => candidate.id === session.id,
 				);
 				return messagesForSession
-					? [{ id: session.id, messages: messagesForSession.messages }]
+					? [
+							{
+								id: session.id,
+								messages:
+									messagesForSession.messages?.map((entry) => entry.native) ??
+									null,
+							},
+						]
 					: [];
 			}),
 		});
@@ -3416,7 +3718,7 @@ export class EvalHost {
 				role: "manager",
 				sessions: parentSessions.map((session) => ({
 					id: session.id,
-					messages: session.messages,
+					messages: session.messages?.map((entry) => entry.native) ?? null,
 				})),
 			}),
 			reviewerActor,
@@ -3425,7 +3727,7 @@ export class EvalHost {
 		let session: Record<string, unknown> | null = null;
 		let archives: Record<string, unknown>[] = [];
 		try {
-			if (!polled) {
+			if (!pinned) {
 				checkCancellation(signal);
 				session = await this.readJson(
 					join(this.project, ".flow", "session.json"),
@@ -3438,26 +3740,33 @@ export class EvalHost {
 		} catch (error) {
 			// Cancelled workspace enrichment must not erase a provider failure
 			// already observed in the transcript.
-			if (!providerError || !signal?.aborted || error !== signal.reason)
+			if (
+				(!providerError && !nativeFailure) ||
+				!signal?.aborted ||
+				error !== signal.reason
+			)
 				throw error;
 		}
 		const currentWorkspace = await captureWorkspaceSnapshot(this.project);
+		const hostTrace = collectHostTrace({
+			runnerRootSessionIds: sessionIds,
+			directory: this.project,
+			sessionMetadata: nativeSessionMetadata,
+			sessionMessages: sessionMessages.map(({ id, messages }) => ({
+				sessionId: id,
+				messages: messages?.map((entry) => entry.native) ?? null,
+			})),
+			childrenComplete:
+				messagesComplete &&
+				rootMetadataComplete &&
+				!descendantResult.endpointFailed,
+		});
 		return {
 			packetBytes: collectReviewerPacketBytes(allCalls, [
 				...(session ? [session] : []),
 				...archives,
 			]),
-			hostTrace: collectHostTrace({
-				runnerRootSessionIds: sessionIds,
-				directory: this.project,
-				sessionMetadata: nativeSessionMetadata,
-				sessionMessages: sessionMessages.map(({ id, messages }) => ({
-					sessionId: id,
-					messages,
-				})),
-				childrenComplete:
-					rootMetadataComplete && !descendantResult.endpointFailed,
-			}),
+			hostTrace,
 			...(this.commandAbortObservation &&
 			sessionIds.includes(this.commandAbortObservation.rootSessionId)
 				? { abortObservation: this.commandAbortObservation }
@@ -3498,6 +3807,7 @@ export class EvalHost {
 			assistantMessages,
 			durationMs,
 			providerError,
+			nativeFailure,
 			providerErrorObservation: observedProviderError,
 		};
 	}
@@ -3573,16 +3883,76 @@ export class EvalHost {
 	}
 
 	private async stopOnce(): Promise<void> {
-		if (this.server) await terminateChildProcessTree(this.server);
-		// Must happen before the scratch directory is removed: a refresh the child
-		// performed lives only in its copy of `auth.json`, and losing it here is
-		// exactly what silently rotates the developer's own stored refresh token
-		// out from under them.
+		const handoff = this.credentialHandoff;
+		const drainResult =
+			handoff && this.nativeClient
+				? await Promise.allSettled([
+						(async () => {
+							const active = await this.nativeRequest(
+								(options) => this.client.session.active(options),
+								null,
+								ABORT_TIMEOUT_MS,
+							);
+							await Promise.all(
+								Object.keys(active).map(async (sessionID) => {
+									await this.nativeRequest(
+										(options) =>
+											this.client.session.interrupt(
+												{ sessionID, resume: false },
+												options,
+											),
+										null,
+										ABORT_TIMEOUT_MS,
+									);
+									await this.nativeRequest(
+										(options) =>
+											this.client.session.wait({ sessionID }, options),
+										null,
+										ABORT_TIMEOUT_MS,
+									);
+								}),
+							);
+						})(),
+					])
+				: [];
+		const credentialResult =
+			handoff && this.nativeClient
+				? await Promise.allSettled([
+						this.nativeRequest(
+							(options) => this.client.credential.list(options),
+							null,
+							ABORT_TIMEOUT_MS,
+						),
+					])
+				: [];
+		try {
+			if (this.server) await terminateChildProcessTree(this.server);
+		} catch (error) {
+			try {
+				await this.nativeAuthSource?.dispose();
+			} catch (cleanupError) {
+				throw new AggregateError(
+					[error, cleanupError],
+					"Native host termination and authentication cleanup failed.",
+				);
+			}
+			throw error;
+		}
+		this.nativeClient = null;
 		const results = await Promise.allSettled([
-			syncProviderCredentialsBack(this.credentialPaths),
+			Promise.resolve().then(async () => {
+				const snapshot = credentialResult[0];
+				if (snapshot?.status === "rejected") throw snapshot.reason;
+				if (snapshot?.status === "fulfilled" && handoff)
+					await handoff.onStop({
+						before: handoff.before,
+						after: snapshot.value,
+					});
+			}),
 			Promise.resolve().then(() => this.projectRetention?.(this.project)),
+			Promise.resolve().then(() => this.nativeAuthSource?.dispose()),
 		]);
-		const failures = results.flatMap((result) =>
+		const failures = [...drainResult, ...results].flatMap((result) =>
 			result.status === "rejected" ? [result.reason] : [],
 		);
 		if (failures.length === 1) throw failures[0];

@@ -1,3 +1,4 @@
+import type { SessionPromptInput } from "@opencode/client";
 import type { FlowService } from "../../application/flow-service.js";
 import type {
 	RecoveryController,
@@ -6,17 +7,17 @@ import type {
 import { FLOW_CORE_COMMANDS } from "../../config-shared.js";
 import { requestEvidenceAnchor } from "../../domain/request-evidence.js";
 import type { AutoDriveCoordinator, AutoGoalIntent } from "./auto-drive.js";
-import { FLOW_AUTO_METADATA_KEY } from "./auto-drive.js";
-import type { Hooks } from "./sdk.js";
 
 type FlowCommandName = keyof typeof FLOW_CORE_COMMANDS;
-type CommandHook = NonNullable<Hooks["command.execute.before"]>;
-type CommandOutput = Parameters<CommandHook>[1];
-type Part = CommandOutput["parts"][number];
-type TextPart = Extract<Part, { type: "text" }>;
-// Host assigns id, sessionID and messageID after the command hook returns.
-type DraftTextPart = Omit<TextPart, "id" | "sessionID" | "messageID">;
-const AUTO_STOPPED = "Flow auto stopped.";
+type PreparedFlowCommand = Readonly<{
+	name: FlowCommandName;
+	goal: string;
+	text: string;
+	settings: RecoverySettings | null;
+	explicit: boolean;
+	stopping: boolean;
+	intent: AutoGoalIntent;
+}>;
 const PLAN_ONLY_REQUEST = [
 	/\b(?:plan[- ]only|planning[- ]only)\b/i,
 	/\b(?:only|just)\s+(?:(?:want|need|draft|write|create|make|prepare|give\s+me|show\s+me)\s+)?(?:(?:a|an|the)\s+)?(?:(?:flow|phased|inspection)\s+)?plan\b/i,
@@ -44,217 +45,104 @@ function autoGoalIntent(goal: string): AutoGoalIntent {
 		return "inspection-deliverable";
 	return withoutNegation !== request ? "plan-only" : "uncertain";
 }
-function isFlowCommand(command: string): command is FlowCommandName {
-	return Object.hasOwn(FLOW_CORE_COMMANDS, command);
-}
-export function textPart(
-	text: string,
-	synthetic = false,
-	metadata?: Readonly<Record<string, unknown>>,
-): DraftTextPart {
-	return {
-		type: "text",
-		text,
-		...(synthetic ? { synthetic: true } : {}),
-		...(metadata ? { metadata } : {}),
-	};
-}
-/**
- * The command hook's parts are typed with the identity the host assigns after
- * the hook returns, so a part written here is a draft at runtime. This is the
- * one place a draft crosses into the host's array.
- */
-function asHostTextPart(part: DraftTextPart): TextPart {
-	return part as TextPart;
-}
-function rewriteCommand(
-	command: FlowCommandName,
+export function prepareFlowCommand(
+	name: FlowCommandName,
 	args: string,
-	output: CommandOutput,
-): void {
-	const config = FLOW_CORE_COMMANDS[command];
-	const promptArgs = config.subtask
-		? args
-		: "the preceding non-synthetic Flow request";
-	const prompt = config.template.split("$ARGUMENTS").join(promptArgs);
-	if (!config.subtask) {
-		if (output.parts.some((part) => part.type === "subtask"))
-			throw new Error("Flow manager commands cannot contain subtask parts.");
-		const preserved = output.parts.filter((part) => part.type !== "text");
-		output.parts.splice(
-			0,
-			output.parts.length,
-			asHostTextPart(
-				textPart(args.trim() ? `Flow ${command}: ${args}` : `Flow ${command}`),
-			),
-			asHostTextPart(textPart(prompt, true)),
-			...preserved,
+): PreparedFlowCommand {
+	const parsed =
+		name === "flow-auto"
+			? parseRecoveryCommand(args)
+			: { goal: args, settings: null, explicit: false };
+	const stopping =
+		name === "flow-auto" && /^(?:stop|cancel)$/i.test(args.trim());
+	const template = FLOW_CORE_COMMANDS[name].template
+		.split("$ARGUMENTS")
+		.join(
+			name === "flow-review"
+				? parsed.goal
+				: "the preceding Flow request in this same input",
 		);
-		return;
-	}
-	const part = output.parts[0];
-	if (output.parts.length !== 1 || part?.type !== "subtask")
-		throw new Error(`/${command} requires exactly one reviewer subtask.`);
-	if (part.agent !== config.agent)
-		throw new Error(`/${command} must dispatch to '${config.agent}'.`);
-	// The host's subtask type does not declare `command`, but a command-dispatched
-	// subtask carries it at runtime, so its presence is checked, not asserted.
-	const declared = "command" in part ? part.command : undefined;
-	if (typeof declared !== "string" || declared.replace(/^\/+/, "") !== command)
-		throw new Error(`/${command} subtask identity did not match.`);
-	part.prompt = prompt;
+	return Object.freeze({
+		name,
+		...parsed,
+		stopping,
+		intent: autoGoalIntent(parsed.goal),
+		text: stopping
+			? "/flow-auto stop"
+			: `Flow ${name}${parsed.goal.trim() ? `: ${parsed.goal}` : ""}\n\n${template}`,
+	});
 }
+
 export function createCommandHook(
 	options: Readonly<{
-		assertOperational: (action: string) => void;
+		assertOperational(action: string): void;
 		autoDrive: AutoDriveCoordinator;
 		flow: FlowService;
-		recovery?: RecoveryController;
-		defaultRecovery?: () => RecoverySettings | null;
-		showRefusal?: (message: string) => Promise<void>;
+		recovery: RecoveryController;
+		defaultRecovery?: (() => RecoverySettings | null) | undefined;
 	}>,
-): CommandHook {
-	const { assertOperational, autoDrive, flow, recovery } = options;
-	let generation = 0;
-	let invocation: { host: string; generation: number } | null = null;
-	return async (input, output) => {
-		const command = input.command.replace(/^\/+/, "");
-		if (!isFlowCommand(command)) return;
-		const action = input.arguments.trim();
-		const stopping =
-			command === "flow-auto" && /^(?:stop|cancel)$/i.test(action);
-		const continuationToken =
-			(command === "flow-run" || command === "flow-status") &&
-			(await autoDrive.resumeForCommand(input.sessionID));
-		const continuing = typeof continuationToken === "string";
-		let cancelledPending = false;
-		if (command === "flow-auto" && !stopping) {
-			invocation = { host: input.sessionID, generation: ++generation };
-			autoDrive.clear();
-			recovery?.revoke();
-		} else if (!continuing && invocation?.host === input.sessionID) {
-			cancelledPending = true;
-			invocation = null;
-			generation++;
-			recovery?.revoke(input.sessionID);
-			autoDrive.deactivate(
-				input.sessionID,
-				stopping ? "cancelled" : "interrupted",
-			);
+) {
+	return async (
+		command: PreparedFlowCommand,
+		host: string,
+		assertCurrent: () => void,
+		invocationToken?: string,
+	): Promise<Readonly<Record<string, unknown>> | null> => {
+		assertCurrent();
+		options.assertOperational(`execute /${command.name}`);
+		const { autoDrive, recovery, flow } = options;
+		if (command.stopping) {
+			recovery.revoke(host);
+			autoDrive.deactivate(host, "cancelled");
+			return null;
 		}
-		const entryGeneration = generation;
-		const assertCurrent = () => {
-			if (generation !== entryGeneration)
-				throw new Error("Flow command was superseded.");
-		};
-		const parsed =
-			command === "flow-auto"
-				? parseRecoveryCommand(input.arguments)
-				: { goal: input.arguments, settings: null, explicit: false };
-		if (command === "flow-auto" && /^(?:stop|cancel)$/i.test(action)) {
-			const confirmed = output.parts.some(
-				(part) => part.type === "text" && part.text === AUTO_STOPPED,
-			);
-			recovery?.revoke(input.sessionID);
-			const response =
-				autoDrive.deactivate(input.sessionID, "cancelled") ||
-				cancelledPending ||
-				confirmed
-					? AUTO_STOPPED
-					: "No Flow auto lease was active in this OpenCode session.";
-			output.parts[0] = asHostTextPart(textPart(response));
-			output.parts.length = 1;
-			return;
-		}
-		try {
-			assertOperational(`execute /${command}`);
-			let newlyAnchoredSessionId: string | null = null;
-			const settings =
-				command === "flow-auto" && !parsed.explicit
-					? (options.defaultRecovery?.() ?? null)
-					: parsed.settings;
-			if (command === "flow-auto") {
-				if (settings && !recovery)
-					throw new Error("Recovery is unavailable in this host.");
-				recovery?.activate(
-					input.sessionID,
-					settings,
-					parsed.explicit ? "explicit" : "default",
-				);
-			} else if (!continuing) recovery?.revoke(input.sessionID);
-			if (command === "flow-auto" || command === "flow-plan") {
-				const evidence = requestEvidenceAnchor(parsed.goal, input.sessionID);
+		if (command.name !== "flow-auto") {
+			if (command.name === "flow-plan") {
+				const evidence = requestEvidenceAnchor(command.goal, host);
 				if (evidence) {
 					await flow.status({ request: { view: "compact" } });
 					assertCurrent();
-					newlyAnchoredSessionId = await flow.requestAnchor({
-						goal: parsed.goal,
-						evidence,
-					});
+					await flow.requestAnchor({ goal: command.goal, evidence });
 					assertCurrent();
 				}
 			}
+			const token =
+				command.name === "flow-run" || command.name === "flow-status"
+					? await autoDrive.resumeForCommand(host)
+					: null;
 			assertCurrent();
-			rewriteCommand(command, parsed.goal, output);
-			if (command !== "flow-auto") {
-				if (continuing) {
-					const instruction = output.parts.find(
-						(part): part is TextPart =>
-							part.type === "text" && part.synthetic === true,
-					);
-					if (!instruction)
-						throw new Error("Flow continuation instruction missing.");
-					instruction.metadata = {
-						...instruction.metadata,
-						[FLOW_AUTO_METADATA_KEY]: continuationToken,
-					};
-				}
-				if (!continuing) autoDrive.deactivate(input.sessionID);
-				return;
+			if (!token) {
+				recovery.revoke(host);
+				autoDrive.deactivate(host);
 			}
-			const metadata = await autoDrive.activate(input.sessionID, parsed.goal, {
-				newlyAnchoredSessionId,
-				intent: autoGoalIntent(parsed.goal),
+			return token ? { "opencode-plugin-flow/auto": token } : null;
+		}
+		autoDrive.clear();
+		recovery.activate(
+			host,
+			command.explicit
+				? command.settings
+				: (options.defaultRecovery?.() ?? null),
+			command.explicit ? "explicit" : "default",
+		);
+		let newlyAnchoredSessionId: string | null = null;
+		const evidence = requestEvidenceAnchor(command.goal, host);
+		if (evidence) {
+			await flow.status({ request: { view: "compact" } });
+			assertCurrent();
+			newlyAnchoredSessionId = await flow.requestAnchor({
+				goal: command.goal,
+				evidence,
 			});
 			assertCurrent();
-			if (autoDrive.continuationSupport() === "unsupported") {
-				output.parts.unshift(
-					asHostTextPart(
-						textPart(
-							"Note: this host reports no assistant parentage, so automatic mutations cannot be attributed. Use a fresh manual /flow-plan or /flow-run command.",
-						),
-					),
-				);
-			}
-			const instruction = output.parts.find(
-				(part): part is TextPart =>
-					part.type === "text" && part.synthetic === true,
-			);
-			if (!instruction) {
-				throw new Error("/flow-auto is missing its synthetic instruction.");
-			}
-			instruction.metadata = { ...instruction.metadata, ...metadata };
-		} catch (error) {
-			if (
-				command === "flow-auto" &&
-				invocation?.host === input.sessionID &&
-				invocation.generation === entryGeneration
-			) {
-				invocation = null;
-				recovery?.revoke(input.sessionID);
-				autoDrive.deactivate(input.sessionID);
-			}
-			if (
-				command === "flow-auto" &&
-				error instanceof Error &&
-				error.message.startsWith("Delegated recovery is unavailable.")
-			) {
-				try {
-					await options.showRefusal?.(error.message);
-				} catch {}
-			}
-			throw error;
 		}
+		const metadata = await autoDrive.activate(host, command.goal, {
+			...(invocationToken === undefined ? {} : { token: invocationToken }),
+			newlyAnchoredSessionId,
+			intent: command.intent,
+		});
+		assertCurrent();
+		return metadata;
 	};
 }
 
@@ -301,4 +189,58 @@ export function parseRecoveryCommand(args: string): {
 		settings: { mode, maxCalls: Number(calls), maxUsd: Number(usd) },
 		explicit: true,
 	};
+}
+
+export function nativePromptPayload(
+	prompt: import("@opencode/plugin/promise/command").CommandInvocation["prompt"],
+): Omit<SessionPromptInput, "sessionID" | "id" | "resume" | "delivery"> {
+	return {
+		text: prompt.text,
+		...(prompt.files === undefined
+			? {}
+			: {
+					files: prompt.files.map((file) => ({
+						uri: file.uri,
+						...(file.name === undefined ? {} : { name: file.name }),
+						...(file.description === undefined
+							? {}
+							: { description: file.description }),
+						...(file.mention === undefined
+							? {}
+							: { mention: { ...file.mention } }),
+					})),
+				}),
+		...(prompt.agents === undefined
+			? {}
+			: {
+					agents: prompt.agents.map((agent) => ({
+						name: agent.name,
+						...(agent.mention === undefined
+							? {}
+							: { mention: { ...agent.mention } }),
+					})),
+				}),
+		...(prompt.skills === undefined
+			? {}
+			: {
+					skills: prompt.skills.map((skill) => ({
+						id: skill.id,
+						...(skill.mention === undefined
+							? {}
+							: { mention: { ...skill.mention } }),
+					})),
+				}),
+	};
+}
+
+export function flowCommandName(name: string): keyof typeof FLOW_CORE_COMMANDS {
+	if (
+		name === "flow-auto" ||
+		name === "flow-plan" ||
+		name === "flow-run" ||
+		name === "flow-review" ||
+		name === "flow-status"
+	)
+		return name;
+	throw new Error("Unknown Flow command.");
 }

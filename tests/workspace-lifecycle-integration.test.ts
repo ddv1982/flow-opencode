@@ -4,8 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import type { ToolContext } from "@opencode-ai/plugin";
-import type { FlowService } from "../src/application/flow-service.js";
+import { z } from "zod";
 import type { SourceDigest } from "../src/domain/session.js";
 import {
 	loadArchivedSession,
@@ -20,14 +19,32 @@ import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
 } from "../src/infrastructure/fs/workspace-validation.js";
+import type { FlowToolContext } from "../src/platform/opencode/flow-tool.js";
 import { createTools } from "../src/platform/opencode/tools.js";
+import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
 
 const execFileAsync = promisify(execFile);
 const FEATURE_ID = "lifecycle";
-const OUTPUT_DIGEST = `sha256:${"b".repeat(64)}` as SourceDigest;
-type FeatureCompleteResponse = Awaited<
-	ReturnType<FlowService["featureComplete"]>
->;
+const OUTPUT_DIGEST: SourceDigest = `sha256:${"b".repeat(64)}`;
+const featureCompleteResponseSchema = z.discriminatedUnion("status", [
+	z.object({
+		status: z.literal("ok"),
+		summary: z.string(),
+		workflowData: z.object({
+			projection: z.object({ status: z.string(), revision: z.number() }),
+			operation: z.object({
+				operationId: z.string(),
+				revision: z.number(),
+				replayed: z.boolean(),
+			}),
+		}),
+	}),
+	z.object({
+		status: z.literal("error"),
+		summary: z.string(),
+		workflowData: z.object({}).passthrough(),
+	}),
+]);
 
 function assertOk<
 	T extends Readonly<{ status: "ok" | "error"; summary: string }>,
@@ -43,20 +60,18 @@ function ok<T extends Readonly<{ status: "ok" | "error"; summary: string }>>(
 	return response;
 }
 
-function parseFeatureCompleteResponse(value: unknown): FeatureCompleteResponse {
-	return JSON.parse(String(value)) as FeatureCompleteResponse;
+function parseFeatureCompleteResponse(value: unknown) {
+	return featureCompleteResponseSchema.parse(value);
 }
 
-function toolContext(workspace: string, agent: string): ToolContext {
+function toolContext(workspace: string, agent: string): FlowToolContext {
 	return {
 		sessionID: `lifecycle-${agent}`,
 		messageID: `message-${agent}`,
+		callID: `call-${agent}`,
 		agent,
 		directory: workspace,
-		worktree: workspace,
 		abort: new AbortController().signal,
-		metadata() {},
-		async ask() {},
 	};
 }
 
@@ -192,13 +207,19 @@ test("persists one complete workspace lifecycle and replays its exact close", as
 			},
 		};
 		let completionCancellations = 0;
+		const validationCapture = new ValidationCaptureCoordinator({
+			readSession: async () => undefined,
+			persistObservation: async () => {
+				throw new Error("Unused validation persistence.");
+			},
+		});
+		const cancel = validationCapture.cancel.bind(validationCapture);
+		validationCapture.cancel = (sessionID) => {
+			completionCancellations++;
+			return cancel(sessionID);
+		};
 		const completionTool = createTools({
-			validation: {
-				cancel() {
-					completionCancellations += 1;
-					return true;
-				},
-			} as never,
+			validation: validationCapture,
 			prepareValidation: async () => {
 				throw new Error("Validation preparation is not used here.");
 			},

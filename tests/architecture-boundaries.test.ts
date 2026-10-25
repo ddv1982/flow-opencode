@@ -105,6 +105,32 @@ describe("v6 architecture boundaries", () => {
 		expect(oversized).toEqual([]);
 	});
 
+	test("keeps input evidence subordinate to the admission ledger, including type imports and re-exports", async () => {
+		const violations: string[] = [];
+		const target = join(sourceRoot, "platform/opencode/input-evidence.ts");
+		for (const directory of ["src", "tests", "scripts", "evals"]) {
+			for (const file of await sourceFiles(join(repositoryRoot, directory))) {
+				const source = await readFile(file, "utf8");
+				const imports = [
+					...source.matchAll(
+						/(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g,
+					),
+				];
+				for (const match of imports) {
+					const specifier = match[1];
+					if (!specifier) continue;
+					if (
+						resolve(dirname(file), specifier).replace(/\.js$/, ".ts") ===
+							target &&
+						repositoryPath(file) !== "src/platform/opencode/input-admission.ts"
+					)
+						violations.push(`${repositoryPath(file)} imports ${specifier}`);
+				}
+			}
+		}
+		expect(violations).toEqual([]);
+	});
+
 	test("keeps every src export referenced outside its declaring file", async () => {
 		// `noUnusedLocals` cannot see an export that nothing imports, so dead
 		// exported types and constants accumulate silently. Anything outside the
@@ -153,18 +179,44 @@ describe("v6 architecture boundaries", () => {
 		expect(unused).toEqual([]);
 	});
 
-	test("routes every OpenCode host import through src/platform/opencode/sdk.ts", async () => {
-		// One seam holds the peer-dependency surface, and it is the only host import
-		// the published declarations expose. It had already drifted once, so it is
-		// enforced here rather than described in prose.
-		const importers: string[] = [];
+	test("keeps native OpenCode imports in the host adapters and RPC contract", async () => {
+		const violations: string[] = [];
 		for (const file of await sourceFiles()) {
 			const source = await readFile(file, "utf8");
-			if (/(?:from\s+|import\s*)["']@opencode-ai\//.test(source)) {
-				importers.push(repositoryPath(file));
-			}
+			const path = repositoryPath(file);
+			if (/(?:from\s+|import\s*)["']@opencode-ai\//.test(source))
+				violations.push(path);
+			if (
+				/(?:from\s+|import\s*)["']@opencode\//.test(source) &&
+				!path.startsWith("src/platform/opencode/") &&
+				path !== "src/tui.ts" &&
+				path !== "src/flow-rpc.ts"
+			)
+				violations.push(path);
 		}
-		expect(importers).toEqual(["src/platform/opencode/sdk.ts"]);
+		expect(violations).toEqual([]);
+	});
+
+	test("keeps active host tooling free of V1 imports and launch packages", async () => {
+		const files = (
+			await Promise.all(
+				["scripts", "evals"].map((directory) =>
+					sourceFiles(join(repositoryRoot, directory)),
+				),
+			)
+		).flat();
+		const violations: string[] = [];
+		for (const file of files) {
+			const path = repositoryPath(file);
+			if (path.startsWith("evals/qualification/")) continue;
+			const source = await readFile(file, "utf8");
+			if (
+				/(?:from\s+|import\s*)["']@opencode-ai\//.test(source) ||
+				/opencode-ai@/.test(source)
+			)
+				violations.push(path);
+		}
+		expect(violations).toEqual([]);
 	});
 
 	test("keeps domain, application, and infrastructure dependencies inward", async () => {
@@ -185,7 +237,7 @@ describe("v6 architecture boundaries", () => {
 
 			if (
 				(layer === "domain" || layer === "application") &&
-				/(?:from\s+|import\s*)["']@opencode-ai\//.test(source)
+				/(?:from\s+|import\s*)["']@opencode(?:-ai)?\//.test(source)
 			) {
 				violations.push(
 					`${relative(sourceRoot, file)} imports the OpenCode host`,

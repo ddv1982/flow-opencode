@@ -10,6 +10,7 @@ import {
 	presentationText as prose,
 } from "./delivery-presentation.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
+import { nativeToolKey } from "./host-trace.js";
 import { checkReviewerEvidenceAccess } from "./reviewer-access.js";
 
 function invokingScript(command: string): string | null {
@@ -234,7 +235,9 @@ function primary(
 	if (message?.role !== "assistant" || message.agent !== call.agent)
 		return false;
 	const tool = message.tools.find(
-		(item) => item.partId === call.native?.partId,
+		(item) =>
+			call.native !== undefined &&
+			nativeToolKey(item) === nativeToolKey(call.native),
 	);
 	if (!tool || tool.tool !== call.tool || tool.status !== call.status)
 		return false;

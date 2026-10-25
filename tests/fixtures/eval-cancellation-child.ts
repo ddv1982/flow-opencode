@@ -3,6 +3,7 @@
 import { mock } from "bun:test";
 import { mkdir, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { OpenCode } from "@opencode/client";
 import { withCampaignSignals } from "../../evals/campaign-stop.js";
 import { providerFailure } from "../../evals/failure-origin.js";
 import type { CommandEnd, EvalHost, Outcome } from "../../evals/harness.js";
@@ -51,6 +52,14 @@ globalThis.fetch = Object.assign(
 	},
 	{ preconnect: fetch.preconnect },
 );
+const nativeClient = () =>
+	OpenCode.make({
+		baseUrl: "http://fixture",
+		fetch: Object.assign(
+			(...args: Parameters<typeof fetch>) => globalThis.fetch(...args),
+			{ preconnect: fetch.preconnect },
+		),
+	});
 const realHarness = { ...(await import("../../evals/harness.js")) };
 const realProvenance = { ...(await import("../../evals/provenance.js")) };
 const realStore = { ...(await import("../../evals/report-store.js")) };
@@ -135,6 +144,7 @@ function plannedOutcome(sessionId: string): Outcome {
 		assistantMessages: 1,
 		durationMs: 1,
 		providerError: null,
+		nativeFailure: null,
 	};
 }
 
@@ -201,39 +211,60 @@ class FakeEvalHost {
 				this.project,
 				this.signal,
 			]) as EvalHost;
-			Object.assign(this.pollHost, { baseUrl: "http://fixture" });
+			Object.assign(this.pollHost, {
+				baseUrl: "http://fixture",
+				nativeClient: nativeClient(),
+			});
 			const originalFetch = globalThis.fetch;
+			let dispatched = false;
 			this.restoreFetch = () => {
 				globalThis.fetch = originalFetch;
 			};
 			globalThis.fetch = Object.assign(
 				async (input: string | URL | Request) => {
-					const url = String(input);
-					if (!url.startsWith("http://fixture/"))
+					const url = new URL(String(input));
+					if (url.origin !== "http://fixture")
 						throw new Error("Unexpected fixture request");
-					if (url.endsWith("/command")) return Response.json({});
-					if (url.endsWith("/message")) {
+					if (url.pathname.endsWith("/command")) {
+						dispatched = true;
+						return new Response(null, { status: 204 });
+					}
+					if (url.pathname.endsWith("/model"))
+						return new Response(null, { status: 204 });
+					if (url.pathname === `/api/session/${sessionId}` && !dispatched)
+						return Response.json({
+							id: sessionId,
+							agent: "build",
+							location: { directory: this.project },
+						});
+					if (url.pathname.endsWith("/message")) {
+						if (!dispatched) {
+							event("actual-command-boundary");
+							return Response.json({ data: [], cursor: {} });
+						}
 						event("actual-progress-poll");
-						return Response.json([
-							{
-								info: {
-									id: "message",
-									role: "assistant",
-									sessionID: sessionId,
+						return Response.json({
+							data: [
+								{
+									id: "msg_fixture_provider",
+									type: "assistant",
+									agent: "build",
+									model: { providerID: "fixture", id: "model" },
 									time: { created: 1, completed: 2 },
 									error: {
-										name: "FixtureProviderUnavailable",
-										data: { message: "Fake polled provider failure" },
+										type: "FixtureProviderUnavailable",
+										message: "Fake polled provider failure",
 									},
+									content: [],
 								},
-								parts: [],
-							},
-						]);
+							],
+							cursor: {},
+						});
 					}
-					if (url.endsWith("/abort")) {
+					if (url.pathname.endsWith("/interrupt")) {
 						event("actual-provider-abort");
 						if (mode === "provider-poll-stop") return stopHere(this.signal);
-						return Response.json(true);
+						return Response.json({ interrupted: true });
 					}
 					event("unexpected-enrichment");
 					throw new Error(
@@ -265,39 +296,62 @@ class FakeEvalHost {
 			return this.pollHost.outcome(sessionIds, 1, this.signal);
 		}
 		if (mode === "provider-transcript-stop" && this.attempt === 2) {
+			await mkdir(this.project, { recursive: true });
 			const host = Reflect.construct(realHarness.EvalHost, [
 				this.project,
 				this.project,
 			]) as EvalHost;
-			Object.assign(host, { baseUrl: "http://fixture" });
+			Object.assign(host, {
+				baseUrl: "http://fixture",
+				nativeClient: nativeClient(),
+			});
 			const parent = sessionIds[0] ?? "id";
 			const originalFetch = globalThis.fetch;
 			globalThis.fetch = Object.assign(
 				async (input: string | URL | Request) => {
-					const url = String(input);
-					if (!url.startsWith("http://fixture/"))
+					const url = new URL(String(input));
+					if (url.origin !== "http://fixture")
 						throw new Error("Unexpected fixture request");
-					if (url.endsWith(`/session/${parent}/children`))
-						return Response.json([{ id: "reviewer", parentID: parent }]);
-					if (url.endsWith("/children")) return Response.json([]);
-					if (url.endsWith(`/session/${parent}/message`))
-						return Response.json([
-							{
-								info: {
-									id: "message",
-									role: "assistant",
-									sessionID: parent,
+					if (url.pathname === "/api/session")
+						return Response.json({
+							data: [
+								{
+									id: "reviewer",
+									parentID: parent,
+									agent: "flow-reviewer",
+									location: { directory: this.project },
+								},
+							],
+							cursor: {},
+						});
+					if (url.pathname === `/api/session/${parent}/message`)
+						return Response.json({
+							data: [
+								{
+									id: "msg_fixture_provider",
+									type: "assistant",
+									agent: "build",
+									model: { providerID: "fixture", id: "model" },
 									time: { created: 1, completed: 2 },
 									error: {
-										name: "FixtureProviderUnavailable",
-										data: { message: "Fake earlier provider failure" },
+										type: "FixtureProviderUnavailable",
+										message: "Fake earlier provider failure",
 									},
+									content: [],
 								},
-								parts: [],
-							},
-						]);
-					if (url.endsWith("/session/reviewer/message"))
+							],
+							cursor: {},
+						});
+					if (url.pathname === "/api/session/reviewer/message")
 						return stopHere(this.signal);
+					if (url.pathname === `/api/session/${parent}`)
+						return Response.json({
+							data: {
+								id: parent,
+								agent: "build",
+								location: { directory: this.project },
+							},
+						});
 					throw new Error("Unexpected fixture endpoint");
 				},
 				{ preconnect: originalFetch.preconnect },

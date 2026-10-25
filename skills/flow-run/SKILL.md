@@ -100,7 +100,7 @@ releases unless asked separately.
 
 Work serially. After a feature run is active, dispatch `flow-worker` only for
 two or three genuinely independent slices with clear benefit. Workers call no
-Flow tools, spawn no children, and run no Bash. Integrate and inspect the
+Flow tools, spawn no children, and run no Shell. Integrate and inspect the
 combined diff before validation.
 
 ## Validate

@@ -8,29 +8,41 @@ relevant `opencode.json` holds that same exact entry.
 
 Restart OpenCode and inspect its plugin-loading logs. Flow has no installer,
 cache cleaner, or configuration-repair CLI. Follow the official
-[OpenCode plugin documentation](https://opencode.ai/docs/plugins/) for npm or
+[OpenCode plugin documentation](https://opencode.ai/v2/docs/plugins/) for npm or
 configuration failures.
 
 ## Reviewer model looks shared
 
 Run `/flow-status` and read the process-local reviewer configuration. Prefer the
-native tuple form:
+object-form v2 entry:
 
 ```json
 {
-  "plugin": [["<same Flow plugin entry>", { "reviewer": { "model": "provider/model", "steps": 80 } }]]
+  "plugins": [{ "package": "<same Flow plugin entry>", "options": { "reviewer": { "model": "provider/model", "steps": 80 } } }]
 }
 ```
 
 Environment variables remain fallbacks. Flow shows the requested model, but
 status keeps availability `unverified`; it does not persist reviewer health.
 
+## Recovery advice stays off
+
+Set the chosen variable in the server environment and restart the server if
+needed. `options.typesafeApiKeyEnv` names it (default `TYPESAFE_API_KEY`).
+Custom names never fall back. Missing/blank keys or invalid names keep advice
+off. Check the command and plugin off settings. See the
+[configuration contract](maintainer-contract.md#opencode-surface).
+
 ## `/flow-auto` stops after every feature
 
-Continuation is anchored to the assistant message that owns the lease, so a host
-that reports no assistant message parentage cannot carry it. Flow says so at
-`/flow-auto` startup when it has observed that, and `flow_status` reports
-`autoContinuation.support`. On that host, drive each feature with `/flow-run`.
+Confirm that OpenCode reports the supported v2 version from the README.
+OpenCode 1 cannot load this release. Restart after the host upgrade.
+
+Continuation needs a verified model-request snapshot, exact native tool
+identity, and a live process-local epoch. Conflicting input, matched source failure,
+manual compaction of automatic work, or stream loss stops that authority.
+Unmatched callbacks grant nothing and cannot stop a fresh invocation. Restart
+discards authority. The durable Flow session remains available.
 
 Read `flow_status.autoDrive` for the [activity and pause reason](automatic-continuation.md).
 A supported host does not imply an active lease. `/flow-run` continues manually.
@@ -74,7 +86,7 @@ project, then remove that exact lock directory manually and retry.
 
 ## Validation capture was cancelled
 
-`flow_validation_start` arms the exact next Bash command. Any different Bash
+`flow_validation_start` arms the exact next Shell command. Any different Shell
 command cancels capture. Arm it again, run the displayed command unchanged, and
 wait for the `[flow-validation]` marker.
 

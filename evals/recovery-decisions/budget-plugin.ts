@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";
-import type { Plugin } from "@opencode-ai/plugin";
+import { Plugin } from "@opencode/plugin";
+import type { Context } from "@opencode/plugin/promise/plugin";
 import { z } from "zod";
 import { writeExclusive } from "../../scripts/lib/exclusive-json.js";
 import {
@@ -29,7 +31,7 @@ let installed:
 			fetch: typeof globalThis.fetch;
 			webSocket: typeof globalThis.WebSocket;
 			directory: string;
-			controlOrigin: string;
+			attach: (context: Context) => Promise<void>;
 			scriptDigest: string | null;
 			scopeDigest: string | null;
 	  }
@@ -38,14 +40,12 @@ function assertInstalledRequestGate(expected: {
 	directory: string;
 	authorizationDigest: string;
 	scope: EpisodeReservationScope;
-	controlOrigin: string;
 	origin: "live";
 }): void {
 	if (
 		!installed?.ready ||
 		installed.digest !== expected.authorizationDigest ||
 		installed.directory !== expected.directory ||
-		installed.controlOrigin !== expected.controlOrigin ||
 		installed.origin !== expected.origin ||
 		installed.scriptDigest !== null ||
 		installed.scopeDigest !== datasetDigest(expected.scope) ||
@@ -54,7 +54,20 @@ function assertInstalledRequestGate(expected: {
 	)
 		throw new Error("Matching live evaluation request gate is unavailable.");
 }
-const BudgetPlugin: Plugin = async (context, input) => {
+let installing = false;
+async function install(context: Context, input: unknown): Promise<void> {
+	if (installing)
+		throw new Error(
+			"Evaluation request gate installation is already in progress.",
+		);
+	installing = true;
+	try {
+		await installOnce(context, input);
+	} finally {
+		installing = false;
+	}
+}
+async function installOnce(context: Context, input: unknown): Promise<void> {
 	const options = Options.parse(input);
 	const scopeDigest = options.scope ? datasetDigest(options.scope) : null;
 	const status = await requestBudgetStatus(options.directory);
@@ -64,7 +77,6 @@ const BudgetPlugin: Plugin = async (context, input) => {
 		Date.parse(status.authorization.expiresAt) <= Date.now()
 	)
 		throw new Error("Evaluation request authorization unavailable.");
-	const controlOrigin = context.serverUrl.origin;
 	if (installed) {
 		if (
 			!installed.ready ||
@@ -73,7 +85,6 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			installed.digest !== options.authorizationDigest ||
 			installed.directory !== options.directory ||
 			installed.scopeDigest !== scopeDigest ||
-			installed.controlOrigin !== controlOrigin ||
 			installed.scriptDigest !==
 				(options.simulationScript
 					? datasetDigest(options.simulationScript)
@@ -82,7 +93,8 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			throw new Error(
 				"One evaluation request budget is allowed per host process.",
 			);
-		return {};
+		await installed.attach(context);
+		return;
 	}
 	if (options.simulationScript && status.authorization.origin !== "simulation")
 		throw new Error("Simulation script requires simulation authorization.");
@@ -99,12 +111,39 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			)
 		: undefined;
 	const original = globalThis.fetch;
-	const gated = createRequestGate({
+	const pending = new Map<string, Request>();
+	let gated: ReturnType<typeof createRequestGate>;
+	const proxy = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		idleTimeout: 0,
+		async fetch(request) {
+			const key = new URL(request.url).pathname.slice(1);
+			const originalRequest = pending.get(key);
+			if (!originalRequest)
+				return new Response("Unknown evaluation request", { status: 403 });
+			pending.delete(key);
+			try {
+				return await gated(
+					new Request(originalRequest, {
+						signal: AbortSignal.any([request.signal, originalRequest.signal]),
+					}),
+				);
+			} catch {
+				return new Response(
+					"Evaluation request refused; reservation remains consumed",
+					{ status: 503 },
+				);
+			}
+		},
+	});
+	const proxyOrigin = proxy.url.origin;
+	gated = createRequestGate({
 		...options,
-		controlOrigin,
+		controlOrigin: proxyOrigin,
 		transport: (request) =>
 			status.authorization.origin === "simulation" &&
-			new URL(request.url).origin !== controlOrigin &&
+			new URL(request.url).origin !== proxyOrigin &&
 			request.url !== "https://models.dev/api.json"
 				? simulate
 					? simulate(request)
@@ -113,6 +152,27 @@ const BudgetPlugin: Plugin = async (context, input) => {
 						)
 				: original(request),
 	});
+	const attached = new WeakSet<Context>();
+	const attach = async (context: Context) => {
+		if (attached.has(context)) return;
+		await context.session.hook("http.request", (input) => {
+			if (pending.size >= 128)
+				throw new Error("Too many pending evaluation requests.");
+			const key = randomUUID();
+			pending.set(key, input.request);
+			input.request = new Request(`${proxyOrigin}/${key}`, {
+				method: "POST",
+				signal: input.request.signal,
+			});
+		});
+		await context.session.hook("experimental.ws.handshake", () => {
+			throw new Error(
+				"WebSocket inference is disabled in budgeted evaluations.",
+			);
+		});
+		attached.add(context);
+	};
+	await attach(context);
 	globalThis.fetch = Object.assign(gated, { preconnect: original.preconnect });
 	globalThis.WebSocket = new Proxy(globalThis.WebSocket, {
 		construct() {
@@ -139,7 +199,7 @@ const BudgetPlugin: Plugin = async (context, input) => {
 		scopeDigest,
 		digest: options.authorizationDigest,
 		directory: options.directory,
-		controlOrigin,
+		attach,
 		scriptDigest: options.simulationScript
 			? datasetDigest(options.simulationScript)
 			: null,
@@ -154,6 +214,13 @@ const BudgetPlugin: Plugin = async (context, input) => {
 			: null,
 	});
 	installed.ready = true;
-	return {};
-};
-export default Object.assign(BudgetPlugin, { assertInstalledRequestGate });
+	return;
+}
+const BudgetPlugin = Plugin.define({
+	id: "flow-eval-request-budget",
+	setup: (context) => install(context, context.options),
+});
+export default Object.assign(BudgetPlugin, {
+	assertInstalledRequestGate,
+	install,
+});

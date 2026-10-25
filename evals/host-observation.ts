@@ -59,30 +59,26 @@ function messageModelIdentity(message: unknown): {
 	readonly providerID: string;
 	readonly modelID: string;
 } | null {
-	if (!isRecord(message) || !isRecord(message.info)) return null;
-	const info = message.info;
-	if (info.role !== "assistant" || "error" in info) return null;
+	if (!isRecord(message)) return null;
+	const info = message;
+	if (info.type !== "assistant" || "error" in info) return null;
 	const time = isRecord(info.time) ? info.time : null;
 	if (typeof time?.completed !== "number") return null;
 	const model = isRecord(info.model) ? info.model : null;
-	const providerID =
-		nonEmptyString(model?.providerID) ?? nonEmptyString(info.providerID);
-	const modelID =
-		nonEmptyString(model?.modelID) ?? nonEmptyString(info.modelID);
+	const providerID = nonEmptyString(model?.providerID);
+	const modelID = nonEmptyString(model?.id);
 	return providerID && modelID ? { providerID, modelID } : null;
 }
 
-/** Extracts the Phase 0-approved identity fields from a host message response. */
 export function extractObservedModelIdentity(
 	messages: readonly unknown[] | null,
 ): ObservedModelIdentity {
 	if (messages === null)
 		return { kind: "unobserved", reason: "endpoint-failure" };
 	const completed = messages.filter((message) => {
-		if (!isRecord(message) || !isRecord(message.info)) return false;
-		if (message.info.role !== "assistant" || "error" in message.info)
-			return false;
-		const time = isRecord(message.info.time) ? message.info.time : null;
+		if (!isRecord(message)) return false;
+		if (message.type !== "assistant" || "error" in message) return false;
+		const time = isRecord(message.time) ? message.time : null;
 		return typeof time?.completed === "number";
 	});
 	if (completed.length === 0)
@@ -93,7 +89,7 @@ export function extractObservedModelIdentity(
 			(value): value is { providerID: string; modelID: string } =>
 				value !== null,
 		);
-	if (identities.length === 0)
+	if (identities.length !== completed.length)
 		return { kind: "unobserved", reason: "field-unavailable" };
 	const unique = new Map(
 		identities.map((identity) => [
@@ -110,13 +106,13 @@ export function extractObservedModelIdentity(
 }
 
 function messageVariant(message: unknown): string | null {
-	if (!isRecord(message) || !isRecord(message.info)) return null;
-	const info = message.info;
-	if (info.role !== "assistant" || "error" in info) return null;
+	if (!isRecord(message)) return null;
+	const info = message;
+	if (info.type !== "assistant" || "error" in info) return null;
 	if (!isRecord(info.time) || typeof info.time.completed !== "number")
 		return null;
 	const model = isRecord(info.model) ? info.model : null;
-	return nonEmptyString(info.variant) ?? nonEmptyString(model?.variant);
+	return nonEmptyString(model?.variant);
 }
 
 export function extractObservedVariant(
@@ -125,10 +121,10 @@ export function extractObservedVariant(
 	if (messages === null)
 		return { kind: "unobserved", reason: "endpoint-failure" };
 	const completed = messages.filter((message) => {
-		if (!isRecord(message) || !isRecord(message.info)) return false;
-		const info = message.info;
+		if (!isRecord(message)) return false;
+		const info = message;
 		return (
-			info.role === "assistant" &&
+			info.type === "assistant" &&
 			!("error" in info) &&
 			isRecord(info.time) &&
 			typeof info.time.completed === "number"
@@ -148,7 +144,6 @@ export function extractObservedVariant(
 		: { kind: "unobserved", reason: "field-unavailable" };
 }
 
-/** Only children linked to a known session and named flow-reviewer are reviewers. */
 export function selectLineageValidatedReviewers(
 	parentSessionIds: readonly string[],
 	children: readonly ObservedSession[],

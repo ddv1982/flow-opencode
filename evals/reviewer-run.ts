@@ -28,6 +28,7 @@ import {
 	packPlugin,
 	preparePackageCache,
 } from "./harness.js";
+import { OPENCODE_HOST_VERSION } from "./opencode-host.js";
 import {
 	evaluatorIdentity,
 	hostActorObservation,
@@ -247,7 +248,7 @@ async function main(): Promise<void> {
 	const cases = REVIEWER_CASES.slice(0, options.limit);
 	const model = requestedModel(options.model);
 	const repositoryRoot = join(import.meta.dir, "..");
-	const opencodeVersion = packageJson.devDependencies["@opencode-ai/plugin"];
+	const opencodeVersion = OPENCODE_HOST_VERSION;
 	const packDir = await mkdtemp(join(tmpdir(), "flow-reviewer-pack-"));
 	const reportDir = join(repositoryRoot, "evals", "results");
 	await persistEvaluation("report-directory", () =>
@@ -294,6 +295,8 @@ async function main(): Promise<void> {
 							toolchain,
 							packageCache,
 							opencodeVersion,
+							ambientConfig: "disabled",
+							reviewerEnvironment: "disabled",
 							files: entry.files,
 							reviewer: { model: options.model },
 						});
@@ -347,8 +350,10 @@ async function main(): Promise<void> {
 							false,
 							() => activeHost.outcome([sessionId], Date.now() - started),
 						);
-						if (outcome.providerError) {
-							runFailure = outcome.providerError;
+						const observedFailure =
+							outcome.providerError ?? outcome.nativeFailure;
+						if (observedFailure) {
+							runFailure = observedFailure;
 							throw new EvaluationPhaseError(runFailure, runFailure);
 						}
 						const submission = await evaluationPhase(

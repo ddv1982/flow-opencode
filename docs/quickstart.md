@@ -6,7 +6,8 @@ consequential change. Read the plan and the review before accepting the result.
 ## Install Flow
 
 Install the exact release shown in the [README installation section](../README.md#install).
-Restart OpenCode after installation.
+Use OpenCode v2 with the tested minimum from the README. Finish or explicitly
+close active Flow sessions before upgrading, then restart OpenCode.
 
 ## Select Flow models
 
@@ -19,17 +20,29 @@ Without the terminal UI, name the reviewer in the Flow plugin entry and restart:
 ```json
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": [
-    [
-      "<same exact Flow plugin entry>",
-      { "reviewer": { "model": "provider/model", "steps": 80 } }
-    ]
-  ]
+  "plugins": [{
+    "package": "<same exact Flow plugin entry>",
+    "options": { "reviewer": { "model": "provider/model", "steps": 80 } }
+  }]
 }
 ```
 
-Picker preferences win, then tuple settings, then the
-`OPENCODE_FLOW_REVIEWER_MODEL` and `OPENCODE_FLOW_REVIEWER_STEPS` fallbacks.
+A project can override either global picker choice through plugin options:
+
+```json
+{
+  "modelPreferences": {
+    "review": { "kind": "model", "model": { "providerID": "provider", "id": "model" } },
+    "planning": { "kind": "default" }
+  }
+}
+```
+
+Place `modelPreferences` inside that plugin's `options` object. An absent role
+inherits its global choice. A project `default` restores the role's configured
+behavior. Reviewer options, then `OPENCODE_FLOW_REVIEWER_MODEL` and
+`OPENCODE_FLOW_REVIEWER_STEPS`, supply the base settings.
+The coding model stays under OpenCode's normal model selection.
 
 ## Verify the installation
 

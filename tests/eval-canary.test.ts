@@ -5,6 +5,7 @@ import {
 	mkdir,
 	mkdtemp,
 	readFile,
+	realpath,
 	rm,
 	symlink,
 	writeFile,
@@ -15,6 +16,7 @@ import {
 	RELEASE_HOST_POLICY,
 	releaseReviewerModel,
 } from "../evals/release-policy.js";
+import type { ModelIdentity } from "../evals/report.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
@@ -25,6 +27,7 @@ import {
 	canaryRecordIssue,
 	canaryRecordSha256,
 	deriveCanaryResult,
+	measureCanaryInstallation,
 	type PreparedCanary,
 	parseCanaryRecord,
 	prepareCanary,
@@ -221,8 +224,8 @@ function installation(value: PreparedCanary) {
 	};
 }
 
-function prepared(): PreparedCanary {
-	const base: Omit<PreparedCanary, "sha256"> = {
+function prepared(): Extract<PreparedCanary, { schemaVersion: 1 }> {
+	const base: Omit<Extract<PreparedCanary, { schemaVersion: 1 }>, "sha256"> = {
 		schemaVersion: 1 as const,
 		releaseTag: "v1.2.3",
 		artifact,
@@ -252,7 +255,7 @@ async function writePreparedFixture(root: string): Promise<{
 		tarballSha256: sha256(artifactBytes),
 	};
 	const { sha256: _initialSha256, ...initialBase } = initial;
-	const base: Omit<PreparedCanary, "sha256"> = {
+	const base = {
 		...initialBase,
 		artifact: artifactValue,
 		artifactSha256: artifactIdentitySha256(artifactValue),
@@ -1083,7 +1086,7 @@ describe("canary preparation", () => {
 		]) {
 			const child = Bun.spawn(
 				[
-					"bun",
+					process.execPath,
 					"run",
 					"scripts/eval-canary.ts",
 					"prepare",
@@ -1111,14 +1114,15 @@ describe("canary preparation", () => {
 			join(root, "dist/index.js"),
 			"export default async () => ({});\n",
 		);
+		await writeFile(join(root, "dist/tui.js"), "export default {};\n");
 		await writeFile(
 			join(root, "package.json"),
 			JSON.stringify({
 				name: "opencode-plugin-flow",
-				version: "1.2.3",
-				files: ["dist/index.js"],
+				version: "10.0.0",
+				files: ["dist/index.js", "dist/tui.js"],
 				dependencies: { zod: "4.4.2" },
-				devDependencies: { "@opencode-ai/plugin": "1.18.5" },
+				devDependencies: { "@opencode/plugin": "2.1.4" },
 			}),
 		);
 		for (const args of [
@@ -1129,15 +1133,15 @@ describe("canary preparation", () => {
 			["git", "commit", "-m", "fixture"],
 		])
 			await run(args, root);
-		await run(["bun", "pm", "pack", "--destination", output], root);
-		const artifactPath = join(output, "opencode-plugin-flow-1.2.3.tgz");
+		await run([process.execPath, "pm", "pack", "--destination", output], root);
+		const artifactPath = join(output, "opencode-plugin-flow-10.0.0.tgz");
 		await writeFile(
 			join(root, "package.json"),
 			JSON.stringify({
 				name: "opencode-plugin-flow",
-				version: "1.2.3",
+				version: "10.0.0",
 				dependencies: { zod: "9.9.9" },
-				devDependencies: { "@opencode-ai/plugin": "9.9.9" },
+				devDependencies: { "@opencode/plugin": "9.9.9" },
 			}),
 		);
 		await expect(
@@ -1154,10 +1158,10 @@ describe("canary preparation", () => {
 			outputDirectory: join(output, "prepared"),
 			preparedAt: new Date("2026-08-25T00:00:00.000Z"),
 		});
-		expect(prepared.releaseTag).toBe("v1.2.3");
+		expect(prepared.releaseTag).toBe("v10.0.0");
 		expect(
 			await readFile(
-				join(output, "prepared/fixture/.opencode/plugins/flow.js"),
+				join(output, "prepared/fixture/.opencode/plugins/flow/index.js"),
 				"utf8",
 			),
 		).toContain("export default");
@@ -1167,18 +1171,46 @@ describe("canary preparation", () => {
 		expect(
 			JSON.parse(
 				await readFile(
-					join(output, "prepared/fixture/.opencode/package.json"),
+					join(output, "prepared/fixture/.opencode/plugins/flow/package.json"),
 					"utf8",
 				),
 			),
 		).toEqual({
-			private: true,
-			version: "1.2.3",
+			name: "opencode-plugin-flow",
+			version: "10.0.0",
+			type: "module",
+			exports: { ".": "./index.js", "./tui": "./tui.js" },
 			dependencies: {
-				"@opencode-ai/plugin": "1.18.5",
+				"@opencode/plugin": "2.1.4",
 				zod: "4.4.2",
 			},
 		});
+		const authenticated = await prepareCanary({
+			repositoryRoot: root,
+			artifactPath,
+			outputDirectory: join(output, "prepared-auth"),
+			nativeAuth: true,
+		});
+		if (authenticated.schemaVersion !== 2)
+			throw new Error("Expected V2 preparation");
+		expect(authenticated.runtime.nativeAuth?.kind).toBe(
+			"native-account-source-v1",
+		);
+		expect(
+			await readFile(join(output, "prepared-auth/fixture/opencode.json")),
+		).toEqual(await readFile(join(output, "prepared/fixture/opencode.json")));
+		const measured = await measureCanaryInstallation(
+			authenticated,
+			await realpath(join(output, "prepared-auth")),
+		);
+		if (measured.schemaVersion !== 2)
+			throw new Error("Expected V2 installation");
+		expect(Object.keys(measured.nativeAuth?.sourceFiles ?? {}).sort()).toEqual([
+			"client-plugin.ts",
+			"index.ts",
+			"package.json",
+			"protocol.ts",
+		]);
 	});
 });
 
@@ -1231,5 +1263,136 @@ test("9.6 canary rejects every wrong-role model including a second reviewer", as
 				now: new Date("2026-08-25T00:00:01Z"),
 			}),
 		).toContain("pinned release route");
+	}
+});
+
+test("10.0.0 canary rejects a self-consistent manager and reviewer on the wrong route", async () => {
+	const value = record({
+		artifactValue: { ...artifact, packageVersion: "10.0.0" },
+	});
+	value.derivationVersion = "canary-evidence-v2";
+	value.actors = ["manager", "reviewer"].map((role) => ({
+		...actor,
+		role: role === "manager" ? "manager" : "reviewer",
+		requestedModel: {
+			routeProvider: "other",
+			gateway: null,
+			family: "other",
+			model: "other",
+			revision: null,
+		},
+		actualModel: {
+			kind: "observed",
+			value: {
+				routeProvider: "other",
+				gateway: null,
+				family: "other",
+				model: "other",
+				revision: null,
+			},
+		},
+		sessionIds: ["<redacted-id>"],
+	}));
+	const { recordSha256: _prior, ...base } = value;
+	const candidate = { ...base, recordSha256: canaryRecordSha256(base) };
+	expect(
+		await canaryRecordIssue({
+			version: "10.0.0",
+			record: candidate,
+			expectedArtifact: candidate.artifact,
+			directory: "/unused",
+			now: new Date("2026-08-25T00:00:01Z"),
+		}),
+	).toBe("Canary manager model does not match the pinned release route.");
+});
+
+test("10.0.0 canary rejects missing and wrong-role identities before evidence access", async () => {
+	const model: ModelIdentity = {
+		routeProvider: "openai",
+		gateway: null,
+		family: "gpt-6.1-sol",
+		model: "gpt-6.1-sol",
+		revision: null,
+	};
+	for (const variant of [
+		"missing-manager",
+		"manager",
+		"reviewer",
+		"second-reviewer",
+		"observed-route",
+		"observed-model",
+		"family",
+		"gateway",
+		"revision",
+	]) {
+		const value = record({
+			artifactValue: { ...artifact, packageVersion: "10.0.0" },
+		});
+		value.derivationVersion = "canary-evidence-v2";
+		value.actors = ["manager", "reviewer"].map((role) => ({
+			...actor,
+			role: role === "manager" ? "manager" : "reviewer",
+			requestedModel: model,
+			actualModel: { kind: "observed", value: model },
+			sessionIds: ["<redacted-id>"],
+		}));
+		const reviewer = value.actors[1];
+		if (!reviewer) throw new Error("Missing reviewer fixture.");
+		switch (variant) {
+			case "missing-manager":
+				value.actors = [reviewer];
+				break;
+			case "manager": {
+				const manager = value.actors[0];
+				if (!manager) throw new Error("Missing manager fixture.");
+				manager.requestedModel = { ...model, model: "other" };
+				break;
+			}
+			case "reviewer":
+				reviewer.requestedModel = { ...model, model: "other" };
+				break;
+			case "second-reviewer":
+				value.actors.push({
+					...reviewer,
+					requestedModel: { ...model, model: "other" },
+				});
+				break;
+			case "observed-route":
+				reviewer.actualModel = {
+					kind: "observed",
+					value: { ...model, routeProvider: "other" },
+				};
+				break;
+			case "observed-model":
+				reviewer.actualModel = {
+					kind: "observed",
+					value: { ...model, model: "other" },
+				};
+				break;
+			case "family":
+				reviewer.requestedModel = { ...model, family: "other" };
+				break;
+			case "gateway":
+				reviewer.requestedModel = { ...model, gateway: "proxy" };
+				break;
+			case "revision":
+				reviewer.requestedModel = { ...model, revision: "preview" };
+				break;
+		}
+		const { recordSha256: _prior, ...base } = value;
+		const candidate = { ...base, recordSha256: canaryRecordSha256(base) };
+		expect(
+			await canaryRecordIssue({
+				version: "10.0.0",
+				record: candidate,
+				expectedArtifact: candidate.artifact,
+				directory: "/unused",
+				now: new Date("2026-08-25T00:00:01Z"),
+			}),
+		).toBe(
+			variant === "missing-manager"
+				? "Passed canaries require actors, session, and transcript evidence."
+				: `Canary ${variant === "manager" ? "manager" : "reviewer"} model does not match the pinned release route.`,
+		);
 	}
 });

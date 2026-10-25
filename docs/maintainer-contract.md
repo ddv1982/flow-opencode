@@ -18,7 +18,7 @@ A new required-at-save plan declaration is a major. `evidence` entries own
 
 Flow owns a serial durable lifecycle with planning, one active run, observed
 validation, one independent review, reset, and closure. Implementation may use a
-bounded, ephemeral host-native worker wave. Flow exposes ten tools, five commands,
+bounded, ephemeral host-native worker wave. Flow exposes eleven tools, five commands,
 four guides, and three hidden subagents. `flow-planner` is disabled unless selected.
 Active work uses the manager and reserved planner, worker, and reviewer roles.
 
@@ -42,33 +42,30 @@ work makes no mutation and offers continue, defer, or abandon. Close completed
 work before a new request. Same-goal approved plan-only requests report plan and
 progress without mutation.
 
-Within existing implementation authority, the manager continues after plan
-approval and each passing feature outcome. Under `/flow-auto`, compact `ready`
-and `completed` projections are mechanical loop states, not user handoffs: the
-manager starts the next runnable feature or closes the session in the same
-authorized auto drive. An internal host-triggered continuation may cross model
-turns from idle only after a same-host accepted non-replayed `flow_plan_save`
-establishes the created Flow session. For an active provisional baseline,
-temporal progress in that same session lets a dispatched pending reviewer submit
-its owned result without pretending reviewer submission is manager provenance.
-An unchanged already-ready baseline or replacement session fails closed.
-Planning awaiting `flow_plan_approve` and any
-`await-user-direction`, blocked or ready, remain checkpoints unless an exact
-qualified host recovery request authorizes the mutation. Shadow advice cannot. A clarification ending at the same recognized checkpoint revision
-re-arms waiting without auto-routing; a reply resumes only after it advances the
-same session to a mechanical state through an accepted non-replayed manager
-mutation observed in that OpenCode host session. The mutation is credited only
-when the tool assistant ID resolves through the cached `message.updated`
-`parentID` to the authoritative user reply; a missing mapping or mismatch fails
-closed. Another host cannot establish that reply authority, though a reviewer
-child may contribute only the one state-constrained successor revision after an
-authenticated `flow_review_start`; every other mechanical projection must equal
-the credited mutation revision. Compaction requires a same-host trigger,
-automatic compaction part, matching summary, and successor user with a synthetic
-`compaction_continue` marker. Captured authority must match. Earlier user metadata
-updates grant nothing. Missing or stale lineage fails closed. This remains
-process-local and adds no Session v5 field. Flow starts the next feature whenever
-the proven lease permits it.
+Within existing implementation authority, `/flow-auto` continues through runnable
+features and closure. An accepted non-replayed manager mutation must establish
+progress in the same Flow session before idle can enqueue another prompt. An
+unchanged ready baseline, replacement session, unknown attribution, or stale
+source fails closed. A dispatched reviewer may contribute only the expected
+state-constrained successor revision after `flow_review_start`.
+
+Planning awaiting approval and `await-user-direction` remain checkpoints.
+Shadow advice grants no mutation. A reply resumes only after its accepted
+manager mutation advances the same session into a mechanical state. An unchanged
+recognized checkpoint returns to waiting. Native assistant and call identities
+must match the frozen inputs consumed by that model request. Later input cannot
+relabel an older assistant or supply authority from another host.
+
+Automatic compaction retains the epoch through its checked native control.
+Its user-role checkpoint grants no approval. Steer or consumed input, manual
+compaction of automatic work, user interruption, or event-stream loss revokes
+the interval.
+Consumer cancellation ends only its captured HTTP request.
+Queued prompts preserve the running request.
+Stale callbacks cannot revoke a fresh source.
+Summary-only ordinary history grants no checkpoint execution. These checks add
+no Session v5 field. See
+[ADR 0018](adr/0018-opencode-v2-only.md).
 
 `/flow-auto stop` and `/flow-auto cancel` revoke only the process-local lease in
 that OpenCode session. They do not mutate or close the durable Flow session.
@@ -192,7 +189,7 @@ separate user approval.
 Workers contribute only inside their assigned boundary. The manager owns shared
 files, integration, evidence acceptance, the combined diff, authoritative
 validation, and review dispatch. Ordinary worker edits are allowed so a cohort
-can run without approval interruptions; Bash, `.flow` and `.git` metadata
+can run without approval interruptions; Shell, `.flow` and `.git` metadata
 paths, nested delegation, and Flow-state tools are denied. Exact per-assignment
 paths remain a prompt contract because one static reusable agent cannot express
 a dynamic file ACL; the manager audits assigned versus changed paths after
@@ -253,8 +250,13 @@ hold or retry budget is persisted. At blocked or ready `await-user-direction`,
 read detail once and report findings. Reset-only compatibility never restores
 implicit selection. See [Session v5](#session-v5).
 
-With `TYPESAFE_API_KEY`, `/flow-auto` defaults to shadow advice (six attempts,
-$0.02). Off disables advice, not retry limits. First retry stays automatic;
+`options.typesafeApiKeyEnv` names the server variable (default `TYPESAFE_API_KEY`).
+Names match `[A-Za-z_][A-Za-z0-9_]*`; invalid names warn and disable the source.
+Custom names never fall back. Missing/blank values disable defaults; others are
+trimmed at runtime. The key goes only in auth headers, never options, logs or
+telemetry. Restart after environment changes. A key enables shadow defaults
+(six attempts, $0.02); plugin `recovery: { "mode": "off" }` disables the source.
+`--recovery=off` disables advice, not retry limits. First retry stays automatic;
 fresh direction permits one retry/start. Shadow grants nothing; release
 delegation is disabled. `recoveryStatus.last` adds process-local assessment duration,
 transport attempts, reservation deltas, scores, and threshold checks. `reservedUsd`
@@ -287,7 +289,7 @@ user starting point.
 | `flow_plan_amend` | Record a bounded prerequisite repair after a failed canonical gate. |
 | `flow_plan_approve` | Approve and lock the draft plan. |
 | `flow_run_start` | Start one runnable approved feature. |
-| `flow_validation_start` | Arm observation of the exact next Bash command. |
+| `flow_validation_start` | Arm observation of the exact next Shell command. |
 | `flow_review_start` | Create the run's independent review assignment. |
 | `flow_feature_complete` | Reviewer-only result submission; exact accepted requests replay read-only. |
 | `flow_feature_reset` | Supersede a failed attempt and optionally atomically start the exact authorized retry or dependency-independent feature through `nextFeatureId`. |
@@ -312,10 +314,13 @@ mutations. `flow_session_close` additionally returns derived delivery under
 | Agent | Boundary |
 | --- | --- |
 | `flow-planner` | Draft advice using read, glob, and grep. The manager saves and approves. |
-| `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Bash, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
+| `flow-worker` | Bounded implementation contribution; ordinary edits are allowed, while Shell, `.flow` and `.git` metadata paths, external-directory access, skills, delegation, and Flow tools are denied. |
 | `flow-reviewer` | Independent workspace-read-only inspection; only `flow_status` and its exact `flow_feature_complete` lifecycle submission are allowed among Flow tools. |
 
-Picker preferences take priority over reviewer tuple/environment settings.
+Project `modelPreferences` options take precedence over global picker choices.
+Global choices override reviewer options and environment defaults. A role reset
+restores its base configuration. Explicit picker selections clear that role's
+reasoning variant.
 Status reports requested roles and the latest observed coding model. These are
 process-local observations. Manager variants survive continuation. Configuration
 does not confirm provider execution.

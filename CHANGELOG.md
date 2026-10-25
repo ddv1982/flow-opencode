@@ -2,6 +2,30 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [10.0.0]
+
+- Flow now targets OpenCode v2, with 2.1.4 as its tested minimum. OpenCode 1
+  support is removed. Finish or explicitly close active Flow sessions before
+  upgrading, then restart OpenCode.
+- Server registration, commands, tools, permissions, validation capture, and
+  automatic continuation use the native v2 APIs. Continuation binds tool calls
+  to the inputs consumed by their model request and preserves authority through
+  verified automatic compaction.
+- The terminal model picker loads with the server plugin. Install Flow once
+  through `opencode plugin add opencode-plugin-flow@10.0.0` or the `plugins`
+  configuration array. Plugin options use object form.
+- Set `options.typesafeApiKeyEnv` to choose the server environment variable
+  holding your Typesafe key. It defaults to `TYPESAFE_API_KEY`. A custom name
+  never falls back to the default.
+- Session v5 schema remains unchanged. Historical qualification evidence retains its
+  original host policy. Exact 10.0.0 pins qualification to `openai/gpt-6.1-sol`
+  across all 17 cases and requires a fresh exact-artifact canary. This scope
+  makes no cross-provider reliability claim.
+- Zod is pinned to 4.6.7, including the fix for
+  [oversized collection validation](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
+
+Upgrade with `opencode plugin add opencode-plugin-flow@10.0.0`.
+
 ## [9.6.0]
 
 - Short delivery handoffs retain goal, closure, progress, assurance, authority,

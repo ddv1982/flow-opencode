@@ -159,14 +159,15 @@ describe("report artifact handoff", () => {
 		temporary.push(root, campaign);
 		await mkdir(join(root, "dist"), { recursive: true });
 		await writeFile(join(root, "dist/index.js"), "export default {}\n");
+		await writeFile(join(root, "dist/tui.js"), "export default {}\n");
 		await writeFile(
 			join(root, "package.json"),
 			JSON.stringify({
 				name: "opencode-plugin-flow",
-				version: "1.2.3",
-				files: ["dist/index.js"],
-				dependencies: { zod: "4.4.3" },
-				devDependencies: { "@opencode-ai/plugin": "1.18.6" },
+				version: "10.0.0",
+				files: ["dist/index.js", "dist/tui.js"],
+				dependencies: { zod: "4.6.7" },
+				devDependencies: { "@opencode/plugin": "2.1.4" },
 			}),
 		);
 		for (const command of [
@@ -180,7 +181,7 @@ describe("report artifact handoff", () => {
 		}
 		await run(["bun", "pm", "pack", "--destination", campaign], root);
 		await rename(
-			join(campaign, "opencode-plugin-flow-1.2.3.tgz"),
+			join(campaign, "opencode-plugin-flow-10.0.0.tgz"),
 			join(campaign, "artifact.tgz"),
 		);
 		const { inspectArtifact } = await import("../evals/provenance.js");

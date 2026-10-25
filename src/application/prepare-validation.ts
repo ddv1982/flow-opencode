@@ -175,6 +175,7 @@ export async function prepareValidation(
 export async function persistObservedValidation(
 	repository: SessionRepository,
 	input: ObservedValidation,
+	assertAuthorized: () => void = () => {},
 ): Promise<ValidationObservation> {
 	return repository.transact(async (transaction) => {
 		const session = await transaction.load();
@@ -187,6 +188,7 @@ export async function persistObservedValidation(
 				? { ineligibleReason: "source-drift" as const }
 				: {}),
 		});
+		assertAuthorized();
 		await transaction.save(result.session);
 		return result.value;
 	});

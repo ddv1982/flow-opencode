@@ -10,6 +10,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EvalHost } from "../evals/harness.js";
+import { fileCredentialHandoff } from "./fixtures/opencode-v2-test-host.js";
 
 test("shutdown retains the quiescent project once before deleting scratch and rejects late retention", async () => {
 	const scratch = await mkdtemp(join(tmpdir(), "retention-check-"));
@@ -55,7 +56,7 @@ test("credential synchronization failure still retains the stopped project and p
 		const target = join(scratch, "invalid-credentials");
 		await writeFile(target, "invalid-json");
 		const host: EvalHost = Reflect.construct(EvalHost, [project, scratch]);
-		Reflect.set(host, "credentialPaths", {
+		fileCredentialHandoff(host, {
 			source: join(scratch, "source-credentials"),
 			target,
 			snapshot: null,
@@ -80,7 +81,7 @@ test("settles synchronous retention failure together with invalid credentials", 
 		const target = join(scratch, "invalid-credentials");
 		await writeFile(target, "invalid-json");
 		const host: EvalHost = Reflect.construct(EvalHost, [project, scratch]);
-		Reflect.set(host, "credentialPaths", {
+		fileCredentialHandoff(host, {
 			source: join(scratch, "source-credentials"),
 			target,
 			snapshot: null,

@@ -64,7 +64,7 @@ export function studyManifest(): StudyManifest {
 		purpose: "exploratory",
 		comparison: "total-effect",
 		method: "equal-task-cluster-bootstrap-v1",
-		opencodeVersion: "1.18.6",
+		opencodeVersion: "2.1.4",
 		arms: { baseline: structuredClone(arm), candidate: structuredClone(arm) },
 		cases: [{ caseId: studyCase.id, caseVersion: 1 }],
 		repetitions: 1,
@@ -78,7 +78,7 @@ export function studyManifest(): StudyManifest {
 		},
 		accounting: {
 			schemaVersion: 1,
-			hostContract: "opencode-1.18.6-disjoint-output-v1",
+			hostContract: "opencode-2.1.4-disjoint-output-v1",
 			maxGeneratedOutputTokens: 10000,
 			estimate: {
 				generatedOutputTokensPerAttempt: 10,
@@ -131,6 +131,7 @@ export async function studyArtifact(
 export function fakeStudyTransport(
 	options: {
 		failStart?: number;
+		nativeFailure?: Outcome["nativeFailure"];
 		badProduct?: number;
 		usage?: Outcome["tokens"];
 		costUsd?: number | null;
@@ -227,6 +228,7 @@ export function fakeStudyTransport(
 					},
 					costUsd: options.costUsd === undefined ? 0.25 : options.costUsd,
 					providerError: null,
+					nativeFailure: options.nativeFailure ?? null,
 					...(options.usageAvailability === undefined
 						? {}
 						: { usageAvailability: options.usageAvailability }),

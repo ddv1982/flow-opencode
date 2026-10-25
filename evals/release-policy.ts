@@ -191,7 +191,23 @@ const STANDARD_RELEASE: ReleaseProfile = {
 	requiredModels: null,
 };
 
+export function targetsOpenCodeV2(packageVersion: string): boolean {
+	const match = /^(\d+)\./.exec(packageVersion);
+	return match !== null && Number(match[1]) >= 10;
+}
+
+const V2_RELEASE: ReleaseProfile = {
+	catalog: DELIVERY_RELEASE_CATALOG.map((row) => ({
+		...row,
+		minProviders: 2,
+	})),
+	requiredModels: null,
+};
+
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "10.0.0")
+		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
+	if (targetsOpenCodeV2(packageVersion)) return V2_RELEASE;
 	if (packageVersion === "9.6.0")
 		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (packageVersion === "9.5.0")
@@ -208,11 +224,14 @@ export function releaseProfile(packageVersion: string): ReleaseProfile {
 
 export function releaseReviewerModel(
 	packageVersion: string,
+	managerModel?: ModelIdentity,
 ): ModelIdentity | null {
-	if (packageVersion !== "9.6.0") return null;
-	const model = releaseProfile(packageVersion).requiredModels?.[0];
-	if (!model) throw new Error("Pinned release reviewer model is absent.");
-	return model;
+	if (packageVersion === "9.6.0" || packageVersion === "10.0.0") {
+		const model = releaseProfile(packageVersion).requiredModels?.[0];
+		if (!model) throw new Error("Pinned release reviewer model is absent.");
+		return model;
+	}
+	return targetsOpenCodeV2(packageVersion) ? (managerModel ?? null) : null;
 }
 
 export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {
@@ -228,7 +247,29 @@ export const RELEASE_HOST_POLICY = {
 	reviewerSteps: null,
 } as const;
 
+const V2_RELEASE_HOST_POLICY = {
+	opencodeVersion: "2.1.4",
+	platform: "linux",
+	reviewerSteps: null,
+	ambientConfig: "disabled",
+	transport: "http",
+} as const;
+
+export function releaseHostPolicy(packageVersion: string) {
+	return targetsOpenCodeV2(packageVersion)
+		? V2_RELEASE_HOST_POLICY
+		: RELEASE_HOST_POLICY;
+}
+
 export function releaseHostPermissions(packageVersion: string) {
+	if (targetsOpenCodeV2(packageVersion))
+		return [
+			{
+				action: "external_directory",
+				resource: "*",
+				effect: "deny" as const,
+			},
+		];
 	return packageVersion === "9.5.0" || packageVersion === "9.6.0"
 		? { external_directory: "deny" as const }
 		: undefined;
@@ -242,7 +283,10 @@ export function releasePolicySha256(packageVersion: string): string {
 			? {}
 			: { requiredModels: profile.requiredModels }),
 		host: {
-			...RELEASE_HOST_POLICY,
+			...releaseHostPolicy(packageVersion),
+			...(targetsOpenCodeV2(packageVersion)
+				? { reviewer: "same-as-manager", recovery: "off" }
+				: {}),
 			...(releaseHostPermissions(packageVersion)
 				? { permission: releaseHostPermissions(packageVersion) }
 				: {}),
@@ -329,7 +373,7 @@ export function releasePrimaryCellsFor(
 					armToken: null,
 					repetition,
 					managerModel: model,
-					reviewerModel: releaseReviewerModel(packageVersion),
+					reviewerModel: releaseReviewerModel(packageVersion, model),
 					schedule: "primary" as const,
 				};
 			}),
@@ -359,7 +403,7 @@ export function releaseCellsFor(
 				armToken: null,
 				repetition: policy.minScoredAttempts,
 				managerModel: model,
-				reviewerModel: releaseReviewerModel(packageVersion),
+				reviewerModel: releaseReviewerModel(packageVersion, model),
 				schedule: "environment-reserve" as const,
 			};
 		}),
@@ -383,13 +427,20 @@ export function releaseHostConfigSha256(input: {
 	readonly model: ModelIdentity;
 }): string {
 	const model = `${input.model.routeProvider}/${input.model.model}`;
+	const host = releaseHostPolicy(input.packageVersion);
 	return canonicalSha256("flow-eval-host-config-v1", {
-		opencodeVersion: RELEASE_HOST_POLICY.opencodeVersion,
+		opencodeVersion: host.opencodeVersion,
 		plugin: `opencode-plugin-flow@${input.packageVersion}`,
 		model,
 		reviewerModel: model,
-		reviewerSteps: RELEASE_HOST_POLICY.reviewerSteps,
-		platform: RELEASE_HOST_POLICY.platform,
+		reviewerSteps: host.reviewerSteps,
+		platform: host.platform,
+		...(targetsOpenCodeV2(input.packageVersion)
+			? {
+					ambientConfig: V2_RELEASE_HOST_POLICY.ambientConfig,
+					transport: V2_RELEASE_HOST_POLICY.transport,
+				}
+			: {}),
 		...(releaseHostPermissions(input.packageVersion)
 			? { permission: releaseHostPermissions(input.packageVersion) }
 			: {}),
@@ -402,16 +453,22 @@ export function assertReleaseHost(input: {
 	readonly platform: string;
 	readonly opencodeOverride?: string | undefined;
 	readonly reviewerModelOverride?: string | undefined;
+	readonly reviewerVariantOverride?: string | undefined;
 	readonly reviewerStepsOverride?: string | undefined;
 }): void {
-	if (input.packageVersion === "9.6.0" && input.recoveryApiKeySet)
+	if (
+		(input.packageVersion === "9.6.0" ||
+			targetsOpenCodeV2(input.packageVersion ?? "standard")) &&
+		input.recoveryApiKeySet
+	)
 		throw new Error(
-			"9.6.0 release evaluation requires recovery off; unset TYPESAFE_API_KEY.",
+			`${input.packageVersion} release evaluation requires recovery off; unset TYPESAFE_API_KEY.`,
 		);
 	if (
 		input.platform !== RELEASE_HOST_POLICY.platform ||
 		input.opencodeOverride?.trim() ||
 		input.reviewerModelOverride?.trim() ||
+		input.reviewerVariantOverride?.trim() ||
 		input.reviewerStepsOverride?.trim()
 	) {
 		throw new Error(

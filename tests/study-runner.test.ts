@@ -341,7 +341,7 @@ describe("paired-study runner", () => {
 			expect(
 				fake.starts.every(
 					(entry) =>
-						entry.nativeLlm === false &&
+						entry.ambientConfig === "disabled" &&
 						entry.reviewerEnvironment === "disabled",
 				),
 			).toBe(true);

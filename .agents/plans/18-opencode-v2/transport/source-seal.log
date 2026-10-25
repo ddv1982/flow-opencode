@@ -1,0 +1,4 @@
+[
+  "evals/http-transport-plugin.ts",
+  "src/platform/opencode/http-transport.ts"
+]

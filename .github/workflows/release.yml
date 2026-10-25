@@ -77,7 +77,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           package-manager-cache: false
 
       - name: Set up Bun
@@ -129,6 +129,11 @@ jobs:
                 "opencode-plugin-flow-${version}.tgz" "$sealed" "$digest"
             fi
           fi
+          if node -e 'process.exit(Number(process.argv[1].split(".")[0]) >= 10 ? 0 : 1)' "$version" && [[ -f "evals/qualification/archives/${version}.json" ]]; then
+            qualified="$(bun scripts/materialize-qualification.ts --descriptor "evals/qualification/archives/${version}.json" --out "${RUNNER_TEMP}/flow-qualified-${version}")"
+            bun run scripts/restore-exact-release-artifact.ts \
+              "opencode-plugin-flow-${version}.tgz" --bundle "$qualified" "$version"
+          fi
 
       - name: Report release evidence readiness without publishing
         timeout-minutes: 5
@@ -171,7 +176,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
 
@@ -237,6 +242,11 @@ jobs:
               bun run scripts/restore-exact-release-artifact.ts \
                 "opencode-plugin-flow-${version}.tgz" "$sealed" "$digest"
             fi
+          fi
+          if node -e 'process.exit(Number(process.argv[1].split(".")[0]) >= 10 ? 0 : 1)' "$version"; then
+            qualified="$(bun scripts/materialize-qualification.ts --descriptor "evals/qualification/archives/${version}.json" --out "${RUNNER_TEMP}/flow-qualified-${version}")"
+            bun run scripts/restore-exact-release-artifact.ts \
+              "opencode-plugin-flow-${version}.tgz" --bundle "$qualified" "$version"
           fi
 
       - name: Restore release record from this workflow run

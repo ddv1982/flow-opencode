@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-10-24T06:56:38.981257+00:00",
+  "scope": ".agents/plans/18-opencode-v2",
+  "checks": {
+    "localMarkdownLinks": "PASS",
+    "markdownWhitespaceAndPunctuation": "PASS",
+    "sixOrderedPhases": "PASS",
+    "decisionLogColumns": "PASS",
+    "sixRegistryPackageIdentities": "PASS",
+    "cliExecutableMetadata": "PASS"
+  },
+  "markdownFiles": 3,
+  "decisionRows": 11,
+  "limitations": [
+    "External link content was researched separately.",
+    "No plugin runtime or implementation tests ran.",
+    "Independent review returned issues. Parent corrections are recorded in review.md; no second independent verdict is claimed."
+  ]
+}

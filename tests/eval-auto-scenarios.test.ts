@@ -298,7 +298,8 @@ test("outside-target repair is accepted only with a source-bound failed-gate ame
 		allCalls: [call, ...fixture.allCalls],
 		flowCalls: [call, ...fixture.flowCalls],
 	};
-	if (fixture.hostTrace?.kind !== "observed") throw new Error("Missing trace");
+	if (fixture.hostTrace?.kind !== "observed" || fixture.hostTrace.version !== 1)
+		throw new Error("Missing trace");
 	const reviewStart = amended.allCalls.find(
 		(value) => value.tool === "flow_review_start",
 	);

@@ -414,6 +414,8 @@ async function accessFixture(
 			{ sessionId: "ses_child", messages: [childUser, ...childMessages] },
 		],
 	});
+	if (hostTrace.version !== 1)
+		throw new Error("Expected historical V1 fixture.");
 	const packetBytes = collectReviewerPacketBytes(calls, [document]);
 	return {
 		input: {
@@ -852,7 +854,10 @@ test("redacted retained native evidence preserves nulls, token digests and revie
 	firstCall.metadata = { accessToken: "raw-access", api_key: "raw-key" };
 	const evidence = retainedAccessEvidence(input);
 	const trace = evidence.gradeInput.hostTrace;
-	const root = trace?.kind === "observed" ? trace.messages[0] : null;
+	const root =
+		trace?.kind === "observed" && trace.version === 1
+			? trace.messages[0]
+			: null;
 	if (root?.role !== "user") throw new Error("Missing retained root request");
 	expect(root.parts.map((part) => part.flowTokenSha256)).toEqual([
 		null,

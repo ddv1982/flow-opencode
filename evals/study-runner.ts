@@ -292,7 +292,6 @@ export async function executeStudy(
 					toolchain,
 					packageCache: "",
 					opencodeVersion: policy.opencodeVersion,
-					nativeLlm: false,
 					ambientConfig: "disabled",
 					withFlow: false,
 					reviewerEnvironment: "disabled",
@@ -477,7 +476,6 @@ export async function executeStudy(
 						opencodeVersion: policy.opencodeVersion,
 						files: benchmark.files,
 						withFlow: flow,
-						nativeLlm: false,
 						ambientConfig: "disabled",
 						reviewerEnvironment: "disabled",
 						...(reviewer
@@ -564,7 +562,7 @@ export async function executeStudy(
 						? {}
 						: { availability: outcome.usageAvailability }),
 				});
-				failure ??= outcome.providerError;
+				failure ??= outcome.providerError ?? outcome.nativeFailure;
 				if (failure && usage.costUsd === 0)
 					usage = normalizeStudyUsage({
 						tokens: usage.tokens,

@@ -1,5 +1,8 @@
 # ADR 0008: Bounded Auto Continuation
 
+The host integration is superseded by [ADR 0018](0018-opencode-v2-only.md).
+Its V1 message and compaction fields describe the earlier host contract.
+
 Date: 2026-07-23
 
 ## Status

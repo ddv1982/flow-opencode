@@ -1942,3 +1942,139 @@ async function priorFindingsFor(
 	}
 	return projection.priorFindings;
 }
+
+for (const waitAt of ["lock", "load", "digest"] as const)
+	test(`validation authorization is decided after the ${waitAt} wait`, async () => {
+		const repository = new MemorySessionRepository();
+		const flow = await approveSession(repository, deterministicEnvironment());
+		await startFeatureRun(flow, repository, FEATURE, `guard-${waitAt}`);
+		const prepared = await prepareValidation(
+			repository,
+			{
+				expectedRevision: revision(repository),
+				featureId: FEATURE,
+				command: "bun test",
+				scope: "focused",
+			},
+			"linux",
+		);
+		const original = structuredClone(repository.session);
+		const saves = repository.saveCount;
+		const entered = Promise.withResolvers<void>();
+		const release = Promise.withResolvers<void>();
+		const wait = async () => {
+			entered.resolve();
+			await release.promise;
+		};
+		const lock =
+			waitAt === "lock" ? repository.transact(wait) : Promise.resolve();
+		let authorized = true;
+		const guarded = {
+			read: () => repository.read(),
+			transact: <T>(
+				task: (transaction: typeof repository.transaction) => Promise<T>,
+			) =>
+				repository.transact((transaction) =>
+					task({
+						...transaction,
+						load: async () => {
+							if (waitAt === "load") await wait();
+							return transaction.load();
+						},
+						computeSourceDigest: async () => {
+							if (waitAt === "digest") await wait();
+							return transaction.computeSourceDigest();
+						},
+					}),
+				),
+		};
+		const pending = persistObservedValidation(
+			guarded,
+			{
+				...prepared,
+				captureId: `guard-${waitAt}`,
+				exitCode: 0,
+				outputDigest: OUTPUT,
+				outputComplete: true,
+			},
+			() => {
+				if (!authorized) throw new Error("stale validation owner");
+			},
+		);
+		const caught = pending.catch(String);
+		await entered.promise;
+		authorized = false;
+		release.resolve();
+		await lock;
+		expect(await caught).toBe("Error: stale validation owner");
+		expect(repository.saveCount).toBe(saves);
+		expect(repository.session).toEqual(original);
+		const fresh = await persistObservedValidation(
+			repository,
+			{
+				...prepared,
+				captureId: `fresh-${waitAt}`,
+				exitCode: 0,
+				outputDigest: OUTPUT,
+				outputComplete: true,
+			},
+			() => {},
+		);
+		expect(fresh.id).toBe(`fresh-${waitAt}`);
+		expect(repository.saveCount).toBe(saves + 1);
+	});
+
+test("validation authorized at save is not rolled back by later owner replacement", async () => {
+	const repository = new MemorySessionRepository();
+	const flow = await approveSession(repository, deterministicEnvironment());
+	await startFeatureRun(flow, repository, FEATURE, "authorized-save");
+	const prepared = await prepareValidation(
+		repository,
+		{
+			expectedRevision: revision(repository),
+			featureId: FEATURE,
+			command: "bun test",
+			scope: "focused",
+		},
+		"linux",
+	);
+	const entered = Promise.withResolvers<void>();
+	const release = Promise.withResolvers<void>();
+	let authorized = true;
+	const guarded = {
+		read: () => repository.read(),
+		transact: <T>(
+			task: (transaction: typeof repository.transaction) => Promise<T>,
+		) =>
+			repository.transact((transaction) =>
+				task({
+					...transaction,
+					save: async (session) => {
+						entered.resolve();
+						await release.promise;
+						return transaction.save(session);
+					},
+				}),
+			),
+	};
+	const pending = persistObservedValidation(
+		guarded,
+		{
+			...prepared,
+			captureId: "authorized-save",
+			exitCode: 0,
+			outputDigest: OUTPUT,
+			outputComplete: true,
+		},
+		() => {
+			if (!authorized) throw new Error("stale validation owner");
+		},
+	);
+	await entered.promise;
+	authorized = false;
+	release.resolve();
+	expect((await pending).id).toBe("authorized-save");
+	expect(
+		repository.session?.runs[0]?.validations.map((value) => value.id),
+	).toEqual(["authorized-save"]);
+});

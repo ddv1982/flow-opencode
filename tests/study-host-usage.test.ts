@@ -1,25 +1,47 @@
-import { afterAll, beforeAll, describe, expect, spyOn, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { EvalHost } from "../evals/harness.js";
+import type {
+	SessionMessageAssistant,
+	SessionMessageInfo,
+} from "@opencode/client";
 import type { StudyUsage } from "../evals/study-usage.js";
-import { authorizePaidRun } from "../scripts/paid-budget.js";
+import {
+	messagePage,
+	type NativeTokens,
+	nativeAssistant,
+	nativeClient,
+	nativeHost,
+	nativeSession,
+	nativeTool,
+	sessionPage,
+	sessionReply,
+	useNativeFixtureBudget,
+} from "./fixtures/native-eval-client.js";
 
-type HostTokens = {
-	input: number;
-	output: number;
-	reasoning: number;
-	cache: { read: number; write: number };
-};
+useNativeFixtureBudget();
+type HostTokens = NativeTokens;
 
 test("entitlement probes distinguish session setup from a provider request attempt", async () => {
-	const host = Reflect.construct(EvalHost, [
-		"/unused-project",
-		"/unused-scratch",
-	]) as EvalHost;
+	const project = await mkdtemp(join(tmpdir(), "native-probe-"));
 	let dispatches = 0;
 	let usage: StudyUsage | undefined;
+	let setupFails = true;
+	const host = nativeHost(
+		project,
+		nativeClient(({ url }) => {
+			if (url.pathname === "/api/session") {
+				if (setupFails) throw new Error("Session setup failed.");
+				return Response.json({ data: nativeSession("probe-session", project) });
+			}
+			if (url.pathname === "/api/session/probe-session/model")
+				throw new Error("Request failed.");
+			if (url.pathname === "/api/session/probe-session")
+				return new Response(null, { status: 204 });
+			throw new Error(`Unexpected probe endpoint ${url.pathname}`);
+		}),
+	);
 	const settings = {
 		onDispatch: () => {
 			dispatches++;
@@ -28,56 +50,81 @@ test("entitlement probes distinguish session setup from a provider request attem
 			usage = value;
 		},
 	};
-	Reflect.set(host, "createSession", async () => {
-		throw new Error("Session setup failed.");
-	});
-	await expect(host.probeModel("fixture/manager", settings)).rejects.toThrow(
-		"Session setup failed.",
-	);
-	expect(dispatches).toBe(0);
-	expect(usage).toBeUndefined();
-	Reflect.set(host, "createSession", async () => "probe-session");
-	Reflect.set(host, "deleteSession", async () => {});
-	Reflect.set(host, "post", async () => {
-		throw new Error("Request failed.");
-	});
-	expect(await host.probeModel("fixture/manager", settings)).toBe(
-		"Request failed.",
-	);
-	expect(dispatches).toBe(1);
-	expect(usage).toMatchObject({ availability: "unobserved", costUsd: null });
+	try {
+		await expect(host.probeModel("fixture/manager", settings)).rejects.toThrow(
+			"Session setup failed.",
+		);
+		expect(dispatches).toBe(0);
+		expect(usage).toBeUndefined();
+		setupFails = false;
+		expect(await host.probeModel("fixture/manager", settings)).toBe(
+			"Transport: Request failed.",
+		);
+		expect(dispatches).toBe(1);
+		expect(usage).toMatchObject({ availability: "unobserved", costUsd: null });
+	} finally {
+		await rm(project, { recursive: true, force: true });
+	}
 });
 
 test("entitlement probes retain missing cache counters as incomplete usage", async () => {
-	const host = Reflect.construct(EvalHost, [
-		"/unused-project",
-		"/unused-scratch",
-	]) as EvalHost;
-	Reflect.set(host, "createSession", async () => "probe-session");
-	Reflect.set(host, "deleteSession", async () => {});
-	Reflect.set(host, "post", async () => ({
-		info: { cost: 0.01, tokens: { input: 2, output: 1, reasoning: 0 } },
-	}));
-	let usage: StudyUsage | undefined;
-	expect(
-		await host.probeModel("fixture/manager", {
-			observeUsage: (value) => {
-				usage = value;
-			},
-		}),
-	).toBeNull();
-	expect(usage).toMatchObject({
-		availability: "incomplete",
-		upstreamBreakdown: "unobserved",
-		costUsd: 0.01,
+	const project = await mkdtemp(join(tmpdir(), "native-probe-"));
+	const reply = nativeAssistant("message-probe", {
+		time: { created: 1, completed: 2 },
+		cost: 0.01,
 	});
+	Reflect.set(reply, "tokens", { input: 2, output: 1, reasoning: 0 });
+	const host = nativeHost(
+		project,
+		nativeClient(({ url }) => {
+			if (url.pathname === "/api/session")
+				return Response.json({ data: nativeSession("probe-session", project) });
+			if (url.pathname === "/api/session/probe-session/message")
+				return messagePage([reply]);
+			if (
+				url.pathname === "/api/session/probe-session/model" ||
+				url.pathname === "/api/session/probe-session" ||
+				url.pathname === "/api/experimental/session/probe-session/wait"
+			)
+				return new Response(null, { status: 204 });
+			if (url.pathname === "/api/session/probe-session/prompt")
+				return Response.json({
+					data: {
+						id: "inbox-probe",
+						sessionID: "probe-session",
+						type: "user",
+						time: { created: 1 },
+						payload: { text: "OK" },
+						delivery: "queue",
+					},
+				});
+			throw new Error(`Unexpected probe endpoint ${url.pathname}`);
+		}),
+	);
+	let usage: StudyUsage | undefined;
+	try {
+		expect(
+			await host.probeModel("fixture/manager", {
+				observeUsage: (value) => {
+					usage = value;
+				},
+			}),
+		).toBeNull();
+		expect(usage).toMatchObject({
+			availability: "incomplete",
+			upstreamBreakdown: "unobserved",
+			costUsd: 0.01,
+		});
+	} finally {
+		await rm(project, { recursive: true, force: true });
+	}
 });
 
 type SessionFixture = {
 	agent: string;
 	parentID: string | null;
 	children?: readonly string[];
-	messages: readonly unknown[];
+	messages: readonly SessionMessageInfo[];
 };
 
 function assistantMessage(
@@ -85,78 +132,56 @@ function assistantMessage(
 	agent: string,
 	tokens: HostTokens | undefined,
 	cost: number | undefined,
-) {
-	return {
-		info: {
-			id: `message-${sessionId}`,
-			sessionID: sessionId,
-			role: "assistant",
-			agent,
-			providerID: "fixture-provider",
-			modelID: `${agent}-model`,
-			time: { created: 1, completed: 2 },
-			...(tokens === undefined ? {} : { tokens }),
-			...(cost === undefined ? {} : { cost }),
-		},
-		parts: [],
-	};
+): SessionMessageAssistant {
+	return nativeAssistant(`message-${sessionId}`, {
+		agent,
+		model: { providerID: "fixture-provider", id: `${agent}-model` },
+		time: { created: 1, completed: 2 },
+		...(tokens === undefined ? {} : { tokens }),
+		...(cost === undefined ? {} : { cost }),
+	});
 }
 
 async function collectOutcome(
 	fixtures: Readonly<Record<string, SessionFixture>>,
 ) {
-	const host: unknown = Reflect.construct(EvalHost, [
-		"unused-study-host-project",
-		"unused-study-host-scratch",
-	]);
-	if (!(host instanceof EvalHost)) throw new Error("Expected an EvalHost.");
-	const origin = "https://study-host.invalid";
-	Object.assign(host, {
-		baseUrl: origin,
-		readJson: async () => null,
-		readArchives: async () => [],
-	});
-	const responses = new Map<string, unknown>();
-	for (const [id, fixture] of Object.entries(fixtures)) {
-		responses.set(`/session/${id}/message`, fixture.messages);
-		responses.set(
-			`/session/${id}/children`,
-			(fixture.children ?? []).map((childId) => {
-				const child = fixtures[childId];
-				if (!child) throw new Error(`Missing child fixture ${childId}.`);
-				return { id: childId, agent: child.agent, parentID: child.parentID };
-			}),
-		);
-	}
-	responses.set("/session/root", {
-		id: "root",
-		directory: "unused-study-host-project",
-	});
+	const project = await mkdtemp(join(tmpdir(), "study-host-usage-"));
 	const requests: string[] = [];
 	const unexpected: string[] = [];
-	const transport = Object.assign(
-		async (...[input, init]: Parameters<typeof fetch>) => {
-			const url = new URL(input instanceof Request ? input.url : String(input));
+	const metadata = (id: string) => {
+		const fixture = fixtures[id];
+		if (!fixture) throw new Error(`Missing session fixture ${id}`);
+		return nativeSession(id, project, {
+			agent: fixture.agent,
+			...(fixture.parentID ? { parentID: fixture.parentID } : {}),
+		});
+	};
+	const host = nativeHost(
+		project,
+		nativeClient(({ url, method }) => {
 			requests.push(url.pathname);
-			if (
-				url.origin !== origin ||
-				(init?.method ?? "GET") !== "GET" ||
-				!responses.has(url.pathname)
-			) {
-				unexpected.push(`${init?.method ?? "GET"} ${url}`);
-				return Response.json({ error: "Unexpected request." }, { status: 404 });
+			if (method !== "GET") throw new Error(`Unexpected method ${method}`);
+			if (url.pathname === "/api/session") {
+				const listed = Object.keys(fixtures).map(metadata);
+				for (const [parentID, fixture] of Object.entries(fixtures))
+					for (const child of fixture.children ?? [])
+						listed.push({ ...metadata(child), parentID });
+				return sessionPage(listed);
 			}
-			return Response.json(responses.get(url.pathname));
-		},
-		{ preconnect: fetch.preconnect },
+			if (url.pathname === "/api/session/root")
+				return sessionReply(metadata("root"));
+			const id = url.pathname.match(/^\/api\/session\/([^/]+)\/message$/)?.[1];
+			if (id && fixtures[id]) return messagePage([...fixtures[id].messages]);
+			unexpected.push(`${method} ${url}`);
+			return Response.json({ error: "Unexpected request." }, { status: 404 });
+		}),
 	);
-	const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(transport);
 	try {
 		const outcome = await host.outcome(["root"], 123);
 		expect(unexpected).toEqual([]);
 		return { outcome, requests };
 	} finally {
-		fetchSpy.mockRestore();
+		await rm(project, { recursive: true, force: true });
 	}
 }
 
@@ -186,13 +211,11 @@ const family = {
 		children: ["worker", "reviewer"],
 		messages: [
 			{
-				info: {
-					...rootMessage.info,
-					id: "user-root",
-					role: "user",
-					cost: 999,
-				},
-				parts: [],
+				type: "user",
+				id: "user-root",
+				time: { created: 1 },
+				text: "Inspect the fixture.",
+				metadata: { cost: 999 },
 			},
 			rootMessage,
 		],
@@ -253,6 +276,27 @@ describe("EvalHost outcome usage collection", () => {
 			{ role: "manager", sessionIds: ["root"] },
 			{ role: "reviewer", sessionIds: ["reviewer"] },
 		]);
+		expect(
+			outcome.actors?.map(({ role, actualModel }) => ({ role, actualModel })),
+		).toEqual([
+			{
+				role: "manager",
+				actualModel: {
+					kind: "observed",
+					value: { providerID: "fixture-provider", modelID: "flow-model" },
+				},
+			},
+			{
+				role: "reviewer",
+				actualModel: {
+					kind: "observed",
+					value: {
+						providerID: "fixture-provider",
+						modelID: "flow-reviewer-model",
+					},
+				},
+			},
+		]);
 	});
 
 	test("fetches repeated descendants once across duplicate edges and cycles", async () => {
@@ -269,13 +313,11 @@ describe("EvalHost outcome usage collection", () => {
 		expect(outcome.costUsd).toBe(0.875);
 		expect(outcome.assistantMessages).toBe(3);
 		expect([...requests].sort()).toEqual([
-			"/session/reviewer/children",
-			"/session/reviewer/message",
-			"/session/root",
-			"/session/root/children",
-			"/session/root/message",
-			"/session/worker/children",
-			"/session/worker/message",
+			"/api/session",
+			"/api/session/reviewer/message",
+			"/api/session/root",
+			"/api/session/root/message",
+			"/api/session/worker/message",
 		]);
 	});
 
@@ -287,16 +329,18 @@ describe("EvalHost outcome usage collection", () => {
 				messages: [
 					{
 						...rootMessage,
-						parts: [
-							{ type: "step-start" },
-							{
-								type: "step-finish",
-								sessionID: "root",
-								messageID: rootMessage.info.id,
-								reason: "stop",
-								cost: 0.125,
-								tokens: rootMessage.info.tokens,
-							},
+						content: [
+							nativeTool(
+								"call-usage",
+								"read",
+								{
+									status: "completed",
+									input: {},
+									content: [{ type: "text", text: "fixture" }],
+									metadata: { cost: 0.125, tokens: rootMessage.tokens ?? {} },
+								},
+								{ created: 1, completed: 2 },
+							),
 						],
 					},
 				],
@@ -460,25 +504,4 @@ describe("EvalHost outcome usage collection", () => {
 			expect(outcome.usageAvailability).toBe("observed");
 		},
 	);
-});
-
-let authorizationDirectory: string;
-let previousAuthorization: string | undefined;
-beforeAll(async () => {
-	previousAuthorization = process.env.FLOW_EVAL_AUTHORIZATION;
-	authorizationDirectory = await mkdtemp(join(tmpdir(), "flow-fake-budget-"));
-	await authorizePaidRun(authorizationDirectory, {
-		schemaVersion: 1,
-		purpose: "Fake transport tests only",
-		models: ["fixture/model", "fixture/manager"],
-		maxDispatches: 100,
-		expiresAt: new Date(Date.now() + 3600000).toISOString(),
-	});
-	process.env.FLOW_EVAL_AUTHORIZATION = authorizationDirectory;
-});
-afterAll(async () => {
-	if (previousAuthorization === undefined)
-		delete process.env.FLOW_EVAL_AUTHORIZATION;
-	else process.env.FLOW_EVAL_AUTHORIZATION = previousAuthorization;
-	await rm(authorizationDirectory, { recursive: true, force: true });
 });

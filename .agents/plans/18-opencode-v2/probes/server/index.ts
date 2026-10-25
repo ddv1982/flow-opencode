@@ -1,0 +1,31 @@
+import {Plugin,Provider,Model} from '@opencode/plugin';
+import {setupExtension} from './extension.ts';
+import {appendFileSync} from 'node:fs';
+const log=(type:string,data:unknown)=>appendFileSync('/tmp/flow-v2-server-probe/plugin.jsonl',JSON.stringify({type,data})+'\n');
+export default Plugin.define({id:'flow-v2-runtime-probe',async setup(ctx){
+ log('setup',{version:ctx.app.version,location:ctx.location,options:ctx.options});
+ await ctx.agent.transform(editor=>{for(const id of ['flow-planner','flow-worker','flow-reviewer'])editor.update(id,agent=>{agent.mode='subagent';agent.description='Probe reserved '+id;agent.permissions=[{action:'*',resource:'*',effect:'allow'},{action:'probe.*',resource:'*',effect:id==='flow-worker'?'deny':'allow'},{action:'probe_plain',resource:'*',effect:id==='flow-worker'?'deny':'allow'}]});log('missing-before',editor.get('flow-probe-missing'));editor.update('flow-probe-missing',agent=>{log('missing-callback',true);agent.description='created?'});log('missing-after',editor.get('flow-probe-missing'));});
+ const providerID=Provider.ID.make('flowprobe');
+ await ctx.provider.transform(editor=>editor.add({info:{...Provider.Info.empty(providerID),name:'Local probe',activation:'enabled',package:'@opencode/ai/providers/openai-compatible',settings:{baseURL:'http://127.0.0.1:47842/v1'}},models:[{...Model.Info.default(providerID,Model.ID.make('probe')),name:'Local scripted probe',capabilities:{...Model.Info.default(providerID,Model.ID.make('probe')).capabilities,tools:true}}]}));
+ await ctx.session.hook('title',input=>{input.result='Probe session'});
+ await ctx.session.hook('compaction',input=>{log('compaction',input);input.result={summary:'Local probe compacted summary'}});
+ let requestSeq=0;let contextSeq=0;const snapshots=new Map();const requests=new WeakMap();const current=new Map();const streaming=new Map();
+ const controller=new AbortController();
+ const stream=(async()=>{try{for await(const e of ctx.event.subscribe({signal:controller.signal}))log('event',e)}catch(e){log('event-end',String(e))}})();
+ await ctx.command.transform(editor=>editor.add({name:'probe',description:'Model-free probe command',execute:async input=>{log('command',input);log('command-session',await ctx.session.get({sessionID:input.sessionID}));}}));
+ await ctx.tool.transform(editor=>{
+  editor.add({name:'probe_hold',options:{codemode:false},description:'Hold tool while steering',input:{type:'object',properties:{}},execute:async(input,t)=>{log('hold-enter',t);await new Promise(resolve=>setTimeout(resolve,1000));log('hold-exit',{...t,aborted:t.signal.aborted});return {content:'Hold finished'};}});
+  editor.add({name:'probe_explicit',options:{codemode:false},description:'Probe explicit permission',input:{type:'object',properties:{},additionalProperties:false},execute:async(input,t)=>{log('explicit-enter',t);await ctx.permission.assert({sessionID:t.sessionID,agent:t.agent,action:'probe.explicit',resources:['test'],source:{type:'tool',messageID:t.messageID,id:t.id}});log('explicit-effect',t);return {content:'explicit allowed'};}});
+  editor.add({name:'probe_declared',description:'Probe declared permission',input:{type:'object',properties:{},additionalProperties:false},options:{codemode:false,permission:'probe.declared'},execute:async(input,t)=>{log('declared-effect',t);return {content:'declared allowed'};}});
+  editor.add({name:'probe_plain',options:{codemode:false},description:'Probe implicit permission',input:{type:'object',properties:{},additionalProperties:false},execute:async(input,t)=>{log('plain-effect',t);return {content:'plain ran'};}});
+ });
+ for(const name of ['execute.before','execute.after'] as const)await ctx.tool.hook(name,async input=>{log(name,input);log(name+'-session',await ctx.session.get({sessionID:input.sessionID}));if(input.tool.startsWith('probe_')){log(name+'-context',{execution:input,current:current.get(input.sessionID),messages:await ctx.session.context({sessionID:input.sessionID})});}});
+ await ctx.permission.hook('evaluate',input=>log('permission',input));
+ await ctx.session.hook('prompt',async input=>{log('prompt',input);if(input.metadata?.slowAdmission)await new Promise(resolve=>setTimeout(resolve,100));if(input.metadata?.rejectProbe)throw new Error('Probe stale token rejection');});
+ await ctx.session.hook('context',input=>{const snapshot=structuredClone({contextSeq:++contextSeq,sessionID:input.sessionID,agent:input.agent,model:input.model,messages:input.messages});snapshots.set(input.sessionID,snapshot);log('context-snapshot',snapshot);log('context',{sessionID:input.sessionID,agent:input.agent,model:input.model,tools:input.tools,messages:input.messages});});
+ await ctx.session.hook('http.request',input=>{if(new URL(input.request.url).hostname!=='127.0.0.1')throw new Error('Probe forbids remote model access');const snapshot=snapshots.get(input.sessionID);const request={requestSeq:++requestSeq,kind:input.kind,snapshot};requests.set(input.request,request);if(input.kind==='primary')current.set(input.sessionID,request);log('http.request',{sessionID:input.sessionID,agent:input.agent,kind:input.kind,url:input.request.url,...request})});
+ await ctx.session.hook('http.response',input=>{const request=requests.get(input.request);log('http.response',{sessionID:input.sessionID,kind:input.kind,requestMatched:!!request,request});if(input.kind!=='primary'||!input.response.body)return;const n=(streaming.get(input.sessionID)||0)+1;streaming.set(input.sessionID,n);log('primary-stream-start',{sessionID:input.sessionID,n,request});const reader=input.response.body.getReader();let ended=false;const end=reason=>{if(ended)return;ended=true;streaming.set(input.sessionID,(streaming.get(input.sessionID)||1)-1);log('primary-stream-end',{sessionID:input.sessionID,reason,request})};input.response=new Response(new ReadableStream({async pull(controller){try{const next=await reader.read();if(next.done){end('done');controller.close()}else controller.enqueue(next.value)}catch(error){end('error');controller.error(error)}},async cancel(reason){end('cancel');await reader.cancel(reason)}}),{status:input.response.status,headers:input.response.headers});});
+ await setupExtension(ctx,log,snapshots,current);
+ log('tools',(await ctx.tool.list()).map(({execute,...tool})=>tool));
+ return async()=>{controller.abort();await stream;log('cleanup',true)};
+}});

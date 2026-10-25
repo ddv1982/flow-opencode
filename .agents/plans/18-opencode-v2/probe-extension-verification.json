@@ -1,0 +1,98 @@
+{
+  "status": "PASS",
+  "run": "1792827133815",
+  "host": "OpenCode 2.1.4 Darwin arm64",
+  "checks": [
+    "four extension cases passed",
+    "compact-uninterrupted exact admission receipt",
+    "compact-uninterrupted genuine automatic compaction",
+    "compact-uninterrupted synchronous running control identity",
+    "compact-uninterrupted compaction consumes original dispatch",
+    "compact-uninterrupted primary context waits for stream end",
+    "compact-uninterrupted primary response streams do not overlap",
+    "compact-uninterrupted old assistant tools precede next primary context",
+    "compact-uninterrupted old assistant tools precede next primary context",
+    "compact-uninterrupted primary context waits for stream end",
+    "compact-uninterrupted primary response streams do not overlap",
+    "compact-uninterrupted old assistant tools precede next primary context",
+    "compact-uninterrupted old assistant tools precede next primary context",
+    "compact-uninterrupted primary context waits for stream end",
+    "compact-uninterrupted primary response streams do not overlap",
+    "same epoch crosses exact compaction control",
+    "post-compaction tool retains epoch one",
+    "post-compaction exact assistant and call",
+    "post-compaction prefix matches frozen consumed control",
+    "compact-steer exact admission receipt",
+    "compact-steer genuine automatic compaction",
+    "compact-steer synchronous running control identity",
+    "compact-steer compaction consumes original dispatch",
+    "compact-steer primary context waits for stream end",
+    "compact-steer primary response streams do not overlap",
+    "compact-steer old assistant tools precede next primary context",
+    "compact-steer old assistant tools precede next primary context",
+    "compact-steer primary context waits for stream end",
+    "compact-steer primary context waits for stream end",
+    "real steer occurs inside compaction interval",
+    "steer vetoes resumed automatic context",
+    "local provider receives no resumed steered request",
+    "no provider dispatch after compaction steer",
+    "no authority after compaction steer",
+    "stale-context exact admission receipt",
+    "stale synthetic reaches context and is rejected",
+    "local provider receives zero stale-context requests",
+    "stale context prevents every HTTP request",
+    "stale context prevents every tool",
+    "stale-tool exact admission receipt",
+    "before-tool veto targets exact native shell",
+    "rejected native shell effect file absent",
+    "rejected native shell never reaches shell creation",
+    "native tool reports rejection rather than success"
+  ],
+  "cases": [
+    {
+      "mode": "compact-uninterrupted",
+      "status": "PASS",
+      "sessionID": "ses_e932cf06dffeulg1JQls6ASQwR",
+      "inputID": "msg_ext_compact_uninterrupted_1792827133815",
+      "compaction": {
+        "id": "msg_16cd31089001LXf7Gm6k878g0K",
+        "reason": "auto",
+        "status": "completed"
+      }
+    },
+    {
+      "mode": "compact-steer",
+      "status": "PASS",
+      "sessionID": "ses_e932cef45ffegRTncXi8vNZlxo",
+      "inputID": "msg_ext_compact_steer_1792827133815",
+      "compaction": {
+        "id": "msg_16cd310ce002rI6ZX0mx67DxVi",
+        "reason": "auto",
+        "status": "completed"
+      }
+    },
+    {
+      "mode": "stale-context",
+      "status": "PASS",
+      "sessionID": "ses_e932ce9a2ffeJ29k7TUa2Kweev",
+      "inputID": "msg_ext_stale_context_1792827133815",
+      "compaction": null
+    },
+    {
+      "mode": "stale-tool",
+      "status": "PASS",
+      "sessionID": "ses_e932ce990ffeiC6dgkHu9qicdr",
+      "inputID": "msg_ext_stale_tool_1792827133815",
+      "compaction": null
+    }
+  ],
+  "scope": "Bounded local scripted HTTP provider. No product integration certification.",
+  "supportedConditions": [
+    "Exact admitted synthetic ID and private live epoch exist before positive authority.",
+    "Freeze primary context and Request identity; reject overlap or immutable assistant binding conflicts.",
+    "Read and freeze running native auto-compaction ID in the synchronous compaction hook.",
+    "At resumed context, require that exact completed auto-compaction ID and unchanged live epoch.",
+    "Reject unknown inputs and real steer; do not recover authority from summary text.",
+    "Before every native tool, verify exact assistant/call identity, frozen input prefix, and unrevoked epoch."
+  ]
+}

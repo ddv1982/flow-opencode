@@ -11,7 +11,6 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { parse } from "yaml";
 import { z } from "zod";
 
 const temporary: string[] = [];
@@ -37,7 +36,7 @@ async function step(
 	name: string,
 	file = ".github/workflows/release.yml",
 ): Promise<string> {
-	const workflow = Workflow.parse(parse(await readFile(file, "utf8")));
+	const workflow = Workflow.parse(Bun.YAML.parse(await readFile(file, "utf8")));
 	const run = workflow.jobs[job]?.steps.find(
 		(entry) => entry.name === name,
 	)?.run;

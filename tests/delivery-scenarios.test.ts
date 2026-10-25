@@ -73,7 +73,12 @@ function idle(input: ScenarioGradeInput): ScenarioGradeInput {
 		(call) => call.tool === "flow_session_close",
 	);
 	const trace = clone.hostTrace;
-	if (!close?.native || trace?.kind !== "observed")
+	if (
+		!close?.native ||
+		!("partId" in close.native) ||
+		trace?.kind !== "observed" ||
+		trace.version !== 1
+	)
 		throw new Error("Missing native fixture.");
 	const native = {
 		...close.native,
@@ -334,7 +339,13 @@ test("an exact accepted close replay preserves full-detail access without new wo
 	);
 	const replay = input.allCalls.at(-1);
 	const trace = input.hostTrace;
-	if (!original || !replay?.native || trace?.kind !== "observed")
+	if (
+		!original ||
+		!replay?.native ||
+		!("partId" in replay.native) ||
+		trace?.kind !== "observed" ||
+		trace.version !== 1
+	)
 		throw new Error("Missing native calls.");
 	const replayCall = {
 		...replay,
@@ -349,7 +360,10 @@ test("an exact accepted close replay preserves full-detail access without new wo
 	);
 	if (message?.role !== "assistant") throw new Error("Missing native message.");
 	const tool = message.tools.find(
-		(item) => item.partId === replay.native?.partId,
+		(item) =>
+			replay.native !== undefined &&
+			"partId" in replay.native &&
+			item.partId === replay.native.partId,
 	);
 	if (!tool) throw new Error("Missing native part.");
 	tool.tool = "flow_session_close";

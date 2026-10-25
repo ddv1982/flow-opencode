@@ -1,7 +1,8 @@
 # Flow documentation
 
 This directory is the maintained documentation source for Flow and Session
-v5. The public overview and installation instructions live in the
+v5 on OpenCode v2. The tested minimum is 2.1.4. OpenCode 1 is unsupported.
+The public overview and installation instructions live in the
 [README](../README.md).
 
 - [Positioning](positioning.md) — what Flow is for, and when not to use it.
@@ -45,6 +46,7 @@ v5. The public overview and installation instructions live in the
   and paired measurement.
 - [ADR 0014](adr/0014-one-evidence-record.md) — `gate` and `externalEvidence`
   collapse into one `evidence` record.
+- [ADR 0018](adr/0018-opencode-v2-only.md) explains the host-major cutover.
 - [Allowed cross-layer dependencies](architecture/allowed-cross-layer-dependencies.md)
   — source ownership.
 

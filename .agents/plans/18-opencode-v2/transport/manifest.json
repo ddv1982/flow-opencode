@@ -1,0 +1,6 @@
+{
+  ".agents/plans/18-opencode-v2/transport/source-seal.log": "a632b365d4042b68d0be7d4b201e3a2d3c803d0324f9fe8110498f9cb7b7b17b",
+  ".agents/plans/18-opencode-v2/transport/probe.ts": "b0d2ff7cbaf38e0ba3b72b396c969f294ce3005a4113f556e872c8821c25eca4",
+  ".agents/plans/18-opencode-v2/transport/session-hook-counterexample.json": "4258a7a89b31b8291a23c15c108b03ccd30d768bd93c7aeb629330b2df6d4ac6",
+  ".agents/plans/18-opencode-v2/transport/verification.json": "d6146d81f08d0fedfed908923a49a96ced60cf3143ed842cb4819f436ad66660"
+}

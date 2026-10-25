@@ -67,7 +67,10 @@ export function nativeTrace(calls: ScenarioGradeInput["allCalls"]) {
 						},
 						parts: [
 							{
-								id: call.native?.partId,
+								id:
+									call.native && "partId" in call.native
+										? call.native.partId
+										: undefined,
 								sessionID: "ses_root",
 								messageID: call.native?.messageId,
 								callID: call.native?.callId,

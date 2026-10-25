@@ -1,5 +1,6 @@
 import type { RetainedScenarioEvidence } from "./grader-input.js";
 import type { ObservedToolCall } from "./harness.js";
+import { nativeToolKey } from "./host-trace.js";
 import { nativeToolWitness } from "./reviewer-access.js";
 
 function record(value: unknown): Record<string, unknown> | null {
@@ -27,16 +28,16 @@ export function nativeActorBindingIssues(
 	const completionCalls = new Map<string, ObservedToolCall[]>();
 	for (const call of evidence.gradeInput.allCalls) {
 		if (call.tool !== "flow_feature_complete" || !call.native) continue;
-		const calls = completionCalls.get(call.native.partId) ?? [];
+		const calls = completionCalls.get(nativeToolKey(call.native)) ?? [];
 		calls.push(call);
-		completionCalls.set(call.native.partId, calls);
+		completionCalls.set(nativeToolKey(call.native), calls);
 	}
 	const incomplete = trace.messages.some(
 		(message) =>
 			message.role === "assistant" &&
 			message.tools.some((tool) => {
 				if (tool.tool !== "flow_feature_complete") return false;
-				const calls = completionCalls.get(tool.partId) ?? [];
+				const calls = completionCalls.get(nativeToolKey(tool)) ?? [];
 				const call = calls[0];
 				return (
 					calls.length !== 1 || !call || nativeToolWitness(call, trace) === null

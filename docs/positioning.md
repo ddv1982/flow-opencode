@@ -45,8 +45,8 @@ only when a wrong change is expensive. For anything else it is overhead.
 Flow is pre-1.0 in the sense that matters: its reliability is measured, but not yet
 measured enough to promise. What that means concretely:
 
-- Evals run against multiple providers on a schedule, and the numbers are published
-  with the release rather than described. Absent numbers mean unmeasured.
+- Scheduled evals follow the [release policy](release-qualification.md). Numbers
+  ship with releases. Absent numbers mean unmeasured.
 - Session v5 is the only active state contract. There is no migration or rollback
   layer: finish or close active work before changing versions, in either direction.
 - The public surface is frozen while the guarantees are measured. See the release

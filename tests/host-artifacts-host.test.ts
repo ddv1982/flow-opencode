@@ -50,7 +50,6 @@ smoke(
 				providerCredentials: "disabled",
 				ambientConfig: "disabled",
 				reviewerEnvironment: "disabled",
-				nativeLlm: false,
 				signal: AbortSignal.timeout(120000),
 			});
 			expect(host.artifactIdentity).toEqual(identity);

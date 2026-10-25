@@ -25,7 +25,7 @@ an unrelated broad pass. The reviewer blocks if that gap reaches review.
 Beyond declared entries, no skipped-evidence field or parallel blocker ledger
 exists. Missing evidence checkpoints for direction through reset or explicit closure.
 
-`flow_validation_start` prepares the active run, exact next Bash command, scope,
+`flow_validation_start` prepares the active run, exact next Shell command, scope,
 current workspace-content digest, and the host platform, which infrastructure reads
 rather than the caller claiming it. The OpenCode after-hook accepts only a structured
 exit code, records output completeness and digests the output. The observation is
@@ -40,9 +40,11 @@ tests. `recordValidation` refuses a broad claim on another command. Nothing
 decides whether the declared command is a test; [ADR 0010](adr/0010-declared-canonical-gate.md)
 records why that stays a caller declaration made at planning time.
 
-For truncated Bash output, Flow hashes the host `outputPath` only if its
-bounded regular `tool-output` file matches the visible tail. Missing or
-mismatched files stay incomplete; the exact command and exit code still bind.
+For truncated shell output, Flow joins the managed native shell record to the
+session, exact command, working directory, and exit status before reading its
+bounded regular output file. The file must match the observed output and belong
+to the host's shell storage. Missing, mismatched, timed-out, or incomplete output
+stays ineligible. A completed tool with a nonzero shell exit still records failure.
 
 `savePlan` requires `evidence`: one gate plus optional extra observations. Every
 entry names its command, `platform`, and `assertions`. A `gate` or `extra` needs
@@ -71,8 +73,8 @@ it. Legacy Session v5 reviews remain valid. Typed assignments must reference eve
 check as of their creation; completed closure also rechecks immutable plan evidence.
 [ADR 0009](adr/0009-scope-keyed-validation-veto.md) records why the label binds.
 
-An armed capture waits at most 15 minutes for its exact Bash command to begin.
-An unrelated Bash command cancels it. Once the exact command begins, the
+An armed capture waits at most 15 minutes for its exact Shell command to begin.
+An unrelated Shell command cancels it. Once the exact command begins, the
 after-hook remains eligible even if the command finishes after that original
 waiting deadline. Session, run, source, exit-code, and output-completeness gates
 still apply.

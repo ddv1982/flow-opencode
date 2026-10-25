@@ -87,6 +87,9 @@ import {
 	type ReviewerActivity,
 	reviewerActivity,
 } from "./metrics.js";
+import type { NativeAuthentication } from "./native-auth/host.js";
+import { nativeAuthenticationFromEnvironment } from "./native-auth-config.js";
+import { OPENCODE_HOST_VERSION } from "./opencode-host.js";
 import {
 	evaluatorIdentity,
 	hostActorObservation,
@@ -103,13 +106,13 @@ import {
 	assertReleaseModels,
 	assertReleaseScenarioOrder,
 	RELEASE_ANALYSIS_SHA256,
-	RELEASE_HOST_POLICY,
 	releaseAttemptsFor,
 	releaseCatalog,
 	releaseCellsFor,
 	releaseGraderBundle,
 	releaseHostConfigSha256,
 	releaseHostPermissions,
+	releaseHostPolicy,
 	releaseRandomizationSeed,
 	releaseReviewerModel,
 	releaseScenarioCatalog,
@@ -289,7 +292,10 @@ export function evalReleaseReviewerConfiguration(
 	managerModel: string,
 	packageVersion: string,
 ) {
-	const pinned = releaseReviewerModel(packageVersion);
+	const pinned = releaseReviewerModel(
+		packageVersion,
+		legacyRequestedModel(managerModel),
+	);
 	return evalReviewerConfiguration(
 		managerModel,
 		pinned
@@ -811,6 +817,7 @@ async function preflight(
 	models: readonly string[],
 	toolchain: BunToolchain,
 	signal: AbortSignal,
+	nativeAuthentication?: NativeAuthentication,
 ): Promise<void> {
 	signal.throwIfAborted();
 	process.stdout.write("- preflight: resolving model ids ... ");
@@ -821,6 +828,9 @@ async function preflight(
 			toolchain,
 			packageCache,
 			opencodeVersion,
+			ambientConfig: "disabled",
+			reviewerEnvironment: "disabled",
+			...(nativeAuthentication ? { nativeAuthentication } : {}),
 			files: { "package.json": '{\n  "name": "preflight"\n}\n' },
 			signal,
 		});
@@ -852,6 +862,7 @@ async function preflight(
 		}
 	} catch (error) {
 		if (error instanceof CampaignCancelled || signal.aborted) throw error;
+		if (nativeAuthentication) throw error;
 		// Losing the probe host is not evidence about the models, so it must not
 		// block a run that may well work. An actual rejection above is different,
 		// and is fatal.
@@ -902,14 +913,31 @@ export async function runCampaign(
 			platform: normalizeEvidencePlatform(process.platform),
 			opencodeOverride: process.env.FLOW_OPENCODE_SMOKE_VERSION,
 			reviewerModelOverride: process.env.OPENCODE_FLOW_REVIEWER_MODEL,
+			reviewerVariantOverride: process.env.OPENCODE_FLOW_REVIEWER_VARIANT,
 			reviewerStepsOverride: process.env.OPENCODE_FLOW_REVIEWER_STEPS,
 		});
 	}
 	const opencodeVersion =
 		sampling.kind === "release"
-			? RELEASE_HOST_POLICY.opencodeVersion
+			? releaseHostPolicy(packageJson.version).opencodeVersion
 			: process.env.FLOW_OPENCODE_SMOKE_VERSION?.trim() ||
-				packageJson.devDependencies["@opencode-ai/plugin"];
+				OPENCODE_HOST_VERSION;
+	const authenticationModels = [
+		...new Set(
+			models.flatMap((model) => {
+				const reviewer = (
+					sampling.kind === "release"
+						? evalReleaseReviewerConfiguration(model, packageJson.version)
+						: evalReviewerConfiguration(model)
+				).pluginOptions?.model;
+				return reviewer ? [model, reviewer] : [model];
+			}),
+		),
+	];
+	const nativeAuthentication =
+		await nativeAuthenticationFromEnvironment(authenticationModels);
+	if (nativeAuthentication && concurrency !== 1)
+		throw new Error("Native account authentication requires --concurrency 1.");
 	const footprint = promptFootprint();
 
 	console.log(`Flow ${packageJson.version} on OpenCode ${opencodeVersion}`);
@@ -1009,6 +1037,7 @@ export async function runCampaign(
 			[...new Set([...models, ...(reviewerModel ? [reviewerModel] : [])])],
 			toolchain,
 			signal,
+			nativeAuthentication,
 		);
 		const persistV2Attempt = async (
 			result: RunResult,
@@ -1105,6 +1134,13 @@ export async function runCampaign(
 							toolchain,
 							packageCache,
 							opencodeVersion,
+							...(nativeAuthentication ? { nativeAuthentication } : {}),
+							...(sampling.kind === "release"
+								? {
+										ambientConfig: "disabled" as const,
+										reviewerEnvironment: "disabled" as const,
+									}
+								: {}),
 							files: scenario.files,
 							...(scenario.id === "inspection-failed-audit-completes"
 								? { retainReviewDocument: true }
@@ -1188,11 +1224,17 @@ export async function runCampaign(
 						observedOutcome = outcome;
 						// An interrupted attempt is not a measured product result. Previously
 						// committed attempts remain in the stopped campaign's report.
-						if (!stepFailure && !outcome.providerError) signal.throwIfAborted();
+						if (
+							!stepFailure &&
+							!outcome.providerError &&
+							!outcome.nativeFailure
+						)
+							signal.throwIfAborted();
 						const cell = campaignCells[job.slot];
 						if (!cell?.managerModel)
 							throw new Error(`Missing v2 campaign cell for slot ${job.slot}.`);
-						const observedFailure = outcome.providerError;
+						const observedFailure =
+							outcome.providerError ?? outcome.nativeFailure;
 						// Asking the user is the designed end of some scenarios, but only at the
 						// wall. `askedScoring` holds the rule and its reasoning.
 						const { escalated, unscored } = askedScoring(
@@ -1323,7 +1365,10 @@ export async function runCampaign(
 							finalText: outcome.finalText,
 							questions: askedQuestions(outcome),
 							durationMs: outcome.durationMs,
-							hostError: outcome.providerError?.detail ?? null,
+							hostError:
+								outcome.providerError?.detail ??
+								outcome.nativeFailure?.code ??
+								null,
 							provenance: {
 								artifact,
 								evaluator,
@@ -1588,7 +1633,10 @@ export async function runCampaign(
 								? bestEffortEvaluation(() => askedQuestions(outcome), [])
 								: [],
 							durationMs: outcome?.durationMs ?? durationMs,
-							hostError: outcome?.providerError?.detail ?? null,
+							hostError:
+								outcome?.providerError?.detail ??
+								outcome?.nativeFailure?.code ??
+								null,
 							provenance: {
 								artifact,
 								evaluator,

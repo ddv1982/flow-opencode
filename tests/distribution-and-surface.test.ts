@@ -10,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolContext } from "@opencode-ai/plugin";
+import { z } from "zod";
 import { createFlowCoreConfigEntries } from "../src/config-shared.js";
 import {
 	FLOW_GUIDANCE_IDS,
@@ -18,8 +18,17 @@ import {
 	getFlowGuidance,
 } from "../src/guidance/catalog.js";
 import FlowPlugin from "../src/index.js";
-import { FLOW_AUTO_METADATA_KEY } from "../src/platform/opencode/auto-drive.js";
-import { createTools } from "../src/platform/opencode/tools.js";
+import {
+	AutoDriveCoordinator,
+	FLOW_AUTO_METADATA_KEY,
+} from "../src/platform/opencode/auto-drive.js";
+import { prepareFlowCommand } from "../src/platform/opencode/command-hook.js";
+import {
+	createNativeFlowHost,
+	type NativeFlowHost,
+	nativeText,
+	projectionOf,
+} from "./fixtures/native-flow-host.js";
 import { plan } from "./runtime-test-support.js";
 
 const TOOL_NAMES = [
@@ -34,317 +43,211 @@ const TOOL_NAMES = [
 	"flow_session_close",
 	"flow_status",
 	"flow_validation_start",
-] as const;
-
+];
 const COMMAND_NAMES = [
 	"flow-auto",
 	"flow-plan",
 	"flow-review",
 	"flow-run",
 	"flow-status",
-] as const;
-
-function createRegisteredTools() {
-	return createTools({
-		validation: {} as never,
-		prepareValidation: async () => {
-			throw new Error("Validation execution is outside this structural test.");
-		},
-	});
+];
+const hosts: NativeFlowHost[] = [];
+const workspaces: string[] = [];
+const pendingDecisionObservations = new Set<() => void>();
+async function load(options: Parameters<typeof createNativeFlowHost>[1] = {}) {
+	const workspace = await mkdtemp(join(tmpdir(), "flow-native-surface-"));
+	workspaces.push(workspace);
+	const host = await createNativeFlowHost(workspace, options);
+	hosts.push(host);
+	await host.load(FlowPlugin);
+	return { host, workspace };
 }
-
-function pluginContext(
-	workspace: string,
-	directory = workspace,
-	promptCalls?: unknown[],
-	logCalls?: unknown[],
+async function idleDecision(
+	host: NativeFlowHost,
+	id: string,
+	receiver?: AutoDriveCoordinator,
 ) {
-	return {
-		client: {
-			app: {
-				log(input: unknown) {
-					logCalls?.push(input);
-				},
-			},
-			session: {
-				get(input: { path: { id: string } }) {
-					return Promise.resolve({ data: { id: input.path.id, directory } });
-				},
-				promptAsync(input: unknown) {
-					promptCalls?.push(input);
-					return Promise.resolve({ data: undefined });
-				},
-				messages() {
-					return Promise.resolve({
-						data: [
-							{
-								info: {
-									id: "host-compaction-user",
-									role: "user",
-								},
-								parts: [],
-							},
-						],
-					});
-				},
-				message(input: unknown) {
-					const messageID = (input as { path: { messageID: string } }).path
-						.messageID;
-					const parentID = messageID.startsWith("assistant:")
-						? messageID.slice("assistant:".length)
-						: null;
-					return Promise.resolve({
-						data: parentID
-							? { info: { role: "assistant", parentID } }
-							: undefined,
-					});
-				},
-			},
-		},
-		project: {},
-		directory,
-		worktree: workspace,
-		experimental_workspace: { register() {} },
-		serverUrl: new URL("http://localhost"),
-		$: {},
-	} as unknown as Parameters<typeof FlowPlugin>[0];
-}
-
-function toolContext(
-	workspace: string,
-	sessionID = "surface-test-session",
-	parentMessageID?: string,
-): ToolContext {
-	return {
-		sessionID,
-		messageID: parentMessageID
-			? `assistant:${parentMessageID}`
-			: "surface-test-message",
-		agent: "build",
-		directory: workspace,
-		worktree: workspace,
-		abort: new AbortController().signal,
-		metadata() {},
-		async ask() {},
+	if (pendingDecisionObservations.size)
+		throw new Error("Overlapping coordinator observation.");
+	const token = host.admissions.findLast(
+		(receipt) =>
+			receipt.sessionID === id &&
+			typeof receipt.payload.metadata?.[FLOW_AUTO_METADATA_KEY] === "string",
+	)?.payload.metadata?.[FLOW_AUTO_METADATA_KEY];
+	if (!receiver && typeof token !== "string")
+		throw new Error("Missing fixture invocation token.");
+	const original = AutoDriveCoordinator.prototype.onIdle,
+		completed = Promise.withResolvers<void>();
+	let failure: unknown;
+	const observed = async function (
+		this: AutoDriveCoordinator,
+		...args: Parameters<typeof original>
+	) {
+		if (
+			args[0] !== id ||
+			(receiver
+				? this !== receiver
+				: this.captureAuthority(id)?.token !== token)
+		)
+			return original.apply(this, args);
+		receiver = this;
+		try {
+			await original.apply(this, args);
+		} catch (error) {
+			failure = error;
+			throw error;
+		} finally {
+			completed.resolve();
+		}
 	};
+	AutoDriveCoordinator.prototype.onIdle = observed;
+	const cancel = () => {
+		if (AutoDriveCoordinator.prototype.onIdle === observed)
+			AutoDriveCoordinator.prototype.onIdle = original;
+		completed.reject(
+			new Error("Fixture disposed before the coordinator decision completed."),
+		);
+	};
+	pendingDecisionObservations.add(cancel);
+	try {
+		await host.idle(id);
+		await completed.promise;
+		if (AutoDriveCoordinator.prototype.onIdle !== observed)
+			throw new Error("Coordinator observation was replaced.");
+		if (failure) throw failure;
+		if (!receiver) throw new Error("No matching coordinator completed.");
+		return receiver;
+	} finally {
+		pendingDecisionObservations.delete(cancel);
+		if (AutoDriveCoordinator.prototype.onIdle === observed)
+			AutoDriveCoordinator.prototype.onIdle = original;
+	}
 }
-
-function expectExactlyOnce(text: string, fragment: string): void {
+async function waitingForPlanApproval(host: NativeFlowHost, id: string) {
+	for (;;) {
+		const status = await host.response("flow_status", statusInput, id);
+		const state = status.workflowData.autoDrive;
+		if (
+			state &&
+			field(state, "state") === "waiting" &&
+			field(state, "reason") === "plan-approval"
+		)
+			return;
+	}
+}
+function exactlyOnce(text: string, fragment: string) {
 	expect(text.split(fragment)).toHaveLength(2);
 }
-
-type PluginHooks = Awaited<ReturnType<typeof FlowPlugin>>;
-const activeHooks: PluginHooks[] = [];
-const activeWorkspaces: string[] = [];
-
-async function createTestWorkspace(prefix: string): Promise<string> {
-	const workspace = await mkdtemp(join(tmpdir(), prefix));
-	activeWorkspaces.push(workspace);
-	return workspace;
-}
-
-async function loadPlugin(
-	workspace: string,
-	directory = workspace,
-	promptCalls?: unknown[],
-	pluginOptions?: Readonly<Record<string, unknown>>,
-): Promise<PluginHooks> {
-	const hooks = await FlowPlugin(
-		pluginContext(workspace, directory, promptCalls),
-		pluginOptions,
+const statusInput = { request: { view: "compact" } };
+async function save(
+	host: NativeFlowHost,
+	hostID = "ses_manager",
+	goal = "Implement the runtime kernel.",
+	expectedRevision = 0,
+	nextPlan = plan,
+) {
+	return host.response(
+		"flow_plan_save",
+		{
+			request: {
+				operationId: `save-${expectedRevision}`,
+				expectedRevision,
+				goal,
+				plan: nextPlan,
+			},
+		},
+		hostID,
 	);
-	activeHooks.push(hooks);
-	return hooks;
 }
-async function emitMessage(
-	hooks: PluginHooks,
-	info: Record<string, unknown>,
-): Promise<void> {
-	await hooks.event?.({
-		event: { type: "message.updated", properties: { info } },
-	} as Parameters<NonNullable<typeof hooks.event>>[0]);
+async function approve(
+	host: NativeFlowHost,
+	revision: number,
+	hostID = "ses_manager",
+	operationId = "approve",
+) {
+	return host.response(
+		"flow_plan_approve",
+		{ request: { operationId, expectedRevision: revision } },
+		hostID,
+	);
 }
-async function emitAssistant(
-	hooks: PluginHooks,
-	sessionID: string,
-	parentID: string,
-	id = `assistant:${parentID}`,
-): Promise<void> {
-	await emitMessage(hooks, { id, sessionID, role: "assistant", parentID });
+function field(value: unknown, name: string) {
+	return z.record(z.string(), z.unknown()).parse(value)[name];
 }
-async function emitAutoCompaction(
-	hooks: PluginHooks,
-	sessionID: string,
-	authority: string,
-	successor: string,
-): Promise<void> {
-	const user = `${successor}-marker`;
-	await emitAssistant(hooks, sessionID, authority, `${successor}-trigger`);
-	await emitMessage(hooks, { id: user, sessionID, role: "user" });
-	await hooks.event?.({
-		event: {
-			type: "message.part.updated",
-			properties: {
-				part: {
-					id: `${user}-part`,
-					messageID: user,
-					sessionID,
-					type: "compaction",
-					auto: true,
-				},
-			},
-		},
-	} as Parameters<NonNullable<typeof hooks.event>>[0]);
-	await emitMessage(hooks, {
-		id: `${successor}-summary`,
-		sessionID,
-		role: "assistant",
-		parentID: user,
-		summary: true,
-	});
-	await emitMessage(hooks, { id: successor, sessionID, role: "user" });
-	await hooks.event?.({
-		event: {
-			type: "message.part.updated",
-			properties: {
-				part: {
-					id: `${successor}-continuation`,
-					messageID: successor,
-					sessionID,
-					type: "text",
-					text: "Continue the same task.",
-					synthetic: true,
-					metadata: { compaction_continue: true },
-				},
-			},
-		},
-	});
-	await hooks.event?.({
-		event: { type: "session.compacted", properties: { sessionID } },
-	} as Parameters<NonNullable<typeof hooks.event>>[0]);
-}
-
 afterEach(async () => {
-	const cleanupErrors: unknown[] = [];
-	for (const hooks of activeHooks.splice(0).reverse()) {
+	for (const cancel of pendingDecisionObservations) cancel();
+	pendingDecisionObservations.clear();
+	const errors: unknown[] = [];
+	for (const host of hosts.splice(0).reverse())
 		try {
-			await hooks.dispose?.();
+			await host.dispose();
 		} catch (error) {
-			cleanupErrors.push(error);
+			errors.push(error);
 		}
-	}
-	for (const workspace of activeWorkspaces.splice(0).reverse()) {
+	for (const workspace of workspaces.splice(0).reverse())
 		try {
 			await rm(workspace, { recursive: true, force: true });
 		} catch (error) {
-			cleanupErrors.push(error);
+			errors.push(error);
 		}
-	}
-	if (cleanupErrors.length > 0) {
-		throw new AggregateError(cleanupErrors, "Flow surface cleanup failed.");
-	}
+	if (errors.length)
+		throw new AggregateError(errors, "Native surface cleanup failed.");
 });
 
 describe("Flow distribution surface", () => {
-	test("ships eleven tools, five commands, three hidden agent configs, and four guides", async () => {
-		expect(new Set(Object.keys(createRegisteredTools()))).toEqual(
-			new Set(TOOL_NAMES),
-		);
-
-		const config = createFlowCoreConfigEntries();
-		expect(Object.keys(config.command).sort()).toEqual([...COMMAND_NAMES]);
-		expect(Object.keys(config.agent)).toEqual([
+	test("registers eleven native tools, five commands, configured hidden roles, and four guides", async () => {
+		const { host } = await load({
+			modelPreferences: {
+				planning: {
+					kind: "model",
+					model: { providerID: "test", id: "planning" },
+				},
+			},
+		});
+		expect(FlowPlugin.id).toBe("opencode-plugin-flow");
+		expect([...host.tools.keys()].sort()).toEqual(TOOL_NAMES);
+		expect([...host.commands.keys()].sort()).toEqual(COMMAND_NAMES);
+		expect([...host.agents.keys()]).toEqual([
 			"flow-planner",
 			"flow-reviewer",
 			"flow-worker",
 		]);
-		for (const agent of Object.values(config.agent)) {
-			expect(agent.hidden).toBe(true);
-		}
-
+		for (const agent of host.agents.values()) expect(agent.hidden).toBe(true);
 		expect(FLOW_GUIDANCE_IDS).toEqual([
 			"flow",
 			"flow-plan",
 			"flow-run",
 			"flow-review",
 		]);
-
-		const workspace = await createTestWorkspace("flow-surface-");
-		const hooks = await loadPlugin(workspace);
-		expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([...TOOL_NAMES]);
-		const status = JSON.parse(
-			String(
-				await hooks.tool?.flow_status?.execute(
-					{ request: { view: "compact" } },
-					{
-						agent: "build",
-						directory: workspace,
-						worktree: workspace,
-						sessionID: "runtime-identity",
-					} as ToolContext,
-				),
-			),
-		) as { workflowData: { runtimeIdentity: { pluginEntrySha256: string } } };
-		const pluginBytes = await readFile(
+		const response = await host.response("flow_status", statusInput);
+		const entry = await readFile(
 			join(import.meta.dir, "../src/platform/opencode/plugin.ts"),
 		);
-		expect(status.workflowData.runtimeIdentity.pluginEntrySha256).toBe(
-			`sha256:${createHash("sha256").update(pluginBytes).digest("hex")}`,
-		);
+		expect(response.workflowData.runtimeIdentity).toEqual({
+			packageVersion: "10.0.0",
+			pluginEntrySha256: `sha256:${createHash("sha256").update(entry).digest("hex")}`,
+		});
 	});
-
-	test("reports process-local reviewer configuration and deterministic status text", async () => {
-		const workspace = await createTestWorkspace("flow-config-status-");
-		const pluginOptions = {
-			reviewer: { model: "provider/reviewer", steps: 80 },
-		};
-		const hooks = await loadPlugin(
-			workspace,
-			workspace,
-			undefined,
-			pluginOptions,
-		);
-		pluginOptions.reviewer.model = "changed/after-startup";
-		pluginOptions.reviewer.steps = 12;
-		const config: Parameters<NonNullable<PluginHooks["config"]>>[0] = {};
-		await hooks.config?.(config);
-		expect(config.agent?.["flow-reviewer"]).toMatchObject({
-			model: "provider/reviewer",
+	test("captures reviewer plugin options once and preserves deterministic status text", async () => {
+		const options = { reviewer: { model: "provider/reviewer", steps: 80 } };
+		const { host } = await load(options);
+		options.reviewer.model = "changed/after-startup";
+		options.reviewer.steps = 12;
+		await host.context.agent.reload();
+		expect(host.agents.get("flow-reviewer")).toMatchObject({
+			model: { providerID: "provider", id: "reviewer" },
 			steps: 80,
 		});
-
-		const raw = String(
-			await hooks.tool?.flow_status?.execute(
-				{ request: { view: "compact" } },
-				toolContext(workspace, "configuration-status"),
-			),
-		);
-		const response = JSON.parse(raw) as {
-			workflowData: {
-				reviewerConfiguration: unknown;
-				statusReport: unknown;
-			};
-		};
-
-		expect(response.workflowData.reviewerConfiguration).toEqual({
+		const response = await host.response("flow_status", statusInput);
+		expect(response.workflowData.reviewerConfiguration).toMatchObject({
 			scope: "current-plugin-process",
 			model: {
 				kind: "explicit",
 				source: "plugin-option",
 				requested: "provider/reviewer",
 			},
-			steps: {
-				kind: "explicit",
-				source: "plugin-option",
-				requested: 80,
-			},
+			steps: { requested: 80 },
 			availability: "unverified",
-			report: [
-				"Reviewer selection: explicit.",
-				"Requested reviewer model: provider/reviewer (from plugin-option).",
-				"Requested reviewer step budget: 80 (from plugin-option).",
-				"Reviewer model availability: unverified; configuration proves only what Flow requested from OpenCode.",
-			],
 		});
 		expect(response.workflowData.statusReport).toEqual([
 			"View: compact",
@@ -356,190 +259,85 @@ describe("Flow distribution surface", () => {
 			"Findings digest: none",
 		]);
 	});
-
-	test("isolates worker permissions while keeping manager and reviewer dispatch separate", () => {
+	test("isolates worker permissions and keeps native reviewer dispatch separate", async () => {
 		const { agent, command } = createFlowCoreConfigEntries();
-		const reviewer = agent["flow-reviewer"];
-		const worker = agent["flow-worker"];
-		expect(reviewer).toBeDefined();
-		expect(reviewer?.hidden).toBe(true);
-		expect(reviewer?.permission).toEqual({
-			edit: "deny",
-			bash: "deny",
-			external_directory: "deny",
-			skill: "deny",
-			task: { "*": "deny" },
-			"flow_*": "deny",
-			flow_status: "allow",
-			flow_feature_complete: "allow",
+		expect(agent["flow-worker"]).toMatchObject({
+			mode: "subagent",
+			hidden: true,
 		});
-		expect(worker).toBeDefined();
-		expect(worker?.hidden).toBe(true);
-		expect(worker?.mode).toBe("subagent");
-		expect(worker?.permission).toEqual({
-			edit: {
-				"*": "allow",
-				".flow": "deny",
-				".flow/**": "deny",
-				".git": "deny",
-				".git/**": "deny",
-			},
-			bash: "deny",
-			external_directory: "deny",
-			skill: "deny",
-			task: { "*": "deny" },
-			"flow_*": "deny",
+		expect(agent["flow-worker"]).not.toHaveProperty("model");
+		expect(agent["flow-worker"]).not.toHaveProperty("steps");
+		expect(agent["flow-reviewer"].permissions).toContainEqual({
+			action: "flow_feature_complete",
+			resource: "*",
+			effect: "allow",
 		});
-		expect(worker).not.toHaveProperty("model");
-		expect(worker).not.toHaveProperty("steps");
-
+		expect(agent["flow-worker"].permissions).toContainEqual({
+			action: "edit",
+			resource: "**/.git/**",
+			effect: "deny",
+		});
 		for (const name of [
 			"flow-auto",
 			"flow-plan",
 			"flow-run",
 			"flow-status",
-		] as const) {
+		] as const)
 			expect(command[name]?.subtask).toBe(false);
-			expect("agent" in (command[name] ?? {})).toBe(false);
-		}
-		expect(command["flow-review"]).toMatchObject({
-			subtask: true,
+		const { host } = await load({ reviewer: { model: "test/reviewer" } });
+		await host.command("flow-review", "assignment-1");
+		const child = [...host.sessions.values()].find(
+			(session) => session.parentID === "ses_manager",
+		);
+		expect(child).toMatchObject({
+			agent: "flow-reviewer",
+			model: { providerID: "test", id: "reviewer" },
+		});
+		expect(host.prompts.at(-1)).toMatchObject({
+			sessionID: child?.id,
+			text: expect.stringContaining("Assignment: assignment-1"),
+		});
+	});
+	test("refuses to load the home directory before registering native tools", async () => {
+		const host = await createNativeFlowHost(homedir());
+		hosts.push(host);
+		await expect(host.load(FlowPlugin)).rejects.toThrow(
+			"Flow refuses to use the home directory itself",
+		);
+		expect(host.tools.size).toBe(0);
+	});
+});
+
+describe("native command preparation", () => {
+	test("preserves raw manager arguments exactly once and targets the reviewer assignment", async () => {
+		const { host } = await load();
+		const raw = "\t  simplify it\n  exactly \t\n";
+		const command = await host.command("flow-plan", raw);
+		expect(command?.text).toStartWith(`Flow flow-plan: ${raw}\n\n`);
+		exactlyOnce(command?.text ?? "", raw);
+		expect(command?.text).toContain("# Flow plan router");
+		const empty = await host.command("flow-status", " \t\n");
+		expect(empty?.text).toStartWith("Flow flow-status\n\n");
+		await host.command("flow-review", "assignment-1");
+		expect(host.prompts.at(-1)?.text).toContain("Assignment: assignment-1");
+	});
+	test("rejects native command dispatch from child sessions and malformed recovery options", async () => {
+		const { host } = await load();
+		host.ensureSession("ses_child", {
+			parentID: "ses_parent",
 			agent: "flow-reviewer",
 		});
-		expect(
-			Object.values(command).some(
-				(entry) => "agent" in entry && entry.agent === "flow-worker",
-			),
-		).toBe(false);
-	});
-
-	test("refuses to load from the home directory and says so", async () => {
-		const home = homedir();
-		const logCalls: unknown[] = [];
-		await expect(
-			FlowPlugin(pluginContext(home, home, undefined, logCalls)),
-		).rejects.toThrow(
-			"Flow refuses to use the home directory itself as mutable state.",
+		await expect(host.command("flow-run", "", "ses_child")).rejects.toThrow(
+			"primary manager",
 		);
-		expect(logCalls).toHaveLength(1);
-		expect(
-			String((logCalls[0] as { body: { message: string } }).body.message),
-		).toContain("cannot start here");
+		expect(() =>
+			prepareFlowCommand("flow-auto", "--recovery=delegated Repair"),
+		).toThrow("Recovery requires");
+		expect(host.prompts).toEqual([]);
 	});
 });
 
-describe("command preflight", () => {
-	test("rewrites manager text and the exact reviewer subtask", async () => {
-		const workspace = await createTestWorkspace("flow-command-");
-		const hooks = await loadPlugin(workspace);
-		const before = hooks["command.execute.before"];
-		if (!before) throw new Error("Missing command preflight hook.");
-
-		const rawArguments = "\t  simplify it\n  exactly \t\n";
-		const managerOutput = {
-			parts: [{ type: "text", text: "stale prompt" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "/flow-plan", sessionID: "s", arguments: rawArguments },
-			managerOutput,
-		);
-		expect(managerOutput.parts).toHaveLength(2);
-		expect(managerOutput.parts[0]).toMatchObject({
-			type: "text",
-			text: `Flow flow-plan: ${rawArguments}`,
-		});
-		expect(managerOutput.parts[1]).toMatchObject({
-			type: "text",
-			synthetic: true,
-		});
-		expect((managerOutput.parts[1] as { text?: string }).text).toContain(
-			"# Flow plan router",
-		);
-		expect((managerOutput.parts[1] as { text?: string }).text).toContain(
-			"the preceding non-synthetic Flow request",
-		);
-		expectExactlyOnce(
-			managerOutput.parts
-				.map((part) => (part.type === "text" ? part.text : ""))
-				.join("\n"),
-			rawArguments,
-		);
-
-		const emptyOutput = {
-			parts: [{ type: "text", text: "stale prompt" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "/flow-status", sessionID: "s", arguments: " \t\n" },
-			emptyOutput,
-		);
-		expect(emptyOutput.parts[0]).toMatchObject({
-			type: "text",
-			text: "Flow flow-status",
-		});
-
-		const reviewerOutput = {
-			parts: [
-				{
-					type: "subtask",
-					agent: "flow-reviewer",
-					command: "flow-review",
-					prompt: "stale prompt",
-					description: "review",
-				},
-			],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-review", sessionID: "s", arguments: "assignment-1" },
-			reviewerOutput,
-		);
-		expect((reviewerOutput.parts[0] as { prompt?: string }).prompt).toContain(
-			"Assignment: assignment-1",
-		);
-	});
-
-	test("fails closed for mixed manager or malformed reviewer dispatch", async () => {
-		const workspace = await createTestWorkspace("flow-command-fail-");
-		const hooks = await loadPlugin(workspace);
-		const before = hooks["command.execute.before"];
-		if (!before) throw new Error("Missing command preflight hook.");
-
-		await expect(
-			before({ command: "flow-run", sessionID: "s", arguments: "" }, {
-				parts: [
-					{
-						type: "subtask",
-						agent: "flow-reviewer",
-						command: "flow-run",
-						prompt: "",
-						description: "invalid",
-					},
-				],
-			} as unknown as Parameters<typeof before>[1]),
-		).rejects.toThrow("manager commands cannot contain subtask parts");
-
-		for (const parts of [
-			[],
-			[{ type: "text", text: "not a subtask" }],
-			[
-				{
-					type: "subtask",
-					agent: "other-reviewer",
-					command: "flow-review",
-					prompt: "",
-					description: "invalid",
-				},
-			],
-		] as const) {
-			await expect(
-				before({ command: "flow-review", sessionID: "s", arguments: "" }, {
-					parts: [...parts],
-				} as unknown as Parameters<typeof before>[1]),
-			).rejects.toThrow();
-		}
-	});
-});
-
-describe("flow-auto host continuation", () => {
+describe("flow-auto native continuation", () => {
 	for (const [kind, goal, expectedApproval] of [
 		[
 			"new-anchor",
@@ -627,52 +425,21 @@ describe("flow-auto host continuation", () => {
 		],
 	] as const) {
 		test(`inspect approval for ${kind}: ${goal}`, async () => {
-			const workspace = await createTestWorkspace("flow-auto-inspect-anchor-");
-			const prompts: unknown[] = [];
-			const hooks = await loadPlugin(workspace, workspace, prompts);
-			const before = hooks["command.execute.before"];
-			const chat = hooks["chat.message"];
-			const save = hooks.tool?.flow_plan_save;
-			const status = hooks.tool?.flow_status;
-			if (!before || !chat || !save || !status || !hooks.event)
-				throw new Error("Missing Flow hooks.");
-			const output = () =>
-				({ parts: [{ type: "text", text: "stale" }] }) as unknown as Parameters<
-					typeof before
-				>[1];
+			const { host } = await load();
+			const manager = "ses_inspect";
 			if (kind === "preexisting-anchor")
-				await before(
-					{ command: "flow-plan", sessionID: "inspect-host", arguments: goal },
-					output(),
-				);
-			const commandOutput = output();
-			await before(
-				{ command: "flow-auto", sessionID: "inspect-host", arguments: goal },
-				commandOutput,
+				await host.command("flow-plan", goal, manager);
+			await host.command("flow-auto", `--recovery=off ${goal}`, manager);
+			const provisional = await host.response(
+				"flow_status",
+				statusInput,
+				manager,
 			);
-			const provisional = JSON.parse(
-				String(
-					await status.execute(
-						{ request: { view: "compact" } },
-						toolContext(workspace, "inspect-host"),
-					),
-				),
-			);
-			expect(provisional.workflowData.projection).toMatchObject({
+			expect(projectionOf(provisional)).toMatchObject({
 				status: "planning",
 				revision: 0,
 				goal,
 			});
-			const provisionalId = provisional.workflowData.projection.sessionId;
-			await chat({ sessionID: "inspect-host" }, {
-				message: {
-					id: "inspect-command",
-					agent: "build",
-					model: { providerID: "provider", modelID: "model" },
-				},
-				parts: commandOutput.parts,
-			} as unknown as Parameters<typeof chat>[1]);
-			await emitAssistant(hooks, "inspect-host", "inspect-command");
 			const inspectPlan = {
 				...plan,
 				features: plan.features.map((feature) => ({
@@ -680,1288 +447,434 @@ describe("flow-auto host continuation", () => {
 					kind: "inspect" as const,
 				})),
 			};
-			const saved = JSON.parse(
-				String(
-					await save.execute(
-						{
-							request: {
-								operationId: `inspect-save-${kind}`,
-								expectedRevision: 0,
-								goal,
-								plan: inspectPlan,
-							},
-						},
-						toolContext(workspace, "inspect-host", "inspect-command"),
-					),
-				),
-			);
+			const saved = await save(host, manager, goal, 0, inspectPlan);
 			expect(saved.status).toBe("ok");
-			expect(saved.workflowData.projection.sessionId).toBe(provisionalId);
-			await hooks.event({
-				event: {
-					type: "session.idle",
-					properties: { sessionID: "inspect-host" },
-				},
-			} as Parameters<NonNullable<typeof hooks.event>>[0]);
-			const approvalPrompts = prompts.filter((call) =>
-				JSON.stringify(call).includes("Approve this one draft"),
+			expect(projectionOf(saved).sessionId).toBe(
+				projectionOf(provisional).sessionId,
 			);
-			expect(approvalPrompts.length, kind).toBe(Number(expectedApproval));
+			const approval = expectedApproval
+				? host.nextSynthetic(manager, (input) =>
+						input.text.includes("Approve this one draft"),
+					)
+				: null;
+			await idleDecision(host, manager);
+			if (approval) await approval;
+			else await waitingForPlanApproval(host, manager);
+			expect(
+				host.synthetics.filter((input) =>
+					input.text.includes("Approve this one draft"),
+				),
+			).toHaveLength(Number(expectedApproval));
 		});
 	}
-	test("binds an explicitly named acceptance case to its originating host", async () => {
-		const workspace = await createTestWorkspace("flow-request-anchor-");
-		const hooks = await loadPlugin(workspace);
-		const before = hooks["command.execute.before"];
-		const planSave = hooks.tool?.flow_plan_save;
-		const planApprove = hooks.tool?.flow_plan_approve;
-		if (!before || !planSave || !planApprove)
-			throw new Error("Missing request-anchor hooks.");
-		const output = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{
-				command: "flow-auto",
-				sessionID: "anchor-owner",
-				arguments:
-					"Implement this; acceptance has a case named `linux-skipped observation`.",
-			},
-			output,
+	test("binds a named acceptance case to the originating native host", async () => {
+		const { host } = await load();
+		const owner = "ses_owner";
+		await host.command(
+			"flow-auto",
+			"--recovery=off Implement this; acceptance has a case named `linux-skipped observation`.",
+			owner,
 		);
-		const save = (
-			operationId: string,
-			expectedRevision: number,
-			nextPlan = plan,
-		) =>
-			planSave.execute(
-				{
-					request: {
-						operationId,
-						expectedRevision,
-						goal: "Implement the named case.",
-						plan: nextPlan,
-					},
-				},
-				toolContext(workspace, "anchor-owner"),
-			);
-		const saved = JSON.parse(String(await save("anchor-save-1", 0)));
+		const saved = await save(host, owner, "Implement the named case.");
 		expect(saved.status).toBe("ok");
-		const approval = {
-			request: { operationId: "anchor-approve-1", expectedRevision: 1 },
-		};
 		expect(
-			JSON.parse(
-				String(
-					await planApprove.execute(
-						approval,
-						toolContext(workspace, "other-host"),
-					),
-				),
-			).summary,
+			(await approve(host, 1, "ses_other", "other-approve")).summary,
 		).toContain("originating OpenCode session");
-		expect(
-			JSON.parse(
-				String(
-					await planApprove.execute(
-						approval,
-						toolContext(workspace, "anchor-owner"),
-					),
-				),
-			).summary,
-		).toContain("linux-skipped observation");
+		expect((await approve(host, 1, owner)).summary).toContain(
+			"linux-skipped observation",
+		);
 		const repairedPlan = {
 			...plan,
 			evidence: (plan.evidence ?? []).map((entry, index) =>
-				index === 0
-					? {
+				index
+					? entry
+					: {
 							...entry,
 							command:
 								"bun test --reporter=junit --reporter-outfile=.flow/results.xml",
 							assertions: ["linux-skipped observation"],
-						}
-					: entry,
+						},
 			),
 		};
-		const repaired = JSON.parse(
-			String(await save("anchor-save-2", 1, repairedPlan)),
+		expect(
+			(await save(host, owner, "Implement the named case.", 1, repairedPlan))
+				.status,
+		).toBe("ok");
+		expect((await approve(host, 2, owner, "approve-repaired")).status).toBe(
+			"ok",
 		);
-		expect(repaired.status).toBe("ok");
-		const approved = JSON.parse(
-			String(
-				await planApprove.execute(
-					{
-						request: {
-							operationId: "anchor-approve-2",
-							expectedRevision: 2,
-						},
-					},
-					toolContext(workspace, "anchor-owner"),
-				),
-			),
-		);
-		expect(approved.status).toBe("ok");
 	});
-
-	test("keeps malformed mutation output out of validation-capture errors", async () => {
-		const workspace = await createTestWorkspace("flow-auto-output-");
-		const hooks = await loadPlugin(workspace);
-		const toolAfter = hooks["tool.execute.after"];
-		if (!toolAfter) throw new Error("Missing tool after-hook.");
-		const output = { title: "", output: "not-json", metadata: {} };
-
-		await toolAfter(
-			{
-				tool: "flow_plan_approve",
-				sessionID: "auto-host",
-				callID: "malformed-mutation-output",
-				args: {},
-			},
-			output,
-		);
-
-		expect(output.output).toBe("not-json");
-		expect(output.output).not.toContain("[flow-validation-error]");
-	});
-
-	test("reports local stop or cancel without durable mutation or cross-host revocation", async () => {
-		const workspace = await createTestWorkspace("flow-auto-stop-");
-		const hooks = await loadPlugin(workspace);
-		const before = hooks["command.execute.before"];
-		const chat = hooks["chat.message"];
-		const compacting = hooks["experimental.session.compacting"];
-		const planSave = hooks.tool?.flow_plan_save;
-		const status = hooks.tool?.flow_status;
-		if (!before || !chat || !compacting || !planSave || !status) {
-			throw new Error("Missing auto-drive hooks.");
-		}
-		const saved = JSON.parse(
-			String(
-				await planSave.execute(
-					{
-						request: {
-							operationId: "stop-plan-save",
-							expectedRevision: 0,
-							goal: "Keep durable state unchanged while stopping auto-drive.",
-							plan,
-						},
-					},
-					toolContext(workspace),
-				),
-			),
-		);
-		const durableBefore = {
-			sessionId: saved.workflowData.projection.sessionId,
-			status: saved.workflowData.projection.status,
-			revision: saved.workflowData.projection.revision,
-		};
-		expect(durableBefore).toMatchObject({
-			sessionId: expect.any(String),
-			status: "planning",
-			revision: 1,
+	test("leaves non-Flow malformed after-hook content untouched", async () => {
+		const { host } = await load();
+		const native = await host.toolContext("flow_plan_approve", {});
+		const result = { content: "not-json", metadata: {} };
+		await host.toolHooks.emit("execute.after", {
+			tool: "flow_plan_approve",
+			sessionID: native.sessionID,
+			messageID: native.messageID,
+			agent: native.agent,
+			id: native.id,
+			input: {},
+			status: "completed",
+			result,
 		});
-
+		expect(result.content).toBe("not-json");
+	});
+	test("stop and cancel preserve durable state and do not revoke another host", async () => {
+		const { host, workspace } = await load();
+		const saved = await save(host);
+		const original = await readFile(
+			join(workspace, ".flow/session.json"),
+			"utf8",
+		);
 		for (const directive of ["stop", "cancel"]) {
-			const activation = {
-				parts: [{ type: "text", text: "stale" }],
-			} as unknown as Parameters<typeof before>[1];
-			await before(
-				{ command: "flow-auto", sessionID: "auto-stop", arguments: "" },
-				activation,
-			);
-			const activeContext = { context: [] as string[] };
-			await compacting({ sessionID: "auto-stop" }, activeContext);
-			expect(activeContext.context).not.toEqual([]);
-
-			const stopped = {
-				parts: [{ type: "text", text: "stale" }],
-			} as unknown as Parameters<typeof before>[1];
-			const retainedParts = stopped.parts;
-			await before(
-				{
-					command: "flow-auto",
-					sessionID: "auto-stop",
-					arguments: directive,
-				},
-				stopped,
-			);
-			expect(stopped.parts).toBe(retainedParts);
-			expect(stopped.parts).toHaveLength(1);
-			const stoppedText = stopped.parts[0];
-			expect(stoppedText?.type).toBe("text");
-			if (stoppedText?.type !== "text") {
-				throw new Error("Expected a plain stop confirmation.");
-			}
-			expect(stoppedText.text).toBe("Flow auto stopped.");
-			expect(stoppedText.synthetic).not.toBe(true);
-			const stoppedContext = { context: [] as string[] };
-			await compacting({ sessionID: "auto-stop" }, stoppedContext);
-			expect(stoppedContext.context).toEqual([]);
+			await host.command("flow-auto", "--recovery=off Continue", "ses_owner");
+			await host.command("flow-auto", directive, "ses_owner");
+			expect(host.prompts.at(-1)).toMatchObject({
+				text: "/flow-auto stop",
+				resume: false,
+			});
+			await host.idle("ses_owner");
+			expect(host.synthetics).toEqual([]);
+			expect(
+				await readFile(join(workspace, ".flow/session.json"), "utf8"),
+			).toBe(original);
 		}
-
-		const alreadyStopped = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-stop", arguments: "stop" },
-			alreadyStopped,
+		await host.command("flow-auto", "--recovery=off Continue", "ses_owner");
+		await host.command("flow-auto", "stop", "ses_other");
+		await host.admit("stop /flow-auto", "ses_other");
+		const stoppedOther = await host.response(
+			"flow_status",
+			statusInput,
+			"ses_other",
 		);
-		expect(alreadyStopped.parts[0]).toMatchObject({
-			type: "text",
-			text: "No Flow auto lease was active in this OpenCode session.",
-		});
-
-		const response = JSON.parse(
-			String(
-				await status.execute(
-					{ request: { view: "compact" } },
-					toolContext(workspace),
-				),
-			),
-		);
-		expect(response.workflowData.projection).toMatchObject(durableBefore);
-
-		const ownerActivation = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-owner", arguments: "" },
-			ownerActivation,
-		);
-		const otherHostStop = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		const otherHostParts = otherHostStop.parts;
-		await before(
-			{ command: "flow-auto", sessionID: "other-host", arguments: "stop" },
-			otherHostStop,
-		);
-		expect(otherHostStop.parts).toBe(otherHostParts);
-		expect(otherHostStop.parts[0]).toMatchObject({
-			type: "text",
-			text: "No Flow auto lease was active in this OpenCode session.",
-		});
-		const afterOtherHost = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, afterOtherHost);
-		expect(afterOtherHost.context).not.toEqual([]);
-		await chat({ sessionID: "other-host" }, {
-			message: {
-				id: "other-host-natural-stop",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: [{ type: "text", text: "stop /flow-auto" }],
-		} as unknown as Parameters<typeof chat>[1]);
-		const afterOtherHostMessage = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, afterOtherHostMessage);
-		expect(afterOtherHostMessage.context).not.toEqual([]);
-
-		await mkdir(join(workspace, ".flow"), { recursive: true });
-		await writeFile(join(workspace, ".flow", "session.json"), "{broken");
-		const unreadableStop = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
+		expect(stoppedOther.workflowData.autoDrive).toBeUndefined();
+		const owner = await host.response("flow_status", statusInput, "ses_owner");
+		expect(owner.workflowData.autoDrive).toMatchObject({ state: "active" });
+		expect(projectionOf(owner).sessionId).toBe(projectionOf(saved).sessionId);
+		await writeFile(join(workspace, ".flow/session.json"), "{broken");
 		await expect(
-			before(
-				{ command: "flow-auto", sessionID: "auto-owner", arguments: "stop" },
-				unreadableStop,
-			),
-		).resolves.toBeUndefined();
-		const afterUnreadableStop = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, afterUnreadableStop);
-		expect(afterUnreadableStop.context).toEqual([]);
+			host.command("flow-auto", "stop", "ses_owner"),
+		).resolves.toMatchObject({ text: "/flow-auto stop", resume: false });
 	});
-
-	test("adopts an idle-created session only from its same-host plan save", async () => {
-		for (const [creatorHost, expectedPrompts] of [
-			["auto-owner", 1],
-			["other-host", 0],
-		] as const) {
-			const workspace = await createTestWorkspace("flow-auto-idle-owner-");
-			const promptCalls: unknown[] = [];
-			const hooks = await loadPlugin(workspace, workspace, promptCalls);
-			const planSave = hooks.tool?.flow_plan_save;
-			const planApprove = hooks.tool?.flow_plan_approve;
-			const before = hooks["command.execute.before"];
-			const chat = hooks["chat.message"];
-			const compacting = hooks["experimental.session.compacting"];
-			if (
-				!planSave ||
-				!planApprove ||
-				!before ||
-				!chat ||
-				!compacting ||
-				!hooks.event
-			)
-				throw new Error("Missing auto-drive hooks or plan tools.");
-			const creatorContext = toolContext(
-				workspace,
-				creatorHost,
-				"idle-owner-command",
+	test.each([
+		["ses_owner", 1],
+		["ses_other", 0],
+	] as const)(
+		"an idle-created workflow is adopted only from same-host save by %s",
+		async (creator, expected) => {
+			const { host } = await load();
+			await host.command("flow-auto", "--recovery=off", "ses_owner");
+			const saved = await save(
+				host,
+				creator,
+				"Bind idle continuation ownership.",
 			);
-			const ownerContext = toolContext(
-				workspace,
-				"auto-owner",
-				"idle-owner-command",
-			);
-			const commandOutput = {
-				parts: [{ type: "text", text: "stale" }],
-			} as unknown as Parameters<typeof before>[1];
-			await before(
-				{ command: "flow-auto", sessionID: "auto-owner", arguments: "" },
-				commandOutput,
-			);
-			await chat({ sessionID: "auto-owner" }, {
-				message: {
-					id: "idle-owner-command",
-					agent: "build",
-					model: { providerID: "provider", modelID: "model" },
-				},
-				parts: commandOutput.parts,
-			} as unknown as Parameters<typeof chat>[1]);
-			await emitAssistant(hooks, creatorHost, "idle-owner-command");
-			const saveArgs = {
-				request: {
-					operationId: "idle-owner-plan-save",
-					expectedRevision: 0,
-					goal: "Bind idle continuation ownership.",
-					plan,
-				},
-			};
-			const savedOutput = String(
-				await planSave.execute(saveArgs, creatorContext),
-			);
-			const saved = JSON.parse(savedOutput);
-			const approveArgs = {
-				request: {
-					operationId: "idle-owner-plan-approve",
-					expectedRevision: saved.workflowData.projection.revision,
-				},
-			};
-			const approvedOutput = String(
-				await planApprove.execute(approveArgs, ownerContext),
-			);
-			expect(JSON.parse(approvedOutput).status).toBe("ok");
-			await hooks.event({
-				event: {
-					type: "session.idle",
-					properties: { sessionID: "auto-owner" },
-				},
-			} as Parameters<NonNullable<typeof hooks.event>>[0]);
-
-			expect(promptCalls).toHaveLength(expectedPrompts);
-			const compacted = { context: [] as string[] };
-			await compacting({ sessionID: "auto-owner" }, compacted);
-			expect(compacted.context.length > 0).toBe(expectedPrompts === 1);
-		}
+			expect(saved.status).toBe("ok");
+			expect((await approve(host, 1, "ses_owner")).status).toBe("ok");
+			const continued = expected ? host.nextSynthetic("ses_owner") : null;
+			await idleDecision(host, "ses_owner");
+			if (continued) await continued;
+			expect(host.synthetics).toHaveLength(expected);
+		},
+	);
+	test("another host's accepted mutation and its exact owner replay cannot grant automatic authority", async () => {
+		const { host } = await load();
+		await save(host);
+		await host.command("flow-auto", "--recovery=off", "ses_owner");
+		await host.response("flow_status", statusInput, "ses_owner");
+		const coordinator = await idleDecision(host, "ses_owner");
+		await waitingForPlanApproval(host, "ses_owner");
+		await host.admit("Approve the plan.", "ses_owner");
+		await host.beginTurn("ses_owner");
+		expect((await approve(host, 1, "ses_other")).status).toBe("ok");
+		const replay = await approve(host, 1, "ses_owner");
+		expect(replay.workflowData.operation?.replayed).toBe(true);
+		await idleDecision(host, "ses_owner", coordinator);
+		expect(host.synthetics).toEqual([]);
 	});
-
-	test("does not treat another host's accepted mutation as continuation authority", async () => {
-		const workspace = await createTestWorkspace("flow-auto-other-host-");
-		const promptCalls: unknown[] = [];
-		const hooks = await loadPlugin(workspace, workspace, promptCalls);
-		const planSave = hooks.tool?.flow_plan_save;
-		const planApprove = hooks.tool?.flow_plan_approve;
-		const before = hooks["command.execute.before"];
-		const chat = hooks["chat.message"];
-		const compacting = hooks["experimental.session.compacting"];
-		if (
-			!planSave ||
-			!planApprove ||
-			!before ||
-			!chat ||
-			!compacting ||
-			!hooks.event
-		) {
-			throw new Error("Missing auto-drive hooks or plan tools.");
-		}
-		const context = toolContext(workspace);
-		const saved = JSON.parse(
-			String(
-				await planSave.execute(
-					{
-						request: {
-							operationId: "other-host-plan-save",
-							expectedRevision: 0,
-							goal: "Reject cross-host continuation authority.",
-							plan,
-						},
-					},
-					context,
-				),
-			),
+	test("missing native request identity rejects a mutation before durable effect", async () => {
+		const { host, workspace } = await load();
+		await save(host);
+		const before = await readFile(
+			join(workspace, ".flow/session.json"),
+			"utf8",
 		);
-		const commandOutput = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-owner", arguments: "" },
-			commandOutput,
-		);
-		await chat({ sessionID: "auto-owner" }, {
-			message: {
-				id: "auto-close-command",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: commandOutput.parts,
-		} as unknown as Parameters<typeof chat>[1]);
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-owner" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		await chat({ sessionID: "auto-owner" }, {
-			message: {
-				id: "auto-owner-reply",
-				agent: "build-approved",
-				model: { providerID: "provider", modelID: "approved-model" },
-			},
-			parts: [{ type: "text", text: "Approve the plan." }],
-		} as unknown as Parameters<typeof chat>[1]);
-
-		const approveArgs = {
-			request: {
-				operationId: "other-host-plan-approve",
-				expectedRevision: saved.workflowData.projection.revision,
-			},
-		};
-		const approvedOutput = String(
-			await planApprove.execute(
-				approveArgs,
-				toolContext(workspace, "other-host"),
-			),
-		);
-		expect(JSON.parse(approvedOutput).status).toBe("ok");
-		const afterCrossHostMutation = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, afterCrossHostMutation);
-		expect(afterCrossHostMutation.context).not.toEqual([]);
-		await emitAssistant(hooks, "auto-owner", "auto-owner-reply");
-		const replayedOutput = String(
-			await planApprove.execute(
-				approveArgs,
-				toolContext(workspace, "auto-owner", "auto-owner-reply"),
-			),
-		);
-		expect(JSON.parse(replayedOutput).workflowData.operation.replayed).toBe(
-			true,
-		);
-		const afterReplay = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, afterReplay);
-		expect(afterReplay.context).not.toEqual([]);
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-owner" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-
-		expect(promptCalls).toHaveLength(0);
-		const afterOtherHostMutation = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, afterOtherHostMutation);
-		expect(afterOtherHostMutation.context).toEqual([]);
-	});
-
-	test("preserves an accepted mutation but fails closed without its assistant origin", async () => {
-		const workspace = await createTestWorkspace("flow-auto-missing-origin-");
-		const promptCalls: unknown[] = [];
-		const hooks = await loadPlugin(workspace, workspace, promptCalls);
-		const planSave = hooks.tool?.flow_plan_save;
-		const planApprove = hooks.tool?.flow_plan_approve;
-		const before = hooks["command.execute.before"];
-		const chat = hooks["chat.message"];
-		const compacting = hooks["experimental.session.compacting"];
-		if (
-			!planSave ||
-			!planApprove ||
-			!before ||
-			!chat ||
-			!compacting ||
-			!hooks.event
-		) {
-			throw new Error("Missing auto-drive hooks or plan tools.");
-		}
-		const saved = JSON.parse(
-			String(
-				await planSave.execute(
-					{
-						request: {
-							operationId: "missing-origin-plan-save",
-							expectedRevision: 0,
-							goal: "Fail closed when mutation provenance is unavailable.",
-							plan,
-						},
-					},
-					toolContext(workspace),
-				),
-			),
-		);
-		const commandOutput = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-host", arguments: "" },
-			commandOutput,
-		);
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "missing-origin-command",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: commandOutput.parts,
-		} as unknown as Parameters<typeof chat>[1]);
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "missing-origin-reply",
-				agent: "build-approved",
-				model: { providerID: "provider", modelID: "approved-model" },
-			},
-			parts: [{ type: "text", text: "Approve the plan." }],
-		} as unknown as Parameters<typeof chat>[1]);
-
-		const approvedOutput = String(
-			await planApprove.execute(
-				{
-					request: {
-						operationId: "missing-origin-plan-approve",
-						expectedRevision: saved.workflowData.projection.revision,
-					},
-				},
-				toolContext(workspace, "auto-host", "missing-origin-reply"),
-			),
-		);
-		expect(JSON.parse(approvedOutput)).toMatchObject({
-			status: "ok",
-			workflowData: {
-				operation: { replayed: false },
-				projection: { status: "ready" },
-			},
+		const native = await host.toolContext("flow_plan_approve", {
+			request: { operationId: "unknown-approve", expectedRevision: 1 },
 		});
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-
-		expect(promptCalls).toHaveLength(0);
-		const afterMissingOrigin = { context: [] as string[] };
-		await compacting({ sessionID: "auto-host" }, afterMissingOrigin);
-		expect(afterMissingOrigin.context).toEqual([]);
+		host.messages.set("ses_manager", []);
+		await expect(
+			host.invoke(
+				"flow_plan_approve",
+				{ request: { operationId: "unknown-approve", expectedRevision: 1 } },
+				native,
+			),
+		).rejects.toThrow("assistant identity");
+		expect(await readFile(join(workspace, ".flow/session.json"), "utf8")).toBe(
+			before,
+		);
 	});
-
-	test("does not credit a same-host assistant from an older user turn", async () => {
-		const workspace = await createTestWorkspace("flow-auto-stale-origin-");
-		const promptCalls: unknown[] = [];
-		const hooks = await loadPlugin(workspace, workspace, promptCalls);
-		const planSave = hooks.tool?.flow_plan_save;
-		const planApprove = hooks.tool?.flow_plan_approve;
-		const before = hooks["command.execute.before"];
-		const chat = hooks["chat.message"];
-		const compacting = hooks["experimental.session.compacting"];
-		if (
-			!planSave ||
-			!planApprove ||
-			!before ||
-			!chat ||
-			!compacting ||
-			!hooks.event
-		) {
-			throw new Error("Missing auto-drive hooks or plan tools.");
-		}
-		const saved = JSON.parse(
-			String(
-				await planSave.execute(
-					{
-						request: {
-							operationId: "stale-origin-plan-save",
-							expectedRevision: 0,
-							goal: "Reject stale same-host mutation provenance.",
-							plan,
-						},
-					},
-					toolContext(workspace),
-				),
-			),
-		);
-		const commandOutput = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-host", arguments: "" },
-			commandOutput,
-		);
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "stale-origin-command",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: commandOutput.parts,
-		} as unknown as Parameters<typeof chat>[1]);
-		await emitAssistant(
-			hooks,
-			"auto-host",
-			"stale-origin-command",
-			"assistant:stale-origin-command",
-		);
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "stale-origin-current-reply",
-				agent: "build-approved",
-				model: { providerID: "provider", modelID: "approved-model" },
-			},
-			parts: [{ type: "text", text: "Approve the plan." }],
-		} as unknown as Parameters<typeof chat>[1]);
-
-		const approvedOutput = String(
-			await planApprove.execute(
-				{
-					request: {
-						operationId: "stale-origin-plan-approve",
-						expectedRevision: saved.workflowData.projection.revision,
-					},
-				},
-				toolContext(workspace, "auto-host", "stale-origin-command"),
-			),
-		);
-		expect(JSON.parse(approvedOutput)).toMatchObject({
-			status: "ok",
-			workflowData: {
-				operation: { replayed: false },
-				projection: { status: "ready" },
-			},
-		});
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-
-		expect(promptCalls).toHaveLength(0);
-		const afterStaleOrigin = { context: [] as string[] };
-		await compacting({ sessionID: "auto-host" }, afterStaleOrigin);
-		expect(afterStaleOrigin.context).toEqual([]);
-	});
-
-	test("retains authority when close commits before archive publication fails", async () => {
-		const workspace = await createTestWorkspace("flow-auto-close-pending-");
-		const promptCalls: unknown[] = [];
-		const hooks = await loadPlugin(workspace, workspace, promptCalls);
-		const planSave = hooks.tool?.flow_plan_save;
-		const sessionClose = hooks.tool?.flow_session_close;
-		const before = hooks["command.execute.before"];
-		const chat = hooks["chat.message"];
-		if (!planSave || !sessionClose || !before || !chat || !hooks.event) {
-			throw new Error("Missing auto-drive hooks or close tools.");
-		}
-		const context = toolContext(workspace);
-		const saved = JSON.parse(
-			String(
-				await planSave.execute(
-					{
-						request: {
-							operationId: "pending-close-plan",
-							expectedRevision: 0,
-							goal: "Recover a durably accepted close.",
-							plan,
-						},
-					},
-					context,
-				),
-			),
-		);
-		const commandOutput = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-close", arguments: "" },
-			commandOutput,
-		);
-		await chat({ sessionID: "auto-close" }, {
-			message: {
-				id: "auto-close-command",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: commandOutput.parts,
-		} as unknown as Parameters<typeof chat>[1]);
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-close" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		await chat({ sessionID: "auto-close" }, {
-			message: {
-				id: "auto-close-reply",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: [{ type: "text", text: "Defer this session." }],
-		} as unknown as Parameters<typeof chat>[1]);
-		await emitAssistant(hooks, "auto-close", "auto-close-reply");
-
-		await writeFile(join(workspace, ".flow", "history"), "unsafe\n");
-		const closeArgs = {
-			request: {
-				operationId: "pending-close",
-				expectedRevision: saved.workflowData.projection.revision,
-				sessionId: saved.workflowData.projection.sessionId,
-				kind: "deferred" as const,
-				summary: "Deferred by user.",
-			},
+	test("a same-host assistant from an older native request cannot mutate after real steer", async () => {
+		const { host, workspace } = await load();
+		await save(host);
+		const args = {
+			request: { operationId: "stale-approve", expectedRevision: 1 },
 		};
-		const closeOutput = String(
-			await sessionClose.execute(
-				closeArgs,
-				toolContext(workspace, "auto-close", "auto-close-reply"),
-			),
+		const old = await host.toolContext("flow_plan_approve", args);
+		const before = await readFile(
+			join(workspace, ".flow/session.json"),
+			"utf8",
 		);
-		const close = JSON.parse(closeOutput);
-		expect(close).toMatchObject({
+		await host.admit("Approve the plan.");
+		await host.beginTurn();
+		await expect(host.invoke("flow_plan_approve", args, old)).rejects.toThrow();
+		expect(await readFile(join(workspace, ".flow/session.json"), "utf8")).toBe(
+			before,
+		);
+	});
+	test("a durably accepted close retains retry authority when archive publication fails", async () => {
+		const { host, workspace } = await load();
+		const saved = await save(host);
+		await host.command("flow-auto", "--recovery=off", "ses_close");
+		await host.response("flow_status", statusInput, "ses_close");
+		await idleDecision(host, "ses_close");
+		await waitingForPlanApproval(host, "ses_close");
+		await host.admit("Defer this session.", "ses_close");
+		await writeFile(join(workspace, ".flow/history"), "unsafe\n");
+		const closed = await host.response(
+			"flow_session_close",
+			{
+				request: {
+					operationId: "pending-close",
+					expectedRevision: 1,
+					sessionId: projectionOf(saved).sessionId,
+					kind: "deferred",
+					summary: "Deferred by user.",
+				},
+			},
+			"ses_close",
+		);
+		expect(closed).toMatchObject({
 			status: "error",
 			workflowData: {
 				operation: { replayed: false },
 				closeState: { durableAccepted: true },
 			},
 		});
-		await unlink(join(workspace, ".flow", "history"));
-		await mkdir(join(workspace, ".flow", "history"));
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-close" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-
-		expect(promptCalls).toHaveLength(1);
-		expect(promptCalls[0]).toMatchObject({
-			path: { id: "auto-close" },
-			body: {
-				parts: [
-					{
-						text: expect.stringContaining("flow_session_close"),
-					},
-				],
-			},
-		});
+		await unlink(join(workspace, ".flow/history"));
+		await mkdir(join(workspace, ".flow/history"));
+		const retried = host.nextSynthetic("ses_close");
+		await host.idle("ses_close");
+		await retried;
+		expect(host.synthetics).toHaveLength(1);
+		expect(host.synthetics[0]?.text).toContain("flow_session_close");
 	});
-
-	test("retains auto authority before decorated after-hooks, then delivers promptAsync", async () => {
-		const workspace = await createTestWorkspace("flow-auto-");
-		const promptCalls: unknown[] = [];
-		const hooks = await loadPlugin(workspace, workspace, promptCalls);
-		await hooks.config?.({
-			agent: {
-				"flow-planner": { options: { flowPlanningModel: "test/planning" } },
-			},
+	test("accepted approval survives decorated native after-hooks and submits one queued continuation with the manager model", async () => {
+		const { host } = await load();
+		await save(host);
+		const manager = "ses_owner";
+		const session = host.ensureSession(manager, {
+			agent: "build",
+			model: { providerID: "provider", id: "approved-model", variant: "high" },
 		});
-		const context = toolContext(workspace);
-		const planSave = hooks.tool?.flow_plan_save;
-		const planApprove = hooks.tool?.flow_plan_approve;
-		if (!planSave || !planApprove) throw new Error("Missing plan tools.");
-		const saved = JSON.parse(
-			String(
-				await planSave.execute(
-					{
-						request: {
-							operationId: "auto-plan-save",
-							expectedRevision: 0,
-							goal: "Exercise durable auto continuation.",
-							plan,
-						},
-					},
-					context,
-				),
-			),
-		);
-		expect(saved.status).toBe("ok");
-
-		const before = hooks["command.execute.before"];
-		const chat = hooks["chat.message"];
-		const compacting = hooks["experimental.session.compacting"];
-		const toolAfter = hooks["tool.execute.after"];
-		if (!before || !chat || !compacting || !toolAfter || !hooks.event) {
-			throw new Error("Missing auto-drive hooks.");
-		}
-		const commandOutput = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof before>[1];
-		await before(
-			{ command: "flow-auto", sessionID: "auto-host", arguments: "" },
-			commandOutput,
-		);
-		const activationToken = (
-			commandOutput.parts.find(
-				(part) => part.type === "text" && part.synthetic === true,
-			) as { metadata?: Record<string, unknown> }
-		).metadata?.[FLOW_AUTO_METADATA_KEY];
-		expect(activationToken).toEqual(expect.any(String));
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "auto-command",
-				agent: "build",
-				model: { providerID: "provider", modelID: "model" },
-			},
-			parts: commandOutput.parts,
-		} as unknown as Parameters<typeof chat>[1]);
-
-		const compactingOutput = { context: [] as string[] };
-		await compacting({ sessionID: "auto-host" }, compactingOutput);
-		expect(compactingOutput.context.join(" ")).toContain(
-			"/flow-auto continuation",
-		);
-		expectExactlyOnce(compactingOutput.context.join("\n"), FLOW_MANAGER_KERNEL);
-		expect(compactingOutput.context.join("\n")).toContain(
-			"Load flow-run guidance before any feature or closure route",
-		);
-		expect(compactingOutput.context.join("\n")).toContain(
-			"replay archiveRetry exactly",
-		);
-		await emitAutoCompaction(
-			hooks,
-			"auto-host",
-			"auto-command",
-			"auto-compaction",
-		);
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "auto-compaction",
-				agent: "build-compacted",
-				model: { providerID: "provider", modelID: "compaction-model" },
-			},
-			parts: [
-				{
-					type: "text",
-					text: "Continue if you have next steps.",
-					synthetic: true,
-				},
-			],
-		} as unknown as Parameters<typeof chat>[1]);
-		expect(promptCalls).toHaveLength(0);
-		const afterCompacted = { context: [] as string[] };
-		await compacting({ sessionID: "auto-host" }, afterCompacted);
-		expectExactlyOnce(afterCompacted.context.join("\n"), FLOW_MANAGER_KERNEL);
-
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		expect(promptCalls).toHaveLength(0);
-
-		await chat({ sessionID: "auto-host" }, {
-			message: {
-				id: "auto-clarification",
-				agent: "build-clarification",
-				model: { providerID: "provider", modelID: "clarification-model" },
-			},
-			parts: [{ type: "text", text: "What do you recommend?" }],
-		} as unknown as Parameters<typeof chat>[1]);
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		expect(promptCalls).toHaveLength(0);
-		const afterClarification = { context: [] as string[] };
-		await compacting({ sessionID: "auto-host" }, afterClarification);
-		expect(afterClarification.context.join(" ")).toContain(
-			"/flow-auto continuation",
-		);
-		expectExactlyOnce(
-			afterClarification.context.join("\n"),
-			FLOW_MANAGER_KERNEL,
-		);
-
-		await chat({ sessionID: "auto-host", variant: "requested-high" }, {
-			message: {
-				id: "auto-approval",
-				agent: "build-approved",
-				model: {
-					providerID: "provider",
-					modelID: "approved-model",
-					variant: "resolved-high",
-				},
-			},
-			parts: [{ type: "text", text: "Approve the plan." }],
-		} as unknown as Parameters<typeof chat>[1]);
-		const approveArgs = {
-			request: {
-				operationId: "auto-plan-approve",
-				expectedRevision: saved.workflowData.projection.revision,
-			},
+		await host.command("flow-auto", "--recovery=off", manager);
+		await host.response("flow_status", statusInput, manager);
+		const coordinator = await idleDecision(host, manager);
+		await waitingForPlanApproval(host, manager);
+		expect(host.synthetics).toEqual([]);
+		await host.admit("What do you recommend?", manager);
+		await host.response("flow_status", statusInput, manager);
+		await idleDecision(host, manager, coordinator);
+		await waitingForPlanApproval(host, manager);
+		expect(host.synthetics).toEqual([]);
+		await host.admit("Approve the plan.", manager);
+		const args = {
+			request: { operationId: "decorated-approve", expectedRevision: 1 },
 		};
-		await emitAssistant(hooks, "auto-host", "auto-approval");
-		const approvedOutput = String(
-			await planApprove.execute(
-				approveArgs,
-				toolContext(workspace, "auto-host", "auto-approval"),
-			),
-		);
-		const approved = JSON.parse(approvedOutput);
-		expect(approved.workflowData.projection.status).toBe("ready");
-		const decorated = {
-			title: "",
-			output: `${approvedOutput}\n\n[audit-footer]`,
-			metadata: {},
-		};
-		await toolAfter(
-			{
-				tool: "flow_plan_approve",
-				sessionID: "auto-host",
-				callID: "auto-plan-approve-call",
-				args: approveArgs,
-			},
-			decorated,
-		);
-		expect(decorated.output).toEndWith("[audit-footer]");
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		expect(promptCalls).toHaveLength(1);
-		const continuationText = String(
-			(promptCalls[0] as { body: { parts: Array<{ text: string }> } }).body
-				.parts[0]?.text,
-		);
-		expectExactlyOnce(continuationText, FLOW_MANAGER_KERNEL);
-		expect(continuationText).toContain(
-			"Load flow-run guidance before any feature or closure route",
-		);
-		expect(continuationText).toContain("replay archiveRetry exactly");
-		expect(promptCalls[0]).toMatchObject({
-			path: { id: "auto-host" },
-			query: { directory: workspace },
-			body: {
-				agent: "build-approved",
-				model: { providerID: "provider", modelID: "approved-model" },
-				variant: "resolved-high",
-				parts: [
-					{
-						type: "text",
-						synthetic: true,
-						text: expect.stringContaining("flow_run_start"),
-						metadata: {
-							[FLOW_AUTO_METADATA_KEY]: expect.any(String),
-						},
-					},
-				],
-			},
-			throwOnError: true,
+		const native = await host.toolContext("flow_plan_approve", args, manager);
+		const result = await host.invoke("flow_plan_approve", args, native);
+		const decorated = { content: `${nativeText(result)}\n\n[audit-footer]` };
+		await host.toolHooks.emit("execute.after", {
+			tool: "flow_plan_approve",
+			sessionID: native.sessionID,
+			messageID: native.messageID,
+			agent: native.agent,
+			id: native.id,
+			input: args,
+			status: "completed",
+			result: decorated,
 		});
-		const continuationParts = (
-			promptCalls[0] as {
-				body: { parts: Array<{ metadata: Record<string, unknown> }> };
-			}
-		).body.parts;
-		expect(continuationParts[0]?.metadata[FLOW_AUTO_METADATA_KEY]).not.toBe(
-			activationToken,
-		);
-		expect((promptCalls[0] as { body: { model: object } }).body.model).toEqual({
+		expect(decorated.content).toEndWith("[audit-footer]");
+		const continuation = host.nextSynthetic(manager);
+		await idleDecision(host, manager, coordinator);
+		await continuation;
+		expect(host.synthetics).toHaveLength(1);
+		const dispatched = host.synthetics[0];
+		expect(dispatched).toMatchObject({
+			sessionID: manager,
+			delivery: "queue",
+			resume: true,
+			metadata: { [FLOW_AUTO_METADATA_KEY]: expect.any(String) },
+		});
+		expect(session.model).toEqual({
 			providerID: "provider",
-			modelID: "approved-model",
+			id: "approved-model",
+			variant: "high",
 		});
-		const status = hooks.tool?.flow_status;
-		if (!status) throw new Error("Missing status tool.");
-		const statusResponse = JSON.parse(
-			String(
-				await status.execute(
-					{ request: { view: "compact" } },
-					{ ...context, sessionID: "auto-host" },
-				),
-			),
+		exactlyOnce(dispatched?.text ?? "", FLOW_MANAGER_KERNEL);
+		expect(dispatched?.text).toContain(
+			"Load flow-run guidance before any feature or closure route",
 		);
-		expect(statusResponse.workflowData).not.toHaveProperty("autoTiming");
-		expect(statusResponse.workflowData.autoDrive).toEqual({
-			scope: "current-plugin-process",
-			state: "active",
-			reason: "continuation",
-		});
-		expect(statusResponse.workflowData.projection).not.toHaveProperty(
-			"autoTiming",
+		expect(dispatched?.text).toContain("replay archiveRetry exactly");
+		const compact = await host.response("flow_status", statusInput, manager);
+		expect(compact.workflowData).not.toHaveProperty("autoTiming");
+		expect(compact.workflowData.autoDrive).toMatchObject({ state: "active" });
+		const detail = await host.response(
+			"flow_status",
+			{ request: { view: "detail" } },
+			manager,
 		);
-		const detailResponse = JSON.parse(
-			String(
-				await status.execute(
-					{ request: { view: "detail" } },
-					{ ...context, sessionID: "auto-host" },
-				),
-			),
-		);
-		expect(detailResponse.workflowData.autoTiming).toMatchObject({
+		expect(detail.workflowData.autoTiming).toMatchObject({
 			scope: "latest-flow-auto-in-current-plugin-process",
 			authoritative: false,
 			state: "active",
 		});
-		expect(detailResponse.workflowData.autoDrive).toEqual(
-			statusResponse.workflowData.autoDrive,
-		);
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		expect(promptCalls).toHaveLength(1);
-
-		await hooks.event({
-			event: {
-				type: "session.error",
-				properties: {
-					sessionID: "auto-host",
-					error: { name: "MessageAbortedError" },
-				},
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		const afterOldError = { context: [] as string[] };
-		await compacting({ sessionID: "auto-host" }, afterOldError);
-		expect(afterOldError.context).toEqual([]);
-		await hooks.event({
-			event: {
-				type: "session.idle",
-				properties: { sessionID: "auto-host" },
-			},
-		} as Parameters<NonNullable<typeof hooks.event>>[0]);
-		expect(promptCalls).toHaveLength(1);
-
-		for (const terminalEvent of [
-			{
-				type: "session.deleted",
-				properties: { info: { id: "auto-host" } },
-			},
-			{ type: "session.error", properties: {} },
-		]) {
-			await before(
-				{ command: "flow-auto", sessionID: "auto-host", arguments: "" },
-				commandOutput,
-			);
-			await chat({ sessionID: "auto-host" }, {
-				message: {
-					id: `terminal-${terminalEvent.type}`,
-					agent: "build",
-					model: { providerID: "provider", modelID: "model" },
-				},
-				parts: commandOutput.parts,
-			} as unknown as Parameters<typeof chat>[1]);
-			await hooks.event({
-				event: terminalEvent,
-			} as Parameters<NonNullable<typeof hooks.event>>[0]);
-			const afterTerminal = { context: [] as string[] };
-			await compacting({ sessionID: "auto-host" }, afterTerminal);
-			expect(afterTerminal.context).toEqual([]);
-		}
+		await idleDecision(host, manager, coordinator);
+		expect(host.synthetics).toHaveLength(1);
+		await host.events.emit({
+			id: "evt_interrupt",
+			created: 100,
+			type: "session.execution.interrupted",
+			data: { sessionID: manager, reason: "user" },
+			durable: { aggregateID: manager, seq: 1, version: 1 },
+		});
+		await host.idle(manager);
+		expect(host.synthetics).toHaveLength(1);
+	});
+	test("automatic compaction keeps the manager kernel and checked continuation authority", async () => {
+		const { host } = await load();
+		await save(host);
+		await host.command("flow-auto", "--recovery=off", "ses_owner");
+		await host.response("flow_status", statusInput, "ses_owner");
+		const system = await host.compact("ses_owner");
+		const text = system
+			.filter((part) => part.type === "text")
+			.map((part) => part.text)
+			.join("\n");
+		exactlyOnce(text, FLOW_MANAGER_KERNEL);
+		expect(text).toContain("/flow-auto continuation");
+		expect(text).toContain("replay archiveRetry exactly");
+		expect(
+			(await host.response("flow_status", statusInput, "ses_owner"))
+				.workflowData.autoDrive,
+		).toMatchObject({ state: "active" });
 	});
 });
 
-describe("duplicate runtime guard", () => {
-	test("preserves an owner stop confirmation across a no-lease duplicate hook", async () => {
-		const workspace = await createTestWorkspace("flow-duplicate-stop-");
-		const firstDirectory = join(workspace, "first-directory");
-		const secondDirectory = join(workspace, "second-directory");
-		await Promise.all([mkdir(firstDirectory), mkdir(secondDirectory)]);
-		const owner = await loadPlugin(workspace, firstDirectory);
-		const ownerBefore = owner["command.execute.before"];
-		const compacting = owner["experimental.session.compacting"];
-		if (!ownerBefore || !compacting) {
-			throw new Error("Missing owner auto-drive hooks.");
-		}
-		const activation = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof ownerBefore>[1];
-		await ownerBefore(
-			{ command: "flow-auto", sessionID: "auto-owner", arguments: "" },
-			activation,
+describe("duplicate native runtime guard", () => {
+	test("rejects duplicate setup, releases its failed registration, and preserves owner stop", async () => {
+		const { host, workspace } = await load();
+		await host.command("flow-auto", "--recovery=off", "ses_owner");
+		const duplicate = await createNativeFlowHost(workspace);
+		hosts.push(duplicate);
+		await expect(duplicate.load(FlowPlugin)).rejects.toThrow(
+			"duplicate-instances",
 		);
-		const active = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, active);
-		expect(active.context).not.toEqual([]);
-
-		const duplicate = await loadPlugin(workspace, secondDirectory);
-		const duplicateBefore = duplicate["command.execute.before"];
-		if (!duplicateBefore) throw new Error("Missing duplicate command hook.");
-		const stopped = {
-			parts: [{ type: "text", text: "stale" }],
-		} as unknown as Parameters<typeof ownerBefore>[1];
-		await ownerBefore(
-			{ command: "flow-auto", sessionID: "auto-owner", arguments: "stop" },
-			stopped,
-		);
-		expect(stopped.parts).toHaveLength(1);
-		expect(stopped.parts[0]).toMatchObject({
-			type: "text",
-			text: "Flow auto stopped.",
-		});
-		await duplicateBefore(
-			{ command: "flow-auto", sessionID: "auto-owner", arguments: "stop" },
-			stopped,
-		);
-		expect(stopped.parts).toHaveLength(1);
-		expect(stopped.parts[0]).toMatchObject({
-			type: "text",
-			text: "Flow auto stopped.",
-		});
-		const inactive = { context: [] as string[] };
-		await compacting({ sessionID: "auto-owner" }, inactive);
-		expect(inactive.context).toEqual([]);
-	});
-
-	test("disables every copy dynamically until one project runtime remains", async () => {
-		const workspace = await createTestWorkspace("flow-duplicate-");
-		const firstDirectory = join(workspace, "first-directory");
-		const secondDirectory = join(workspace, "second-directory");
-		await Promise.all([mkdir(firstDirectory), mkdir(secondDirectory)]);
-		const first = await loadPlugin(workspace, firstDirectory);
-		const second = await loadPlugin(workspace, secondDirectory);
-		const context = toolContext(workspace);
-
-		for (const hooks of [first, second]) {
-			const status = hooks.tool?.flow_status;
-			if (!status) throw new Error("Missing guarded status tool.");
-			const parsed = JSON.parse(
-				String(await status.execute({ request: { view: "compact" } }, context)),
-			);
-			expect(parsed).toMatchObject({
-				status: "error",
-				summary: expect.stringContaining("duplicate-instances"),
-				workflowData: {
-					runtimeGuard: {
-						operational: false,
-						reason: "duplicate-instances",
-					},
-				},
-			});
-			expect(parsed.workflowData.runtimeGuard).toEqual({
-				operational: false,
-				reason: "duplicate-instances",
-				message: "Flow is not operational (duplicate-instances).",
-			});
-			// A guard rejection carries the same `failure` envelope every other Flow
-			// error uses, because the prompts tell the model to read exactly that.
-			expect(parsed.workflowData.dataNote).toEqual(expect.any(String));
-			expect(parsed.workflowData.failure).toEqual({
-				summary: "Flow is not operational (duplicate-instances).",
-				recovery: expect.stringContaining("Remove the duplicate installation"),
-			});
-
-			// `flow_guidance` answers in markdown, so its rejection must be markdown
-			// too rather than a JSON blob the caller is not parsing.
-			const guidance = hooks.tool?.flow_guidance;
-			if (!guidance) throw new Error("Missing guarded guidance tool.");
-			const rejected = String(await guidance.execute({ id: "flow" }, context));
-			expect(rejected).not.toContain("{");
-			expect(rejected).toContain(
-				"Flow is not operational (duplicate-instances).",
-			);
-			expect(rejected).toContain("Recovery: ");
-		}
-
-		await second.dispose?.();
-		const guidance = first.tool?.flow_guidance;
-		if (!guidance) throw new Error("Missing guarded guidance tool.");
+		expect(duplicate.tools.size).toBe(0);
+		await expect(
+			host.command("flow-auto", "stop", "ses_owner"),
+		).resolves.toMatchObject({ text: "/flow-auto stop", resume: false });
+		expect((await host.response("flow_status", statusInput)).status).toBe("ok");
 		for (const id of ["flow", "flow-run"] as const) {
-			const output = String(await guidance.execute({ id }, context));
+			const output = nativeText(await host.call("flow_guidance", { id }));
 			expect(output).toBe(getFlowGuidance(id).content);
-			expect(output.split(FLOW_MANAGER_KERNEL)).toHaveLength(2);
+			exactlyOnce(output, FLOW_MANAGER_KERNEL);
 		}
 	});
 });
 
-test("planner cannot mutate manager-owned Flow state even through a direct tool call", async () => {
-	const workspace = await createTestWorkspace("flow-planner-authority-");
-	const hooks = await loadPlugin(workspace);
-	for (const definition of Object.values(hooks.tool ?? {})) {
-		const result = JSON.parse(
-			String(
-				await definition.execute(
-					{},
-					{ ...toolContext(workspace), agent: "flow-planner" },
-				),
-			),
-		);
-		expect(result.status).toBe("error");
-		expect(result.summary).toContain("manager owns all Flow tools");
+test("planner cannot mutate Flow even through direct native tool execution", async () => {
+	const { host, workspace } = await load();
+	host.ensureSession("ses_planner", {
+		agent: "flow-planner",
+		parentID: "ses_manager",
+	});
+	for (const name of TOOL_NAMES) {
+		const output = nativeText(await host.call(name, {}, "ses_planner"));
+		if (name === "flow_guidance")
+			expect(output).toContain("verified workspace session");
+		else {
+			const value: unknown = JSON.parse(output);
+			expect(value).toMatchObject({ status: "error" });
+		}
 	}
 	await expect(
-		readFile(join(workspace, ".flow", "session.json")),
+		readFile(join(workspace, ".flow/session.json")),
 	).rejects.toMatchObject({ code: "ENOENT" });
 });
 
-test("model handoff distinguishes requested roles from bounded session observations", async () => {
-	const workspace = await createTestWorkspace("flow-model-observation-");
-	const hooks = await loadPlugin(workspace);
-	await hooks.config?.({
-		agent: {
-			"flow-planner": { options: { flowPlanningModel: "test/planner" } },
-			"flow-reviewer": { options: { flowReviewerModel: "test/reviewer" } },
+test("model handoff distinguishes requested roles from bounded native manager observations", async () => {
+	const { host } = await load({
+		modelPreferences: {
+			planning: { kind: "model", model: { providerID: "test", id: "planner" } },
+			review: { kind: "model", model: { providerID: "test", id: "reviewer" } },
 		},
 	});
-	const read = async (sessionID: string) =>
-		JSON.parse(
-			String(
-				await hooks.tool?.flow_status?.execute(
-					{ request: { view: "compact" } },
-					toolContext(workspace, sessionID),
-				),
+	const selected = host.ensureSession("ses_manager", {
+		model: { providerID: "test", id: "coding", variant: "high" },
+	});
+	const result = await host.response("flow_status", statusInput);
+	expect(selected.model).toEqual({
+		providerID: "test",
+		id: "coding",
+		variant: "high",
+	});
+	expect(result.workflowData.modelConfiguration).toMatchObject({
+		planning: {
+			requested: "test/planner",
+			mode: "specialist-advice",
+			availability: "unverified",
+		},
+		review: { requested: "test/reviewer", availability: "unverified" },
+		implementation: {
+			observed: { providerID: "test", modelID: "coding", variant: "high" },
+		},
+	});
+	host.ensureSession("ses_planner", {
+		agent: "flow-planner",
+		parentID: "ses_manager",
+		model: { providerID: "test", id: "planner" },
+	});
+	await host.beginTurn("ses_planner");
+	expect(
+		field(
+			field(
+				(await host.response("flow_status", statusInput)).workflowData
+					.modelConfiguration,
+				"implementation",
 			),
-		).workflowData.modelConfiguration;
-	expect((await read("manager")).implementation.observed).toBeNull();
-	const chat = hooks["chat.message"];
-	if (!chat) throw new Error("Missing chat hook");
-	const output = {
-		message: {
-			id: "request",
-			agent: "build",
-			model: { providerID: "test", modelID: "coding", variant: "high" },
-		},
-		parts: [{ type: "text", text: "Plan only" }],
-	} as unknown as Parameters<typeof chat>[1];
-	await chat({ sessionID: "manager" }, output);
-	expect(output.message.model).toMatchObject({
-		providerID: "test",
-		modelID: "coding",
-		variant: "high",
-	});
-	const status = await read("manager");
-	expect(status.planning).toMatchObject({
-		requested: "test/planner",
-		mode: "specialist-advice",
-		availability: "unverified",
-	});
-	expect(status.review).toMatchObject({
-		requested: "test/reviewer",
-		availability: "unverified",
-	});
-	expect(status.implementation.observed).toEqual({
-		providerID: "test",
-		modelID: "coding",
-		variant: "high",
-	});
-	expect((await read("other")).implementation.observed).toBeNull();
-	output.message.agent = "flow-planner";
-	output.message.model.modelID = "planner";
-	await chat({ sessionID: "manager" }, output);
-	expect((await read("manager")).implementation.observed.modelID).toBe(
-		"coding",
-	);
+			"observed",
+		),
+	).toEqual({ providerID: "test", modelID: "coding", variant: "high" });
 	for (let index = 0; index < 128; index++) {
-		output.message.agent = "build";
-		await chat({ sessionID: `other-${index}` }, output);
+		await host.admit("Inspect.", `ses_other_${index}`);
+		await host.beginTurn(`ses_other_${index}`);
 	}
-	expect((await read("manager")).implementation.observed).toBeNull();
+	expect(
+		field(
+			field(
+				(await host.response("flow_status", statusInput)).workflowData
+					.modelConfiguration,
+				"implementation",
+			),
+			"observed",
+		),
+	).toBeNull();
 });
 
 test("production plugin options cannot supply experimental recovery profiles", async () => {
-	const workspace = await createTestWorkspace("flow-production-recovery-");
-	const hooks = await loadPlugin(workspace, workspace, undefined, {
+	const { host } = await load({
 		recoveryTreatment: { origin: "simulation", arm: "manager-plus-jev" },
 		profiles: [
 			{
@@ -1975,96 +888,137 @@ test("production plugin options cannot supply experimental recovery profiles", a
 			},
 		],
 	});
-	const before = hooks["command.execute.before"];
-	if (!before) throw new Error("Missing command hook.");
 	await expect(
-		before(
-			{
-				command: "flow-auto",
-				sessionID: "production-refusal",
-				arguments:
-					"--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 Repair parser",
-			},
-			{ parts: [] },
+		host.command(
+			"flow-auto",
+			"--recovery=delegated --recovery-calls=3 --recovery-usd=0.01 Repair parser",
 		),
 	).rejects.toThrow("No release-owned live qualification");
 });
 
-test("attachment-only user direction can close a stopped recovery session", async () => {
-	const workspace = await createTestWorkspace("flow-recovery-attachment-");
-	const hooks = await loadPlugin(workspace);
-	const planSave = hooks.tool?.flow_plan_save;
-	const sessionClose = hooks.tool?.flow_session_close;
-	const before = hooks["command.execute.before"];
-	const chat = hooks["chat.message"];
-	if (!planSave || !sessionClose || !before || !chat || !hooks.event)
-		throw new Error("Missing recovery hooks.");
-	const saved = JSON.parse(
-		String(
-			await planSave.execute(
-				{
-					request: {
-						operationId: "attachment-plan",
-						expectedRevision: 0,
-						goal: "Honor attachment direction",
-						plan,
-					},
-				},
-				toolContext(workspace, "attachment-host", "initial-user"),
-			),
-		),
+test("attachment-only native user direction can close a stopped recovery workflow", async () => {
+	const { host } = await load();
+	const saved = await save(host);
+	await host.command(
+		"flow-auto",
+		"--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Continue",
 	);
-	const commandOutput = {
-		parts: [{ type: "text", text: "stale" }],
-	} as unknown as Parameters<typeof before>[1];
-	await before(
-		{
-			command: "flow-auto",
-			sessionID: "attachment-host",
-			arguments:
-				"--recovery=shadow --recovery-calls=2 --recovery-usd=0.01 Continue",
+	await host.command("flow-auto", "stop");
+	await host.admit("", "ses_manager", {
+		files: [{ uri: "data:image/png;base64,AA==" }],
+	});
+	const closed = await host.response("flow_session_close", {
+		request: {
+			operationId: "attachment-close",
+			expectedRevision: 1,
+			sessionId: projectionOf(saved).sessionId,
+			kind: "abandoned",
+			summary: "Directed by the user attachment.",
 		},
-		commandOutput,
+	});
+	expect(closed.status).toBe("ok");
+});
+
+test("current armed validation persistence failure remains visible to the model", async () => {
+	const { spyOn } = await import("bun:test");
+	const { realpath } = await import("node:fs/promises");
+	const { ValidationCaptureCoordinator } = await import(
+		"../src/platform/opencode/validation-capture.js"
 	);
-	await chat({ sessionID: "attachment-host" }, {
-		message: {
-			id: "initial-user",
-			agent: "build",
-			model: { providerID: "test", modelID: "manager" },
-		},
-		parts: commandOutput.parts,
-	} as unknown as Parameters<typeof chat>[1]);
-	await emitAssistant(hooks, "attachment-host", "initial-user");
-	await before(
-		{ command: "flow-auto", sessionID: "attachment-host", arguments: "stop" },
-		{ parts: [] } as Parameters<typeof before>[1],
-	);
-	await chat({ sessionID: "attachment-host" }, {
-		message: {
-			id: "attachment-user",
-			agent: "build",
-			model: { providerID: "test", modelID: "manager" },
-		},
-		parts: [
-			{ type: "file", mime: "image/png", url: "data:image/png;base64,AA==" },
-		],
-	} as unknown as Parameters<typeof chat>[1]);
-	await emitAssistant(hooks, "attachment-host", "attachment-user");
-	const close = JSON.parse(
-		String(
-			await sessionClose.execute(
-				{
-					request: {
-						operationId: "attachment-close",
-						expectedRevision: saved.workflowData.projection.revision,
-						sessionId: saved.workflowData.projection.sessionId,
-						kind: "abandoned",
-						summary: "Directed by the user attachment.",
-					},
-				},
-				toolContext(workspace, "attachment-host", "attachment-user"),
-			),
-		),
-	);
-	expect(close.status).toBe("ok");
+	type ValidationCaptureCoordinator =
+		import("../src/platform/opencode/validation-capture.js").ValidationCaptureCoordinator;
+	type NativeToolAfter =
+		import("../src/platform/opencode/sdk.js").NativeToolAfter;
+	type NativeToolBefore =
+		import("../src/platform/opencode/sdk.js").NativeToolBefore;
+	const { host, workspace } = await load();
+	let receiver: ValidationCaptureCoordinator | undefined;
+	const rejected: unknown[] = [];
+	const original = ValidationCaptureCoordinator.prototype.observeToolAfter;
+	const observer = spyOn(
+		ValidationCaptureCoordinator.prototype,
+		"observeToolAfter",
+	).mockImplementation(async function (
+		this: ValidationCaptureCoordinator,
+		input,
+	) {
+		receiver = this;
+		try {
+			return await original.call(this, input);
+		} catch (error) {
+			rejected.push(error);
+			throw error;
+		}
+	});
+	try {
+		const command = "printf 'literal raw shell output\\n0 failed\\n'";
+		const native = await host.toolContext("shell", { command });
+		const before: NativeToolBefore = {
+			tool: "shell",
+			sessionID: native.sessionID,
+			messageID: native.messageID,
+			id: native.id,
+			agent: native.agent,
+			input: { command },
+		};
+		await host.toolHooks.emit("execute.after", {
+			...before,
+			status: "completed",
+			result: { content: "unarmed literal" },
+		});
+		function coordinator(): ValidationCaptureCoordinator {
+			if (!receiver)
+				throw new Error("Composition did not invoke its coordinator.");
+			return receiver;
+		}
+		const capture = coordinator();
+		capture.arm(native.sessionID, workspace, {
+			featureId: "capture-research",
+			runId: "run-research",
+			command,
+			scope: "focused",
+			sourceDigest: `sha256:${"a".repeat(64)}`,
+			hostPlatform: "other",
+			intent: "pass",
+			assertions: [],
+			resultsPath: undefined,
+		});
+		await host.toolHooks.emit("execute.before", before);
+		expect(capture.pendingCount()).toBe(1);
+		await mkdir(join(workspace, ".flow"), { recursive: true });
+		await writeFile(
+			join(workspace, ".flow/session.json"),
+			"unchanged durable bytes\n",
+		);
+		await writeFile(
+			join(workspace, ".flow/session.lock"),
+			"deliberate capture failure\n",
+		);
+		const result = {
+			content: "literal raw shell output\n0 failed\n",
+			metadata: { exit: 0, truncated: false },
+			output: {
+				exit: 0,
+				truncated: false,
+				output: "literal raw shell output\n0 failed\n",
+			},
+		};
+		const after: NativeToolAfter = { ...before, status: "completed", result };
+		await host.toolHooks.emit("execute.after", after);
+		expect(rejected.map(String)).toEqual([
+			`Error: Flow requires the Flow session lock to be a directory: ${join(await realpath(workspace), ".flow/session.lock")}.`,
+		]);
+		expect(capture.pendingCount()).toBe(0);
+		expect(await readFile(join(workspace, ".flow/session.json"), "utf8")).toBe(
+			"unchanged durable bytes\n",
+		);
+		expect(after.result.metadata).toBe(result.metadata);
+		expect(after.result.output).toBe(result.output);
+		expect(JSON.stringify(after)).not.toContain("[flow-validation]");
+		expect(after.result.content).toBe(
+			"literal raw shell output\n0 failed\n\n\n[flow-validation-error] Flow validation capture failed. No validation receipt was produced.",
+		);
+	} finally {
+		observer.mockRestore();
+	}
 });

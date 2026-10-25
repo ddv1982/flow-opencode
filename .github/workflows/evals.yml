@@ -52,7 +52,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -120,7 +120,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           FLOW_EVAL_MODEL: ${{ steps.matrix.outputs.models }}
-          FLOW_EVAL_NO_AUTH_COPY: "1"
           FLOW_EVAL_AUTHORIZATION: ${{ github.workspace }}/.paid-budget
         # A failing scenario must still publish its report: the durable documents are
         # the only way to read why, and paying for the pass twice is the alternative.

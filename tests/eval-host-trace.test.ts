@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OpenCode } from "@opencode/client";
 import {
 	pseudonymizeEvalIds,
 	RetainedScenarioEvidenceSchema,
@@ -74,7 +75,8 @@ const fixture = () => ({
 
 test("retained native call references bind to their observed tool parts", () => {
 	const trace = collectHostTrace(fixture());
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	const call = {
 		native: {
 			sessionId: "ses_root",
@@ -176,7 +178,8 @@ test("retained native call references bind to their observed tool parts", () => 
 test("collects mixed initial user parts without retaining text or raw token", () => {
 	const trace = collectHostTrace(fixture());
 	expect(trace.kind).toBe("observed");
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	expect(trace.sessions).toEqual([
 		{ id: "ses_root", parentId: null, agent: null, projectMatched: true },
 	]);
@@ -323,7 +326,8 @@ test("child task user prompts remain outside runner roots", () => {
 		],
 	});
 	expect(trace.kind).toBe("observed");
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	expect(trace.runnerRootSessionIds).toEqual(["ses_root"]);
 	expect(
 		trace.messages
@@ -372,7 +376,8 @@ test("second real root input remains visible despite a supplied count", () => {
 	};
 	const trace = collectHostTrace(withCount);
 	expect(trace.kind).toBe("observed");
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	expect(
 		trace.messages
 			.filter((message) => message.role === "user")
@@ -386,7 +391,11 @@ test("missing initial marker is absence, not inferred authority", () => {
 	required(required(input.sessionMessages[0]).messages[0]).parts.splice(1, 1);
 	const trace = collectHostTrace(input);
 	expect(trace.kind).toBe("observed");
-	if (trace.kind !== "observed" || trace.messages[0]?.role !== "user")
+	if (
+		trace.kind !== "observed" ||
+		trace.version !== 1 ||
+		trace.messages[0]?.role !== "user"
+	)
 		throw new Error("Expected native user facts");
 	expect(trace.messages[0].parts.map((part) => part.flowTokenSha256)).toEqual([
 		null,
@@ -439,7 +448,8 @@ test("a changed token is retained as distinct native facts without claiming auth
 			},
 		],
 	});
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	const initial = trace.messages[0],
 		later = trace.messages[2];
 	if (initial?.role !== "user" || later?.role !== "user")
@@ -480,7 +490,8 @@ test("compaction facts cannot attest native event delivery from final messages",
 			},
 		],
 	});
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	expect(trace.compactionDelivery).toBe("unavailable-from-message-export");
 	const message = trace.messages[2];
 	if (message?.role !== "user") throw new Error("Expected compaction user");
@@ -491,7 +502,49 @@ test.each([false, true])(
 	"EvalHost reads actual primary metadata and retains trace through grade input: GET fails $0",
 	async (metadataFails) => {
 		const scratch = await mkdtemp(join(tmpdir(), "flow-trace-wire-"));
-		const input = fixture();
+		const nativeSession = {
+			id: "ses_root",
+			location: { directory: scratch },
+			projectID: "fixture",
+			agent: "build",
+			cost: 0,
+			tokens: {
+				input: 0,
+				output: 0,
+				reasoning: 0,
+				cache: { read: 0, write: 0 },
+			},
+			time: { created: 1, updated: 2 },
+		};
+		const nativeMessages = [
+			{
+				id: "msg_user",
+				type: "user",
+				text: "Implement approved task",
+				time: { created: 1 },
+				metadata: { "opencode-plugin-flow/auto": "fixture-token" },
+			},
+			{
+				id: "msg_assistant",
+				type: "assistant",
+				agent: "build",
+				model: { id: "fixture", providerID: "fake" },
+				time: { created: 2 },
+				content: [
+					{
+						type: "tool",
+						id: "call_one",
+						name: "flow_status",
+						time: { created: 2, completed: 3 },
+						state: {
+							status: "completed",
+							input: {},
+							content: [{ type: "text", text: "{}" }],
+						},
+					},
+				],
+			},
+		];
 		const requests: string[] = [];
 		const server = Bun.serve({
 			hostname: "127.0.0.1",
@@ -499,24 +552,30 @@ test.each([false, true])(
 			fetch(request) {
 				const path = new URL(request.url).pathname;
 				requests.push(path);
-				if (path === "/session/ses_root/children") return Response.json([]);
-				if (path === "/session/ses_root")
+				if (path === "/api/session")
+					return Response.json({ data: [], cursor: {} });
+				if (path === "/api/session/ses_root")
 					return metadataFails
 						? new Response("Unavailable", { status: 503 })
-						: Response.json({ id: "ses_root", directory: scratch });
-				if (path === "/session/ses_root/message")
-					return Response.json(required(input.sessionMessages[0]).messages);
+						: Response.json({ data: nativeSession });
+				if (path === "/api/session/ses_root/message")
+					return Response.json({ data: nativeMessages, cursor: {} });
 				return new Response("Unknown", { status: 404 });
 			},
 		});
 		try {
 			const host = Reflect.construct(EvalHost, [scratch, scratch]) as EvalHost;
-			Object.assign(host, { baseUrl: `http://127.0.0.1:${server.port}` });
+			Object.assign(host, {
+				baseUrl: `http://127.0.0.1:${server.port}`,
+				nativeClient: OpenCode.make({
+					baseUrl: `http://127.0.0.1:${server.port}`,
+				}),
+			});
 			const outcome = await host.outcome(["ses_root"], 10);
 			expect(requests).toEqual([
-				"/session/ses_root/children",
-				"/session/ses_root",
-				"/session/ses_root/message",
+				"/api/session",
+				"/api/session/ses_root",
+				"/api/session/ses_root/message",
 			]);
 			expect(outcome.hostTrace?.kind).toBe(
 				metadataFails ? "unavailable" : "observed",
@@ -526,7 +585,7 @@ test.each([false, true])(
 			expect(gradeInput.allCalls[0]?.native).toEqual({
 				sessionId: "ses_root",
 				messageId: "msg_assistant",
-				partId: "prt_tool",
+				version: 2,
 				partIndex: 0,
 				callId: "call_one",
 				startedAt: 2,
@@ -581,7 +640,8 @@ test.each([false, true])(
 
 test("retained schema rejects resealed unknown-parent and cyclic child facts", () => {
 	const trace = collectHostTrace(fixture());
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	for (const parentId of ["unknown-parent", "ses_child"]) {
 		const mutated = {
 			...trace,
@@ -630,7 +690,8 @@ test("retained schema rejects resealed unknown-parent and cyclic child facts", (
 
 test("retained schema rejects impossible user part fields and missing first-part order", () => {
 	const trace = collectHostTrace(fixture());
-	if (trace.kind !== "observed") throw new Error("Expected native facts");
+	if (trace.kind !== "observed" || trace.version !== 1)
+		throw new Error("Expected native facts");
 	const initial = trace.messages[0];
 	if (initial?.role !== "user") throw new Error("Expected native user");
 	const first = required(initial.parts[0]);

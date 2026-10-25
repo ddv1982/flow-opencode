@@ -1,7 +1,7 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "9.6.0",
-	"description": "Small durable planning, validation, and review workflow for OpenCode",
+	"version": "10.0.0",
+	"description": "Durable planning, validation, and independent review for OpenCode v2",
 	"type": "module",
 	"repository": {
 		"type": "git",
@@ -35,8 +35,8 @@
 	],
 	"scripts": {
 		"build": "bun run clean && bun run build:plugin && bun run build:tui && bun run build:types",
-		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode-ai/plugin --external=zod --sourcemap=external ./src/index.ts",
-		"build:tui": "bun build --target=bun --outdir=./dist --entry-naming=tui.js --sourcemap=external ./src/tui.ts",
+		"build:plugin": "bun build --target=node --outdir=./dist --entry-naming=index.js --external=@opencode/plugin --external=zod --external=@opencode/schema --external=@opencode/client --external=effect --sourcemap=external ./src/index.ts",
+		"build:tui": "bun build --target=bun --outdir=./dist --entry-naming=tui.js --external=@opencode/plugin --external=zod --external=@opencode/schema --external=@opencode/client --external=effect --sourcemap=external ./src/tui.ts",
 		"build:types": "tsc -p tsconfig.types.json && bun run scripts/prune-dist-declarations.ts",
 		"clean": "bun run scripts/clean-dist.ts",
 		"eval": "bun run evals/run.ts",
@@ -73,18 +73,21 @@
 		"node": ">=24"
 	},
 	"peerDependencies": {
-		"@opencode-ai/plugin": ">=1.18.3 <2"
+		"@opencode/plugin": ">=2.1.4 <3",
+		"@opencode/schema": ">=2.1.4 <3"
 	},
 	"dependencies": {
 		"saxes": "6.0.0",
-		"zod": "4.4.3"
+		"zod": "4.6.7"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.14",
-		"@opencode-ai/plugin": "1.18.31",
 		"@types/bun": "1.4.2",
 		"@types/node": "26.6.2",
-		"typescript": "7.0.2"
+		"typescript": "7.0.2",
+		"@opencode/plugin": "2.1.4",
+		"@opencode/client": "2.1.4",
+		"@opencode/schema": "2.1.4"
 	},
 	"overrides": {
 		"@types/node": "26.6.2"

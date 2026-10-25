@@ -9,7 +9,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 
 | Threshold | Value | Why |
 | --- | --- | --- |
-| Distinct providers | 1 for 9.1.0, 9.2.0, 9.3.0, 9.4.0, 9.5.0, and 9.6.0; otherwise ≥ 2 | 9.5.0 and 9.6.0 pin `openai/gpt-6.1-sol`; earlier exceptions pin GPT-6 Sol. OpenAI-only claims. |
+| Distinct providers | 1 for 9.1.0, 9.2.0, 9.3.0, 9.4.0, 9.5.0, 9.6.0, and exact 10.0.0; otherwise 2 | 9.5.0, 9.6.0, and 10.0.0 pin `openai/gpt-6.1-sol`; earlier exceptions pin GPT-6 Sol. No cross-provider reliability claim. |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Every independent assignment must have its own submitted result. |
 | Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
@@ -23,10 +23,10 @@ This page owns release thresholds, candidate freezing, and publication order.
 | `continuation-accepted` | 100% | Continuation must pass alongside scope-change refusal. |
 | `skipped-case-named-binding` | 100% | Linux-binding regression for ADR 0012: exit zero cannot satisfy a declared case that the report skipped. |
 | `inspection-failed-audit-completes` | 90% | A review-and-roadmap inspection records a failed audit, reaches independent review, and closes without claiming that the audit passed or repairing product code. |
-| `auto-two-features-evidence` | 100% in 9.4.0 through 9.6.0 | Two dependent features, native reviewer packet access and final gate. |
-| `auto-prerequisite-repair` | 100% in 9.4.0 through 9.6.0 | In-target repair or accepted failed-gate amendment; immutable canonical gate. |
-| `auto-observe-with-required-pass` | 100% in 9.4.0 through 9.6.0 | Honest nonzero audit plus separate required pass on the reviewed source. |
-| Five delivery cases | 100% in 9.6.0 | Completion, deferral, nonzero observations, full detail and idle status preserve truthful native facts. |
+| `auto-two-features-evidence` | 100% in 9.4.0 through 9.6.0 and the v2 profile | Two dependent features, native reviewer packet access and final gate. |
+| `auto-prerequisite-repair` | 100% in 9.4.0 through 9.6.0 and the v2 profile | In-target repair or accepted failed-gate amendment; immutable canonical gate. |
+| `auto-observe-with-required-pass` | 100% in 9.4.0 through 9.6.0 and the v2 profile | Honest nonzero audit plus separate required pass on the reviewed source. |
+| Five delivery cases | 100% in 9.6.0 and the v2 profile | Completion, deferral, nonzero observations, full detail and idle status preserve truthful native facts. |
 
 Ungated exploratory scenarios are listed in [evals](../evals/README.md#scenarios).
 
@@ -54,8 +54,11 @@ Primary/reserve cells on GPT-6 Sol are 38/8 in 9.1.0 and 9.2.0, 48/9 in
 9.3.0, and 57/12 in 9.4.0. The 9.4.0 profile adds three autonomous cases.
 Version 9.5.0 keeps those twelve cases on GPT-6.1 Sol, with 57/12 cells.
 Version 9.6.0 adds five delivery cases, collects them first, and uses 72/17
-cells. Other versions use 96/18. Changed order requires a new freeze and
-approval. Existing campaigns stay immutable; narrowed or merged reports
+cells. Exact 10.0.0 retains all 17 cases on `openai/gpt-6.1-sol` with 72 primary
+and 17 reserve cells. Later v2 releases retain two routes and 144/34 cells.
+Manager and reviewer share the approved model per cell. Recovery is off.
+Other historical generic profiles use 96/18. Cell counts are not dispatch limits.
+Changed order requires a new freeze and approval. Existing campaigns stay immutable; narrowed or merged reports
 cannot qualify.
 
 Reported but ungated: reviewer findings/silent passes, refusals, operational counts,
@@ -88,6 +91,11 @@ Finish or close active sessions before changing Flow versions in either directio
   release and removed no earlier than the next major, so no session is stranded
   mid-lifecycle by an upgrade.
 
+Flow 10.0.0 deliberately removes OpenCode 1 support without a bridge release,
+as requested by the maintainer. This is an explicit exception to the earlier
+announcement cadence. The minimum tested host is OpenCode 2.1.4. Historical
+9.x qualification keeps its original 1.18.31 host pin and policy digests.
+
 [Publication recovery](../.agents/plans/05-release-simplification/README.md#recovery).
 
 ## Running it
@@ -95,7 +103,8 @@ Finish or close active sessions before changing Flow versions in either directio
 Finish code, dependency, version and changelog changes first. Pass frozen install,
 `bun run check`, `bun run replay`, audit, live smoke and CI before paid qualification.
 Freeze packed contents and evaluator inputs, then run the versioned matrix
-on the canonical Linux host. Run a fresh canary against its exact `artifact.tgz`,
+on the canonical Linux host. The v2 profile uses HTTP transport with ambient
+OpenCode configuration disabled. Run a fresh canary against its exact `artifact.tgz`,
 seal/regrade the bundle, and commit only evidence without changing measured inputs.
 Recheck final main CI and exact artifact identity before tagging `v<package-version>`.
 For 9.4.0, use
@@ -103,21 +112,32 @@ For 9.4.0, use
 
 Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
-For 9.1.0 through 9.4.0, pin GPT-6 Sol. Versions 9.5.0 and 9.6.0 pin GPT-6.1 Sol.
+For native accounts, follow the [source setup](../evals/README.md#native-account-authentication).
+Prepare with `--native-auth`, launch with `--native-auth-source`, and record with
+the matching `--launch-receipt`. Live connection data remains private.
+For 9.1.0 through 9.4.0, pin GPT-6 Sol. Exact 9.5.0, 9.6.0, and 10.0.0 pin GPT-6.1 Sol.
 
 ```bash
-env -u TYPESAFE_API_KEY -u OPENCODE_FLOW_REVIEWER_MODEL -u OPENCODE_FLOW_REVIEWER_STEPS \
+env -u TYPESAFE_API_KEY -u OPENCODE_FLOW_REVIEWER_MODEL \
+  -u OPENCODE_FLOW_REVIEWER_VARIANT -u OPENCODE_FLOW_REVIEWER_STEPS \
   bun run eval -- --release --model openai/gpt-6.1-sol
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
-# Run the prepared fixture, then record its session and transcript.
-bun run eval:canary -- record <record-options>
+bun scripts/canary-run.ts <prepared.json> openai/gpt-6.1-sol <prompt-file>
+bun run eval:canary -- record --prepared <prepared.json> --operator <operator> \
+  --session <closed-session-v5.json> --transcript <printed-native.json>
 bun run qualify -- --campaign-dir <campaign-dir> \
   --canary evals/canary/<version>.json
 ```
 
-The 9.6.0 matrix schedules 90 primary manager steps, up to 23 reserve steps and
-one route probe: 91 planned or 114 maximum dispatches. Internal generation is
-separate and these counts imply no dollar cap. Canary authorization is separate.
+The canary launcher needs its separately approved ledger in `FLOW_EVAL_AUTHORIZATION`
+and provider access through its environment. It prints the native export path,
+collects it before stopping the isolated host, and charges failed launches.
+
+Current 10.0.0 steps derive 90 primary dispatches, 23 reserves, and one route
+probe, giving 91 planned or 114 maximum top-level dispatches. Historical 9.6.0
+has the same counts. Internal turns and reviewer generations are separate;
+no dollar cap follows. Canary approval is separate. Refresh the draft at final
+freeze. Paid work stays HOLD until purpose, models, count, and expiry are approved.
 
 Use the [cheaper tiers](../evals/README.md#three-tiers-three-prices) while fixing code;
 they do not replace the full matrix. `bun run triage` identifies runs worth reading.

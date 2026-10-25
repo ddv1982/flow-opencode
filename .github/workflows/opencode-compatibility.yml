@@ -8,8 +8,6 @@ on:
 permissions:
   contents: read
 
-# This non-blocking scheduled signal catches upcoming OpenCode drift without
-# making an unreviewed host release part of the reproducible v6 build.
 jobs:
   latest-opencode:
     runs-on: ubuntu-latest
@@ -20,7 +18,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
@@ -30,7 +28,24 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Resolve the latest OpenCode 2 release
+        run: |
+          node --input-type=module <<'JS'
+          import { execFileSync } from 'node:child_process';
+          import { appendFileSync } from 'node:fs';
+          const result = JSON.parse(execFileSync('npm', ['view', '@opencode/cli@2', 'version', '--json'], { encoding: 'utf8' }));
+          const versions = (Array.isArray(result) ? result : [result])
+            .filter((version) => /^2\.\d+\.\d+$/.test(version))
+            .sort((a, b) => {
+              const left = a.split('.').map(Number);
+              const right = b.split('.').map(Number);
+              return left[1] - right[1] || left[2] - right[2];
+            });
+          const version = versions.at(-1);
+          if (!version) throw new Error('No stable OpenCode 2 release resolved.');
+          appendFileSync(process.env.GITHUB_ENV, `FLOW_OPENCODE_SMOKE_VERSION=${version}\n`);
+          console.log(`Compatibility host: @opencode/cli@${version}`);
+          JS
+
       - name: Run live OpenCode smoke
-        env:
-          FLOW_OPENCODE_SMOKE_VERSION: latest
         run: bun run smoke:live

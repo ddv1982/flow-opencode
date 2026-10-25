@@ -117,6 +117,7 @@ export type EpisodeHostOptions = {
 		| "opencodeVersion"
 		| "requestBudget"
 		| "providerCredentials"
+		| "credentialHandoff"
 		| "recoveryTreatment"
 	>;
 	hostFactory?: (options: StartOptions) => Promise<Host>;
@@ -161,7 +162,31 @@ async function workload(
 export async function createEpisodeHostDriver(
 	options: EpisodeHostOptions,
 ): Promise<EpisodeDriver> {
-	options = { ...options, host: structuredClone(options.host) };
+	const { credentialHandoff, ...hostOptions } = options.host;
+	options = {
+		...options,
+		host: {
+			...structuredClone(hostOptions),
+			...(credentialHandoff
+				? {
+						credentialHandoff: {
+							entries: structuredClone(credentialHandoff.entries),
+							onStop: credentialHandoff.onStop,
+						},
+					}
+				: {}),
+		},
+	};
+	if (options.host.providerCredentials === "inherit" && !credentialHandoff)
+		throw new Error(
+			"Native credential inheritance requires an explicit credentialHandoff.",
+		);
+	if (
+		credentialHandoff &&
+		(options.host.providerCredentials !== "inherit" ||
+			options.host.recoveryTreatment?.origin === "simulation")
+	)
+		throw new Error("Native credentials are disabled for this host.");
 	if (options.host.requestBudget)
 		options.host.requestBudget.directory = resolve(
 			options.host.requestBudget.directory,
@@ -247,7 +272,7 @@ export async function createEpisodeHostDriver(
 		manager,
 		recoveryTreatment: options.host.recoveryTreatment ?? null,
 		treatmentBundleSha256: frozenTreatmentBundle?.sha256 ?? null,
-		providerCredentials: options.host.providerCredentials ?? "inherit",
+		providerCredentials: options.host.providerCredentials ?? "disabled",
 		sources,
 		host: {
 			bun: options.host.toolchain.actualVersion,
@@ -261,7 +286,6 @@ export async function createEpisodeHostDriver(
 			withFlow: true,
 			ambientConfig: "disabled",
 			reviewerEnvironment: "disabled",
-			nativeLlm: false,
 		},
 	});
 	const lifecycle = new AbortController();
@@ -391,7 +415,6 @@ export async function createEpisodeHostDriver(
 				withFlow: true,
 				ambientConfig: "disabled",
 				reviewerEnvironment: "disabled",
-				nativeLlm: false,
 				signal: AbortSignal.any([signal, lifecycle.signal]),
 			});
 			host = await starting;

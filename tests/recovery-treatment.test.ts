@@ -4,6 +4,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { EvalHost } from "../evals/harness.js";
+import { OPENCODE_HOST_VERSION } from "../evals/opencode-host.js";
 import {
 	cancelRequestBudget,
 	createRequestBudget,
@@ -139,7 +140,7 @@ test("host refuses treatment without a gate before any process starts", async ()
 				environment: {},
 			},
 			packageCache: "/unused",
-			opencodeVersion: "1.18.31",
+			opencodeVersion: OPENCODE_HOST_VERSION,
 			files: { "README.md": "test" },
 			recoveryTreatment: treatment,
 		}),

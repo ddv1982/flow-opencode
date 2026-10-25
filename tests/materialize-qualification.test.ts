@@ -7,6 +7,7 @@ import {
 	mkdir,
 	mkdtemp,
 	readFile,
+	realpath,
 	rm,
 	symlink,
 	writeFile,
@@ -64,7 +65,9 @@ function tar(entries: readonly Entry[]): Buffer {
 }
 
 async function fixture(packageVersion = "9.4.0") {
-	const root = await mkdtemp(join(tmpdir(), "flow-materialize-test-"));
+	const root = await realpath(
+		await mkdtemp(join(tmpdir(), "flow-materialize-test-")),
+	);
 	temporary.push(root);
 	const roles = [
 		"report",

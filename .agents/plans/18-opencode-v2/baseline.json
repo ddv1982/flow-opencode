@@ -1,0 +1,52 @@
+{
+  "sourceSha": "8103f1cd42e1b4d111f25d2a311935d4e41fb997",
+  "bunVersion": "1.4.0",
+  "isolatedBun": "/tmp/flow-v2-toolchain/node_modules/.bin/bun",
+  "install": {
+    "command": "bun install --frozen-lockfile",
+    "exitCode": 0
+  },
+  "oldHostPackedSmoke": {
+    "command": "PATH=/tmp/flow-v2-toolchain/node_modules/.bin:$PATH bun run smoke:live",
+    "host": "1.18.31",
+    "pass": 22,
+    "fail": 0,
+    "log": "/tmp/flow-v2-baseline-smoke-pinned.log"
+  },
+  "deterministicCheck": {
+    "command": "PATH=/tmp/flow-v2-toolchain/node_modules/.bin:$PATH bun run check",
+    "status": "failed",
+    "log": "/tmp/flow-v2-baseline-check-pinned.log",
+    "observedFailure": "Two macOS temporary path aliases in materialize-qualification.test.ts and canary-run.test.ts",
+    "passCount": 4275,
+    "skipCount": 21,
+    "failCount": 2
+  },
+  "fixtureCorrection": {
+    "file": "tests/materialize-qualification.test.ts",
+    "command": "PATH=/tmp/flow-v2-toolchain/node_modules/.bin:$PATH bun test tests/materialize-qualification.test.ts",
+    "pass": 21,
+    "fail": 0,
+    "log": "/tmp/flow-v2-materialize-test.log",
+    "files": [
+      "tests/materialize-qualification.test.ts",
+      "tests/canary-run.test.ts"
+    ],
+    "focusedPassCount": 25,
+    "focusedFailCount": 0
+  },
+  "correctedCheck": {
+    "status": "passed",
+    "log": "/tmp/flow-v2-baseline-check-fixed.log",
+    "passCount": 4277,
+    "skipCount": 21,
+    "failCount": 0,
+    "totalTests": 4298
+  },
+  "replay": {
+    "command": "bun run replay",
+    "gatedCassettes": 13,
+    "matched": 13,
+    "log": "/tmp/flow-v2-baseline-replay.log"
+  }
+}

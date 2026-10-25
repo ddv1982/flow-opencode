@@ -46,7 +46,7 @@ model judgments. Each tier names what can fail.
 ## Host-attested
 
 - The validated command's **exit code** and **output truncation flag**, read from
-  the host's own Bash metadata. A model cannot report these; a host that reports
+  the host's own Shell metadata. A model cannot report these; a host that reports
   neither yields a durable never-passing observation rather than a silent pass.
 - That the executed command's bytes equal the armed command.
 - The **host platform** each observation ran on, normalized from what the runtime
@@ -80,7 +80,7 @@ The runtime cannot enforce these judgments. Read the review before trusting its 
   checklist, and failed an unprovable claim instead of passing it conditionally.
   `unprovable-claim-refused` and `defect-fails-review` put work in front of it that
   should not pass; neither can force the review path.
-- **Reviewer independence.** Without an explicit reviewer model from plugin tuple
+- **Reviewer independence.** Without an explicit reviewer model from plugin options
   configuration or `OPENCODE_FLOW_REVIEWER_MODEL`, the reviewer shares the
   manager's model; independence rests on structure alone.
 - **Evidence completeness.** Whether an entry names the requested observation,
@@ -99,7 +99,7 @@ The runtime cannot enforce these judgments. Read the review before trusting its 
 - Plans saved before `plan.evidence` existed. They declare none and keep the
   older, weaker rules: `broad` is the claimant's word, and no acceptance
   observation is owed. This build does not hydrate `gate` or `externalEvidence`.
-- Worker file boundaries beyond `.flow`, `.git`, and Bash denial. Exact per-slice
+- Worker file boundaries beyond `.flow`, `.git`, and Shell denial. Exact per-slice
   write paths are a prompt contract the manager audits afterward.
 - `/flow-auto` continuation across model turns, which depends on an unversioned
   host surface. Capability-gated and best-effort: see
@@ -114,8 +114,8 @@ Who can break a run, and what each is up against.
   it. What Flow enforces is that the lifecycle cannot be talked into existence.
   An armed validation command runs byte-for-byte or the observation is
   ineligible, the exit code and output-completeness flag come from the host's
-  Bash metadata, and only the reserved reviewer identity submits a review result.
-  The hidden worker and reviewer agents do get a deny matrix: no Bash, no
+  Shell metadata, and only the reserved reviewer identity submits a review result.
+  The hidden worker and reviewer agents do get a deny matrix: no Shell, no
   external directories, no skills, no delegation, no Flow lifecycle tools. The
   reviewer cannot edit at all, and the worker cannot touch `.flow` or `.git`.
 - **A compromised host.** Nothing. The host's own reports are the root of trust
