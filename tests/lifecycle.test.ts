@@ -104,6 +104,16 @@ async function fixture(
 	const recovery = new RecoveryController({
 		assess: async () => ({ kind: "unavailable", reason: "test" }),
 	});
+	let dispatchReturnGate: {
+		entered: () => void;
+		promise: Promise<void>;
+	} | null = null;
+	const automaticAccepted = Promise.withResolvers<string>();
+	let projectionReads = 0;
+	let projectionGate: { entered: () => void; promise: Promise<void> } | null =
+		null;
+	let digestGate: { entered: () => void; promise: Promise<void> } | null = null;
+	const sourceDigest = `sha256:${"a".repeat(64)}` as const;
 	let admissionBlocked: (() => void) | null = null;
 	let admissionGate: Promise<void> | null = null;
 	let corruptReceipt = false;
@@ -209,7 +219,7 @@ async function fixture(
 					...(input.metadata === undefined
 						? {}
 						: { metadata: structuredClone(input.metadata) }),
-					delivery: input.delivery ?? "queue",
+					delivery: input.delivery ?? "steer",
 				});
 				const receipt: SessionInboxUser = {
 					id,
@@ -222,7 +232,7 @@ async function fixture(
 							: { metadata: structuredClone(input.metadata) }),
 					},
 					time: { created: 0 },
-					delivery: input.delivery ?? "queue",
+					delivery: input.delivery ?? "steer",
 				};
 				native.push({
 					type: "user",
@@ -269,7 +279,7 @@ async function fixture(
 							: { metadata: { ...input.metadata } }),
 					},
 					time: { created: 0 },
-					delivery: input.delivery ?? "queue",
+					delivery: input.delivery ?? "steer",
 				};
 			},
 		},
@@ -336,8 +346,37 @@ async function fixture(
 	let lifecycle: Awaited<ReturnType<typeof registerFlowLifecycle>>;
 	const autoDrive = new AutoDriveCoordinator({
 		recovery,
-		readProjection: async () => projection,
-		prompt: (...args) => lifecycle.prompt(...args),
+		readProjection: async () => {
+			projectionReads++;
+			const snapshot = structuredClone(projection),
+				gate = projectionGate;
+			projectionGate = null;
+			if (gate) {
+				gate.entered();
+				await gate.promise;
+			}
+			return snapshot;
+		},
+		readSourceDigest: async () => {
+			const gate = digestGate;
+			digestGate = null;
+			if (gate) {
+				gate.entered();
+				await gate.promise;
+			}
+			return sourceDigest;
+		},
+		prompt: async (...args) => {
+			const result = await lifecycle.prompt(...args),
+				gate = dispatchReturnGate;
+			dispatchReturnGate = null;
+			if (gate) {
+				gate.entered();
+				await gate.promise;
+			}
+			if (result.kind === "sent") automaticAccepted.resolve(result.source);
+			return result;
+		},
 		createToken: () => "local-token",
 	});
 	lifecycle = await registerFlowLifecycle({
@@ -390,6 +429,8 @@ async function fixture(
 	});
 	return {
 		lifecycle,
+		ctxSession: ctx.session,
+		ctxSessionContext: ctx.session.context.bind(ctx.session),
 		autoDrive,
 		recovery,
 		repository,
@@ -405,6 +446,33 @@ async function fixture(
 		emit,
 		context,
 		toolCallbacks,
+		waitAutomaticSource: () => automaticAccepted.promise,
+		projectionReadCount: () => projectionReads,
+		blockNextDispatchReturn() {
+			const entered = Promise.withResolvers<void>(),
+				release = Promise.withResolvers<void>();
+			dispatchReturnGate = {
+				entered: entered.resolve,
+				promise: release.promise,
+			};
+			return {
+				entered: entered.promise,
+				release: release.resolve,
+			};
+		},
+		sourceDigest,
+		blockPolicyRead(stage: "projection" | "digest") {
+			const entered = Promise.withResolvers<void>(),
+				release = Promise.withResolvers<void>();
+			const gate = { entered: entered.resolve, promise: release.promise };
+			if (stage === "projection") projectionGate = gate;
+			else digestGate = gate;
+			return {
+				entered: entered.promise,
+				release: release.resolve,
+				reject: release.reject,
+			};
+		},
 		setProjection(value: AutoDriveProjection) {
 			projection = value;
 		},
@@ -473,6 +541,7 @@ async function fixture(
 				push(event);
 			} else queuedEvents.push(event);
 			await handled.promise;
+			for (let i = 0; i < 20; i++) await Promise.resolve();
 		},
 		sendEvent(event: OpenCodeEvent) {
 			if (pushEvent) {
@@ -3419,7 +3488,7 @@ for (const fresh of ["automatic", "ordinary"] as const)
 	});
 
 for (const actor of ["command", "synthetic"] as const)
-	test(`reservation before ${actor} session read vetoes old callbacks without taking new authority`, async () => {
+	test(`${actor} selected read respects its input reservation boundary`, async () => {
 		const f = await fixture();
 		try {
 			await initialOwnershipWork(f);
@@ -3436,12 +3505,18 @@ for (const actor of ["command", "synthetic"] as const)
 						);
 			await f.flush();
 			const before = f.autoDrive.captureAuthority(sessionID);
-			await expect(f.emit("context", old)).rejects.toThrow("epoch was revoked");
+			if (actor === "command")
+				await expect(f.emit("context", old)).rejects.toThrow(
+					"epoch was revoked",
+				);
+			else await finishOwnedResponse(f, await startOwnedRequest(f));
 			const control = automaticControl("msg_pre_get_old");
 			f.native.push(control);
-			await expect(f.emit("compaction", old)).rejects.toThrow(
-				"epoch was revoked",
-			);
+			if (actor === "command")
+				await expect(f.emit("compaction", old)).rejects.toThrow(
+					"epoch was revoked",
+				);
+			else await f.emit("compaction", old);
 			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(before);
 			expect(f.repository.saveCount).toBe(0);
 			f.native.splice(f.native.indexOf(control), 1);
@@ -5048,3 +5123,1011 @@ test("queued public inputs consume A before pending B without idle", async () =>
 		await f.lifecycle.dispose();
 	}
 });
+
+function inboxEvent(
+	type: "session.inbox.enqueued" | "session.inbox.cancelled",
+	id: string,
+	seq: number,
+): Extract<
+	OpenCodeEvent,
+	{ type: "session.inbox.enqueued" | "session.inbox.cancelled" }
+> {
+	const base = {
+		id: `evt_queue_${seq}`,
+		created: seq,
+		durable: { aggregateID: sessionID, seq, version: 1 as const },
+	};
+	return type === "session.inbox.enqueued"
+		? {
+				...base,
+				type,
+				data: {
+					sessionID,
+					inboxID: id,
+					item: { type: "user", payload: { text: id }, delivery: "queue" },
+				},
+			}
+		: { ...base, type, data: { sessionID, inboxID: id } };
+}
+async function queuePublic(f: OwnershipFixture, id: string, seq?: number) {
+	await f.emit("prompt", {
+		sessionID,
+		messageID: SessionMessage.ID.make(id),
+		prompt: { text: id },
+		delivery: "queue",
+	});
+	if (seq !== undefined)
+		await f.sendEventAndWait(inboxEvent("session.inbox.enqueued", id, seq));
+}
+function continuationProjection(f: OwnershipFixture) {
+	const source = f.context().messages.at(-1)?.id;
+	if (!source) throw new Error("Missing original input.");
+	f.autoDrive.observeAssistant(sessionID, "msg_validation_boundary", source);
+	const origin = f.autoDrive.validationOrigin(
+		sessionID,
+		"msg_validation_boundary",
+		{
+			featureId: "feature",
+			runId: "run",
+			sourceDigest: f.sourceDigest,
+			command: "bun test",
+			scope: "focused",
+			hostPlatform: "linux",
+			intent: "pass",
+			assertions: [],
+		},
+	);
+	if (!origin) throw new Error("Missing exact validation origin.");
+	f.autoDrive.observeValidation({
+		origin,
+		captureId: "validation",
+		observation: {
+			id: "validation",
+			featureId: "feature",
+			runId: "run",
+			sourceDigest: f.sourceDigest,
+			outputDigest: f.sourceDigest,
+			command: "bun test",
+			scope: "focused",
+			intent: "pass",
+			hostPlatform: "linux",
+			outputComplete: true,
+			exitCode: 0,
+			recordedRevision: 5,
+		},
+	});
+	f.setProjection({
+		sessionId: "flow-1",
+		status: "running",
+		revision: 5,
+		nextAction: "flow_review_start",
+	});
+	return source;
+}
+for (const stage of ["projection", "digest", "selected"] as const)
+	test(`confirmed pending queue during ${stage} withholds synthetic admission without consuming the continuation`, async () => {
+		const f = await fixture();
+		let release = () => {};
+		try {
+			await initialOwnershipWork(f);
+			const guard = await f.lifecycle.verifyTool(
+				ownershipNativeCall(f),
+				"flow",
+			);
+			if (guard.kind !== "flow") throw new Error("Missing original guard.");
+			const source = continuationProjection(f);
+			let entered: Promise<void>;
+			if (stage === "selected") {
+				f.blockNextSessionRead();
+				entered = f.waitSessionRead();
+				release = f.releaseSessionRead;
+			} else {
+				const gate = f.blockPolicyRead(stage);
+				entered = gate.entered;
+				release = gate.release;
+			}
+			const idle = f.autoDrive.onIdle(sessionID);
+			await entered;
+			await queuePublic(f, "msg_queued_A", 100);
+			release();
+			await idle;
+			expect(
+				f.native.filter((message) => message.type === "synthetic"),
+			).toEqual([]);
+			expect(() => guard.assertCurrent()).not.toThrow();
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			if (!authority)
+				throw new Error("Withholding consumed the automatic lease.");
+			expect(
+				f.autoDrive.captureDispatch(sessionID, authority.token)?.source,
+			).toBe(source);
+			await f.sendEventAndWait(
+				inboxEvent("session.inbox.cancelled", "msg_queued_A", 101),
+			);
+			await f.autoDrive.onIdle(sessionID);
+			const synthetic = f.native.filter(
+				(message) => message.type === "synthetic",
+			);
+			expect(synthetic).toHaveLength(1);
+			expect(
+				f.autoDrive.captureDispatch(sessionID, authority.token)?.source,
+			).toBe(synthetic[0]?.id);
+		} finally {
+			release();
+			f.releaseSessionRead();
+			await f.lifecycle.dispose();
+		}
+	});
+test("hook-only preparation still permits an authenticated automatic continuation", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		continuationProjection(f);
+		await queuePublic(f, "msg_failed_prepare");
+		await f.autoDrive.onIdle(sessionID);
+		const synthetic = f.native.filter(
+			(message) => message.type === "synthetic",
+		);
+		expect(synthetic).toHaveLength(1);
+		const authority = f.autoDrive.captureAuthority(sessionID);
+		expect(
+			authority &&
+				f.autoDrive.captureDispatch(sessionID, authority.token)?.source,
+		).toBe(synthetic[0]?.id);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+test("a real activation keeps its busy token after handoff and late cleanup cannot touch steer", async () => {
+	const f = await fixture(),
+		entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>();
+	try {
+		await initialOwnershipWork(f);
+		const observe = f.autoDrive.observeMessage.bind(f.autoDrive);
+		f.autoDrive.observeMessage = async (...args) => {
+			const result = await observe(...args);
+			if (args[3] === "msg_A") {
+				entered.resolve();
+				await release.promise;
+			}
+			return result;
+		};
+		await queuePublic(f, "msg_A");
+		f.native.push({
+			type: "user",
+			id: "msg_A",
+			text: "msg_A",
+			time: { created: 20 },
+		});
+		const pending = f.emit("context", f.context()).catch(String);
+		await entered.promise;
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"callbacks overlap",
+		);
+		await f.emit("prompt", {
+			sessionID,
+			messageID: SessionMessage.ID.make("msg_steer"),
+			prompt: { text: "msg_steer" },
+			delivery: "steer",
+		});
+		f.native.push({
+			type: "user",
+			id: "msg_steer",
+			text: "msg_steer",
+			time: { created: 21 },
+		});
+		expect(await pending).toContain("epoch was revoked");
+		const request = await startOwnedRequest(f);
+		const guard = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		release.resolve();
+		await f.flush();
+		if (guard.kind !== "flow") throw new Error("Missing fresh steer guard.");
+		expect(() => guard.assertCurrent()).not.toThrow();
+		await finishOwnedResponse(f, request);
+	} finally {
+		release.resolve();
+		await f.lifecycle.dispose();
+	}
+});
+test("nested idle during first real settlement withholds promptly and finishes the new origin", async () => {
+	const f = await fixture();
+	try {
+		f.setProjection({
+			status: "idle",
+			revision: 0,
+			nextAction: "flow_plan_save",
+		});
+		const metadata = await f.autoDrive.activate(sessionID);
+		await f.autoDrive.observeMessage(
+			sessionID,
+			delivery,
+			[{ synthetic: true, metadata }],
+			"msg_O",
+		);
+		await queuePublic(f, "msg_A");
+		f.native.push({
+			type: "user",
+			id: "msg_A",
+			text: "msg_A",
+			time: { created: 1 },
+		});
+		const request = await startOwnedRequest(f);
+		expect(f.native.filter((message) => message.type === "synthetic")).toEqual(
+			[],
+		);
+		expect(
+			f.autoDrive.captureDispatch(
+				sessionID,
+				f.autoDrive.captureAuthority(sessionID)?.token ?? "",
+			)?.source,
+		).toBe("msg_A");
+		const guard = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		expect(guard.kind).toBe("flow");
+		await finishOwnedResponse(f, request);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+test("registered queue compacts before its first primary and resumes with Flow provenance", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		const old = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		if (old.kind !== "flow") throw new Error("Missing predecessor.");
+		await queuePublic(f, "msg_A");
+		f.native.push({
+			type: "user",
+			id: "msg_A",
+			text: "msg_A",
+			time: { created: 20 },
+		});
+		await compactCurrentInput(f, "queued_checkpoint");
+		expect(() => old.assertCurrent()).toThrow();
+		const request = await startOwnedRequest(f);
+		expect(
+			(await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow")).kind,
+		).toBe("flow");
+		await finishOwnedResponse(f, request);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+function succeededIdle(f: OwnershipFixture, id = "evt_queue_terminal") {
+	const time = 30;
+	f.native.push({
+		type: "idle",
+		id: SessionMessage.ID.fromEvent(id),
+		outcome: "succeeded",
+		time: { created: time },
+	});
+	f.session.outcome = "succeeded";
+	f.session.time.idle = time;
+	const event: OpenCodeEvent = {
+		id,
+		type: "session.execution.succeeded",
+		created: time,
+		durable: { aggregateID: sessionID, seq: 30, version: 1 },
+		data: { sessionID },
+	};
+	return event;
+}
+test("inbox cancellation is reduced during blocked terminal work and wakes one exact deferred ticket", async () => {
+	const f = await fixture();
+	let release = () => {};
+	try {
+		await initialOwnershipWork(f);
+		continuationProjection(f);
+		await queuePublic(f, "msg_A", 100);
+		const gate = f.blockNextDispatchReturn();
+		release = gate.release;
+		f.sendEvent(succeededIdle(f));
+		await gate.entered;
+		await f.sendEventAndWait(
+			inboxEvent("session.inbox.cancelled", "msg_A", 101),
+		);
+		expect(f.native.filter((message) => message.type === "synthetic")).toEqual(
+			[],
+		);
+		release();
+		const source = await f.waitAutomaticSource();
+		expect(
+			f.native
+				.filter((message) => message.type === "synthetic")
+				.map((message) => message.id),
+		).toEqual([source]);
+		await f.sendEventAndWait(
+			inboxEvent("session.inbox.cancelled", "msg_A", 101),
+		);
+		expect(
+			f.native
+				.filter((message) => message.type === "synthetic")
+				.map((message) => message.id),
+		).toEqual([source]);
+	} finally {
+		release();
+		await f.lifecycle.dispose();
+	}
+});
+for (const change of [
+	"consumption",
+	"primary",
+	"selected",
+	"idle-time",
+	"prefix",
+] as const)
+	test(`deferred terminal retry refuses changed ${change} ownership`, async () => {
+		const f = await fixture();
+		let release = () => {};
+		try {
+			await initialOwnershipWork(f);
+			continuationProjection(f);
+			await queuePublic(f, "msg_A", 100);
+			const resumed = Promise.withResolvers<void>(),
+				terminalFinished = Promise.withResolvers<void>();
+			const resume = f.autoDrive.resumeDeferred.bind(f.autoDrive),
+				onIdle = f.autoDrive.onIdle.bind(f.autoDrive);
+			const retry = spyOn(f.autoDrive, "resumeDeferred").mockImplementation(
+				async (...args) => {
+					try {
+						await resume(...args);
+					} finally {
+						resumed.resolve();
+					}
+				},
+			);
+			const terminal = spyOn(f.autoDrive, "onIdle").mockImplementation(
+				async (...args) => {
+					try {
+						await onIdle(...args);
+					} finally {
+						terminalFinished.resolve();
+					}
+				},
+			);
+			const gate = f.blockNextDispatchReturn();
+			release = gate.release;
+			f.sendEvent(succeededIdle(f));
+			await gate.entered;
+			if (change === "consumption") {
+				f.native.push({
+					type: "user",
+					id: "msg_A",
+					text: "msg_A",
+					time: { created: 31 },
+				});
+				await f.emit("context", f.context());
+			}
+			if (change === "primary") await f.emit("context", f.context());
+			if (change === "selected")
+				f.session.model = { ...model, id: Model.ID.make("changed") };
+			if (change === "idle-time") f.session.time.idle = 31;
+			if (change === "prefix")
+				f.native.push({
+					type: "user",
+					id: "unknown",
+					text: "unknown",
+					time: { created: 31 },
+				});
+			await f.sendEventAndWait(
+				inboxEvent("session.inbox.cancelled", "msg_A", 101),
+			);
+			release();
+			if (change === "consumption") await terminalFinished.promise;
+			else await resumed.promise;
+			retry.mockRestore();
+			terminal.mockRestore();
+			expect(
+				f.native.filter((message) => message.type === "synthetic"),
+			).toEqual([]);
+		} finally {
+			release();
+			await f.lifecycle.dispose();
+		}
+	});
+test("registered queue compaction rejects a final changed control before replacing O", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		const old = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		if (old.kind !== "flow") throw new Error("Missing old guard.");
+		await queuePublic(f, "msg_A");
+		f.native.push({
+			type: "user",
+			id: "msg_A",
+			text: "msg_A",
+			time: { created: 20 },
+		});
+		const input = f.context();
+		f.native.push(automaticControl("queued_running"));
+		const read = f.ctxSessionContext;
+		let reads = 0;
+		const observation = spyOn(f.ctxSession, "context").mockImplementation(
+			async (...args) => {
+				const native = await read(...args);
+				if (++reads === 3) {
+					const control = native.findLast(
+						(message) => message.type === "compaction",
+					);
+					if (control?.type === "compaction") control.reason = "manual";
+				}
+				return native;
+			},
+		);
+		try {
+			await expect(f.emit("compaction", input)).rejects.toThrow(
+				"control identity changed",
+			);
+			expect(reads).toBe(3);
+			expect(() => old.assertCurrent()).not.toThrow();
+		} finally {
+			observation.mockRestore();
+		}
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("dispose cancels a held terminal policy read and drains its tracked job", async () => {
+	const f = await fixture();
+	let release = () => {};
+	try {
+		await initialOwnershipWork(f);
+		continuationProjection(f);
+		const gate = f.blockPolicyRead("projection");
+		release = gate.release;
+		f.sendEvent(succeededIdle(f));
+		await gate.entered;
+		await f.lifecycle.dispose();
+		release();
+		await f.flush();
+		expect(f.native.filter((message) => message.type === "synthetic")).toEqual(
+			[],
+		);
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		expect(f.registrations).toContain("context");
+	} finally {
+		release();
+		await f.lifecycle.dispose();
+	}
+});
+test("a corrupt synthetic receipt cannot activate a dispatch intent", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		continuationProjection(f);
+		const native = f.ctxSession.synthetic.bind(f.ctxSession);
+		const corrupt = spyOn(f.ctxSession, "synthetic").mockImplementation(
+			async (...args) => ({
+				...(await native(...args)),
+				id: "msg_wrong_receipt",
+			}),
+		);
+		const observe = spyOn(f.autoDrive, "observeMessage");
+		try {
+			await f.autoDrive.onIdle(sessionID);
+			expect(observe).not.toHaveBeenCalled();
+			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+			expect(
+				f.native.filter((message) => message.type === "synthetic"),
+			).toHaveLength(1);
+		} finally {
+			corrupt.mockRestore();
+			observe.mockRestore();
+		}
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("terminal synthetic selected read cannot reserve over a same-epoch primary replacement", async () => {
+	const f = await fixture(),
+		entered = Promise.withResolvers<void>(),
+		release = Promise.withResolvers<void>(),
+		finished = Promise.withResolvers<void>();
+	try {
+		await initialOwnershipWork(f);
+		continuationProjection(f);
+		const before = f.autoDrive.captureAuthority(sessionID),
+			get = f.ctxSession.get.bind(f.ctxSession),
+			onIdle = f.autoDrive.onIdle.bind(f.autoDrive);
+		let reads = 0;
+		const selected = spyOn(f.ctxSession, "get").mockImplementation(
+			async (...args) => {
+				const snapshot = await get(...args);
+				if (++reads === 2) {
+					entered.resolve();
+					await release.promise;
+				}
+				return snapshot;
+			},
+		);
+		const idle = spyOn(f.autoDrive, "onIdle").mockImplementation(
+			async (...args) => {
+				try {
+					await onIdle(...args);
+				} finally {
+					finished.resolve();
+				}
+			},
+		);
+		try {
+			f.sendEvent(succeededIdle(f));
+			await entered.promise;
+			const request = await startOwnedRequest(f),
+				access = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+			release.resolve();
+			await finished.promise;
+			expect(
+				f.native.filter((message) => message.type === "synthetic"),
+			).toEqual([]);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(before);
+			if (access.kind !== "flow") throw new Error("Missing replacement guard.");
+			expect(() => access.assertCurrent()).not.toThrow();
+			await finishOwnedResponse(f, request);
+		} finally {
+			selected.mockRestore();
+			idle.mockRestore();
+		}
+	} finally {
+		release.resolve();
+		await f.lifecycle.dispose();
+	}
+});
+
+test("compaction rechecks its third control after the held selected-session read", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		const old = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+		if (old.kind !== "flow") throw new Error("Missing predecessor guard.");
+		await queuePublic(f, "msg_A");
+		f.native.push({
+			type: "user",
+			id: "msg_A",
+			text: "msg_A",
+			time: { created: 20 },
+		});
+		const input = f.context();
+		const control: Extract<SessionMessageInfo, { type: "compaction" }> =
+			automaticControl("queued_selected_control");
+		f.native.push(control);
+		f.blockNextSessionRead();
+		const pending = f.emit("compaction", input).catch(String);
+		await f.waitSessionRead();
+		control.reason = "manual";
+		f.releaseSessionRead();
+		expect(await pending).toBe(
+			"Error: Flow automatic compaction control identity changed.",
+		);
+		expect(() => old.assertCurrent()).not.toThrow();
+	} finally {
+		f.releaseSessionRead();
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const read of ["native", "selected"] as const)
+	test(`failed deferred queue ${read} read preserves the usable predecessor and permits exact retry`, async () => {
+		const f = await fixture();
+		try {
+			await initialOwnershipWork(f);
+			const old = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
+				authority = f.autoDrive.captureAuthority(sessionID);
+			if (old.kind !== "flow") throw new Error("Missing old guard.");
+			await queuePublic(f, "msg_A");
+			f.native.push({
+				type: "user",
+				id: "msg_A",
+				text: "msg_A",
+				time: { created: 20 },
+			});
+			if (read === "native") f.rejectNextContextRead();
+			else f.rejectNextSessionRead();
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				read === "native"
+					? "Native context snapshot failed."
+					: "Native session snapshot failed.",
+			);
+			expect(() => old.assertCurrent()).not.toThrow();
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			const request = await startOwnedRequest(f);
+			expect(() => old.assertCurrent()).toThrow();
+			expect(
+				(await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow")).kind,
+			).toBe("flow");
+			await finishOwnedResponse(f, request);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+test("a reused compaction control ID rejects a new queued source before handoff", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		await compactCurrentInput(f, "msg_existing_control");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		const old = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
+			authority = f.autoDrive.captureAuthority(sessionID);
+		if (old.kind !== "flow") throw new Error("Missing old compaction guard.");
+		await queuePublic(f, "msg_A");
+		f.native.push({
+			type: "user",
+			id: "msg_A",
+			text: "msg_A",
+			time: { created: 20 },
+		});
+		const input = f.context();
+		f.native.push(automaticControl("msg_existing_control"));
+		await expect(f.emit("compaction", input)).rejects.toThrow(
+			"control identity changed",
+		);
+		expect(() => old.assertCurrent()).not.toThrow();
+		expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("stream loss cancels a held terminal read before disposal drains its job", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		f.blockNextContextRead();
+		f.sendEvent(succeededIdle(f));
+		await f.waitContextRead();
+		f.loseStream();
+		await f.flush();
+		await f.lifecycle.dispose();
+		f.releaseContextRead();
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		expect(
+			f.logs.filter(
+				(message) => message === "Flow event stream failed closed.",
+			),
+		).toHaveLength(1);
+		expect(f.native.filter((message) => message.type === "synthetic")).toEqual(
+			[],
+		);
+	} finally {
+		f.releaseContextRead();
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const rejectRead of [false, true])
+	test(`review cancellation retry policy ${rejectRead ? "rejection" : "success"} preserves same-epoch replacement`, async () => {
+		const f = await fixture();
+		const terminalFinished = Promise.withResolvers<void>();
+		const retryFinished = Promise.withResolvers<void>();
+		let release = () => {};
+		try {
+			await initialOwnershipWork(f);
+			continuationProjection(f);
+			await queuePublic(f, "msg_A", 100);
+			const before = f.autoDrive.captureAuthority(sessionID);
+			const onIdle = f.autoDrive.onIdle.bind(f.autoDrive);
+			let idles = 0;
+			const idleSpy = spyOn(f.autoDrive, "onIdle").mockImplementation(
+				async (...args) => {
+					const sequence = ++idles;
+					try {
+						await onIdle(...args);
+					} finally {
+						(sequence === 1 ? terminalFinished : retryFinished).resolve();
+					}
+				},
+			);
+			f.sendEvent(succeededIdle(f));
+			await terminalFinished.promise;
+			const gate = f.blockPolicyRead("projection");
+			release = gate.release;
+			await f.sendEventAndWait(
+				inboxEvent("session.inbox.cancelled", "msg_A", 101),
+			);
+			await gate.entered;
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			const fresh = await f.lifecycle.verifyTool(
+				ownershipNativeCall(f),
+				"flow",
+			);
+			expect(fresh.kind).toBe("flow");
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(before);
+			if (rejectRead)
+				gate.reject(new Error("obsolete retry projection read failed"));
+			else gate.release();
+			await retryFinished.promise;
+			idleSpy.mockRestore();
+			let guardError: string | null = null;
+			try {
+				if (fresh.kind === "flow") fresh.assertCurrent();
+			} catch (error) {
+				guardError = String(error);
+			}
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(before);
+			expect(guardError).toBeNull();
+		} finally {
+			release();
+			await f.lifecycle.dispose();
+		}
+	});
+test("review current terminal policy rejection still deactivates its owned lease", async () => {
+	const f = await fixture();
+	const finished = Promise.withResolvers<void>();
+	let release = () => {};
+	try {
+		await initialOwnershipWork(f);
+		continuationProjection(f);
+		const gate = f.blockPolicyRead("projection");
+		release = gate.release;
+		const onIdle = f.autoDrive.onIdle.bind(f.autoDrive);
+		const idleSpy = spyOn(f.autoDrive, "onIdle").mockImplementation(
+			async (...args) => {
+				try {
+					await onIdle(...args);
+				} finally {
+					finished.resolve();
+				}
+			},
+		);
+		f.sendEvent(succeededIdle(f));
+		await gate.entered;
+		gate.reject(new Error("current projection read failed"));
+		await finished.promise;
+		idleSpy.mockRestore();
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		expect(f.autoDrive.continuationSnapshot(sessionID)).toMatchObject({
+			state: "inactive",
+			reason: "status-error",
+		});
+	} finally {
+		release();
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const prior of ["ordinary", "automatic"] as const)
+	test(`independent review valid queued user extends completed compaction alias before checkpoint primary ${prior}`, async () => {
+		const f = await fixture();
+		try {
+			if (prior === "automatic") await initialOwnershipWork(f);
+			else {
+				await admitOrdinaryInput(f, "msg_review_O", "Ordinary predecessor");
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+			}
+			await compactCurrentInput(f, "msg_review_checkpoint");
+			await queuePublic(f, "msg_review_after_compaction");
+			f.native.push({
+				type: "user",
+				id: "msg_review_after_compaction",
+				text: "msg_review_after_compaction",
+				time: { created: 22 },
+			});
+			const request = await startOwnedRequest(f);
+			const effects: string[] = [];
+			const tool = await effectTool(f, effects);
+			await tool.execute({}, ownershipNativeCall(f));
+			expect(effects).toEqual(["effect"]);
+			await finishOwnedResponse(f, request);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+test("independent review manual compaction alias followed by queued user retains ordinary Flow access", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_review_O", "Ordinary predecessor");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await compactCurrentInput(f, "msg_review_manual_checkpoint", "manual");
+		await queuePublic(f, "msg_review_after_manual");
+		f.native.push({
+			type: "user",
+			id: "msg_review_after_manual",
+			text: "msg_review_after_manual",
+			time: { created: 22 },
+		});
+		const request = await startOwnedRequest(f);
+		const effects: string[] = [];
+		const tool = await effectTool(f, effects);
+		await tool.execute({}, ownershipNativeCall(f));
+		expect(effects).toEqual(["effect"]);
+		await finishOwnedResponse(f, request);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+test("independent review observed native manual compaction inbox does not collide with its checkpoint identity", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_review_O", "Ordinary predecessor");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await f.sendEventAndWait({
+			id: "evt_review_compaction_enqueued",
+			created: 40,
+			durable: { aggregateID: sessionID, seq: 40, version: 1 },
+			type: "session.inbox.enqueued",
+			data: {
+				sessionID,
+				inboxID: "msg_review_manual_control",
+				item: { type: "compaction", payload: {}, delivery: "queue" },
+			},
+		});
+		await f.sendEventAndWait({
+			id: "evt_review_compaction_delivered",
+			created: 41,
+			durable: { aggregateID: sessionID, seq: 41, version: 1 },
+			type: "session.inbox.delivered",
+			data: { sessionID, inboxID: "msg_review_manual_control" },
+		});
+		await compactCurrentInput(f, "msg_review_manual_control", "manual");
+		const request = await startOwnedRequest(f);
+		const effects: string[] = [];
+		const tool = await effectTool(f, effects);
+		await tool.execute({}, ownershipNativeCall(f));
+		expect(effects).toEqual(["effect"]);
+		await finishOwnedResponse(f, request);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("a delivered-only compaction observation does not require an enqueue rendezvous", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_observed_O", "Ordinary predecessor");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await f.sendEventAndWait({
+			id: "evt_compaction_delivered_only",
+			created: 41,
+			durable: { aggregateID: sessionID, seq: 41, version: 1 },
+			type: "session.inbox.delivered",
+			data: { sessionID, inboxID: "msg_delivered_control" },
+		});
+		await compactCurrentInput(f, "msg_delivered_control", "manual");
+		const request = await startOwnedRequest(f),
+			effects: string[] = [],
+			tool = await effectTool(f, effects);
+		await tool.execute({}, ownershipNativeCall(f));
+		expect(effects).toEqual(["effect"]);
+		await finishOwnedResponse(f, request);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+for (const control of ["unknown", "summary-only", "wrong-reason"] as const)
+	test(`fresh queued input cannot use an unproved ${control} checkpoint prefix bridge`, async () => {
+		const f = await fixture();
+		try {
+			await admitOrdinaryInput(f, "msg_bridge_O", "Ordinary predecessor");
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			const old = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+			if (old.kind !== "flow") throw new Error("Missing predecessor.");
+			if (control === "unknown")
+				f.native.splice(0, f.native.length, {
+					...automaticControl("msg_unproved_C"),
+					status: "completed",
+				});
+			else {
+				if (control === "summary-only")
+					f.native.push({
+						type: "user",
+						id: "msg_unregistered_U",
+						text: "Unknown history",
+						time: { created: 15 },
+					});
+				await compactCurrentInput(
+					f,
+					"msg_unproved_C",
+					control === "summary-only" ? "manual" : "auto",
+				);
+				if (control === "wrong-reason") {
+					const completed = f.native[0];
+					if (completed?.type !== "compaction")
+						throw new Error("Missing completed control.");
+					completed.reason = "manual";
+				}
+			}
+			await queuePublic(f, "msg_new_A");
+			f.native.push({
+				type: "user",
+				id: "msg_new_A",
+				text: "msg_new_A",
+				time: { created: 30 },
+			});
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				control === "unknown"
+					? "epoch was revoked"
+					: control === "wrong-reason"
+						? "control identity changed"
+						: "does not extend",
+			);
+			expect(() => old.assertCurrent()).not.toThrow();
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+test("a fresh queued source after a checked checkpoint proves its own selected model", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_model_O", "Ordinary predecessor");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await compactCurrentInput(f, "msg_model_C");
+		await queuePublic(f, "msg_model_A");
+		f.native.push({
+			type: "user",
+			id: "msg_model_A",
+			text: "msg_model_A",
+			time: { created: 30 },
+		});
+		const chosen = {
+			...model,
+			id: Model.ID.make("new-selected-model"),
+			variant: Model.VariantID.make("new-variant"),
+		};
+		f.session.model = chosen;
+		await f.emit("context", { ...f.context(), model: chosen });
+		const request = new Request("http://localhost/checked-new-model");
+		await f.emit("http.request", {
+			sessionID,
+			agent,
+			model: chosen,
+			kind: "primary",
+			request,
+		});
+		const call = ownershipNativeCall(f);
+		const assistant = f.native.find((message) => message.id === call.messageID);
+		if (assistant?.type !== "assistant")
+			throw new Error("Missing selected-model assistant.");
+		assistant.model = chosen;
+		const effects: string[] = [],
+			tool = await effectTool(f, effects);
+		await tool.execute({}, call);
+		expect(effects).toEqual(["effect"]);
+		expect(f.codingModels.get(sessionID)).toMatchObject({
+			modelID: "new-selected-model",
+			variant: "new-variant",
+		});
+		const response = {
+			sessionID,
+			agent,
+			model: chosen,
+			kind: "primary" as const,
+			request,
+			response: new Response("selected model completed"),
+		};
+		await f.emit("http.response", response);
+		expect(await response.response.text()).toBe("selected model completed");
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const interveningPrimary of [false, true])
+	test(`queued input follows consecutive owned checkpoints, intermediate primary ${interveningPrimary}`, async () => {
+		const f = await fixture();
+		try {
+			await admitOrdinaryInput(f, "msg_chain_O", "Ordinary predecessor");
+			await finishOwnedResponse(f, await startOwnedRequest(f));
+			await compactCurrentInput(f, "msg_chain_C1");
+			if (interveningPrimary)
+				await finishOwnedResponse(f, await startOwnedRequest(f));
+			await compactCurrentInput(f, "msg_chain_C2");
+			await queuePublic(f, "msg_chain_A");
+			f.native.push({
+				type: "user",
+				id: "msg_chain_A",
+				text: "msg_chain_A",
+				time: { created: 40 },
+			});
+			const request = await startOwnedRequest(f),
+				effects: string[] = [],
+				tool = await effectTool(f, effects);
+			await tool.execute({}, ownershipNativeCall(f));
+			expect(effects).toEqual(["effect"]);
+			await finishOwnedResponse(f, request);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});

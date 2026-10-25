@@ -16,10 +16,11 @@ supply JSON Schema. Results retain Flow envelopes and guidance.
 Frozen inputs bind each primary to its native session, agent, model, assistant,
 call, and workspace. Flow selects HTTP for providers, models, and variants.
 Prompt hooks and event arrival order grant no authority.
+Queued prompts preserve the running request.
 
 Unregistered native user and synthetic turns may use ordinary tools. They gain
-no Flow-tool access, validation, recovery intent, or automatic lease. A fresh
-observed prompt or Flow command establishes Flow provenance. Retired request
+no Flow-tool access, validation, recovery intent, or automatic lease. A consumed
+registered prompt or Flow command establishes Flow provenance. Retired request
 owners retain no transcript snapshots.
 
 EOF and consumer cancellation close only the captured HTTP request. Protected

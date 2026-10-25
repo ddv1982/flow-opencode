@@ -9,7 +9,9 @@ import type {
 } from "@opencode/plugin/promise/session";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import type { FlowCodingModel } from "../../config-shared.js";
+import type { CompletedPrefix } from "./auto-compaction.js";
 import type { AutoDriveAuthority, AutoDriveDelivery } from "./auto-drive.js";
+import type { InputScope } from "./input-admission.js";
 
 export type NativeExecution = Pick<
 	ToolContext,
@@ -28,7 +30,7 @@ export type InputOrigin = Readonly<{
 export type Participation =
 	| Readonly<{ kind: "flow"; origin: InputOrigin }>
 	| Readonly<{ kind: "native-only" }>;
-type InputClock = Readonly<{ current(): boolean; assertCurrent(): void }>;
+type InputClock = Pick<InputScope, "current" | "assertCurrent">;
 
 type Snapshot = Readonly<{
 	clock: InputClock;
@@ -64,6 +66,14 @@ type SessionRecord = {
 	assistants: Map<string, AssistantRecord>;
 	bindings: Map<string, Binding>;
 };
+const replacementBrand = Symbol();
+type Replacement = Readonly<{
+	[replacementBrand]: ExecutionAttribution;
+	expected: PrimaryOwner | undefined;
+	retry: boolean;
+	inputs: readonly string[];
+	delivery: AutoDriveDelivery;
+}>;
 const retired: Lifetime = Object.freeze({ kind: "retired" });
 const historical: AssistantRecord = Object.freeze({ kind: "historical" });
 const same = isDeepStrictEqual;
@@ -160,7 +170,6 @@ function canonical(path: string): string {
 export class ExecutionAttribution {
 	readonly #sessions = new Map<string, SessionRecord | null>();
 	readonly #requests = new WeakMap<Request, PrimaryOwner>();
-	readonly #retries = new WeakSet<PrimaryOwner>();
 	readonly #assertLive: (origin: InputOrigin) => void;
 	#closed = false;
 	constructor(assertLive: (origin: InputOrigin) => void) {
@@ -214,16 +223,87 @@ export class ExecutionAttribution {
 	current(sessionID: string): PrimaryOwner | undefined {
 		return this.#sessions.get(sessionID)?.current;
 	}
+	assertExpected(host: string, expected: PrimaryOwner | undefined): void {
+		if (this.#closed) throw new Error("Flow lifecycle is closed.");
+		this.#session(host);
+		if (this.current(host) !== expected)
+			throw new Error("Flow primary ownership was superseded.");
+	}
+	prepareReplacement(
+		input: Pick<SessionContext, "sessionID" | "messages" | "agent" | "model">,
+		native: readonly SessionMessageInfo[],
+		expected: PrimaryOwner | undefined,
+		changingPublicSource: boolean,
+		bridge?: CompletedPrefix,
+	): Replacement {
+		this.assertExpected(input.sessionID, expected);
+		const inputs = modelInputIDs(input),
+			delivery = nativeDelivery(input);
+
+		const previous =
+			expected?.lifetime.kind === "current"
+				? expected.lifetime.snapshot
+				: undefined;
+		if (
+			changingPublicSource &&
+			previous?.clock.current() &&
+			!same(inputs.slice(0, previous.inputs.length), previous.inputs) &&
+			!(
+				bridge &&
+				expected?.participation.kind === "flow" &&
+				bridge.sourceOrigin === expected.participation.origin &&
+				same(bridge.consumed, previous.inputs) &&
+				inputs[0] === bridge.checkpoint
+			)
+		)
+			throw new Error(
+				"Flow new public input does not extend the frozen consumed prefix.",
+			);
+		const retry =
+			!!expected &&
+			this.isCurrent(expected) &&
+			!changingPublicSource &&
+			this.#retryEligible(expected, native);
+		if (
+			expected &&
+			this.isCurrent(expected) &&
+			expected.http.phase !== "ended" &&
+			!retry
+		)
+			throw new Error("Flow primary contexts or streams overlap.");
+		if (!same(inputs, nativeInputIDs(native)))
+			throw new Error(
+				"Flow native inputs differ from the model-visible prefix.",
+			);
+		return Object.freeze({
+			[replacementBrand]: this,
+			expected,
+			retry,
+			inputs: Object.freeze(inputs),
+			delivery,
+		});
+	}
 	freeze(
 		input: SessionContext,
 		native: readonly SessionMessageInfo[],
 		participation: Participation,
 		clock: InputClock,
+		replacement?: Replacement,
 	): PrimaryOwner {
 		if (this.#closed) throw new Error("Flow lifecycle is closed.");
 		const record = this.#session(input.sessionID);
 		const prior = record?.current;
-		if (prior && this.isCurrent(prior) && prior.http.phase !== "ended")
+		if (replacement) {
+			this.assertExpected(input.sessionID, replacement.expected);
+			if (replacement[replacementBrand] !== this)
+				throw new Error("Flow replacement permit belongs to another owner.");
+		}
+		if (
+			!replacement &&
+			prior &&
+			this.isCurrent(prior) &&
+			prior.http.phase !== "ended"
+		)
 			throw new Error("Flow primary contexts or streams overlap.");
 		clock.assertCurrent();
 		if (participation.kind === "flow") this.#assertLive(participation.origin);
@@ -240,11 +320,17 @@ export class ExecutionAttribution {
 			throw new Error(
 				"Flow admitted agent or model differs from its primary request.",
 			);
+		if (
+			replacement &&
+			(!same(inputs, replacement.inputs) ||
+				!sameDelivery(delivery, replacement.delivery))
+		)
+			throw new Error("Flow replacement candidate changed after preparation.");
 		const previous =
 			prior?.lifetime.kind === "current" ? prior.lifetime.snapshot : undefined;
 		const retry =
 			prior &&
-			this.#retries.delete(prior) &&
+			replacement?.retry &&
 			previous?.clock.current() &&
 			prior.participation.kind === participation.kind &&
 			(participation.kind === "native-only" ||
@@ -253,6 +339,13 @@ export class ExecutionAttribution {
 			same(previous?.inputs, inputs) &&
 			prior.agent === input.agent &&
 			sameModel(prior.model, input.model);
+		if (
+			prior &&
+			this.isCurrent(prior) &&
+			prior.http.phase !== "ended" &&
+			!retry
+		)
+			throw new Error("Flow primary contexts or streams overlap.");
 		const snapshot: Snapshot = Object.freeze({
 			clock: Object.freeze({
 				current: clock.current,
@@ -334,7 +427,10 @@ export class ExecutionAttribution {
 				same(nativeInputIDs(native.slice(0, position)), snapshot.inputs),
 		);
 	}
-	retry(primary: PrimaryOwner, native: readonly SessionMessageInfo[]): boolean {
+	#retryEligible(
+		primary: PrimaryOwner,
+		native: readonly SessionMessageInfo[],
+	): boolean {
 		this.assertCurrent(primary);
 		const snapshot = this.#evidence(primary);
 		const record = this.#session(primary.sessionID);
@@ -358,10 +454,7 @@ export class ExecutionAttribution {
 				!record?.assistants.has(message.id) &&
 				same(nativeInputIDs(native.slice(0, position)), snapshot.inputs),
 		);
-		if (candidates.length !== 1) return false;
-		this.#retries.add(primary);
-		this.end(primary);
-		return true;
+		return candidates.length === 1;
 	}
 	end(primary: PrimaryOwner): boolean {
 		const active = primary.http.phase !== "ended";

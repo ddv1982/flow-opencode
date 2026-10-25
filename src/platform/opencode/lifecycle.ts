@@ -2,7 +2,6 @@ import { isDeepStrictEqual } from "node:util";
 import type { SessionMessageInfo } from "@opencode/client";
 import type { Context } from "@opencode/plugin/promise/plugin";
 import type { Registration } from "@opencode/plugin/promise/registration";
-import type { SessionContext } from "@opencode/plugin/promise/session";
 import type { ToolContext } from "@opencode/plugin/promise/tool";
 import { SessionMessage } from "@opencode/schema/session-message";
 import type { FlowService } from "../../application/flow-service.js";
@@ -20,6 +19,11 @@ import {
 	type AutoDriveDelivery,
 	FLOW_AUTO_METADATA_KEY,
 } from "./auto-drive.js";
+import type {
+	DispatchIntent,
+	DispatchResult,
+	IdleOwner,
+} from "./auto-drive-dispatch.js";
 import {
 	createCommandHook,
 	flowCommandName,
@@ -32,11 +36,10 @@ import {
 	type NativeExecution,
 	nativeDelivery,
 	nativeInputIDs,
-	type Participation,
 	rememberCodingModel,
 	sameDelivery,
 } from "./execution-attribution.js";
-import { InputAdmissions, type InputScope } from "./input-admission.js";
+import { InputAdmissions, type SourceOperation } from "./input-admission.js";
 import type { FlowLeadershipHandle } from "./leadership.js";
 
 type LifecycleContext = Readonly<{
@@ -79,7 +82,8 @@ type FlowLifecycle = Readonly<{
 		prompt: string,
 		delivery: AutoDriveDelivery,
 		metadata: Readonly<Record<string, unknown>>,
-	): Promise<void>;
+		intent?: DispatchIntent,
+	): Promise<DispatchResult>;
 	dispose(): Promise<void>;
 }>;
 type CallbackOwner = Readonly<{
@@ -101,8 +105,10 @@ export async function registerFlowLifecycle(
 	const registrations: Registration[] = [];
 	const idle = new Map<string, string>();
 	const outcomes = new Set<string>();
-	const contextPending = new Map<string, InputScope>();
+	const contextPending = new Map<string, SourceOperation>();
 	const controller = new AbortController();
+	const readController = new AbortController();
+	const readOptions = { signal: readController.signal };
 	let closed = false;
 	let streamLost = false;
 	let disposal: Promise<void> | null = null;
@@ -123,6 +129,10 @@ export async function registerFlowLifecycle(
 	});
 	const assertLive = (origin: InputOrigin) => inputs.assertLive(origin);
 	const attribution = new ExecutionAttribution(assertLive);
+	const revokeEffects = (host: string) => {
+		autoDrive.revokeExecutions(host);
+		recovery.invalidateOrigins(host);
+	};
 	const revoke = (
 		host: string,
 		deactivate = true,
@@ -130,8 +140,7 @@ export async function registerFlowLifecycle(
 	) => {
 		if (captured) attribution.end(captured);
 		inputs.invalidate(host);
-		autoDrive.revokeExecutions(host);
-		recovery.invalidateOrigins(host);
+		revokeEffects(host);
 		if (deactivate) {
 			autoDrive.deactivate(host);
 			recovery.revoke(host);
@@ -213,12 +222,19 @@ export async function registerFlowLifecycle(
 		metadata: Readonly<Record<string, unknown>> | null,
 		synthetic: boolean,
 		assertCurrent: () => void,
+		intent?: DispatchIntent,
 	) => {
 		assertCurrent();
 		const parts = metadata
 			? [{ type: "text", text, synthetic: true, metadata }]
 			: [{ type: "text", text }];
-		const result = await autoDrive.observeMessage(host, delivery, parts, id);
+		const result = await autoDrive.observeMessage(
+			host,
+			delivery,
+			parts,
+			id,
+			intent,
+		);
 		assertCurrent();
 		if (result === "stale-continuation")
 			throw new Error("Flow rejected a stale admitted continuation.");
@@ -251,8 +267,8 @@ export async function registerFlowLifecycle(
 			assertOwned(owner);
 			attribution.assertCurrent(primary);
 			const [native, session] = await Promise.all([
-				ctx.session.context({ sessionID: execution.sessionID }),
-				ctx.session.get({ sessionID: execution.sessionID }),
+				ctx.session.context({ sessionID: execution.sessionID }, readOptions),
+				ctx.session.get({ sessionID: execution.sessionID }, readOptions),
 			]);
 			assertOwned(owner);
 			attribution.verify(
@@ -299,17 +315,36 @@ export async function registerFlowLifecycle(
 		text: string,
 		delivery: AutoDriveDelivery,
 		metadata: Readonly<Record<string, unknown>>,
-	) => {
+		intent?: DispatchIntent,
+	): Promise<DispatchResult> => {
 		assertOpen();
 		const token = metadata[FLOW_AUTO_METADATA_KEY];
-		if (typeof token !== "string" || !autoDrive.captureAuthority(host, token))
+		if (typeof token !== "string")
+			throw new Error(
+				"Flow synthetic dispatch has no live authenticated token.",
+			);
+		const capture = autoDrive.captureDispatch(host, token, intent);
+		if (!capture)
 			throw new Error(
 				"Flow synthetic dispatch has no live authenticated token.",
 			);
 		if (Object.keys(metadata).some((key) => key !== FLOW_AUTO_METADATA_KEY))
 			throw new Error("Flow synthetic metadata has unknown fields.");
-		const id = SessionMessage.ID.create();
-		const reservation = inputs.reserve(host, id);
+		const barrier = inputs.captureBarrier(host);
+		const block = inputs.automaticBlock(host);
+		if (block) return { kind: "withheld", reason: block };
+		const session = await ctx.session.get({ sessionID: host }, readOptions);
+		barrier.assertCurrent();
+		if (!capture.current())
+			throw new Error("Flow synthetic dispatch was superseded.");
+		if (session.id !== host || !sameDelivery(delivery, nativeDelivery(session)))
+			throw new Error(
+				"Flow queued continuation cannot change the user's selected agent or model.",
+			);
+		const reason = inputs.automaticBlock(host);
+		if (reason) return { kind: "withheld", reason };
+		const id = SessionMessage.ID.create(),
+			reservation = inputs.reserve(host, id);
 		const expectedEpoch = reservation.epoch;
 		const owner = captureOwner(
 			host,
@@ -317,39 +352,22 @@ export async function registerFlowLifecycle(
 			attribution.current(host),
 			expectedEpoch,
 		);
-		const authority = autoDrive.captureAuthority(host, token);
-		if (!authority) throw new Error("Flow synthetic authority expired.");
 		const assertCurrent = () => {
 			inputs.assertReservation(reservation);
-			if (
-				epoch(host) !== expectedEpoch ||
-				!autoDrive.isAuthorityCurrent(authority)
-			)
+			if (!autoDrive.isAuthorityCurrent(capture.authority))
 				throw new Error("Flow synthetic dispatch was superseded.");
 		};
-		const selected = await ctx.session
-			.get({ sessionID: host })
-			.then(nativeDelivery)
-			.catch((error: unknown) => {
-				failReservation(reservation, owner);
-				throw error;
-			});
-		assertCurrent();
-		if (!sameDelivery(delivery, selected))
-			throw new Error(
-				"Flow queued continuation cannot change the user's selected agent or model.",
-			);
 		const payload = { text, metadata: { [FLOW_AUTO_METADATA_KEY]: token } };
 		const admission = inputs.register(reservation, {
 			type: "synthetic",
 			payload,
 		});
 		try {
-			assertCurrent();
-			const receipt = await ctx.session.synthetic(
+			const pending = ctx.session.synthetic(
 				{ sessionID: host, id, ...payload, delivery: "queue", resume: true },
 				{ signal: controller.signal },
 			);
+			const receipt = await pending;
 			await inputs.accept(admission, receipt, async () => {
 				assertCurrent();
 				await observeAccepted(
@@ -360,10 +378,12 @@ export async function registerFlowLifecycle(
 					payload.metadata,
 					true,
 					assertCurrent,
+					intent,
 				);
 				assertCurrent();
 				return makeOrigin(host, id, delivery, true, expectedEpoch);
 			});
+			return { kind: "sent", source: id };
 		} catch (error) {
 			inputs.reject(admission, error);
 			failReservation(reservation, owner);
@@ -371,25 +391,49 @@ export async function registerFlowLifecycle(
 		}
 	};
 	const sourceFailure = (
-		scope: InputScope,
-		primary?: ReturnType<ExecutionAttribution["current"]>,
+		operation: SourceOperation,
+		stillExpected = () => true,
 	) => {
-		const origin = inputs.positive(scope);
-		if (origin)
-			failOwned(
-				captureOwner(
-					scope.host,
-					"admission",
-					primary,
-					origin.epoch,
-					origin,
-					origin.id,
-				),
-			);
+		if (!operation.fail(stillExpected)) return;
+		autoDrive.deactivate(operation.scope.host);
+		recovery.revoke(operation.scope.host);
+	};
+	const replacementEffects = (host: string) => {
+		const expected = attribution.current(host);
+		return {
+			check: (
+				input: Parameters<ExecutionAttribution["prepareReplacement"]>[0],
+				native: readonly SessionMessageInfo[],
+				changing: boolean,
+			) => {
+				attribution.assertExpected(host, expected);
+				if (changing)
+					attribution.prepareReplacement(
+						input,
+						native,
+						expected,
+						true,
+						compactions.prefixBridge(
+							input,
+							native,
+							expected?.participation.kind === "flow"
+								? expected.participation.origin
+								: undefined,
+						),
+					);
+			},
+			current: () => attribution.current(host) === expected,
+			supersede: () => {
+				if (expected) attribution.end(expected);
+				revokeEffects(host);
+			},
+		};
 	};
 	const compactions = new CompactionBoundary({
 		inputs,
-		readNative: (host) => ctx.session.context({ sessionID: host }),
+		readNative: (host) => ctx.session.context({ sessionID: host }, readOptions),
+		readSelected: (host) => ctx.session.get({ sessionID: host }, readOptions),
+		captureReplacement: replacementEffects,
 		failure: sourceFailure,
 		hasActivePrimary: (host) => {
 			const current = attribution.current(host);
@@ -410,33 +454,6 @@ export async function registerFlowLifecycle(
 			if (!origin.authority) recovery.observeMessage(host, id, true, true);
 		},
 	});
-	const resolveParticipation = async (
-		input: SessionContext,
-		native: readonly SessionMessageInfo[],
-		scope: InputScope,
-	): Promise<Participation> => {
-		const completed = compactions.completed(input, native);
-		if (completed) return { kind: "flow", origin: completed };
-		const evidence = await inputs.evidence(
-			scope,
-			native,
-			nativeDelivery(input),
-		);
-		if (evidence.kind === "live") {
-			assertLive(evidence.origin);
-			return { kind: "flow", origin: evidence.origin };
-		}
-		const source = native.find((message) => message.id === scope.source);
-		if (
-			(source?.type === "user" || source?.type === "synthetic") &&
-			(evidence.kind === "retired-ordinary" ||
-				(evidence.kind === "unregistered" && evidence.lineage !== "rejected"))
-		)
-			return { kind: "native-only" };
-		throw new Error(
-			"Flow context has an unknown, synthetic, or stale real input.",
-		);
-	};
 	try {
 		registrations.push(
 			await ctx.session.hook("prompt", (input) => {
@@ -477,7 +494,7 @@ export async function registerFlowLifecycle(
 									throw new Error("Flow command was superseded.");
 							};
 							const session = await ctx.session
-								.get({ sessionID: input.sessionID })
+								.get({ sessionID: input.sessionID }, readOptions)
 								.catch((error: unknown) => {
 									failReservation(reservation, owner);
 									throw error;
@@ -585,64 +602,98 @@ export async function registerFlowLifecycle(
 			}),
 		);
 		registrations.push(
-			await ctx.session.hook("context", async (input) => {
+			await ctx.session.hook("context", async (value) => {
 				assertOpen();
-				const scope = inputs.capture(input);
-				const pending = contextPending.get(input.sessionID);
-				if (pending?.current()) {
-					sourceFailure(scope);
-					scope.release();
+				const input = {
+					...value,
+					model: { ...value.model },
+					messages: structuredClone(value.messages),
+				};
+				const prior = attribution.current(input.sessionID),
+					operation = inputs.openSource(input);
+				if (contextPending.get(input.sessionID)?.current()) {
+					sourceFailure(
+						operation,
+						() => attribution.current(input.sessionID) === prior,
+					);
+					operation.release();
 					throw new Error("Flow primary context callbacks overlap.");
 				}
-				contextPending.set(input.sessionID, scope);
-				const prior = attribution.current(input.sessionID);
+				contextPending.set(input.sessionID, operation);
 				let frozen: ReturnType<ExecutionAttribution["freeze"]> | undefined;
+				let completed: InputOrigin | undefined;
+				let replacement:
+					| ReturnType<ExecutionAttribution["prepareReplacement"]>
+					| undefined;
 				try {
-					await scope.ready();
-					const native = await scope.wait(
-						ctx.session.context({ sessionID: input.sessionID }),
+					await operation.scope.ready();
+					const native = await operation.scope.wait(
+						ctx.session.context({ sessionID: input.sessionID }, readOptions),
 					);
-					if (
-						prior &&
-						attribution.isCurrent(prior) &&
-						prior.http.phase !== "ended" &&
-						!attribution.retry(prior, native)
-					)
-						throw new Error("Flow primary contexts or streams overlap.");
-					if (!isDeepStrictEqual(scope.consumed, nativeInputIDs(native)))
+					const session = await operation.scope.wait(
+						ctx.session.get({ sessionID: input.sessionID }, readOptions),
+					);
+					attribution.prepareReplacement(input, native, prior, false);
+
+					const resolved = await operation.resolve(native, session, {
+						check: (changing) => {
+							replacement = attribution.prepareReplacement(
+								input,
+								native,
+								prior,
+								changing,
+								changing
+									? compactions.prefixBridge(
+											input,
+											native,
+											prior?.participation.kind === "flow"
+												? prior.participation.origin
+												: undefined,
+										)
+									: undefined,
+							);
+							completed = compactions.completed(input, native);
+						},
+						supersede: () => {
+							if (prior) attribution.end(prior);
+							revokeEffects(input.sessionID);
+						},
+					});
+					const participation = completed
+						? { kind: "flow" as const, origin: completed }
+						: resolved.participation;
+					if (!participation)
 						throw new Error(
-							"Flow native inputs differ from the model-visible prefix.",
+							"Flow context has an unknown, synthetic, or stale real input.",
 						);
-					const participation = await resolveParticipation(
+					attribution.assertExpected(input.sessionID, prior);
+					frozen = attribution.freeze(
 						input,
-						native,
-						scope,
+						resolved.native,
+						participation,
+						resolved.scope,
+						replacement,
 					);
-					scope.assertCurrent();
-					const session = await scope.wait(
-						ctx.session.get({ sessionID: input.sessionID }),
-					);
-					if (
-						participation.kind === "native-only" &&
-						(session.id !== input.sessionID ||
-							!sameDelivery(nativeDelivery(session), nativeDelivery(input)))
-					)
-						throw new Error(
-							"Flow native selected session agent or model changed.",
-						);
-					scope.assertCurrent();
-					frozen = attribution.freeze(input, native, participation, scope);
 					attribution.assertCurrent(frozen);
-					rememberCodingModel(codingModels, input, session, specialists);
+					rememberCodingModel(
+						codingModels,
+						input,
+						resolved.selected,
+						specialists,
+					);
 				} catch (error) {
 					if (frozen)
 						failOwned(captureOwner(input.sessionID, "attempt", frozen));
-					else sourceFailure(scope, prior);
+					else
+						sourceFailure(
+							operation,
+							() => attribution.current(input.sessionID) === prior,
+						);
 					throw error;
 				} finally {
-					if (contextPending.get(input.sessionID) === scope)
+					if (contextPending.get(input.sessionID) === operation)
 						contextPending.delete(input.sessionID);
-					scope.release();
+					operation.release();
 				}
 			}),
 		);
@@ -730,19 +781,70 @@ export async function registerFlowLifecycle(
 			await registration.dispose();
 		throw error;
 	}
+	const tasks = new Set<Promise<void>>(),
+		chains = new Map<string, Promise<void>>(),
+		scheduled = new Set<string>();
+	const cancelled = Promise.withResolvers<never>();
+	void cancelled.promise.catch(() => {});
+	readController.signal.addEventListener(
+		"abort",
+		() => cancelled.reject(new Error("Flow lifecycle disposed.")),
+		{ once: true },
+	);
+	const wait = <T>(promise: Promise<T>) =>
+		Promise.race([promise, cancelled.promise]);
+	const enqueue = (host: string, job: () => Promise<void>) => {
+		const task = (chains.get(host) ?? Promise.resolve())
+			.then(async () => {
+				if (!closed && !streamLost) await job();
+			})
+			.catch((error) =>
+				log("warn", "Flow terminal observation failed.", {
+					host,
+					message: errorOf(error).message,
+				}),
+			)
+			.finally(() => {
+				tasks.delete(task);
+				if (chains.get(host) === task) chains.delete(host);
+			});
+		chains.set(host, task);
+		tasks.add(task);
+	};
 	const subscription = (async () => {
 		try {
 			for await (const event of ctx.event.subscribe({
 				signal: controller.signal,
 			})) {
 				if (closed) break;
+				const host =
+					"sessionID" in event.data ? event.data.sessionID : undefined;
+				if (
+					event.type === "session.inbox.enqueued" ||
+					event.type === "session.inbox.cancelled" ||
+					event.type === "session.inbox.delivered" ||
+					event.type === "session.inbox.delivery.changed"
+				) {
+					const { retryHost } = inputs.observeInbox(event, (host) =>
+						revoke(host, false),
+					);
+					if (retryHost) {
+						const primary = attribution.current(retryHost),
+							owner = captureOwner(retryHost, "attempt", primary);
+						enqueue(retryHost, async () => {
+							if (owns(owner) && !inputs.automaticBlock(retryHost))
+								await autoDrive.resumeDeferred(retryHost);
+						});
+					}
+					continue;
+				}
 				if (event.type === "session.deleted") {
 					if (outcomes.has(event.id)) continue;
 					outcomes.add(event.id);
-					const host = event.data.sessionID;
-					revoke(host);
-					attribution.deleteSession(host);
-					codingModels.delete(host);
+					revoke(event.data.sessionID);
+					inputs.deleteHost(event.data.sessionID);
+					attribution.deleteSession(event.data.sessionID);
+					codingModels.delete(event.data.sessionID);
 					continue;
 				}
 				if (
@@ -752,75 +854,108 @@ export async function registerFlowLifecycle(
 					event.type !== "session.idle"
 				)
 					continue;
-				if (outcomes.has(event.id)) continue;
-				const host = event.data.sessionID;
+				if (!host || outcomes.has(event.id) || scheduled.has(event.id))
+					continue;
 				const primary = attribution.current(host);
 				if (!primary) continue;
 				const owner = captureOwner(host, "attempt", primary);
-				let proved = false;
-				try {
-					const native = await ctx.session.context({ sessionID: host });
-					if (!owns(owner)) continue;
-					const terminal = attribution.terminal(
-						primary,
-						native,
-						event.type === "session.idle"
-							? undefined
-							: SessionMessage.ID.fromEvent(event.id),
-					);
-					if (
-						!terminal ||
-						(event.type === "session.execution.failed" &&
-							terminal.outcome !== "failed") ||
-						(event.type === "session.execution.interrupted" &&
-							terminal.outcome !== "interrupted") ||
-						(event.type === "session.execution.succeeded" &&
-							terminal.outcome !== "succeeded")
-					)
-						continue;
-					proved = true;
-					outcomes.add(event.id);
-					if (primary.participation.kind === "native-only") {
-						attribution.retire(primary);
-						continue;
-					}
-					if (terminal.outcome !== "succeeded") {
+				scheduled.add(event.id);
+				enqueue(host, async () => {
+					let proved = false;
+					try {
+						if (!owns(owner)) return;
+						const native = await wait(
+							ctx.session.context({ sessionID: host }, readOptions),
+						);
+						if (!owns(owner)) return;
+						const terminal = attribution.terminal(
+							primary,
+							native,
+							event.type === "session.idle"
+								? undefined
+								: SessionMessage.ID.fromEvent(event.id),
+						);
+						if (
+							!terminal ||
+							(event.type === "session.execution.failed" &&
+								terminal.outcome !== "failed") ||
+							(event.type === "session.execution.interrupted" &&
+								terminal.outcome !== "interrupted") ||
+							(event.type === "session.execution.succeeded" &&
+								terminal.outcome !== "succeeded")
+						)
+							return;
+						proved = true;
+						outcomes.add(event.id);
+						if (primary.participation.kind === "native-only") {
+							attribution.retire(primary);
+							return;
+						}
+						if (terminal.outcome !== "succeeded") {
+							options.onFlowTerminal?.(host);
+							failOwned(owner);
+							return;
+						}
+						const session = await wait(
+							ctx.session.get({ sessionID: host }, readOptions),
+						);
+						if (!owns(owner)) return;
+						if (session.id !== host)
+							throw new Error("Flow native terminal session identity changed.");
+						if (
+							session.outcome !== terminal.outcome ||
+							session.time.idle !== terminal.time.created
+						)
+							return;
+						const watermark = String(session.time.idle);
+						if (idle.get(host) === watermark) return;
+						idle.set(host, watermark);
 						options.onFlowTerminal?.(host);
-						failOwned(owner);
-						continue;
+						if (!runtimeGuard.query().operational) {
+							failOwned(owner);
+							return;
+						}
+						const consumed = nativeInputIDs(native),
+							delivery = nativeDelivery(session);
+						const current = () => owns(owner) && attribution.isCurrent(primary);
+						const idleOwner: IdleOwner = {
+							current,
+							recheck: async () => {
+								if (!current()) return false;
+								const fresh = await wait(
+									ctx.session.context({ sessionID: host }, readOptions),
+								);
+								if (!current()) return false;
+								const exact = attribution.terminal(primary, fresh, terminal.id);
+								const selected = await wait(
+									ctx.session.get({ sessionID: host }, readOptions),
+								);
+								return (
+									current() &&
+									exact?.outcome === "succeeded" &&
+									exact.time.created === terminal.time.created &&
+									isDeepStrictEqual(nativeInputIDs(fresh), consumed) &&
+									selected.id === host &&
+									selected.time.idle === terminal.time.created &&
+									selected.outcome === "succeeded" &&
+									sameDelivery(nativeDelivery(selected), delivery)
+								);
+							},
+						};
+						await autoDrive.onIdle(host, idleOwner);
+					} catch (error) {
+						if (proved && owns(owner)) failOwned(owner);
+						throw error;
+					} finally {
+						scheduled.delete(event.id);
 					}
-					const session = await ctx.session.get({ sessionID: host });
-					if (!owns(owner)) continue;
-					if (session.id !== host)
-						throw new Error("Flow native terminal session identity changed.");
-					if (session.time.idle === undefined || session.outcome === undefined)
-						continue;
-					if (
-						session.outcome !== terminal.outcome ||
-						session.time.idle !== terminal.time.created
-					)
-						continue;
-					const watermark = String(session.time.idle);
-					if (idle.get(host) === watermark) continue;
-					idle.set(host, watermark);
-					options.onFlowTerminal?.(host);
-					if (!runtimeGuard.query().operational) {
-						failOwned(owner);
-						continue;
-					}
-					await autoDrive.onIdle(host);
-				} catch (error) {
-					if (proved && owns(owner)) failOwned(owner);
-					log("warn", "Flow terminal observation failed.", {
-						host,
-						message: errorOf(error).message,
-					});
-				}
+				});
 			}
 			if (!closed) throw new Error("Flow event stream ended unexpectedly.");
 		} catch (error) {
 			if (!closed) {
 				streamLost = true;
+				readController.abort();
 				inputs.clear();
 				attribution.clear();
 				autoDrive.clear();
@@ -838,12 +973,14 @@ export async function registerFlowLifecycle(
 			disposal ??= (async () => {
 				closed = true;
 				controller.abort();
+				readController.abort();
 				inputs.clear();
 				attribution.clear();
 				autoDrive.clear();
 				recovery.revoke();
 				codingModels.clear();
 				await subscription;
+				await Promise.allSettled([...tasks]);
 				const errors: unknown[] = [];
 				for (const registration of registrations.reverse()) {
 					try {

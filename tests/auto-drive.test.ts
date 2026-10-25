@@ -14,6 +14,7 @@ import {
 	FLOW_AUTO_METADATA_KEY,
 } from "../src/platform/opencode/auto-drive.js";
 import { ValidationCaptureCoordinator } from "../src/platform/opencode/validation-capture.js";
+import { fixtureAutomaticPrompt } from "./fixtures/verified-continuation-origin.js";
 
 const DELIVERY: AutoDriveDelivery = {
 	agent: "build",
@@ -45,12 +46,17 @@ function mutate(
 	host: string,
 	revision: number,
 	created?: string,
-	parent = "command-message",
+	parent?: string,
 	reviewerPending = false,
 	mutation?: { tool: string; goal: string; features: Array<{ kind?: string }> },
 ): void {
 	const id = `assistant-${++assistantSequence}`;
-	driver.observeAssistant(host, id, parent);
+	const token = driver.captureAuthority(host)?.token;
+	const source =
+		parent ??
+		(token ? driver.captureDispatch(host, token)?.source : null) ??
+		"command-message";
+	driver.observeAssistant(host, id, source);
 	driver.observeMutation(
 		host,
 		revision,
@@ -86,10 +92,13 @@ function harness(initial: AutoDriveProjection) {
 	const driver = new AutoDriveCoordinator({
 		readProjection: () => Promise.resolve(projection),
 		readSourceDigest: () => Promise.resolve(source),
-		prompt: (_sessionID, text, delivery, metadata) => {
-			prompts.push({ text, delivery, metadata });
-			return Promise.resolve();
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => driver,
+			(_sessionID, text, delivery, metadata) => {
+				prompts.push({ text, delivery, metadata });
+				return Promise.resolve();
+			},
+		),
 		onWarning: (message) => warnings.push(message),
 		createToken: () => `token-${++token}`,
 		now: () => now,
@@ -235,11 +244,15 @@ describe("Flow auto-drive coordinator", () => {
 
 		await state.driver.onIdle("session-host1");
 		expect(state.prompts).toHaveLength(1);
-		expect(state.warnings.at(-1)).toContain("made no lifecycle progress");
-		expect(state.driver.compactionContext("session-host1")).not.toBeNull();
+		expect(state.warnings).toEqual([]);
+		expect(state.driver.continuationSnapshot("session-host1")).toMatchObject({
+			state: "inactive",
+			reason: "no-progress",
+		});
+		expect(state.driver.compactionContext("session-host1")).toBeNull();
 		state.setNow(1_000);
 		expect(state.driver.timingSnapshot()).toMatchObject({
-			state: "paused",
+			state: "inactive",
 			activeMs: 25,
 			waitingForUserMs: 0,
 		});
@@ -1106,10 +1119,13 @@ describe("Flow auto-drive coordinator", () => {
 				}
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 			createToken: () => "token",
 		});
 		const metadata = await driver.activate("session-host1");
@@ -1171,10 +1187,13 @@ describe("Flow auto-drive coordinator", () => {
 					});
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1234,7 +1253,10 @@ describe("Flow auto-drive coordinator", () => {
 					});
 				return Promise.resolve(checkpoint);
 			},
-			prompt: () => Promise.resolve(),
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				() => Promise.resolve(),
+			),
 		});
 		await driver.activate("session-host1");
 		const olderIdle = driver.onIdle("session-host1");
@@ -1281,10 +1303,13 @@ describe("Flow auto-drive coordinator", () => {
 				}
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 			createToken: () => "token",
 		});
 		const metadata = await driver.activate("session-host1");
@@ -1341,10 +1366,13 @@ describe("Flow auto-drive coordinator", () => {
 					});
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1395,10 +1423,13 @@ describe("Flow auto-drive coordinator", () => {
 					});
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1443,20 +1474,23 @@ describe("Flow auto-drive coordinator", () => {
 			nextAction: "flow_plan_approve",
 		};
 		let resolvePending: ((projection: AutoDriveProjection) => void) | undefined;
-		let reads = 0;
+		let holdRead = false;
 		const prompts: AutoDriveDelivery[] = [];
 		const driver = new AutoDriveCoordinator({
 			readProjection: () => {
-				if (++reads === 5)
+				if (holdRead)
 					return new Promise((resolve) => {
 						resolvePending = resolve;
 					});
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1482,6 +1516,13 @@ describe("Flow auto-drive coordinator", () => {
 		await driver.onIdle("session-host1");
 		expect(prompts).toHaveLength(1);
 
+		await driver.observeMessage(
+			"session-host1",
+			DELIVERY,
+			[{ text: "Acknowledged continuation checkpoint." }],
+			"continued-checkpoint-reply",
+		);
+		holdRead = true;
 		const laterIdle = driver.onIdle("session-host1");
 		await driver.observeMessage(
 			"session-host1",
@@ -1518,10 +1559,13 @@ describe("Flow auto-drive coordinator", () => {
 				}
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1578,7 +1622,10 @@ describe("Flow auto-drive coordinator", () => {
 					});
 				return Promise.resolve(projection);
 			},
-			prompt: () => Promise.resolve(),
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				() => Promise.resolve(),
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1626,10 +1673,13 @@ describe("Flow auto-drive coordinator", () => {
 				}
 				return Promise.resolve(projection);
 			},
-			prompt: (_sessionID, _prompt, delivery) => {
-				prompts.push(delivery);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, _prompt, delivery) => {
+					prompts.push(delivery);
+					return Promise.resolve();
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1736,10 +1786,13 @@ describe("Flow auto-drive coordinator", () => {
 					resolveProjection = resolve;
 				});
 			},
-			prompt: (_sessionID, prompt) => {
-				prompts.push(prompt);
-				return Promise.resolve();
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				(_sessionID, prompt) => {
+					prompts.push(prompt);
+					return Promise.resolve();
+				},
+			),
 			createToken: () => "token",
 		});
 		await driver.activate("session-host1");
@@ -1789,13 +1842,16 @@ describe("Flow auto-drive coordinator", () => {
 		});
 		const driver = new AutoDriveCoordinator({
 			readProjection: () => Promise.resolve(projection),
-			prompt: () => {
-				promptCount += 1;
-				markPromptStarted?.();
-				return new Promise((resolve) => {
-					resolvePrompt = resolve;
-				});
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				() => {
+					promptCount += 1;
+					markPromptStarted?.();
+					return new Promise((resolve) => {
+						resolvePrompt = resolve;
+					});
+				},
+			),
 		});
 		const metadata = await driver.activate("session-host1");
 		await driver.observeMessage(
@@ -1851,7 +1907,10 @@ describe("Flow auto-drive coordinator", () => {
 					nextAction: "flow_run_start",
 				});
 			},
-			prompt: () => Promise.resolve(),
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				() => Promise.resolve(),
+			),
 			createToken: () => `token-${reads}`,
 		});
 		await driver.activate("session-host1");
@@ -1886,7 +1945,10 @@ describe("Flow auto-drive coordinator", () => {
 					nextAction: "flow_run_start",
 				});
 			},
-			prompt: () => Promise.resolve(),
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				() => Promise.resolve(),
+			),
 		});
 		const first = driver.activate("session-host1");
 		const second = await driver.activate("session-host1");
@@ -1978,7 +2040,10 @@ describe("Flow auto-drive coordinator", () => {
 								revision: reads,
 								nextAction: "flow_run_start",
 							}),
-				prompt: () => Promise.reject(new Error("unavailable")),
+				prompt: fixtureAutomaticPrompt(
+					() => driver,
+					() => Promise.reject(new Error("unavailable")),
+				),
 				createToken: () => failure,
 			});
 			await driver.activate("session-host1");

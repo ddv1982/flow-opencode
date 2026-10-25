@@ -91,9 +91,23 @@ export async function verifiedContinuationOrigin(
 			},
 		],
 	};
-	const scope = inputs.capture(context);
-	await scope.ready();
-	const evidence = await inputs.evidence(scope, [user], delivery);
+	const session: SessionInfo = {
+		id: sessionID,
+		agent,
+		model,
+		projectID: "fixture",
+		location: { directory: process.cwd() },
+		time: { created: 0, updated: 0 },
+		cost: 0,
+		tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+	};
+	const operation = inputs.openSource(context);
+	const resolved = await operation.resolve([user], session, {
+		check: () => {},
+		supersede: () => {},
+	});
+	const scope = resolved.scope,
+		evidence = resolved.evidence;
 	if (evidence.kind !== "live")
 		throw new Error("Missing accepted fixture origin.");
 	attribution.freeze(
@@ -125,16 +139,7 @@ export async function verifiedContinuationOrigin(
 			},
 		],
 	};
-	const session: SessionInfo = {
-		id: sessionID,
-		agent,
-		model,
-		projectID: "fixture",
-		location: { directory: process.cwd() },
-		time: { created: 0, updated: 0 },
-		cost: 0,
-		tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-	};
+
 	const verified = attribution.verify(
 		{ sessionID, agent, messageID, id },
 		[user, assistant],
@@ -146,8 +151,67 @@ export async function verifiedContinuationOrigin(
 		throw new Error("Expected Flow fixture participation.");
 	const origin = verified.primary.participation.origin;
 	auto.observeAssistant(host, assistantID, origin.id);
-	scope.release();
+	operation.release();
 	inputs.clear();
 	attribution.clear();
 	return origin.id;
+}
+
+export function fixtureAutomaticPrompt(
+	auto: () => AutoDriveCoordinator,
+	observe: (
+		...args: Parameters<
+			import("../../src/platform/opencode/auto-drive-dispatch.js").AutomaticPrompt
+		>
+	) => void | Promise<void> = () => {},
+	afterAdmission = false,
+): import("../../src/platform/opencode/auto-drive-dispatch.js").AutomaticPrompt {
+	return async (...args) => {
+		const [host, text, delivery, metadata, intent] = args;
+		const token = metadata[FLOW_AUTO_METADATA_KEY];
+		if (typeof token !== "string") throw new Error("Missing fixture token.");
+		const driver = auto(),
+			id = SessionMessage.ID.create();
+		const inputs = new InputAdmissions({
+			assertOpen: () => {},
+			authority: () => driver.captureAuthority(host),
+			authorityCurrent: (authority) => driver.isAuthorityCurrent(authority),
+			observeReal: async () => {},
+		});
+		const payload = { text, metadata: { [FLOW_AUTO_METADATA_KEY]: token } };
+		const reservation = inputs.reserve(host, id),
+			admission = inputs.register(reservation, { type: "synthetic", payload });
+		const accept = () =>
+			inputs.accept(
+				admission,
+				{
+					sessionID: host,
+					id,
+					type: "synthetic",
+					payload,
+					time: { created: 0 },
+					delivery: "queue",
+				},
+				async () => {
+					const result = await driver.observeMessage(
+						host,
+						delivery,
+						[{ type: "text", text, synthetic: true, metadata }],
+						id,
+						intent,
+					);
+					if (result !== "accepted-continuation")
+						throw new Error("Fixture dispatch was not accepted.");
+					return inputs.makeOrigin(host, id, delivery, true, reservation.epoch);
+				},
+			);
+		try {
+			if (afterAdmission) await accept();
+			await observe(...args);
+			if (!afterAdmission) await accept();
+			return { kind: "sent", source: id };
+		} finally {
+			inputs.clear();
+		}
+	};
 }

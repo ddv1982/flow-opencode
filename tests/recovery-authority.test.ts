@@ -16,7 +16,10 @@ import {
 } from "../src/platform/opencode/auto-drive.js";
 import { InputAdmissions } from "../src/platform/opencode/input-admission.js";
 import { continuationCommands } from "./fixtures/continuation-commands.js";
-import { verifiedContinuationOrigin } from "./fixtures/verified-continuation-origin.js";
+import {
+	fixtureAutomaticPrompt,
+	verifiedContinuationOrigin,
+} from "./fixtures/verified-continuation-origin.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -99,7 +102,10 @@ test.each(["off", "no-key", "shadow"] as const)(
 				revision: revision(s.repository),
 				nextAction: "await-user-direction",
 			}),
-			prompt: async () => {},
+			prompt: fixtureAutomaticPrompt(
+				() => auto,
+				async () => {},
+			),
 		});
 		const commands = await continuationCommands({
 			autoDrive: auto,
@@ -785,7 +791,10 @@ test("unmatched native requests fail closed and fresh flow-run restores a verifi
 			revision: revision(s.repository),
 			nextAction: "flow_run_start",
 		}),
-		prompt: async () => {},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async () => {},
+		),
 	});
 	const commands = await continuationCommands({
 		autoDrive: auto,
@@ -859,27 +868,31 @@ test.each(["success", "failure"] as const)(
 			recovery: a.controller,
 			createToken: () => "fixed-old-token",
 			readProjection: async () => projection,
-			prompt: async (host, _text, delivery, metadata) => {
-				count++;
-				if (count === 1) {
-					await driver.observeMessage(
-						host,
-						delivery,
-						[{ type: "text", synthetic: true, metadata }],
-						"first-handback",
-					);
-					a.controller.observeMessage(host, "first-handback", true, true);
-					return;
-				}
-				lateMetadata = metadata;
-				started();
-				await new Promise<void>((resolve, reject) => {
-					release = () =>
-						outcome === "failure"
-							? reject(new Error("Obsolete prompt failed"))
-							: resolve();
-				});
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				async (host, _text, delivery, metadata) => {
+					count++;
+					if (count === 1) {
+						await driver.observeMessage(
+							host,
+							delivery,
+							[{ type: "text", synthetic: true, metadata }],
+							"first-handback",
+						);
+						a.controller.observeMessage(host, "first-handback", true, true);
+						return;
+					}
+					lateMetadata = metadata;
+					started();
+					await new Promise<void>((resolve, reject) => {
+						release = () =>
+							outcome === "failure"
+								? reject(new Error("Obsolete prompt failed"))
+								: resolve();
+					});
+				},
+				true,
+			),
 		});
 		const delivery = {
 			agent: "build",
@@ -995,19 +1008,23 @@ test("obsolete initial prompt failure preserves a renewed checkpoint reply", asy
 			revision: 0,
 			nextAction: "flow_plan_save",
 		}),
-		prompt: async (host, _text, delivery, metadata) => {
-			initialMetadata = metadata;
-			await driver.observeMessage(
-				host,
-				delivery,
-				[{ type: "text", synthetic: true, metadata }],
-				"initial-route",
-			);
-			started();
-			await new Promise<void>((_resolve, reject) => {
-				release = () => reject(new Error("Obsolete initial prompt failed"));
-			});
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => driver,
+			async (host, _text, delivery, metadata) => {
+				initialMetadata = metadata;
+				await driver.observeMessage(
+					host,
+					delivery,
+					[{ type: "text", synthetic: true, metadata }],
+					"initial-route",
+				);
+				started();
+				await new Promise<void>((_resolve, reject) => {
+					release = () => reject(new Error("Obsolete initial prompt failed"));
+				});
+			},
+			true,
+		),
 	});
 	const delivery = {
 		agent: "build",
@@ -1059,7 +1076,10 @@ test.each([
 				nextAction:
 					failures === 1 ? "flow_feature_reset" : "await-user-direction",
 			}),
-			prompt: async () => {},
+			prompt: fixtureAutomaticPrompt(
+				() => driver,
+				async () => {},
+			),
 		});
 		const delivery = {
 			agent: "build",
@@ -1139,6 +1159,26 @@ test.each([
 		const boundary = new CompactionBoundary({
 			inputs,
 			readNative: async () => structuredClone(native),
+			readSelected: async () => ({
+				id: host,
+				agent: nativeAgent,
+				model: nativeModel,
+				projectID: "test",
+				location: { directory: process.cwd() },
+				time: { created: 0, updated: 0 },
+				cost: 0,
+				tokens: {
+					input: 0,
+					output: 0,
+					reasoning: 0,
+					cache: { read: 0, write: 0 },
+				},
+			}),
+			captureReplacement: () => ({
+				check: () => {},
+				supersede: () => {},
+				current: () => true,
+			}),
 			failure: () => {},
 			hasActivePrimary: () => false,
 			guidance: () => driver.compactionContext(host),

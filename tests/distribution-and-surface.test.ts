@@ -18,7 +18,10 @@ import {
 	getFlowGuidance,
 } from "../src/guidance/catalog.js";
 import FlowPlugin from "../src/index.js";
-import { FLOW_AUTO_METADATA_KEY } from "../src/platform/opencode/auto-drive.js";
+import {
+	AutoDriveCoordinator,
+	FLOW_AUTO_METADATA_KEY,
+} from "../src/platform/opencode/auto-drive.js";
 import { prepareFlowCommand } from "../src/platform/opencode/command-hook.js";
 import {
 	createNativeFlowHost,
@@ -50,6 +53,7 @@ const COMMAND_NAMES = [
 ];
 const hosts: NativeFlowHost[] = [];
 const workspaces: string[] = [];
+const pendingDecisionObservations = new Set<() => void>();
 async function load(options: Parameters<typeof createNativeFlowHost>[1] = {}) {
 	const workspace = await mkdtemp(join(tmpdir(), "flow-native-surface-"));
 	workspaces.push(workspace);
@@ -57,6 +61,79 @@ async function load(options: Parameters<typeof createNativeFlowHost>[1] = {}) {
 	hosts.push(host);
 	await host.load(FlowPlugin);
 	return { host, workspace };
+}
+async function idleDecision(
+	host: NativeFlowHost,
+	id: string,
+	receiver?: AutoDriveCoordinator,
+) {
+	if (pendingDecisionObservations.size)
+		throw new Error("Overlapping coordinator observation.");
+	const token = host.admissions.findLast(
+		(receipt) =>
+			receipt.sessionID === id &&
+			typeof receipt.payload.metadata?.[FLOW_AUTO_METADATA_KEY] === "string",
+	)?.payload.metadata?.[FLOW_AUTO_METADATA_KEY];
+	if (!receiver && typeof token !== "string")
+		throw new Error("Missing fixture invocation token.");
+	const original = AutoDriveCoordinator.prototype.onIdle,
+		completed = Promise.withResolvers<void>();
+	let failure: unknown;
+	const observed = async function (
+		this: AutoDriveCoordinator,
+		...args: Parameters<typeof original>
+	) {
+		if (
+			args[0] !== id ||
+			(receiver
+				? this !== receiver
+				: this.captureAuthority(id)?.token !== token)
+		)
+			return original.apply(this, args);
+		receiver = this;
+		try {
+			await original.apply(this, args);
+		} catch (error) {
+			failure = error;
+			throw error;
+		} finally {
+			completed.resolve();
+		}
+	};
+	AutoDriveCoordinator.prototype.onIdle = observed;
+	const cancel = () => {
+		if (AutoDriveCoordinator.prototype.onIdle === observed)
+			AutoDriveCoordinator.prototype.onIdle = original;
+		completed.reject(
+			new Error("Fixture disposed before the coordinator decision completed."),
+		);
+	};
+	pendingDecisionObservations.add(cancel);
+	try {
+		await host.idle(id);
+		await completed.promise;
+		if (AutoDriveCoordinator.prototype.onIdle !== observed)
+			throw new Error("Coordinator observation was replaced.");
+		if (failure) throw failure;
+		if (!receiver) throw new Error("No matching coordinator completed.");
+		return receiver;
+	} finally {
+		pendingDecisionObservations.delete(cancel);
+		if (AutoDriveCoordinator.prototype.onIdle === observed)
+			AutoDriveCoordinator.prototype.onIdle = original;
+	}
+}
+async function waitingForPlanApproval(host: NativeFlowHost, id: string) {
+	for (;;) {
+		const status = await host.response("flow_status", statusInput, id);
+		const state = status.workflowData.autoDrive;
+		if (
+			state &&
+			field(state, "state") === "waiting" &&
+			field(state, "reason") === "plan-approval"
+		)
+			return;
+	}
 }
 function exactlyOnce(text: string, fragment: string) {
 	expect(text.split(fragment)).toHaveLength(2);
@@ -98,6 +175,8 @@ function field(value: unknown, name: string) {
 	return z.record(z.string(), z.unknown()).parse(value)[name];
 }
 afterEach(async () => {
+	for (const cancel of pendingDecisionObservations) cancel();
+	pendingDecisionObservations.clear();
 	const errors: unknown[] = [];
 	for (const host of hosts.splice(0).reverse())
 		try {
@@ -373,7 +452,14 @@ describe("flow-auto native continuation", () => {
 			expect(projectionOf(saved).sessionId).toBe(
 				projectionOf(provisional).sessionId,
 			);
-			await host.idle(manager);
+			const approval = expectedApproval
+				? host.nextSynthetic(manager, (input) =>
+						input.text.includes("Approve this one draft"),
+					)
+				: null;
+			await idleDecision(host, manager);
+			if (approval) await approval;
+			else await waitingForPlanApproval(host, manager);
 			expect(
 				host.synthetics.filter((input) =>
 					input.text.includes("Approve this one draft"),
@@ -486,7 +572,9 @@ describe("flow-auto native continuation", () => {
 			);
 			expect(saved.status).toBe("ok");
 			expect((await approve(host, 1, "ses_owner")).status).toBe("ok");
-			await host.idle("ses_owner");
+			const continued = expected ? host.nextSynthetic("ses_owner") : null;
+			await idleDecision(host, "ses_owner");
+			if (continued) await continued;
 			expect(host.synthetics).toHaveLength(expected);
 		},
 	);
@@ -495,13 +583,14 @@ describe("flow-auto native continuation", () => {
 		await save(host);
 		await host.command("flow-auto", "--recovery=off", "ses_owner");
 		await host.response("flow_status", statusInput, "ses_owner");
-		await host.idle("ses_owner");
+		const coordinator = await idleDecision(host, "ses_owner");
+		await waitingForPlanApproval(host, "ses_owner");
 		await host.admit("Approve the plan.", "ses_owner");
 		await host.beginTurn("ses_owner");
 		expect((await approve(host, 1, "ses_other")).status).toBe("ok");
 		const replay = await approve(host, 1, "ses_owner");
 		expect(replay.workflowData.operation?.replayed).toBe(true);
-		await host.idle("ses_owner");
+		await idleDecision(host, "ses_owner", coordinator);
 		expect(host.synthetics).toEqual([]);
 	});
 	test("missing native request identity rejects a mutation before durable effect", async () => {
@@ -549,7 +638,8 @@ describe("flow-auto native continuation", () => {
 		const saved = await save(host);
 		await host.command("flow-auto", "--recovery=off", "ses_close");
 		await host.response("flow_status", statusInput, "ses_close");
-		await host.idle("ses_close");
+		await idleDecision(host, "ses_close");
+		await waitingForPlanApproval(host, "ses_close");
 		await host.admit("Defer this session.", "ses_close");
 		await writeFile(join(workspace, ".flow/history"), "unsafe\n");
 		const closed = await host.response(
@@ -574,7 +664,9 @@ describe("flow-auto native continuation", () => {
 		});
 		await unlink(join(workspace, ".flow/history"));
 		await mkdir(join(workspace, ".flow/history"));
+		const retried = host.nextSynthetic("ses_close");
 		await host.idle("ses_close");
+		await retried;
 		expect(host.synthetics).toHaveLength(1);
 		expect(host.synthetics[0]?.text).toContain("flow_session_close");
 	});
@@ -588,11 +680,13 @@ describe("flow-auto native continuation", () => {
 		});
 		await host.command("flow-auto", "--recovery=off", manager);
 		await host.response("flow_status", statusInput, manager);
-		await host.idle(manager);
+		const coordinator = await idleDecision(host, manager);
+		await waitingForPlanApproval(host, manager);
 		expect(host.synthetics).toEqual([]);
 		await host.admit("What do you recommend?", manager);
 		await host.response("flow_status", statusInput, manager);
-		await host.idle(manager);
+		await idleDecision(host, manager, coordinator);
+		await waitingForPlanApproval(host, manager);
 		expect(host.synthetics).toEqual([]);
 		await host.admit("Approve the plan.", manager);
 		const args = {
@@ -612,7 +706,9 @@ describe("flow-auto native continuation", () => {
 			result: decorated,
 		});
 		expect(decorated.content).toEndWith("[audit-footer]");
-		await host.idle(manager);
+		const continuation = host.nextSynthetic(manager);
+		await idleDecision(host, manager, coordinator);
+		await continuation;
 		expect(host.synthetics).toHaveLength(1);
 		const dispatched = host.synthetics[0];
 		expect(dispatched).toMatchObject({
@@ -644,7 +740,7 @@ describe("flow-auto native continuation", () => {
 			authoritative: false,
 			state: "active",
 		});
-		await host.idle(manager);
+		await idleDecision(host, manager, coordinator);
 		expect(host.synthetics).toHaveLength(1);
 		await host.events.emit({
 			id: "evt_interrupt",

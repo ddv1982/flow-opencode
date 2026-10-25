@@ -12,7 +12,10 @@ import {
 import { createJevDecisionProvider } from "../src/infrastructure/jev-decision-provider.js";
 import { parseRecoveryCommand } from "../src/platform/opencode/command-hook.js";
 import { continuationCommands } from "./fixtures/continuation-commands.js";
-import { verifiedContinuationOrigin } from "./fixtures/verified-continuation-origin.js";
+import {
+	fixtureAutomaticPrompt,
+	verifiedContinuationOrigin,
+} from "./fixtures/verified-continuation-origin.js";
 
 const cleanups: Array<() => Promise<void>> = [];
 afterEach(async () => {
@@ -216,7 +219,10 @@ describe("process-local recovery", () => {
 					throw new Error("compact status unavailable");
 				return status.workflowData.projection;
 			},
-			prompt: async () => {},
+			prompt: fixtureAutomaticPrompt(
+				() => auto,
+				async () => {},
+			),
 		});
 		const commands = await continuationCommands({
 			autoDrive: auto,
@@ -1178,11 +1184,21 @@ test("expired advice stops prompting while automatic retry safeguards remain", a
 	controller.observeMessage("ses_host", "old-user", false);
 	controller.observeAssistant("ses_host", "old-assistant", "old-user");
 	expect(
-		controller.proposalPrompt("ses_host", "flow", 10, "await-user-direction"),
+		controller.prepareProposalPrompt(
+			"ses_host",
+			"flow",
+			10,
+			"await-user-direction",
+		),
 	).not.toBeNull();
 	now = 60 * 60 * 1000;
 	expect(
-		controller.proposalPrompt("ses_host", "flow", 11, "await-user-direction"),
+		controller.prepareProposalPrompt(
+			"ses_host",
+			"flow",
+			11,
+			"await-user-direction",
+		),
 	).toBeNull();
 	expect(controller.snapshot()).toMatchObject({
 		mode: "off",
@@ -1362,26 +1378,30 @@ test("registered tools share the controller across file-backed service instances
 					throw new Error("projection");
 				return status.workflowData.projection;
 			},
-			prompt: async (host, _text, delivery, metadata) => {
-				prompts++;
-				const user = `msg_recovery-turn-${prompts}`;
-				ctx.messageID = `msg_assistant-${prompts}`;
-				await auto.observeMessage(
-					host,
-					delivery,
-					[{ type: "text", synthetic: true, metadata }],
-					user,
-				);
-				await verifiedContinuationOrigin(
-					auto,
-					host,
-					user,
-					ctx.messageID,
-					delivery,
-				);
-				s.controller.observeMessage(host, user, true, true);
-				s.controller.observeAssistant(host, ctx.messageID, user);
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => auto,
+				async (host, _text, delivery, metadata) => {
+					prompts++;
+					const user = `msg_recovery-turn-${prompts}`;
+					ctx.messageID = `msg_assistant-${prompts}`;
+					await auto.observeMessage(
+						host,
+						delivery,
+						[{ type: "text", synthetic: true, metadata }],
+						user,
+					);
+					await verifiedContinuationOrigin(
+						auto,
+						host,
+						user,
+						ctx.messageID,
+						delivery,
+					);
+					s.controller.observeMessage(host, user, true, true);
+					s.controller.observeAssistant(host, ctx.messageID, user);
+				},
+				true,
+			),
 		});
 		const { ValidationCaptureCoordinator } = await import(
 			"../src/platform/opencode/validation-capture.js"
@@ -1836,7 +1856,10 @@ test("plain auto in another host rejects the previous host's pending grant", asy
 			revision: revision(s.repository),
 			nextAction: "await-user-direction",
 		}),
-		prompt: async () => {},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async () => {},
+		),
 	});
 	await auto.activate("ses_host");
 	const commands = await continuationCommands({

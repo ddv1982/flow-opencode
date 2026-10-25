@@ -1,5 +1,5 @@
 import { isDeepStrictEqual as same } from "node:util";
-import type { SessionMessageInfo } from "@opencode/client";
+import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
 import type {
 	SessionCompaction,
 	SessionContext,
@@ -12,8 +12,19 @@ import {
 	nativeInputIDs,
 	sameDelivery,
 } from "./execution-attribution.js";
-import type { InputAdmissions, InputScope } from "./input-admission.js";
+import type {
+	InputAdmissions,
+	ResolvedSource,
+	SourceOperation,
+} from "./input-admission.js";
 
+const completedPrefix = Symbol();
+export type CompletedPrefix = Readonly<{
+	[completedPrefix]: true;
+	sourceOrigin: InputOrigin;
+	consumed: readonly string[];
+	checkpoint: string;
+}>;
 type Native = readonly SessionMessageInfo[];
 type ControlProof = Readonly<{
 	id: string;
@@ -71,14 +82,20 @@ function running(
 type CompactionOptions = Readonly<{
 	inputs: InputAdmissions;
 	readNative(host: string): Promise<Native>;
-	failure(scope: InputScope): void;
+	readSelected(host: string): Promise<SessionInfo>;
+	captureReplacement(host: string): Readonly<{
+		check(input: SessionCompaction, native: Native, changing: boolean): void;
+		current(): boolean;
+		supersede(): void;
+	}>;
+	failure(operation: SourceOperation, stillExpected: () => boolean): void;
 	hasActivePrimary(host: string): boolean;
 	guidance(host: string): string | null;
 	observe(host: string, origin: InputOrigin, source: string, id: string): void;
 }>;
 export class CompactionBoundary {
 	readonly #records = new Map<string, CompactionResult>();
-	readonly #pending = new Map<string, InputScope>();
+	readonly #pending = new Map<string, SourceOperation>();
 	readonly #options: CompactionOptions;
 	constructor(options: CompactionOptions) {
 		this.#options = options;
@@ -86,14 +103,22 @@ export class CompactionBoundary {
 	#key(host: string, id: string) {
 		return JSON.stringify([host, id]);
 	}
-	async admit(input: SessionCompaction): Promise<CompactionResult> {
-		const scope = this.#options.inputs.capture(input);
+	async admit(value: SessionCompaction): Promise<CompactionResult> {
+		const input = {
+			...value,
+			model: { ...value.model },
+			messages: structuredClone(value.messages),
+		};
+		const effects = this.#options.captureReplacement(input.sessionID);
+		const operation = this.#options.inputs.openSource(input);
+		let scope = operation.scope;
+		let resolved: ResolvedSource | undefined;
 		const prior = this.#pending.get(scope.host);
 		if (prior?.current()) {
-			scope.release();
+			operation.release();
 			throw new Error("Flow compaction callbacks overlap.");
 		}
-		this.#pending.set(scope.host, scope);
+		this.#pending.set(scope.host, operation);
 		try {
 			const first = running(
 				input,
@@ -106,19 +131,84 @@ export class CompactionBoundary {
 			);
 			if (!same(first.proof, second.proof))
 				throw new Error("Flow automatic compaction control identity changed.");
-			const source = await this.#options.inputs.evidence(
-				scope,
-				second.prefix,
-				second.proof.delivery,
-			);
-			const evidence =
-				source.kind === "unregistered" ? { kind: source.lineage } : source;
+			const selected = await scope.wait(this.#options.readSelected(scope.host));
 			const final = running(
 				input,
 				await scope.wait(this.#options.readNative(scope.host)),
 			);
 			if (!same(first.proof, final.proof))
 				throw new Error("Flow automatic compaction control identity changed.");
+			const existing = this.#records.get(this.#key(scope.host, final.proof.id));
+			const transfer = existing
+				? undefined
+				: this.#options.inputs.assertCheckpointAvailable(
+						scope.host,
+						final.proof.id,
+					);
+			resolved = await operation.resolve(final.prefix, selected, {
+				check: (changing, source) => {
+					if (
+						existing &&
+						(!source ||
+							!same(final.proof, {
+								id: existing.id,
+								reason: existing.reason,
+								consumed: existing.consumed,
+								delivery: existing.delivery,
+							}) ||
+							(existing.kind === "continuation" &&
+								(source.kind !== "live" ||
+									existing.sourceOrigin !== source.origin)))
+					)
+						throw new Error(
+							"Flow automatic compaction control identity changed.",
+						);
+					const evidence =
+						source?.kind === "unregistered" ? { kind: source.lineage } : source;
+					if (
+						evidence?.kind === "retired-automatic" ||
+						evidence?.kind === "rejected"
+					)
+						throw new Error("Flow execution epoch was revoked.");
+					if (evidence && evidence.kind !== "live") {
+						if (final.proof.reason !== "manual")
+							throw new Error(
+								evidence.kind === "unknown-history"
+									? "Flow compaction has no accepted input origin."
+									: "Flow execution epoch was revoked.",
+							);
+						if (
+							this.#options.guidance(scope.host) ||
+							this.#options.hasActivePrimary(scope.host)
+						)
+							throw new Error(
+								"Flow manual summary cannot overlap a live execution.",
+							);
+					}
+					if (
+						final.proof.reason === "manual" &&
+						evidence?.kind === "live" &&
+						evidence.origin.authority
+					)
+						throw new Error(
+							"Flow cannot retain authority through unverified or manual compaction.",
+						);
+					effects.check(input, final.prefix, changing);
+					if (
+						final.proof.reason === "manual" &&
+						changing &&
+						this.#options.guidance(scope.host)
+					)
+						throw new Error(
+							"Flow cannot retain authority through unverified or manual compaction.",
+						);
+				},
+				supersede: effects.supersede,
+			});
+			scope = resolved.scope;
+			const source = resolved.evidence;
+			const evidence =
+				source.kind === "unregistered" ? { kind: source.lineage } : source;
 			let result: CompactionResult;
 			if (evidence.kind === "live") {
 				const origin = this.completed(input, final.prefix) ?? evidence.origin;
@@ -208,17 +298,58 @@ export class CompactionBoundary {
 				scope,
 				result.id,
 				result.kind === "continuation" ? result.origin : null,
+				transfer,
 			);
 			this.#records.set(this.#key(scope.host, result.id), result);
 			return result;
 		} catch (error) {
-			this.#options.failure(scope);
+			this.#options.failure(operation, effects.current);
 			throw error;
 		} finally {
-			if (this.#pending.get(scope.host) === scope)
+			if (this.#pending.get(scope.host) === operation)
 				this.#pending.delete(scope.host);
-			scope.release();
+			operation.release();
 		}
+	}
+	prefixBridge(
+		input: Pick<SessionContext, "sessionID" | "messages" | "agent" | "model">,
+		native: Native,
+		predecessor?: InputOrigin,
+	): CompletedPrefix | undefined {
+		const first = modelInputIDs(input)[0];
+		if (!first || !predecessor) return;
+		const record = this.#records.get(this.#key(input.sessionID, first));
+		if (record?.kind !== "continuation") return;
+		const control = native.findLast((message) => message.type === "compaction");
+		if (
+			control?.type !== "compaction" ||
+			control.id !== record.id ||
+			control.reason !== record.reason ||
+			control.status !== "completed" ||
+			nativeInputIDs(native)[0] !== record.id
+		)
+			throw new Error("Flow automatic compaction control identity changed.");
+		this.#options.inputs.assertLive(record.origin);
+		let prior = record;
+		while (prior.sourceOrigin !== predecessor) {
+			const checkpoint = prior.consumed[0];
+			if (prior.consumed.length !== 1 || !checkpoint) return;
+			const previous = this.#records.get(
+				this.#key(input.sessionID, checkpoint),
+			);
+			if (
+				previous?.kind !== "continuation" ||
+				prior.sourceOrigin !== previous.origin
+			)
+				return;
+			prior = previous;
+		}
+		return Object.freeze({
+			[completedPrefix]: true as const,
+			sourceOrigin: prior.sourceOrigin,
+			consumed: prior.consumed,
+			checkpoint: record.id,
+		});
 	}
 	completed(
 		input: Pick<SessionContext, "sessionID" | "messages" | "agent" | "model">,

@@ -10,7 +10,10 @@ import {
 	FLOW_AUTO_METADATA_KEY,
 } from "../src/platform/opencode/auto-drive.js";
 import { continuationCommands } from "./fixtures/continuation-commands.js";
-import { verifiedContinuationOrigin } from "./fixtures/verified-continuation-origin.js";
+import {
+	fixtureAutomaticPrompt,
+	verifiedContinuationOrigin,
+} from "./fixtures/verified-continuation-origin.js";
 import {
 	deterministicEnvironment,
 	MemorySessionRepository,
@@ -60,9 +63,12 @@ async function commandFixture(
 	const auto = new AutoDriveCoordinator({
 		recovery,
 		readProjection: options.readProjection ?? (async () => projection),
-		prompt: async (_host, prompt) => {
-			prompts.push(prompt);
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async (_host, prompt) => {
+				prompts.push(prompt);
+			},
+		),
 	});
 	const commands = await continuationCommands({
 		autoDrive: auto,
@@ -97,22 +103,26 @@ test("fast recovery continuation receipt survives enqueue and advances to next f
 	const auto = new AutoDriveCoordinator({
 		recovery,
 		readProjection: async () => projection,
-		prompt: async (host, _text, model, metadata) => {
-			prompts++;
-			await auto.observeMessage(
-				host,
-				model,
-				[{ type: "text", synthetic: true, metadata }],
-				`msg_continuation-${prompts}`,
-			);
-			await verifiedContinuationOrigin(
-				auto,
-				host,
-				`msg_continuation-${prompts}`,
-				`msg_assistant-${prompts}`,
-				model,
-			);
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async (host, _text, model, metadata) => {
+				prompts++;
+				await auto.observeMessage(
+					host,
+					model,
+					[{ type: "text", synthetic: true, metadata }],
+					`msg_continuation-${prompts}`,
+				);
+				await verifiedContinuationOrigin(
+					auto,
+					host,
+					`msg_continuation-${prompts}`,
+					`msg_assistant-${prompts}`,
+					model,
+				);
+			},
+			true,
+		),
 	});
 	const metadata = await auto.activate("ses_host");
 	await auto.observeMessage(
@@ -153,10 +163,13 @@ test("recovery never overrides unowned-session stop and prompt failure revokes",
 		const auto = new AutoDriveCoordinator({
 			recovery,
 			readProjection: async () => projection,
-			prompt: async () => {
-				prompts++;
-				throw new Error("host unavailable");
-			},
+			prompt: fixtureAutomaticPrompt(
+				() => auto,
+				async () => {
+					prompts++;
+					throw new Error("host unavailable");
+				},
+			),
 		});
 		const metadata = await auto.activate("ses_host");
 		expect(metadata[FLOW_AUTO_METADATA_KEY]).toBeDefined();
@@ -187,9 +200,12 @@ test("shadow recovery prompt does not add a second handback at one checkpoint", 
 			revision,
 			nextAction: "await-user-direction",
 		}),
-		prompt: async (_host, prompt) => {
-			prompts.push(prompt);
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async (_host, prompt) => {
+				prompts.push(prompt);
+			},
+		),
 	});
 	const metadata = await auto.activate("ses_host");
 	await auto.observeMessage(
@@ -221,9 +237,12 @@ test("running state cannot trigger Jev even with a direction-shaped next action"
 			revision: 10,
 			nextAction: "await-user-direction",
 		}),
-		prompt: async (_host, prompt) => {
-			prompts.push(prompt);
-		},
+		prompt: fixtureAutomaticPrompt(
+			() => auto,
+			async (_host, prompt) => {
+				prompts.push(prompt);
+			},
+		),
 	});
 	const metadata = await auto.activate("ses_host");
 	await auto.observeMessage(
@@ -512,7 +531,12 @@ test("ordinary handback and native flow-run keep one shadow lease for the next c
 	});
 	now = 60 * 60 * 1000;
 	expect(
-		f.recovery.proposalPrompt("ses_host", "flow", 12, "await-user-direction"),
+		f.recovery.prepareProposalPrompt(
+			"ses_host",
+			"flow",
+			12,
+			"await-user-direction",
+		),
 	).toBeNull();
 	expect(f.recovery.snapshot("ses_host")).toMatchObject({
 		mode: "off",

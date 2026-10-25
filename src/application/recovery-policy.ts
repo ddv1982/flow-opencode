@@ -5,6 +5,7 @@ import type {
 	RecoveryProposal,
 	RecoverySettings,
 } from "./recovery-contracts.js";
+import { RecoveryProposals } from "./recovery-proposal.js";
 
 export {
 	type RecoveryMutation,
@@ -86,7 +87,7 @@ type Lease = {
 		| Readonly<{ kind: "stale" | "cancelled" }>
 		| Readonly<{ kind: "executed"; operationId: string; featureId: string }>
 		| null;
-	proposalPrompt: string | null;
+	proposals: RecoveryProposals;
 };
 type Host = {
 	parents: Map<string, string>;
@@ -230,7 +231,7 @@ export class RecoveryController {
 			pending: null,
 			inFlight: false,
 			last: null,
-			proposalPrompt: null,
+			proposals: new RecoveryProposals(),
 		};
 	}
 	#profile() {
@@ -403,12 +404,12 @@ export class RecoveryController {
 				}
 			: { mode: "off", ...status };
 	}
-	proposalPrompt(
+	prepareProposalPrompt(
 		host: string,
 		session: string | undefined,
 		revision: number,
 		nextAction: string | null,
-	): string | null {
+	) {
 		this.#expireLease();
 		const lease = this.#lease;
 		if (
@@ -418,15 +419,14 @@ export class RecoveryController {
 			nextAction !== "await-user-direction"
 		)
 			return null;
-		const key = `${session}/${revision}`;
-		if (
-			lease.proposalPrompt === key ||
-			lease.calls >= lease.settings.maxCalls ||
-			lease.controller.signal.aborted
-		)
-			return null;
-		lease.proposalPrompt = key;
-		return "Recovery advice is enabled for this process. Call flow_status with a top-level recoveryProposal containing id, sessionId, expectedRevision and at most three candidates. Each candidate needs id, action retry or independent-feature, exact featureId, remedy, changedFromPreviousAttempt and actual findingIds. Advice cannot expand the approved plan or replace evidence. In shadow mode report the advice and stop. In delegated mode call only the exact recommended existing mutation, then repeat full validation and independent review.";
+		return lease.proposals.prepare(`${session}/${revision}`, () => {
+			this.#expireLease();
+			return (
+				this.#lease === lease &&
+				!lease.controller.signal.aborted &&
+				lease.calls < lease.settings.maxCalls
+			);
+		});
 	}
 	guard(context: RecoveryContext): RecoveryGuard {
 		const identity = this.#lease;

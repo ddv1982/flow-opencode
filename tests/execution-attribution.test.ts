@@ -758,7 +758,10 @@ test("resource end grants no same-origin retry and cannot revive an explicitly r
 			error: { type: "provider.transport", message: "Refused" },
 		},
 	};
-	expect(f.attribution.retry(f.primary, [user, retry])).toBe(false);
+	expect(
+		f.attribution.prepareReplacement(context, [user, retry], f.primary, false)
+			.retry,
+	).toBe(false);
 	f.revoke();
 	expect(() =>
 		f.attribution.verify(
@@ -933,12 +936,21 @@ test("permitted retry shares exclusions and admits the retry assistant's first t
 		},
 	};
 	const exclusions = retainedSnapshot(first)?.previousAssistants;
-	expect(attribution.retry(first, [user, excluded, retry])).toBe(true);
+	const permit = attribution.prepareReplacement(
+		context,
+		[user, excluded, retry],
+		first,
+		false,
+	);
+	expect(permit.retry).toBe(true);
+	expect(first.http.phase).toBe("request");
+	expect(attribution.current(sid)).toBe(first);
 	const next = attribution.freeze(
 		context,
 		[user, excluded, retry],
 		{ kind: "flow", origin: origin },
 		clock,
+		permit,
 	);
 	expect(retainedSnapshot(next)?.previousAssistants).toBe(exclusions);
 	expect(retainedSnapshot(first)).toBeUndefined();
@@ -966,7 +978,9 @@ test("permitted retry shares exclusions and admits the retry assistant's first t
 			messageID: SessionMessage.ID.make("msg_excluded"),
 		}),
 	).toBeUndefined();
-	expect(() => attribution.retry(first, [user, retry])).toThrow("superseded");
+	expect(() =>
+		attribution.prepareReplacement(context, [user, retry], first, false),
+	).toThrow("superseded");
 	expect(() => attribution.terminal(first, [user])).toThrow("superseded");
 });
 

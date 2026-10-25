@@ -200,6 +200,7 @@ export async function createNativeFlowHost(
 	const messages = new Map<string, SessionMessageInfo[]>();
 	const prompts: SessionPromptInput[] = [];
 	const synthetics: SessionSyntheticInput[] = [];
+	const syntheticObservers = new Set<(input: SessionSyntheticInput) => void>();
 	const admissions: Array<SessionInboxUser | SessionInboxSynthetic> = [];
 	const tools = new Map<string, Info>();
 	const commands = new Map<string, CommandDefinition>();
@@ -386,6 +387,7 @@ export async function createNativeFlowHost(
 			delivery: input.delivery ?? "queue",
 		};
 		synthetics.push(structuredClone(input));
+		for (const observe of syntheticObservers) observe(input);
 		admissions.push(structuredClone(receipt));
 		history(input.sessionID).push(
 			structuredClone({
@@ -552,7 +554,10 @@ export async function createNativeFlowHost(
 		const session = ensureSession(host);
 		if (
 			!history(host).some(
-				(message) => message.type === "user" || message.type === "synthetic",
+				(message) =>
+					message.type === "user" ||
+					message.type === "synthetic" ||
+					(message.type === "compaction" && message.status === "completed"),
 			)
 		)
 			await prompt({ sessionID: host, text: "Inspect current Flow state." });
@@ -690,6 +695,19 @@ export async function createNativeFlowHost(
 		messages,
 		prompts,
 		synthetics,
+		nextSynthetic(
+			host: string,
+			matches: (input: SessionSyntheticInput) => boolean = () => true,
+		) {
+			return new Promise<SessionSyntheticInput>((resolve) => {
+				const observe = (input: SessionSyntheticInput) => {
+					if (input.sessionID !== host || !matches(input)) return;
+					syntheticObservers.delete(observe);
+					resolve(structuredClone(input));
+				};
+				syntheticObservers.add(observe);
+			});
+		},
 		admissions,
 		permissions,
 		events,
@@ -712,6 +730,7 @@ export async function createNativeFlowHost(
 			}
 		},
 		async dispose() {
+			syntheticObservers.clear();
 			for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 		},
 		async command(

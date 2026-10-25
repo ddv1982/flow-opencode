@@ -114,12 +114,18 @@ export function createFlowPlugin(dependencies: {
 							: {}),
 					};
 				},
-				prompt: async (sessionID, prompt, delivery, metadata) => {
+				prompt: async (sessionID, prompt, delivery, metadata, intent) => {
 					if (!lifecycle)
 						throw new Error(
 							"Flow lifecycle is not ready for continuation dispatch.",
 						);
-					await lifecycle.prompt(sessionID, prompt, delivery, metadata);
+					return lifecycle.prompt(
+						sessionID,
+						prompt,
+						delivery,
+						metadata,
+						intent,
+					);
 				},
 				onWarning: (message) => log("warn", message),
 			});
