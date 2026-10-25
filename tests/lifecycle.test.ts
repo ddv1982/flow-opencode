@@ -4884,3 +4884,167 @@ for (const rejectedAt of ["model", "agent", "session", "session-read"] as const)
 			await f.lifecycle.dispose();
 		}
 	});
+
+test("queued public input preserves O until exact A consumption", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_queue_O", "Original O");
+		const request = await startOwnedRequest(f);
+		const originalCall = ownershipNativeCall(f);
+		const original = await f.lifecycle.verifyTool(originalCall, "flow");
+		if (original.kind !== "flow") throw new Error("Expected O Flow access.");
+		original.assertCurrent();
+		const effects: string[] = [];
+		const tool = await effectTool(f, effects);
+		expect(await tool.execute({}, originalCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect"]);
+		const response = {
+			sessionID,
+			agent,
+			model,
+			kind: "primary" as const,
+			request,
+			response: new Response(new Uint8Array([0, 65, 10, 255, 13, 10])),
+		};
+		await f.emit("http.response", response);
+		await f.emit("prompt", {
+			sessionID,
+			messageID: SessionMessage.ID.make("msg_queue_A"),
+			prompt: { text: "Queued A" },
+			delivery: "queue",
+		});
+		expect(
+			f.native.filter((item) => item.type === "user").map((item) => item.id),
+		).toEqual(["msg_queue_O"]);
+		expect(f.context().messages.map((item) => item.id)).toEqual([
+			"msg_queue_O",
+		]);
+		expect(() => original.assertCurrent()).not.toThrow();
+		expect(await tool.execute({}, originalCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect", "effect"]);
+		expect([...new Uint8Array(await response.response.arrayBuffer())]).toEqual([
+			0, 65, 10, 255, 13, 10,
+		]);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		expect(() => original.assertCurrent()).toThrow("superseded");
+		const nextOCall = ownershipNativeCall(f);
+		const nextO = await f.lifecycle.verifyTool(nextOCall, "flow");
+		if (nextO.kind !== "flow") throw new Error("Expected next O Flow access.");
+		nextO.assertCurrent();
+		expect(await tool.execute({}, nextOCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect", "effect", "effect"]);
+		f.native.push({
+			type: "user",
+			id: "msg_queue_A",
+			text: "Queued A",
+			time: { created: 10 },
+		});
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		const aCall = ownershipNativeCall(f);
+		const a = await f.lifecycle.verifyTool(aCall, "flow");
+		if (a.kind !== "flow") throw new Error("Expected consumed A Flow access.");
+		a.assertCurrent();
+		expect(await tool.execute({}, aCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(() => nextO.assertCurrent()).toThrow();
+		await expect(tool.execute({}, nextOCall)).rejects.toThrow();
+		a.assertCurrent();
+		expect(effects).toEqual(["effect", "effect", "effect", "effect"]);
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("queued public inputs consume A before pending B without idle", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_order_O", "Original O");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		const oCall = ownershipNativeCall(f);
+		const o = await f.lifecycle.verifyTool(oCall, "flow");
+		if (o.kind !== "flow") throw new Error("Expected O Flow access.");
+		const effects: string[] = [];
+		const tool = await effectTool(f, effects);
+		expect(await tool.execute({}, oCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect"]);
+		for (const [id, text] of [
+			["msg_order_A", "Queued A"],
+			["msg_order_B", "Queued B"],
+		] as const) {
+			await f.emit("prompt", {
+				sessionID,
+				messageID: SessionMessage.ID.make(id),
+				prompt: { text },
+				delivery: "queue",
+			});
+			expect(f.context().messages.map((item) => item.id)).toEqual([
+				"msg_order_O",
+			]);
+			expect(() => o.assertCurrent()).not.toThrow();
+			expect(await tool.execute({}, oCall)).toEqual({
+				content: [{ type: "text", text: "applied" }],
+			});
+		}
+		expect(effects).toEqual(["effect", "effect", "effect"]);
+		f.native.push({
+			type: "user",
+			id: "msg_order_A",
+			text: "Queued A",
+			time: { created: 10 },
+		});
+		expect(f.context().messages.map((item) => item.id)).toEqual([
+			"msg_order_O",
+			"msg_order_A",
+		]);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		const aCall = ownershipNativeCall(f);
+		const a = await f.lifecycle.verifyTool(aCall, "flow");
+		if (a.kind !== "flow") throw new Error("Expected consumed A Flow access.");
+		a.assertCurrent();
+		expect(await tool.execute({}, aCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(() => o.assertCurrent()).toThrow();
+		await expect(tool.execute({}, oCall)).rejects.toThrow();
+		a.assertCurrent();
+		expect(effects).toEqual(["effect", "effect", "effect", "effect"]);
+		f.native.push({
+			type: "user",
+			id: "msg_order_B",
+			text: "Queued B",
+			time: { created: 11 },
+		});
+		expect(f.native.filter((item) => item.type === "idle")).toEqual([]);
+		expect(f.context().messages.map((item) => item.id)).toEqual([
+			"msg_order_O",
+			"msg_order_A",
+			"msg_order_B",
+		]);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		const bCall = ownershipNativeCall(f);
+		const b = await f.lifecycle.verifyTool(bCall, "flow");
+		if (b.kind !== "flow") throw new Error("Expected consumed B Flow access.");
+		b.assertCurrent();
+		expect(await tool.execute({}, bCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(() => a.assertCurrent()).toThrow();
+		expect(() => o.assertCurrent()).toThrow();
+		await expect(tool.execute({}, aCall)).rejects.toThrow();
+		b.assertCurrent();
+		expect(effects).toEqual(["effect", "effect", "effect", "effect", "effect"]);
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
