@@ -6131,3 +6131,819 @@ for (const interveningPrimary of [false, true])
 			await f.lifecycle.dispose();
 		}
 	});
+
+type FailedReservationCase =
+	| "selected-read"
+	| "parent"
+	| "specialist"
+	| "missing-agent"
+	| "missing-model"
+	| "native-rpc-before-history"
+	| "native-rpc-after-history"
+	| "receipt"
+	| "activation"
+	| "review-child";
+async function triageRejectedCommand(
+	f: OwnershipFixture,
+	failure: FailedReservationCase,
+) {
+	let restore = () => {};
+	let failedID: string | undefined;
+	const before = f.native.filter((item) => item.type === "user").length;
+	let command = "flow-status";
+	let expected = "";
+	if (failure === "selected-read") {
+		f.failNextSessionRead();
+		expected = "Native session read failed.";
+	} else if (failure === "parent") {
+		f.session.parentID = Session.ID.make("session-parent");
+		restore = () => {
+			delete f.session.parentID;
+		};
+		expected = "Flow commands require the native primary manager.";
+	} else if (failure === "specialist") {
+		f.session.agent = Agent.ID.make("flow-worker");
+		restore = () => {
+			f.session.agent = agent;
+		};
+		expected = "Flow commands require the native primary manager.";
+	} else if (failure === "missing-agent") {
+		delete f.session.agent;
+		restore = () => {
+			f.session.agent = agent;
+		};
+		expected = "Flow commands require the native primary manager.";
+	} else if (failure === "missing-model") {
+		delete f.session.model;
+		restore = () => {
+			f.session.model = model;
+		};
+		expected = "Flow requires the native selected agent and model.";
+	} else if (failure === "native-rpc-before-history") {
+		const prompt = spyOn(f.ctxSession, "prompt").mockImplementationOnce(
+			async (input) => {
+				failedID = input.id ?? undefined;
+				throw new Error("Native prompt rejected before materialization.");
+			},
+		);
+		restore = () => prompt.mockRestore();
+		expected = "Native prompt rejected before materialization.";
+	} else if (failure === "native-rpc-after-history") {
+		const original = f.ctxSession.prompt;
+		const prompt = spyOn(f.ctxSession, "prompt").mockImplementationOnce(
+			async (...args) => {
+				failedID = args[0].id ?? undefined;
+				await original(...args);
+				throw new Error("Native prompt rejected after unknown acceptance.");
+			},
+		);
+		restore = () => prompt.mockRestore();
+		expected = "Native prompt rejected after unknown acceptance.";
+	} else if (failure === "receipt") {
+		f.corruptReceipt();
+		expected = "Flow admission receipt did not match its exact local payload.";
+	} else if (failure === "activation") {
+		const observe = spyOn(f.autoDrive, "observeMessage").mockRejectedValueOnce(
+			new Error("Accepted activation failed."),
+		);
+		restore = () => observe.mockRestore();
+		expected = "Accepted activation failed.";
+	} else {
+		command = "flow-review";
+		const create = spyOn(f.ctxSession, "create").mockRejectedValueOnce(
+			new Error("Reviewer child creation failed."),
+		);
+		restore = () => create.mockRestore();
+		expected = "Reviewer child creation failed.";
+	}
+	try {
+		const outcome = await f
+			.command(command, "Inspect failed reservation")
+			.then(() => "accepted", String);
+		expect(outcome).toBe(`Error: ${expected}`);
+		console.log(`TRIAGE ${failure} command=${outcome}`);
+	} finally {
+		restore();
+	}
+	const materialized =
+		f.native.filter((item) => item.type === "user").length - before;
+	expect(materialized).toBe(
+		[
+			"native-rpc-after-history",
+			"receipt",
+			"activation",
+			"review-child",
+		].includes(failure)
+			? 1
+			: 0,
+	);
+	console.log(`TRIAGE ${failure} materialized=${materialized}`);
+	return { failedID };
+}
+async function triageOrdinaryPredecessor(f: OwnershipFixture) {
+	await admitOrdinaryInput(f, "msg_triage_old", "Original ordinary request");
+	await finishOwnedResponse(f, await startOwnedRequest(f));
+	const oldCall = ownershipNativeCall(f);
+	const old = await f.lifecycle.verifyTool(oldCall, "flow");
+	if (old.kind !== "flow") throw new Error("Missing ordinary predecessor.");
+	return { oldCall, old };
+}
+async function triageFreshPublic(f: OwnershipFixture, mode: "queue" | "steer") {
+	const id = "msg_triage_fresh",
+		text = "Fresh ordinary request after rejection";
+	await f.emit("prompt", {
+		sessionID,
+		messageID: SessionMessage.ID.make(id),
+		prompt: { text },
+		delivery: mode,
+	});
+	f.native.push({ type: "user", id, text, time: { created: 20 } });
+	const context = f.context();
+	const outcome = await f
+		.emit("context", context)
+		.then(() => "context accepted", String);
+	console.log(`TRIAGE ${mode} ${outcome}`);
+	expect(outcome).toBe("context accepted");
+	expect(context.messages.at(-1)).toEqual({
+		role: "user",
+		id,
+		content: [{ type: "text", text }],
+	});
+	const request = new Request("http://localhost/triage-fresh", {
+		method: "POST",
+		body: text,
+	});
+	const outbound = {
+		sessionID,
+		agent,
+		model,
+		kind: "primary" as const,
+		request,
+	};
+	await f.emit("http.request", outbound);
+	expect(await outbound.request.clone().text()).toBe(
+		"Fresh ordinary request after rejection",
+	);
+	await finishOwnedResponse(f, request);
+	const effects: string[] = [];
+	const tool = await effectTool(f, effects);
+	const freshCall = ownershipNativeCall(f);
+	expect(await tool.execute({}, freshCall)).toEqual({
+		content: [{ type: "text", text: "applied" }],
+	});
+	expect(effects).toEqual(["effect"]);
+	console.log(
+		`TRIAGE ${mode} fresh-model-body=Fresh ordinary request after rejection fresh-tool=applied`,
+	);
+	return { freshCall, tool, effects };
+}
+for (const failure of [
+	"selected-read",
+	"parent",
+	"specialist",
+	"missing-agent",
+	"missing-model",
+	"native-rpc-before-history",
+	"native-rpc-after-history",
+	"receipt",
+	"activation",
+	"review-child",
+] as const)
+	for (const mode of ["queue", "steer"] as const)
+		test(`reservation triage ${failure} then public ${mode} executes fresh exact tools`, async () => {
+			const f = await fixture();
+			try {
+				const predecessor = await triageOrdinaryPredecessor(f);
+				await triageRejectedCommand(f, failure);
+				expect(() => predecessor.old.assertCurrent()).toThrow();
+				const fresh = await triageFreshPublic(f, mode);
+				await expect(
+					fresh.tool.execute({}, predecessor.oldCall),
+				).rejects.toThrow();
+				expect(fresh.effects).toEqual(["effect"]);
+				expect(await fresh.tool.execute({}, fresh.freshCall)).toEqual({
+					content: [{ type: "text", text: "applied" }],
+				});
+				expect(fresh.effects).toEqual(["effect", "effect"]);
+			} finally {
+				await f.lifecycle.dispose();
+			}
+		});
+
+test("reservation triage static parse failure keeps predecessor usable and permits queue", async () => {
+	const f = await fixture();
+	try {
+		const predecessor = await triageOrdinaryPredecessor(f);
+		await expect(f.command("flow-auto", "--recovery=shadow")).rejects.toThrow(
+			"Recovery requires",
+		);
+		predecessor.old.assertCurrent();
+		const effects: string[] = [],
+			tool = await effectTool(f, effects);
+		expect(await tool.execute({}, predecessor.oldCall)).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect"]);
+		console.log("TRIAGE static-parse predecessor-tool=applied");
+		await triageFreshPublic(f, "queue");
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("reservation triage pending command read blocks old context and tools immediately", async () => {
+	const f = await fixture();
+	let pending: Promise<string | null> | undefined;
+	try {
+		const predecessor = await triageOrdinaryPredecessor(f);
+		const oldContext = f.context();
+		f.blockNextSessionRead();
+		f.rejectNextSessionRead();
+		pending = f.command("flow-status", "Held command").then(() => null, String);
+		await f.waitSessionRead();
+		await expect(f.emit("context", oldContext)).rejects.toThrow(
+			"epoch was revoked",
+		);
+		expect(() => predecessor.old.assertCurrent()).toThrow();
+		await expect(
+			f.lifecycle.verifyTool(predecessor.oldCall, "flow"),
+		).rejects.toThrow();
+		console.log("TRIAGE pending-read old-context=denied old-tool=denied");
+		f.releaseSessionRead();
+		expect(await pending).toBe("Error: Native session snapshot failed.");
+	} finally {
+		f.releaseSessionRead();
+		await pending;
+		await f.lifecycle.dispose();
+	}
+});
+
+test("reservation triage exact rejected private ID cannot replay as Flow or native-only", async () => {
+	const f = await fixture();
+	try {
+		const { failedID } = await triageRejectedCommand(
+			f,
+			"native-rpc-before-history",
+		);
+		if (!failedID) throw new Error("Missing rejected ID.");
+		await f.emit("prompt", {
+			sessionID,
+			messageID: SessionMessage.ID.make(failedID),
+			prompt: { text: "Replay private rejection" },
+			delivery: "queue",
+		});
+		f.native.push({
+			type: "user",
+			id: failedID,
+			text: "Replay private rejection",
+			time: { created: 20 },
+		});
+		await expect(f.emit("context", f.context())).rejects.toThrow();
+		await expect(
+			f.emit("http.request", {
+				sessionID,
+				agent,
+				model,
+				kind: "primary",
+				request: new Request("http://localhost/rejected-replay"),
+			}),
+		).rejects.toThrow();
+		await expect(
+			f.lifecycle.verifyTool(ownershipNativeCall(f), "flow"),
+		).rejects.toThrow();
+		console.log(
+			"TRIAGE exact-rejected-id context=denied model-request=denied Flow-tool=denied",
+		);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const replacement of [
+	"same-epoch-synthetic",
+	"new-epoch-command",
+] as const)
+	test(`reservation triage late old RPC reject preserves ${replacement} frontier and readiness`, async () => {
+		const f = await fixture();
+		let old: Promise<string | null> | undefined;
+		const entered = Promise.withResolvers<void>(),
+			gate = Promise.withResolvers<void>();
+		const original = f.ctxSession.synthetic;
+		let calls = 0;
+		const mock = spyOn(f.ctxSession, "synthetic").mockImplementation(
+			async (...args) => {
+				calls++;
+				if (calls === 1) {
+					entered.resolve();
+					await gate.promise;
+					throw new Error("Old synthetic rejected before history.");
+				}
+				return original(...args);
+			},
+		);
+		try {
+			await initialOwnershipWork(f);
+			old = f.lifecycle
+				.prompt(sessionID, "Old synthetic dispatch", delivery, {
+					[FLOW_AUTO_METADATA_KEY]: "local-token",
+				})
+				.then(() => null, String);
+			await entered.promise;
+			f.blockAdmission();
+			const fresh =
+				replacement === "same-epoch-synthetic"
+					? f.lifecycle.prompt(
+							sessionID,
+							"Fresh synthetic dispatch",
+							delivery,
+							{ [FLOW_AUTO_METADATA_KEY]: "local-token" },
+						)
+					: f.command("flow-auto", "Fresh command dispatch");
+			await f.flush();
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			const context = f
+				.emit("context", f.context())
+				.then(() => "context accepted", String);
+			let settled = false;
+			void context.then(() => {
+				settled = true;
+			});
+			await f.flush();
+			expect(settled).toBe(false);
+			gate.resolve();
+			expect(await old).toBe("Error: Old synthetic rejected before history.");
+			await f.flush();
+			expect(settled).toBe(false);
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			f.releaseAdmission();
+			await fresh;
+			expect(await context).toBe("context accepted");
+			const request = new Request("http://localhost/late-reject-fresh");
+			await f.emit("http.request", {
+				sessionID,
+				agent,
+				model,
+				kind: "primary",
+				request,
+			});
+			await finishOwnedResponse(f, request);
+			const effects: string[] = [],
+				tool = await effectTool(f, effects);
+			expect(await tool.execute({}, ownershipNativeCall(f))).toEqual({
+				content: [{ type: "text", text: "applied" }],
+			});
+			expect(effects).toEqual(["effect"]);
+			console.log(
+				`TRIAGE late-old-reject ${replacement} ready=preserved fresh-tool=applied`,
+			);
+		} finally {
+			gate.resolve();
+			f.releaseAdmission();
+			await old;
+			mock.mockRestore();
+			await f.lifecycle.dispose();
+		}
+	});
+
+test("reservation triage failed synthetic before history also permits fresh public queue", async () => {
+	const f = await fixture();
+	const original = f.ctxSession.synthetic;
+	try {
+		await initialOwnershipWork(f);
+		f.ctxSession.synthetic = async () => {
+			throw new Error("Synthetic rejected before materialization.");
+		};
+		await expect(
+			f.lifecycle.prompt(sessionID, "Failed synthetic", delivery, {
+				[FLOW_AUTO_METADATA_KEY]: "local-token",
+			}),
+		).rejects.toThrow("Synthetic rejected before materialization.");
+		f.ctxSession.synthetic = original;
+		await triageFreshPublic(f, "queue");
+	} finally {
+		f.ctxSession.synthetic = original;
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const reason of ["auto", "manual"] as const)
+	test(`reservation triage known automatic history plus failed private ID still refuses unowned ${reason} summary`, async () => {
+		const f = await fixture();
+		try {
+			await initialOwnershipWork(f);
+			await triageRejectedCommand(f, "native-rpc-before-history");
+			f.native.push({
+				type: "user",
+				id: "msg_unregistered_suffix",
+				text: "External history is not an authority reset",
+				time: { created: 20 },
+			});
+			const input = f.context();
+			f.native.push({
+				...automaticControl("msg_triage_negative_control"),
+				reason,
+			});
+			await expect(f.emit("compaction", input)).rejects.toThrow();
+			expect(f.repository.saveCount).toBe(0);
+			console.log(`TRIAGE known-automatic ${reason}-summary=denied`);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const changed of ["text", "metadata"] as const)
+	test(`reservation triage a rejected materialized private prefix retains its ${changed} guard`, async () => {
+		const f = await fixture();
+		try {
+			await triageOrdinaryPredecessor(f);
+			await triageRejectedCommand(f, "native-rpc-after-history");
+			const failed = f.native.findLast((item) => item.type === "user");
+			if (failed?.type !== "user")
+				throw new Error("Missing materialized private prefix.");
+			if (changed === "text") failed.text = "Changed rejected dispatch";
+			else failed.metadata = { forged: true };
+			await admitOrdinaryInput(
+				f,
+				"msg_payload_guard_fresh",
+				"Fresh cannot launder changed history",
+			);
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				"payload conflicts",
+			);
+			expect(f.repository.saveCount).toBe(0);
+			console.log(`TRIAGE rejected-prefix changed-${changed}=denied`);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+test("reservation triage public queue after rejection still refuses forged automatic metadata", async () => {
+	const f = await fixture();
+	try {
+		await triageRejectedCommand(f, "selected-read");
+		await expect(
+			f.emit("prompt", {
+				sessionID,
+				messageID: SessionMessage.ID.make("msg_forged_fresh"),
+				prompt: { text: "Forged fresh" },
+				delivery: "queue",
+				metadata: { [FLOW_AUTO_METADATA_KEY]: "forged-token" },
+			}),
+		).rejects.toThrow("private admitted dispatch");
+		expect(f.repository.saveCount).toBe(0);
+		console.log("TRIAGE forged-public-auto-metadata=denied");
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("reservation triage failed private RPC cannot veto a fresh native-only user in the same ledger", async () => {
+	const f = await fixture();
+	try {
+		await triageRejectedCommand(f, "native-rpc-before-history");
+		f.native.push({
+			type: "user",
+			id: "msg_triage_native_only",
+			text: "Fresh native-only input",
+			time: { created: 30 },
+		});
+		await exerciseUnregisteredNativeExecution(f, [
+			{
+				role: "user",
+				id: "msg_triage_native_only",
+				content: [{ type: "text", text: "Fresh native-only input" }],
+			},
+		]);
+		console.log(
+			"TRIAGE fresh-native-only ordinary-tool=allowed Flow-tool=denied",
+		);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const mode of ["queue", "steer"] as const)
+	test(`candidate B claimed real activation failure then fresh ${mode}`, async () => {
+		const f = await fixture();
+		let reject: ReturnType<typeof spyOn> | undefined;
+		try {
+			const prior = await triageOrdinaryPredecessor(f);
+			await admitOrdinaryInput(
+				f,
+				"msg_b_real_failed",
+				"Consumed real activation fails",
+			);
+			reject = spyOn(f.autoDrive, "observeMessage").mockRejectedValueOnce(
+				new Error("Real activation failed after claim."),
+			);
+			const failed = await f
+				.emit("context", f.context())
+				.then(() => "unexpected accepted", String);
+			expect(failed).toBe("Error: Real activation failed after claim.");
+			expect(reject.mock.calls[0]?.[3]).toBe("msg_b_real_failed");
+			expect(
+				f.native.filter((m) => m.type === "user").map((m) => m.id),
+			).toEqual(["msg_triage_old", "msg_b_real_failed"]);
+			expect(() => prior.old.assertCurrent()).toThrow();
+			reject.mockRestore();
+			console.log(
+				`CANDIDATE_B claimed-real native-ID-present=true local-activation=failed old-clock=revoked next=${mode}`,
+			);
+			const fresh = await triageFreshPublic(f, mode);
+			await expect(fresh.tool.execute({}, prior.oldCall)).rejects.toThrow();
+			expect(fresh.effects).toEqual(["effect"]);
+		} finally {
+			reject?.mockRestore();
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const changed of ["none", "text", "metadata", "last"] as const)
+	test(`candidate B materialized rejected private prefix ${changed}`, async () => {
+		const f = await fixture();
+		const original = f.ctxSession.prompt;
+		let failedID: string | undefined;
+		const prompt = spyOn(f.ctxSession, "prompt").mockImplementationOnce(
+			async (...args) => {
+				failedID = args[0].id ?? undefined;
+				await original(...args);
+				throw new Error("Locally rejected after native materialization.");
+			},
+		);
+		try {
+			await expect(
+				f.command("flow-status", "Rejected exact payload"),
+			).rejects.toThrow("Locally rejected after native materialization.");
+			prompt.mockRestore();
+			const failed = f.native.find((m) => m.id === failedID);
+			if (failed?.type !== "user")
+				throw new Error("Expected real fixture materialization.");
+			expect(failed.text).toContain("Rejected exact payload");
+			if (changed === "text") failed.text = "Tampered private text";
+			if (changed === "metadata") failed.metadata = { changed: true };
+			console.log(
+				`CANDIDATE_B materialized-private id=${failedID} state=locally-rejected variant=${changed}`,
+			);
+			if (changed === "none") await triageFreshPublic(f, "queue");
+			else {
+				if (changed !== "last")
+					await admitOrdinaryInput(f, "msg_b_guard_fresh", "Fresh exact queue");
+				await expect(f.emit("context", f.context())).rejects.toThrow(
+					changed === "last"
+						? "unknown, synthetic, or stale"
+						: "payload conflicts",
+				);
+				await expect(
+					f.emit("http.request", {
+						sessionID,
+						agent,
+						model,
+						kind: "primary",
+						request: new Request("http://localhost/b-no-request"),
+					}),
+				).rejects.toThrow();
+				expect(f.repository.saveCount).toBe(0);
+			}
+		} finally {
+			prompt.mockRestore();
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const type of ["user", "synthetic"] as const)
+	test(`candidate B fresh unregistered ${type} after failed private keeps compaction negative`, async () => {
+		const f = await fixture();
+		try {
+			await triageRejectedCommand(f, "native-rpc-before-history");
+			const id = "msg_b_native_fresh",
+				text = "Different exact native-only source";
+			f.native.push({ type, id, text, time: { created: 30 } });
+			const compaction = f.context();
+			const control = {
+				...automaticControl("msg_b_native_manual"),
+				reason: "manual" as const,
+			};
+			f.native.push(control);
+			await expect(f.emit("compaction", compaction)).rejects.toThrow();
+			f.native.splice(f.native.indexOf(control), 1);
+			console.log(`CANDIDATE_B native-only type=${type} unowned-manual=denied`);
+			await exerciseUnregisteredNativeExecution(f, [
+				{ role: "user", id, content: [{ type: "text", text }] },
+			]);
+			console.log(
+				`CANDIDATE_B native-only type=${type} ordinary=allowed Flow=denied`,
+			);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createTools as candidateRealTools } from "../src/platform/opencode/tools.js";
+
+async function candidateStatusTool(
+	f: OwnershipFixture,
+	workspace: typeof directory,
+) {
+	const registered = new Map<string, NativeToolDefinition>();
+	const validation = new ValidationCaptureCoordinator({
+		readSession: async () => f.session,
+		persistObservation: async () => {
+			throw new Error("Status must not persist validation.");
+		},
+	});
+	const status = candidateRealTools({
+		validation,
+		prepareValidation: async () => {
+			throw new Error("Status must not prepare validation.");
+		},
+	}).flow_status;
+	if (!status) throw new Error("Missing real status definition.");
+	await registerFlowTools(
+		{
+			location: { directory: workspace },
+			permission: { assert: async () => {} },
+			tool: {
+				transform: async (apply) => {
+					apply({
+						list: () => [...registered].map(([id, tool]) => ({ id, ...tool })),
+						get: (id) => {
+							const tool = registered.get(id);
+							return tool ? { id, ...tool } : undefined;
+						},
+						namespace() {},
+						add: (tool) => {
+							registered.set(tool.name, tool);
+						},
+						update: (id, update) => {
+							const tool = registered.get(id);
+							if (tool) update(tool);
+						},
+						remove: (id) => {
+							registered.delete(id);
+						},
+					});
+					return {
+						dispose: async () => {
+							registered.clear();
+						},
+					};
+				},
+			},
+		},
+		{ flow_status: status },
+		async (context) => {
+			await f.lifecycle.verifyTool(context, "flow");
+		},
+	);
+	const tool = registered.get("flow_status");
+	if (!tool) throw new Error("Missing real registered status wrapper.");
+	return tool;
+}
+for (const mode of ["queue", "steer"] as const)
+	test(`candidate B failed parent command then ${mode} executes actual tracked application flow_status`, async () => {
+		const f = await fixture();
+		const workspace = AbsolutePath.make(
+			realpathSync(mkdtempSync(join(tmpdir(), "flow-reservation-status-"))),
+		);
+		try {
+			const old = await triageOrdinaryPredecessor(f);
+			await triageRejectedCommand(f, "parent");
+			const fresh = await triageFreshPublic(f, mode);
+			const tool = await candidateStatusTool(f, workspace);
+			const result = await tool.execute(
+				{ request: { view: "compact" } },
+				fresh.freshCall,
+			);
+			const content = result.content;
+			const part =
+				typeof content === "string"
+					? undefined
+					: content?.find((part) => part.type === "text");
+			const text =
+				typeof content === "string"
+					? content
+					: part?.type === "text"
+						? part.text
+						: undefined;
+			if (text === undefined) throw new Error("Missing real Flow status text.");
+			const response = JSON.parse(text);
+			expect(response.status).toBe("ok");
+			expect(response.summary).toBe("No active Flow session.");
+			await expect(
+				tool.execute({ request: { view: "compact" } }, old.oldCall),
+			).rejects.toThrow();
+			expect(f.repository.saveCount).toBe(0);
+			console.log(
+				`CANDIDATE_B actual-flow-status mode=${mode} status=ok summary=No active Flow session. old-call=denied`,
+			);
+		} finally {
+			await f.lifecycle
+				.dispose()
+				.finally(() => rmSync(workspace, { recursive: true, force: true }));
+		}
+	});
+
+for (const type of ["user", "synthetic"] as const)
+	test(`candidate B materialized rejected prefix then fresh native-only ${type}`, async () => {
+		const f = await fixture();
+		try {
+			const { failedID } = await triageRejectedCommand(
+				f,
+				"native-rpc-after-history",
+			);
+			const failed = f.native.find((m) => m.id === failedID);
+			if (failed?.type !== "user")
+				throw new Error("Expected materialized failed prefix.");
+			const id = "msg_b_materialized_native",
+				text = "Different native-only source after materialized rejection";
+			f.native.push({ type, id, text, time: { created: 30 } });
+			const compaction = f.context();
+			const control = {
+				...automaticControl("msg_b_materialized_manual"),
+				reason: "manual" as const,
+			};
+			f.native.push(control);
+			await expect(f.emit("compaction", compaction)).rejects.toThrow();
+			f.native.splice(f.native.indexOf(control), 1);
+			console.log(
+				`CANDIDATE_B materialized native-only type=${type} manual-summary=denied`,
+			);
+			await exerciseUnregisteredNativeExecution(f, [
+				{
+					role: "user",
+					id: failed.id,
+					content: [{ type: "text", text: failed.text }],
+				},
+				{ role: "user", id, content: [{ type: "text", text }] },
+			]);
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+test("parent checked ordinary boundary resets unowned summary lineage without executing its summary", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		await triageRejectedCommand(f, "native-rpc-before-history");
+		await triageFreshPublic(f, "steer");
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		f.failNextSessionRead();
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"Native session read failed.",
+		);
+		f.native.push({
+			type: "user",
+			id: "msg_parent_unregistered",
+			text: "Unregistered ordinary suffix",
+			time: { created: 40 },
+		});
+		const input = f.context();
+		const control = {
+			...automaticControl("msg_parent_summary"),
+			reason: "manual" as const,
+		};
+		f.native.push(control);
+		await f.emit("compaction", input);
+		expect(f.repository.saveCount).toBe(0);
+		f.native.splice(0, f.native.length, { ...control, status: "completed" });
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"unknown, synthetic, or stale",
+		);
+		console.log(
+			"PARENT scoped-history manual-summary=accepted summary-execution=refused",
+		);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("parent consecutive public queues after a checked checkpoint need no stale bridge", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		await compactCurrentInput(f, "msg_parent_checked_checkpoint");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await admitOrdinaryInput(
+			f,
+			"msg_parent_queue_one",
+			"First ordinary after checkpoint",
+		);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await admitOrdinaryInput(
+			f,
+			"msg_parent_queue_two",
+			"Second ordinary after checkpoint",
+		);
+		const result = await f
+			.emit("context", f.context())
+			.then(() => "accepted", String);
+		console.log(`PARENT consecutive-after-checkpoint=${result}`);
+		expect(result).toBe("accepted");
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});

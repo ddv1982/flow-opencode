@@ -1182,3 +1182,90 @@ test("a matching delivered compaction observation transfers at final alias insta
 		f.close();
 	}
 });
+
+import { SessionMessage as TriageSessionMessage } from "@opencode/schema/session-message";
+
+test("reservation triage rejected absent private identity cannot veto a new consumed public queue", async () => {
+	const f = fixture();
+	try {
+		f.inputs.reject(
+			f.admission,
+			new Error("Private RPC failed before history."),
+		);
+		f.inputs.invalidate(host);
+		await expect(f.admission.ready).rejects.toThrow(
+			"Private RPC failed before history.",
+		);
+		f.inputs.observePrompt(
+			{
+				sessionID: host,
+				messageID: TriageSessionMessage.ID.make("msg_candidate_b_fresh"),
+				prompt: { text: "Fresh queue" },
+				delivery: "queue",
+			},
+			() => {
+				throw new Error("Queue unexpectedly requested immediate revocation.");
+			},
+		);
+		const outcome = await (async () => {
+			const operation = f.inputs.openSource(context("msg_candidate_b_fresh"));
+			try {
+				const result = await operation.resolve(
+					[
+						{
+							type: "user",
+							id: "msg_candidate_b_fresh",
+							text: "Fresh queue",
+							time: { created: 1 },
+						},
+					],
+					selected,
+					effects,
+				);
+				expect(
+					result.evidence.kind === "live"
+						? result.evidence.origin.id
+						: result.evidence.kind,
+				).toBe("msg_candidate_b_fresh");
+				expect(result.participation?.kind).toBe("flow");
+				return "fresh queue accepted";
+			} finally {
+				operation.release();
+			}
+		})().catch(String);
+		console.log(`TRIAGE ledger rejected-absent-id ${outcome}`);
+		expect(outcome).toBe("fresh queue accepted");
+	} finally {
+		f.close();
+	}
+});
+
+test("reservation triage exact rejected ledger identity remains negative without granting native-only", async () => {
+	const f = fixture();
+	try {
+		f.inputs.reject(f.admission, new Error("Rejected private dispatch."));
+		f.inputs.invalidate(host);
+		const operation = f.inputs.openSource(context("user-1"));
+		try {
+			const result = await operation.resolve(
+				[
+					{
+						type: "user",
+						id: "user-1",
+						text: "Approved task",
+						time: { created: 0 },
+					},
+				],
+				selected,
+				effects,
+			);
+			expect(result.evidence).toEqual({ kind: "rejected" });
+			expect(result.participation).toBeNull();
+			console.log("TRIAGE ledger exact-rejected-id participation=null");
+		} finally {
+			operation.release();
+		}
+	} finally {
+		f.close();
+	}
+});
