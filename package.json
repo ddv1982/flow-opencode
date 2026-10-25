@@ -90,6 +90,6 @@
 		"@opencode/schema": "2.1.4"
 	},
 	"overrides": {
-		"@types/node": "26.6.2"
+		"@types/node": "26.6.5"
 	}
 }
