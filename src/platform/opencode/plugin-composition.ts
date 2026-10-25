@@ -271,6 +271,18 @@ export function createFlowPlugin(dependencies: {
 						log("error", "Flow validation capture failed closed.", {
 							message: String(error),
 						});
+						if (input.status === "completed") {
+							const marker =
+								"\n\n[flow-validation-error] Flow validation capture failed. No validation receipt was produced.";
+							const content = input.result.content;
+							input.result = {
+								...input.result,
+								content:
+									typeof content === "string"
+										? content + marker
+										: [...(content ?? []), { type: "text", text: marker }],
+							};
+						}
 					}
 				});
 				cleanups.push(() => after.dispose());
