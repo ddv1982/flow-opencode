@@ -55,29 +55,29 @@ import { assertQualificationBundle } from "../scripts/release-metadata.js";
 
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
-test("current release defaults retain 17 cases across two providers and three autonomous attempts", () => {
+test("current release defaults retain 17 cases on OpenAI and three autonomous attempts", () => {
 	expect(packageJson.version).toBe("10.0.0");
 	const scenarios = releaseScenarios(packageJson.version);
 	const catalog = releaseCatalog(packageJson.version);
 	expect(scenarios).toHaveLength(17);
-	expect([...new Set(catalog.map((row) => row.minProviders))]).toEqual([2]);
+	expect([...new Set(catalog.map((row) => row.minProviders))]).toEqual([1]);
 	const plan = campaignPlanFor({
-		models: ["openai/fixture-manager", "anthropic/fixture-manager"],
+		models: ["openai/gpt-6.1-sol"],
 		scenarios,
 		sampling: { kind: "release" },
 		opencodeVersion: releaseHostPolicy(packageJson.version).opencodeVersion,
 	});
 	expect(plan.cells.filter((cell) => cell.schedule === "primary")).toHaveLength(
-		144,
+		72,
 	);
 	expect(
 		plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
-	).toHaveLength(34);
+	).toHaveLength(17);
 	expect(
 		[
 			...new Set(plan.cells.map((cell) => cell.managerModel?.routeProvider)),
 		].sort(),
-	).toEqual(["anthropic", "openai"]);
+	).toEqual(["openai"]);
 	expect(
 		attemptsForScenario("auto-two-features-evidence", { kind: "release" }),
 	).toBe(3);

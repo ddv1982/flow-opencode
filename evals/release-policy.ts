@@ -205,6 +205,8 @@ const V2_RELEASE: ReleaseProfile = {
 };
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
+	if (packageVersion === "10.0.0")
+		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (targetsOpenCodeV2(packageVersion)) return V2_RELEASE;
 	if (packageVersion === "9.6.0")
 		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
@@ -224,11 +226,12 @@ export function releaseReviewerModel(
 	packageVersion: string,
 	managerModel?: ModelIdentity,
 ): ModelIdentity | null {
-	if (targetsOpenCodeV2(packageVersion)) return managerModel ?? null;
-	if (packageVersion !== "9.6.0") return null;
-	const model = releaseProfile(packageVersion).requiredModels?.[0];
-	if (!model) throw new Error("Pinned release reviewer model is absent.");
-	return model;
+	if (packageVersion === "9.6.0" || packageVersion === "10.0.0") {
+		const model = releaseProfile(packageVersion).requiredModels?.[0];
+		if (!model) throw new Error("Pinned release reviewer model is absent.");
+		return model;
+	}
+	return targetsOpenCodeV2(packageVersion) ? (managerModel ?? null) : null;
 }
 
 export const RELEASE_ANALYSIS_SHA256 = canonicalSha256("flow-v2-analysis-v1", {

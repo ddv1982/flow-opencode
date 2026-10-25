@@ -15,6 +15,7 @@ import {
 	releaseReviewerModel,
 } from "../evals/release-policy.js";
 import type { ModelIdentity } from "../evals/report.js";
+import { ModelIdentitySchema } from "../evals/report-identities.js";
 
 const manager: ModelIdentity = {
 	routeProvider: "openai",
@@ -31,8 +32,9 @@ const alternate: ModelIdentity = {
 	revision: null,
 };
 
-test("OpenCode 2 release keeps every delivery and autonomous case on two providers", () => {
+test("OpenAI-only 10.0.0 keeps every delivery and autonomous case", () => {
 	const catalog = releaseCatalog("10.0.0");
+	expect(catalog).toEqual(releaseCatalog("9.6.0"));
 	expect(catalog.map((row) => row.caseId)).toEqual([
 		"delivery-summary-completed",
 		"delivery-summary-deferred",
@@ -52,25 +54,14 @@ test("OpenCode 2 release keeps every delivery and autonomous case on two provide
 		"auto-prerequisite-repair",
 		"auto-observe-with-required-pass",
 	]);
-	expect(catalog.map((row) => row.minProviders)).toEqual(Array(17).fill(2));
-	expect(() => assertReleaseModels([manager], "10.0.0")).toThrow(
-		"exactly 2 models on distinct route providers",
-	);
-	expect(() =>
-		assertReleaseModels(
-			[manager, { ...alternate, routeProvider: "openai" }],
-			"10.0.0",
-		),
-	).toThrow("distinct route providers");
-	assertReleaseModels([manager, alternate], "10.0.0");
-	const cells = releaseCellsFor([manager, alternate], "10.0.0");
-	expect(cells.filter((cell) => cell.schedule === "primary")).toHaveLength(144);
+	expect(catalog.map((row) => row.minProviders)).toEqual(Array(17).fill(1));
+	assertReleaseModels([manager], "10.0.0");
+	const cells = releaseCellsFor([manager], "10.0.0");
+	expect(cells.filter((cell) => cell.schedule === "primary")).toHaveLength(72);
 	expect(
 		cells.filter((cell) => cell.schedule === "environment-reserve"),
-	).toHaveLength(34);
-	for (const cell of cells)
-		expect(cell.reviewerModel).toEqual(cell.managerModel);
-	expect(releaseReviewerModel("10.0.0", alternate)).toEqual(alternate);
+	).toHaveLength(17);
+	for (const cell of cells) expect(cell.reviewerModel).toEqual(manager);
 });
 
 test("prospective host policy pins OpenCode 2 and refuses recovery or host overrides", () => {
@@ -126,4 +117,76 @@ test("the release evaluator seals the ordinary control transport adapter", () =>
 	);
 	expect(files).toContain("evals/http-transport-plugin.ts");
 	expect(files).toContain("src/platform/opencode/http-transport.ts");
+});
+
+test("OpenAI-only 10.0.0 admits only the complete canonical direct identity", () => {
+	expect(() => assertReleaseModels([manager], "10.0.0")).not.toThrow();
+	for (const forged of [
+		alternate,
+		{ ...manager, routeProvider: "other" },
+		{ ...manager, model: "gpt-6-sol" },
+		{ ...manager, family: "other-family" },
+		{ ...manager, gateway: "proxy" },
+		{ ...manager, revision: "preview" },
+		{ ...manager, variant: "fast" },
+		{ ...manager, unexpected: true },
+	]) {
+		expect(() => assertReleaseModels([forged], "10.0.0")).toThrow(
+			"canonical direct-route identity",
+		);
+	}
+	for (const models of [[], [manager, alternate], [manager, manager]])
+		expect(() => assertReleaseModels(models, "10.0.0")).toThrow(
+			"exactly openai/gpt-6.1-sol",
+		);
+});
+
+test("OpenAI-only exception leaves later release defaults unchanged", () => {
+	for (const version of ["10.0.1", "10.1.0", "11.0.0"]) {
+		expect(releaseCatalog(version).map((row) => row.minProviders)).toEqual(
+			Array(17).fill(2),
+		);
+		expect(() => assertReleaseModels([manager], version)).toThrow("exactly 2");
+		expect(() =>
+			assertReleaseModels(
+				[manager, { ...alternate, routeProvider: "openai" }],
+				version,
+			),
+		).toThrow("distinct route providers");
+		assertReleaseModels([manager, alternate], version);
+		const cells = releaseCellsFor([manager, alternate], version);
+		expect(cells.filter((cell) => cell.schedule === "primary")).toHaveLength(
+			144,
+		);
+		expect(
+			cells.filter((cell) => cell.schedule === "environment-reserve"),
+		).toHaveLength(34);
+		expect(releaseReviewerModel(version, alternate)).toEqual(alternate);
+		expect(releaseReviewerModel(version)).toBeNull();
+		expect(releasePolicySha256(version)).toBe(
+			"sha256:86953cd5da1a0af6a541243abd1d8b92ec5d4c2e0aff26334a5be1d21187c3f6",
+		);
+	}
+});
+
+test("OpenAI-only 10.0.0 resolves its reviewer pin before generic manager fallback", () => {
+	expect(releaseReviewerModel("10.0.0")).toEqual(manager);
+	expect(releaseReviewerModel("10.0.0", manager)).toEqual(manager);
+	expect(releaseReviewerModel("10.0.0", alternate)).toEqual(manager);
+});
+
+test("external release identities require every canonical field", () => {
+	const { routeProvider: _provider, ...missingProvider } = manager;
+	const { gateway: _gateway, ...missingGateway } = manager;
+	const { family: _family, ...missingFamily } = manager;
+	const { model: _model, ...missingModel } = manager;
+	const { revision: _revision, ...missingRevision } = manager;
+	for (const input of [
+		missingProvider,
+		missingGateway,
+		missingFamily,
+		missingModel,
+		missingRevision,
+	])
+		expect(ModelIdentitySchema.safeParse(input).success).toBe(false);
 });

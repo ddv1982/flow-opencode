@@ -18,8 +18,9 @@ One short entry per release, written for users deciding whether to upgrade.
   holding your Typesafe key. It defaults to `TYPESAFE_API_KEY`. A custom name
   never falls back to the default.
 - Session v5 schema remains unchanged. Historical qualification evidence retains its
-  original host policy. The new release profile requires all 17 cases on two
-  provider routes and a fresh exact-artifact canary.
+  original host policy. Exact 10.0.0 pins qualification to `openai/gpt-6.1-sol`
+  across all 17 cases and requires a fresh exact-artifact canary. This scope
+  makes no cross-provider reliability claim.
 - Zod is pinned to 4.6.7, including the fix for
   [oversized collection validation](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5).
 

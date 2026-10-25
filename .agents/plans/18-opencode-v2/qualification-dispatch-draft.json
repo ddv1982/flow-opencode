@@ -1,7 +1,8 @@
 {
   "status": "draft-not-authorized",
   "packageVersion": "10.0.0",
-  "managerModels": 2,
+  "managerModels": 1,
+  "modelSet": ["openai/gpt-6.1-sol"],
   "cases": [
     {
       "caseId": "delivery-summary-completed",
@@ -123,9 +124,10 @@
       "reserveDispatchesPerModel": 1
     }
   ],
-  "primaryDispatches": 180,
-  "reserveDispatches": 46,
-  "routeProbes": 2,
-  "totalDispatchLimit": 228,
+  "primaryDispatches": 90,
+  "reserveDispatches": 23,
+  "routeProbes": 1,
+  "plannedDispatches": 91,
+  "totalDispatchLimit": 114,
   "semantics": "Top-level manager steps and route probes only; internal generation is separate; no dollar cap; canary requires separate approval."
 }

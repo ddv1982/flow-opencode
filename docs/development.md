@@ -158,9 +158,10 @@ Follow the [frozen-candidate sequence](release-qualification.md#running-it):
 finish fixes and dependency updates, pass deterministic checks, approve paid
 evals.
 `bun run qualify -- --campaign-dir <dir> --canary <record>` seals the
-policy grid, canary and grader evidence. Versions 9.1.0, 9.2.0, 9.3.0 and 9.4.0 use
-GPT-6 Sol only under explicit exceptions. Other versions require two providers. Commit that
-bundle before tagging; never substitute interrupted results for qualification.
+policy grid, canary and grader evidence. Exact 10.0.0 pins `openai/gpt-6.1-sol`.
+See [model policy](release-qualification.md#the-qualification-bar) for historical
+exceptions and later defaults. Commit the bundle before tagging;
+interrupted results cannot qualify.
 
 Release tags use `v<package-version>`. Blocking release checks: the normal
 repository gate, package smoke, packed live OpenCode smoke, package integrity

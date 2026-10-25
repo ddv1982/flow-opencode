@@ -9,7 +9,7 @@ This page owns release thresholds, candidate freezing, and publication order.
 
 | Threshold | Value | Why |
 | --- | --- | --- |
-| Distinct providers | 1 for 9.1.0, 9.2.0, 9.3.0, 9.4.0, 9.5.0, and 9.6.0; otherwise ≥ 2 | 9.5.0 and 9.6.0 pin `openai/gpt-6.1-sol`; earlier exceptions pin GPT-6 Sol. OpenAI-only claims. |
+| Distinct providers | 1 for 9.1.0, 9.2.0, 9.3.0, 9.4.0, 9.5.0, 9.6.0, and exact 10.0.0; otherwise 2 | 9.5.0, 9.6.0, and 10.0.0 pin `openai/gpt-6.1-sol`; earlier exceptions pin GPT-6 Sol. No cross-provider reliability claim. |
 | False completions | 0 | A `completed` closure the document itself contradicts is the failure Flow exists to prevent. |
 | Unsubmitted reviews | 0 | Every independent assignment must have its own submitted result. |
 | Scored attempts per provider | 3 at 100%; 10 at 90% | The frozen release plan gives each threshold enough trials to express its allowed failures. |
@@ -54,9 +54,9 @@ Primary/reserve cells on GPT-6 Sol are 38/8 in 9.1.0 and 9.2.0, 48/9 in
 9.3.0, and 57/12 in 9.4.0. The 9.4.0 profile adds three autonomous cases.
 Version 9.5.0 keeps those twelve cases on GPT-6.1 Sol, with 57/12 cells.
 Version 9.6.0 adds five delivery cases, collects them first, and uses 72/17
-cells. Flow 10.0.0 and later v2-targeting releases retain all 17 cases on two
-provider routes, with 144 primary and 34 environmental reserve cells. Manager
-and reviewer share the approved model within each cell. Recovery is off.
+cells. Exact 10.0.0 retains all 17 cases on `openai/gpt-6.1-sol` with 72 primary
+and 17 reserve cells. Later v2 releases retain two routes and 144/34 cells.
+Manager and reviewer share the approved model per cell. Recovery is off.
 Other historical generic profiles use 96/18. Cell counts are not dispatch limits.
 Changed order requires a new freeze and approval. Existing campaigns stay immutable; narrowed or merged reports
 cannot qualify.
@@ -115,14 +115,14 @@ Keep that ledger across retries. Budget-stopped campaigns cannot qualify.
 For native accounts, follow the [source setup](../evals/README.md#native-account-authentication).
 Prepare with `--native-auth`, launch with `--native-auth-source`, and record with
 the matching `--launch-receipt`. Live connection data remains private.
-For 9.1.0 through 9.4.0, pin GPT-6 Sol. Versions 9.5.0 and 9.6.0 pin GPT-6.1 Sol.
+For 9.1.0 through 9.4.0, pin GPT-6 Sol. Exact 9.5.0, 9.6.0, and 10.0.0 pin GPT-6.1 Sol.
 
 ```bash
 env -u TYPESAFE_API_KEY -u OPENCODE_FLOW_REVIEWER_MODEL \
   -u OPENCODE_FLOW_REVIEWER_VARIANT -u OPENCODE_FLOW_REVIEWER_STEPS \
-  bun run eval -- --release --model provider-a/model --model provider-b/model
+  bun run eval -- --release --model openai/gpt-6.1-sol
 bun run eval:canary -- prepare --report <campaign-dir>/report.json --out <canary-dir>
-bun scripts/canary-run.ts <prepared.json> <provider/model> <prompt-file>
+bun scripts/canary-run.ts <prepared.json> openai/gpt-6.1-sol <prompt-file>
 bun run eval:canary -- record --prepared <prepared.json> --operator <operator> \
   --session <closed-session-v5.json> --transcript <printed-native.json>
 bun run qualify -- --campaign-dir <campaign-dir> \
@@ -133,11 +133,11 @@ The canary launcher needs its separately approved ledger in `FLOW_EVAL_AUTHORIZA
 and provider access through its environment. It prints the native export path,
 collects it before stopping the isolated host, and charges failed launches.
 
-The historical 9.6.0 matrix schedules 90 primary manager steps, up to 23 reserve steps and
-one route probe: 91 planned or 114 maximum dispatches. Internal generation is
-separate and these counts imply no dollar cap. Canary authorization is separate. For the v2 profile, derive the dispatch limit
-from the frozen scenario steps, followups, and route probes before approval.
-Do not copy the historical single-provider budget.
+Current 10.0.0 steps derive 90 primary dispatches, 23 reserves, and one route
+probe, giving 91 planned or 114 maximum top-level dispatches. Historical 9.6.0
+has the same counts. Internal turns and reviewer generations are separate;
+no dollar cap follows. Canary approval is separate. Refresh the draft at final
+freeze. Paid work stays HOLD until purpose, models, count, and expiry are approved.
 
 Use the [cheaper tiers](../evals/README.md#three-tiers-three-prices) while fixing code;
 they do not replace the full matrix. `bun run triage` identifies runs worth reading.

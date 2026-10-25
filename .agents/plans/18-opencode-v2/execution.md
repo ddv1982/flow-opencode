@@ -89,10 +89,15 @@ Flow session. Both were fixed and passed independent release review R2. Evaluato
 found separate credential-drain and ambient reviewer-variant defects. Their
 source fixes pass focused tests and typecheck. A fresh eval review remains due.
 
-The draft qualification schedule has 180 primary manager dispatches, 46 reserve
-dispatches, and two route probes. Its maximum is 228 top-level dispatches.
-Internal generation is separate. This draft has no spending authorization and
-is not a dollar cap. Canary authorization remains separate.
+The current unapproved draft supersedes the earlier two-provider proposal for
+exact 10.0.0 only. It pins `openai/gpt-6.1-sol` across all 17 cases, with 72
+primary cells and 17 reserve cells. Current steps derive 90 primary dispatches,
+23 reserve dispatches, and one route probe, giving 91 planned or 114 maximum
+top-level dispatches. Internal turns and reviewer generations are separate;
+no dollar cap follows. Refresh the proposal at final candidate freeze.
+Paid qualification stays HOLD until purpose, models, count, and expiry are
+approved under [release operations](../05-release-simplification/README.md#authorize-paid-work).
+Canary approval remains separate. Later v2 releases retain two-provider defaults.
 
 The user selected existing OpenCode 2 accounts as the authentication source.
 A synthetic source-owned OAuth resolver passed its bounded mechanism tests.

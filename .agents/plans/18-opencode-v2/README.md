@@ -224,12 +224,19 @@ and 2 so tests exercise the final plugin rather than a placeholder.
   version selection. Do not mutate `RELEASE_HOST_POLICY` globally.
   Add regression checks that retained 9.x evidence still verifies offline.
   Add a prospective release profile that keeps all 17 current release cases,
-  including auto-continuation and delivery. Require two route providers unless
-  the operator approves a documented exception. Keep historical policies stable.
+  including auto-continuation and delivery. The operator's explicit exception
+  pins exact 10.0.0 to `openai/gpt-6.1-sol`, following 9.5.0 and 9.6.0.
+  It makes no cross-provider reliability claim. Later v2 releases retain two
+  route providers. Keep historical policies stable.
 - [ ] Generate the frozen sample and dispatch proposal from that profile.
-  With unchanged thresholds and two providers, 17 cases imply 144 primary cells
-  and 34 environmental reserves. Derive dispatch counts separately because
-  scenario followups and probes can consume additional dispatches.
+  Exact 10.0.0 keeps all thresholds and 17 cases with 72 primary cells and 17
+  environmental reserves. Current steps derive 90 primary dispatches, 23 reserve
+  dispatches, and one route probe, giving 91 planned or 114 maximum top-level
+  dispatches. Internal turns and reviewer generations are separate; no dollar
+  cap follows. Refresh the draft at final candidate freeze. Paid qualification
+  stays HOLD until purpose, models, count, and expiry are approved under
+  [release operations](../05-release-simplification/README.md#authorize-paid-work).
+  Canary approval remains separate. Later generic profiles retain 144/34 cells.
 - [ ] Port release host permissions and model identity checks. Check recovery
   mode explicitly. Give the prospective version deliberate equivalents of
   `releaseReviewerModel`, `releaseHostPermissions`, and the recovery-key refusal.

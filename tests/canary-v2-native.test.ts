@@ -91,7 +91,7 @@ function sessionInfo(
 		...(parentID === undefined ? {} : { parentID }),
 		projectID: "project",
 		agent: parentID === undefined ? "build" : "flow-reviewer",
-		model: { providerID: "approved", id: "model" },
+		model: { providerID: "openai", id: "gpt-6.1-sol" },
 		location: { directory },
 		cost: 0,
 		tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -121,7 +121,7 @@ function native(
 						id: "msg_manager",
 						type: "assistant",
 						agent: "build",
-						model: { providerID: "approved", id: "model" },
+						model: { providerID: "openai", id: "gpt-6.1-sol" },
 						time: { created: 1, completed: 2 },
 						content: [
 							tool("flow_status", {
@@ -167,7 +167,7 @@ function native(
 						id: "msg_reviewer",
 						type: "assistant",
 						agent: "flow-reviewer",
-						model: { providerID: "approved", id: "model" },
+						model: { providerID: "openai", id: "gpt-6.1-sol" },
 						time: { created: 1, completed: 2 },
 						content: session.runs
 							.filter((run) => run.state === "completed")
@@ -267,8 +267,8 @@ test("V2 canary uses native completed Flow tools and server session parentage", 
 			actor.sessionIds,
 		]),
 	).toEqual([
-		["manager", "approved", ["ses_manager"]],
-		["reviewer", "approved", ["ses_reviewer"]],
+		["manager", "openai", ["ses_manager"]],
+		["reviewer", "openai", ["ses_reviewer"]],
 	]);
 });
 
@@ -418,7 +418,7 @@ for (const mutation of [
 								metadata: {
 									parentSessionId: "ses_manager",
 									sessionId: "ses_reviewer",
-									model: { providerID: "approved", id: "model" },
+									model: { providerID: "openai", id: "gpt-6.1-sol" },
 								},
 							},
 						],
@@ -531,7 +531,7 @@ test("native collector refuses wrong host, active sessions, pagination loops and
 						ses_manager: {
 							type: "running",
 							agent: "build",
-							model: { providerID: "approved", id: "model" },
+							model: { providerID: "openai", id: "gpt-6.1-sol" },
 							messageID: "msg_manager",
 							started: 1,
 						},

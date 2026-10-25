@@ -46,12 +46,13 @@ variant. Reset restores its base. Native selection owns the coding model.
 
 ## Qualification
 
-Qualification retains 17 cases on two provider routes, with the same approved
-manager and reviewer model per cell and recovery off. Candidate, canary, and
-publication bind the exact archive and unpacked manifest.
+Flow 10.0.0 pins `openai/gpt-6.1-sol` across 17 cases with 72 primary and 17
+reserve cells. Later v2 releases retain two routes and 144/34 cells. Reviewers
+use the manager model with recovery off. Candidate, canary, and publication
+bind the exact archive and unpacked manifest.
 
-Historical 9.x pins, digests, transcripts, and bundles remain verifiable without
-an OpenCode 1 runtime. Publication approval gates remain.
+Historical 9.x pins, digests, transcripts, and bundles remain verifiable offline.
+Publication approval gates remain.
 
-See [release qualification](../release-qualification.md) for the executable gates
-and [automatic continuation](../automatic-continuation.md) for operator behavior.
+See [qualification](../release-qualification.md) and
+[automatic continuation](../automatic-continuation.md).

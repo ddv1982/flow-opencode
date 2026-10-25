@@ -132,8 +132,10 @@ Ordinary runs use one sequential queue per model, with up to four queues in flig
 Release mode is strictly sequential (`--concurrency 1`). Versions 9.1.0 and
 9.2.0 pin `openai/gpt-6-sol` with 38 primary targets and eight reserves. Version
 9.3.0 pins the same model with 48 primary targets and nine reserves. Version
-9.4.0 uses 57 primary targets and 12 reserves on the same route. Flow 10.0.0
-requires two providers across 17 cases, with 144 primary cells and 34 reserves.
+9.4.0 uses 57 primary targets and 12 reserves on the same route. Exact 10.0.0
+pins `openai/gpt-6.1-sol` across all 17 cases with 72 primary cells and 17 reserves.
+Later v2 releases retain two routes and 144/34 cells. The 10.0.0 exception makes
+no cross-provider reliability claim.
 Cells are scheduling units; count scenario steps and probes separately for the
 dispatch authorization. Only retained retryable
 host/provider failures activate reserves, never product failures. Results are
@@ -566,9 +568,10 @@ about the prompts; a single attempt of a stochastic scenario is not a rate.
 
 ## Multi-model matrix
 
-Versions 9.1.0, 9.2.0, 9.3.0, and 9.4.0 require only `openai/gpt-6-sol` and make no
-cross-provider claim. Other versions require two distinct providers. This is the
-release sampling policy, not evidence that any candidate has qualified.
+The [versioned policy](../docs/release-qualification.md#the-qualification-bar)
+owns model requirements. Exact 10.0.0 requires only `openai/gpt-6.1-sol` and makes
+no cross-provider reliability claim. Later v2 releases require two distinct
+provider routes. This policy is not evidence that any candidate has qualified.
 `.github/workflows/evals.yml`
 runs the matrix weekly and on demand, outside contributor gates.
 
@@ -726,13 +729,16 @@ distinction that matters: one pass in six and six in six are different findings.
 
 ## Cost
 
-Versions 9.1.0 and 9.2.0 schedule 38 primary attempts and eight reserves on GPT-6 Sol.
-Version 9.3.0 schedules 48 primary attempts and nine reserves on the same route.
-Version 9.4.0 schedules 57 primary attempts and 12 reserves on that route.
-These are policy targets, not completed qualification claims. Other versions schedule
-96 primary attempts and 18 reserves across two providers. Ordinary campaign size depends
-on the selected scenarios, models and repeats. Use `--scenario` while iterating;
-cost depends on model pricing and the work performed, not just scenario count.
+The [versioned qualification policy](../docs/release-qualification.md#the-qualification-bar)
+owns model pins and cell counts, including historical exceptions. Exact 10.0.0
+has 72 primary cells and 17 reserves on `openai/gpt-6.1-sol`. Current scenario
+steps derive 90 primary dispatches, 23 reserve dispatches, and one route probe,
+for 91 planned or 114 maximum top-level dispatches. These remain an unapproved
+proposal to refresh at final candidate freeze. Paid work is HOLD until purpose,
+models, dispatch count, and expiry are approved. Canary approval is separate.
+Internal turns and reviewer generations are separate, with no dollar cap.
+Ordinary campaign size depends on scenarios, models, and repeats. Use `--scenario`
+while iterating; cost depends on pricing and work, not just scenario count.
 
 Cost is the host-reported figure, which may come from model-price estimates. It
 is not a provider invoice. Historical OpenAI runs reported `cost: 0` on real
