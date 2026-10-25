@@ -105,6 +105,32 @@ describe("v6 architecture boundaries", () => {
 		expect(oversized).toEqual([]);
 	});
 
+	test("keeps input evidence subordinate to the admission ledger, including type imports and re-exports", async () => {
+		const violations: string[] = [];
+		const target = join(sourceRoot, "platform/opencode/input-evidence.ts");
+		for (const directory of ["src", "tests", "scripts", "evals"]) {
+			for (const file of await sourceFiles(join(repositoryRoot, directory))) {
+				const source = await readFile(file, "utf8");
+				const imports = [
+					...source.matchAll(
+						/(?:from\s+|import\s*(?:\(\s*)?)["']([^"']+)["']/g,
+					),
+				];
+				for (const match of imports) {
+					const specifier = match[1];
+					if (!specifier) continue;
+					if (
+						resolve(dirname(file), specifier).replace(/\.js$/, ".ts") ===
+							target &&
+						repositoryPath(file) !== "src/platform/opencode/input-admission.ts"
+					)
+						violations.push(`${repositoryPath(file)} imports ${specifier}`);
+				}
+			}
+		}
+		expect(violations).toEqual([]);
+	});
+
 	test("keeps every src export referenced outside its declaring file", async () => {
 		// `noUnusedLocals` cannot see an export that nothing imports, so dead
 		// exported types and constants accumulate silently. Anything outside the

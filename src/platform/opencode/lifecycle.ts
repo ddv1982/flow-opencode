@@ -204,16 +204,14 @@ export async function registerFlowLifecycle(
 	const failReservation = (
 		reservation: Parameters<InputAdmissions["assertReservation"]>[0],
 		owner: CallbackOwner,
+		error: unknown,
 	) => {
-		try {
-			inputs.assertReservation(reservation);
-		} catch {
-			return;
-		}
-		failOwned(owner);
+		if (!inputs.finishReservation(reservation, error)) return;
+		if (owner.primary) attribution.end(owner.primary);
+		revokeEffects(owner.host);
+		autoDrive.deactivate(owner.host);
+		recovery.revoke(owner.host);
 	};
-	const makeOrigin = (...args: Parameters<InputAdmissions["makeOrigin"]>) =>
-		inputs.makeOrigin(...args);
 	const observeAccepted = async (
 		host: string,
 		id: string,
@@ -358,11 +356,11 @@ export async function registerFlowLifecycle(
 				throw new Error("Flow synthetic dispatch was superseded.");
 		};
 		const payload = { text, metadata: { [FLOW_AUTO_METADATA_KEY]: token } };
-		const admission = inputs.register(reservation, {
-			type: "synthetic",
-			payload,
-		});
 		try {
+			const admission = inputs.register(reservation, {
+				type: "synthetic",
+				payload,
+			});
 			const pending = ctx.session.synthetic(
 				{ sessionID: host, id, ...payload, delivery: "queue", resume: true },
 				{ signal: controller.signal },
@@ -381,12 +379,11 @@ export async function registerFlowLifecycle(
 					intent,
 				);
 				assertCurrent();
-				return makeOrigin(host, id, delivery, true, expectedEpoch);
+				return inputs.makeOrigin(host, id, delivery, true, expectedEpoch);
 			});
 			return { kind: "sent", source: id };
 		} catch (error) {
-			inputs.reject(admission, error);
-			failReservation(reservation, owner);
+			failReservation(reservation, owner, error);
 			throw error;
 		}
 	};
@@ -408,11 +405,7 @@ export async function registerFlowLifecycle(
 			) => {
 				attribution.assertExpected(host, expected);
 				if (changing)
-					attribution.prepareReplacement(
-						input,
-						native,
-						expected,
-						true,
+					attribution.prepareReplacement(input, native, expected, true, () =>
 						compactions.prefixBridge(
 							input,
 							native,
@@ -490,42 +483,41 @@ export async function registerFlowLifecycle(
 							);
 							const assertCurrent = () => {
 								inputs.assertReservation(reservation);
-								if (epoch(input.sessionID) !== expectedEpoch)
-									throw new Error("Flow command was superseded.");
 							};
-							const session = await ctx.session
-								.get({ sessionID: input.sessionID }, readOptions)
-								.catch((error: unknown) => {
-									failReservation(reservation, owner);
-									throw error;
-								});
-							assertCurrent();
-							if (
-								session.parentID ||
-								!session.agent ||
-								specialists.has(session.agent)
-							)
-								throw new Error(
-									"Flow commands require the native primary manager.",
-								);
-							const delivery = nativeDelivery(session);
-							const invocationToken =
-								command.name === "flow-auto" && !command.stopping
-									? autoDrive.createInvocationToken()
-									: undefined;
-							const payload = {
-								...nativePromptPayload({ ...input.prompt, text: command.text }),
-								...(invocationToken === undefined
-									? {}
-									: {
-											metadata: { [FLOW_AUTO_METADATA_KEY]: invocationToken },
-										}),
-							};
-							const admission = inputs.register(reservation, {
-								type: "user",
-								payload,
-							});
 							try {
+								const session = await ctx.session.get(
+									{ sessionID: input.sessionID },
+									readOptions,
+								);
+								assertCurrent();
+								if (
+									session.parentID ||
+									!session.agent ||
+									specialists.has(session.agent)
+								)
+									throw new Error(
+										"Flow commands require the native primary manager.",
+									);
+								const delivery = nativeDelivery(session);
+								const invocationToken =
+									command.name === "flow-auto" && !command.stopping
+										? autoDrive.createInvocationToken()
+										: undefined;
+								const payload = {
+									...nativePromptPayload({
+										...input.prompt,
+										text: command.text,
+									}),
+									...(invocationToken === undefined
+										? {}
+										: {
+												metadata: { [FLOW_AUTO_METADATA_KEY]: invocationToken },
+											}),
+								};
+								const admission = inputs.register(reservation, {
+									type: "user",
+									payload,
+								});
 								assertCurrent();
 								const receipt = await ctx.session.prompt(
 									{
@@ -556,7 +548,7 @@ export async function registerFlowLifecycle(
 										assertCurrent,
 									);
 									assertCurrent();
-									return makeOrigin(
+									return inputs.makeOrigin(
 										input.sessionID,
 										id,
 										delivery,
@@ -592,8 +584,7 @@ export async function registerFlowLifecycle(
 									);
 								}
 							} catch (error) {
-								inputs.reject(admission, error);
-								failReservation(reservation, owner);
+								failReservation(reservation, owner, error);
 								throw error;
 							}
 						},
@@ -642,15 +633,14 @@ export async function registerFlowLifecycle(
 								native,
 								prior,
 								changing,
-								changing
-									? compactions.prefixBridge(
-											input,
-											native,
-											prior?.participation.kind === "flow"
-												? prior.participation.origin
-												: undefined,
-										)
-									: undefined,
+								() =>
+									compactions.prefixBridge(
+										input,
+										native,
+										prior?.participation.kind === "flow"
+											? prior.participation.origin
+											: undefined,
+									),
 							);
 							completed = compactions.completed(input, native);
 						},

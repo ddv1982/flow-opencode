@@ -76,7 +76,7 @@ test("matching receipt wakes only the exact admission scope", async () => {
 	const f = fixture();
 	const scope = f.inputs.openSource(context("user-1"));
 	const ready = scope.scope.ready();
-	expect(f.admission.state).toBe("pending");
+	expect(f.admission.phase.state).toBe("pending");
 	await f.inputs.accept(f.admission, f.receipt, async () => f.origin());
 	await ready;
 	const resolved = await scope.resolve(
@@ -203,7 +203,11 @@ test("a new frontier cancels old scope without rejecting a fresh exact ready", a
 	f.close();
 });
 
-import type { SessionInfo, SessionMessageInfo } from "@opencode/client";
+import type {
+	SessionInboxUser,
+	SessionInfo,
+	SessionMessageInfo,
+} from "@opencode/client";
 import { CompactionBoundary } from "../src/platform/opencode/auto-compaction.js";
 
 async function compactionFixture() {
@@ -501,7 +505,10 @@ for (const state of ["pending", "rejected", "accepted"] as const)
 			if (state === "accepted")
 				await f.inputs.accept(f.admission, f.receipt, async () => f.origin());
 			if (state === "rejected")
-				f.inputs.reject(f.admission, new Error("rejected receipt"));
+				f.inputs.finishReservation(
+					f.admission.reservation,
+					new Error("rejected receipt"),
+				);
 			const operation = f.inputs.openSource({
 				...context("foreign"),
 				messages: [
@@ -524,7 +531,9 @@ for (const state of ["pending", "rejected", "accepted"] as const)
 				),
 			).rejects.toThrow("native inputs differ");
 			operation.release();
-			expect(f.admission.state).toBe(state === "pending" ? "pending" : state);
+			expect(f.admission.phase.state).toBe(
+				state === "pending" ? "pending" : state,
+			);
 			if (state === "accepted") {
 				const old = f.inputs.openSource(context("user-1"));
 				const resolved = await old.resolve(
@@ -1188,11 +1197,10 @@ import { SessionMessage as TriageSessionMessage } from "@opencode/schema/session
 test("reservation triage rejected absent private identity cannot veto a new consumed public queue", async () => {
 	const f = fixture();
 	try {
-		f.inputs.reject(
-			f.admission,
+		f.inputs.finishReservation(
+			f.admission.reservation,
 			new Error("Private RPC failed before history."),
 		);
-		f.inputs.invalidate(host);
 		await expect(f.admission.ready).rejects.toThrow(
 			"Private RPC failed before history.",
 		);
@@ -1243,8 +1251,10 @@ test("reservation triage rejected absent private identity cannot veto a new cons
 test("reservation triage exact rejected ledger identity remains negative without granting native-only", async () => {
 	const f = fixture();
 	try {
-		f.inputs.reject(f.admission, new Error("Rejected private dispatch."));
-		f.inputs.invalidate(host);
+		f.inputs.finishReservation(
+			f.admission.reservation,
+			new Error("Rejected private dispatch."),
+		);
 		const operation = f.inputs.openSource(context("user-1"));
 		try {
 			const result = await operation.resolve(
@@ -1267,5 +1277,1263 @@ test("reservation triage exact rejected ledger identity remains negative without
 		}
 	} finally {
 		f.close();
+	}
+});
+
+for (const replacement of ["same-epoch", "new-epoch"] as const)
+	for (const accepted of [false, true])
+		test(`terminal ownership late private finish preserves ${replacement} ${accepted ? "accepted" : "pending"} replacement readiness`, async () => {
+			const f = fixture();
+			try {
+				if (replacement === "new-epoch") f.inputs.invalidate(host);
+				const reservation = f.inputs.reserve(host, "msg_ready_successor");
+				const next = f.inputs.register(reservation, {
+					type: "synthetic",
+					payload: { text: "Successor" },
+				});
+				const origin = f.inputs.makeOrigin(
+					host,
+					reservation.id,
+					delivery,
+					false,
+					reservation.epoch,
+				);
+				if (accepted)
+					await f.inputs.accept(
+						next,
+						{
+							...f.receipt,
+							id: reservation.id,
+							type: "synthetic",
+							payload: { text: "Successor" },
+						},
+						async () => origin,
+					);
+				let settled = false;
+				void next.ready.then(() => {
+					settled = true;
+				});
+				expect(
+					f.inputs.finishReservation(
+						f.reservation,
+						new Error("Late old private failure"),
+					),
+				).toBe(false);
+				expect(
+					f.inputs.finishReservation(
+						f.reservation,
+						new Error("Duplicate late failure"),
+					),
+				).toBe(false);
+				await expect(f.admission.ready).rejects.toThrow(
+					"Late old private failure",
+				);
+				await Promise.resolve();
+				expect(settled).toBe(accepted);
+				expect(next.phase.state).toBe(accepted ? "accepted" : "pending");
+				expect(f.inputs.epoch(host)).toBe(reservation.epoch);
+				if (!accepted)
+					await f.inputs.accept(
+						next,
+						{
+							...f.receipt,
+							id: reservation.id,
+							type: "synthetic",
+							payload: { text: "Successor" },
+						},
+						async () => origin,
+					);
+				expect(await next.ready).toBe(origin);
+				expect(() => f.inputs.assertLive(origin)).not.toThrow();
+			} finally {
+				f.close();
+			}
+		});
+
+test("terminal ownership finish settles once and cannot overwrite acceptance while activation is awaiting", async () => {
+	const f = fixture(),
+		entered = Promise.withResolvers<void>(),
+		resume = Promise.withResolvers<void>();
+	try {
+		const origin = f.origin();
+		const accepting = f.inputs
+			.accept(f.admission, f.receipt, async () => {
+				entered.resolve();
+				await resume.promise;
+				return origin;
+			})
+			.catch(String);
+		await entered.promise;
+		const old = f.inputs.captureBarrier(host),
+			epoch = f.inputs.epoch(host);
+		expect(
+			f.inputs.finishReservation(
+				{ ...f.reservation },
+				new Error("Forged reservation"),
+			),
+		).toBe(false);
+		expect(f.admission.phase.state).toBe("pending");
+		expect(
+			f.inputs.finishReservation(
+				f.reservation,
+				new Error("Exact terminal failure"),
+			),
+		).toBe(true);
+		expect(f.inputs.epoch(host)).toBe(epoch + 1);
+		expect(old.current()).toBe(false);
+		const nextClock = f.inputs.captureBarrier(host);
+		expect(
+			f.inputs.finishReservation(f.reservation, new Error("Duplicate failure")),
+		).toBe(false);
+		expect(nextClock.current()).toBe(true);
+		expect(f.inputs.epoch(host)).toBe(epoch + 1);
+		await expect(f.admission.ready).rejects.toThrow("Exact terminal failure");
+		resume.resolve();
+		expect(await accepting).toBe("Error: Flow execution epoch was revoked.");
+		expect(f.admission.phase.state).toBe("rejected");
+		await expect(f.admission.ready).rejects.toThrow("Exact terminal failure");
+	} finally {
+		resume.resolve();
+		f.close();
+	}
+});
+
+test("terminal ownership accepted parent keeps its exact receipt origin and resolved ready after child failure", async () => {
+	const f = fixture();
+	try {
+		const origin = f.origin();
+		await f.inputs.accept(f.admission, f.receipt, async () => origin);
+		expect(
+			f.inputs.finishReservation(
+				f.reservation,
+				new Error("Review child failed"),
+			),
+		).toBe(true);
+		expect(f.admission.phase.state).toBe("accepted");
+		if (f.admission.phase.state !== "accepted")
+			throw new Error("Lost accepted phase");
+		expect(f.admission.phase.origin).toBe(origin);
+		expect(f.admission.phase.acceptedPayload).toEqual({
+			text: "Approved task",
+		});
+		expect(f.admission.phase.failure?.outcome).toBe("after-acceptance");
+		expect(await f.admission.ready).toBe(origin);
+		expect(
+			f.inputs.finishReservation(
+				f.reservation,
+				new Error("Duplicate child failure"),
+			),
+		).toBe(false);
+		expect(await f.admission.ready).toBe(origin);
+	} finally {
+		f.close();
+	}
+});
+
+for (const terminal of ["deleted", "closed"] as const)
+	test(`terminal ownership finish cannot reopen a ${terminal} ledger host`, async () => {
+		const f = fixture();
+		try {
+			const epoch = f.inputs.epoch(host),
+				old = f.inputs.captureBarrier(host);
+			if (terminal === "deleted") f.inputs.deleteHost(host);
+			else f.inputs.clear();
+			expect(
+				f.inputs.finishReservation(f.reservation, new Error("Late failure")),
+			).toBe(false);
+			expect(f.inputs.epoch(host)).toBe(epoch);
+			expect(old.current()).toBe(false);
+			expect(() => f.inputs.reserve(host, "msg_reopen")).toThrow("unavailable");
+			const operation = f.inputs.openSource(
+				context("msg_unknown_after_delete"),
+			);
+			await expect(operation.scope.ready()).rejects.toThrow(
+				"epoch was revoked",
+			);
+			expect(operation.fail(() => true)).toBe(false);
+			operation.release();
+		} finally {
+			f.close();
+		}
+	});
+
+for (const failedKind of ["private", "reserved"] as const)
+	test(`terminal identity exact failed ${failedKind} stays denied after a checked ordinary queue resets history`, async () => {
+		const f = publicLedger();
+		let failedMessage: SessionMessageInfo;
+		try {
+			const reservation = f.inputs.reserve(host, "msg_negative");
+			if (failedKind === "private")
+				f.inputs.register(reservation, {
+					type: "user",
+					payload: { text: "msg_negative" },
+				});
+			expect(
+				f.inputs.finishReservation(reservation, new Error("Failed identity")),
+			).toBe(true);
+			failedMessage = f.message("msg_negative");
+			f.prepare("msg_checked_reset");
+			const reset = await f.consume(["msg_checked_reset"]);
+			expect(reset.participation?.kind).toBe("flow");
+			expect(
+				reset.evidence.kind === "live"
+					? reset.evidence.origin.authority
+					: "not-live",
+			).toBeNull();
+			f.inputs.invalidate(host);
+			const replay = f.inputs.openSource(
+				f.input(["msg_checked_reset", "msg_negative"]),
+			);
+			try {
+				const result = await replay.resolve(
+					[f.message("msg_checked_reset"), failedMessage],
+					selected,
+					effects,
+				);
+				expect(result.participation).toBeNull();
+				expect(result.evidence.kind).toBe("rejected");
+			} finally {
+				replay.release();
+			}
+		} finally {
+			f.inputs.clear();
+		}
+	});
+
+for (const prefix of ["private", "reserved", "real"] as const)
+	test(`terminal identity aliased failed ${prefix} final cannot become an unknown native source`, async () => {
+		let rejectReal = false;
+		const f = publicLedger(async () => {
+			if (rejectReal) throw new Error("Real claim failed");
+		});
+		try {
+			let source: ReturnType<InputAdmissions["openSource"]>;
+			if (prefix === "real") {
+				f.prepare("msg_alias_failed");
+				source = f.inputs.openSource(f.input(["msg_alias_failed"]));
+				f.inputs.checkpoint(source.scope, "msg_failed_alias", null);
+				rejectReal = true;
+				await expect(
+					source.resolve([f.message("msg_alias_failed")], selected, effects),
+				).rejects.toThrow("Real claim failed");
+				expect(source.fail(() => true)).toBe(true);
+			} else {
+				const reservation = f.inputs.reserve(host, "msg_alias_failed");
+				if (prefix === "private")
+					f.inputs.register(reservation, {
+						type: "user",
+						payload: { text: "msg_alias_failed" },
+					});
+				source = f.inputs.openSource(f.input(["msg_alias_failed"]));
+				f.inputs.checkpoint(source.scope, "msg_failed_alias", null);
+				expect(
+					f.inputs.finishReservation(reservation, new Error("Failed source")),
+				).toBe(true);
+			}
+			source.release();
+			const attempt = async () => {
+				const replay = f.inputs.openSource(f.input(["msg_failed_alias"]));
+				try {
+					const result = await replay.resolve(
+						[f.message("msg_failed_alias")],
+						selected,
+						effects,
+					);
+					return result.participation;
+				} finally {
+					replay.release();
+				}
+			};
+			if (prefix === "real")
+				await expect(attempt()).rejects.toThrow("epoch was revoked");
+			else expect(await attempt()).toBeNull();
+		} finally {
+			f.inputs.clear();
+		}
+	});
+
+test("terminal identity a neverregistered failed prefix has no payload proof for a fresh queue", async () => {
+	const f = publicLedger();
+	try {
+		const reservation = f.inputs.reserve(host, "msg_neverregistered");
+		expect(
+			f.inputs.finishReservation(
+				reservation,
+				new Error("Selected read failed"),
+			),
+		).toBe(true);
+		expect(f.inputs.hasPrivate(host, reservation.id)).toBe(true);
+		f.reduce(f.event("session.inbox.enqueued", reservation.id, 1));
+		f.reduce(
+			f.event("session.inbox.delivery.changed", reservation.id, 2, "steer"),
+		);
+		expect(f.inputs.automaticBlock(host)).toBeNull();
+		expect(() => f.prepare(reservation.id)).toThrow("unavailable");
+		f.prepare("msg_after_unregistered");
+		await expect(
+			f.consume([reservation.id, "msg_after_unregistered"]),
+		).rejects.toThrow("epoch was revoked");
+		expect(f.intents).toEqual([]);
+		expect(
+			(await f.consume(["msg_after_unregistered"])).participation?.kind,
+		).toBe("flow");
+	} finally {
+		f.inputs.clear();
+	}
+});
+
+test("terminal identity a failed real final remains denied after checked queue reset and preserves original nonfinal payload", async () => {
+	let fail = true;
+	const f = publicLedger(async () => {
+		if (fail) throw new Error("Real activation failed");
+	});
+	try {
+		f.prepare("msg_failed_real");
+		const failed = f.inputs.openSource(f.input(["msg_failed_real"]));
+		await expect(
+			failed.resolve([f.message("msg_failed_real")], selected, effects),
+		).rejects.toThrow("Real activation failed");
+		expect(failed.fail(() => true)).toBe(true);
+		failed.release();
+		fail = false;
+		f.prepare("msg_real_reset");
+		expect(
+			(await f.consume(["msg_failed_real", "msg_real_reset"])).participation
+				?.kind,
+		).toBe("flow");
+		f.inputs.invalidate(host);
+		await expect(
+			f.consume(["msg_real_reset", "msg_failed_real"]),
+		).rejects.toThrow("epoch was revoked");
+		f.prepare("msg_later_queue");
+		await expect(
+			f.consume(
+				["msg_real_reset", "msg_failed_real", "msg_later_queue"],
+				[
+					f.message("msg_real_reset"),
+					f.message("msg_failed_real", "Changed old payload"),
+					f.message("msg_later_queue"),
+				],
+			),
+		).rejects.toThrow("unknown, synthetic, or stale real input");
+		expect(f.intents).toEqual(["msg_failed_real", "msg_real_reset"]);
+	} finally {
+		f.inputs.clear();
+	}
+});
+
+test("terminal ownership partial real activation keeps earlier settled members and fails only unfinished claim members", async () => {
+	let fail = true;
+	const f = publicLedger(async (id) => {
+		if (fail && id === "msg_partial_second")
+			throw new Error("Second activation failed");
+	});
+	try {
+		for (const id of [
+			"msg_partial_first",
+			"msg_partial_second",
+			"msg_partial_final",
+		])
+			f.prepare(id);
+		const batch = [
+				"msg_partial_first",
+				"msg_partial_second",
+				"msg_partial_final",
+			],
+			operation = f.inputs.openSource(f.input(batch));
+		await expect(
+			operation.resolve(
+				batch.map((id) => f.message(id)),
+				selected,
+				effects,
+			),
+		).rejects.toThrow("Second activation failed");
+		const claimedEpoch = f.inputs.epoch(host);
+		expect(operation.fail(() => false)).toBe(false);
+		expect(f.inputs.epoch(host)).toBe(claimedEpoch);
+		expect(operation.fail(() => true)).toBe(true);
+		expect(operation.fail(() => true)).toBe(false);
+		expect(f.inputs.epoch(host)).toBe(claimedEpoch + 1);
+		operation.release();
+		expect(f.intents).toEqual(["msg_partial_first", "msg_partial_second"]);
+		fail = false;
+		f.prepare("msg_after_partial");
+		expect(
+			(await f.consume([...batch, "msg_after_partial"])).participation?.kind,
+		).toBe("flow");
+		expect(f.intents).toEqual([
+			"msg_partial_first",
+			"msg_partial_second",
+			"msg_after_partial",
+		]);
+	} finally {
+		f.inputs.clear();
+	}
+});
+
+for (const replacement of ["same-epoch", "new-epoch"] as const)
+	for (const accepted of [false, true])
+		test(`terminal ownership late real observer rejection preserves a ${replacement} ${accepted ? "accepted" : "pending"} private replacement`, async () => {
+			const entered = Promise.withResolvers<void>(),
+				resume = Promise.withResolvers<void>();
+			const f = publicLedger(async () => {
+				entered.resolve();
+				await resume.promise;
+				throw new Error("Late observer failure");
+			});
+			try {
+				f.prepare("msg_old_real");
+				const operation = f.inputs.openSource(f.input(["msg_old_real"]));
+				const pending = operation
+					.resolve([f.message("msg_old_real")], selected, effects)
+					.catch(String);
+				await entered.promise;
+				if (replacement === "new-epoch") f.inputs.invalidate(host);
+				const reservation = f.inputs.reserve(host, "msg_private_replacement");
+				const admission = f.inputs.register(reservation, {
+					type: "synthetic",
+					payload: { text: "Private replacement" },
+				});
+				const origin = f.inputs.makeOrigin(
+					host,
+					reservation.id,
+					delivery,
+					false,
+					reservation.epoch,
+				);
+				const acceptReplacement = () =>
+					f.inputs.accept(
+						admission,
+						{
+							id: reservation.id,
+							sessionID: host,
+							type: "synthetic",
+							payload: { text: "Private replacement" },
+							time: { created: 3 },
+							delivery: "queue",
+						},
+						async () => origin,
+					);
+				if (accepted) await acceptReplacement();
+				resume.resolve();
+				expect(await pending).toBe("Error: Flow execution epoch was revoked.");
+				expect(operation.fail(() => true)).toBe(false);
+				operation.release();
+				expect(admission.phase.state).toBe(accepted ? "accepted" : "pending");
+				expect(f.inputs.epoch(host)).toBe(reservation.epoch);
+				if (!accepted) await acceptReplacement();
+				expect(await admission.ready).toBe(origin);
+				expect(() => f.inputs.assertLive(origin)).not.toThrow();
+				expect(f.inputs.automaticBlock(host)).toBeNull();
+			} finally {
+				resume.resolve();
+				f.inputs.clear();
+			}
+		});
+
+test("terminal ownership a stale activation cannot overwrite a later accepted phase on the stable record", async () => {
+	const f = fixture(),
+		entered = Promise.withResolvers<void>(),
+		resume = Promise.withResolvers<void>();
+	try {
+		const oldOrigin = f.origin(),
+			acceptedOrigin = f.origin();
+		const old = f.inputs
+			.accept(f.admission, f.receipt, async () => {
+				entered.resolve();
+				await resume.promise;
+				return oldOrigin;
+			})
+			.catch(String);
+		await entered.promise;
+		await f.inputs.accept(f.admission, f.receipt, async () => acceptedOrigin);
+		expect(await f.admission.ready).toBe(acceptedOrigin);
+		resume.resolve();
+		expect(await old).toBe("Error: Flow execution epoch was revoked.");
+		expect(f.admission.phase.state).toBe("accepted");
+		if (f.admission.phase.state !== "accepted")
+			throw new Error("Lost accepted phase");
+		expect(f.admission.phase.origin).toBe(acceptedOrigin);
+		expect(f.admission.phase.acceptedPayload).toEqual({
+			text: "Approved task",
+		});
+		expect(await f.admission.ready).toBe(acceptedOrigin);
+	} finally {
+		resume.resolve();
+		f.close();
+	}
+});
+
+test("terminal identity a captured unknown final cannot hide a subsequent real registration", async () => {
+	const f = publicLedger();
+	try {
+		const failed = f.inputs.reserve(host, "msg_inspection_failed");
+		expect(
+			f.inputs.finishReservation(failed, new Error("Pre-registration failed")),
+		).toBe(true);
+		const operation = f.inputs.openSource(f.input(["msg_captured_unknown"]));
+		f.prepare("msg_captured_unknown");
+		await expect(
+			operation.resolve([f.message("msg_captured_unknown")], selected, effects),
+		).rejects.toThrow("epoch was revoked");
+		expect(operation.fail(() => true)).toBe(false);
+		operation.release();
+		expect(f.intents).toEqual([]);
+		expect(
+			(await f.consume(["msg_captured_unknown"])).participation?.kind,
+		).toBe("flow");
+	} finally {
+		f.inputs.clear();
+	}
+});
+
+for (const changed of [
+	"none",
+	"text",
+	"metadata",
+	"file-count",
+	"file-name",
+	"file-description",
+	"file-mention",
+	"file-uri",
+	"file-source",
+	"agent-count",
+	"agent-name",
+	"agent-mention",
+	"skill-count",
+	"skill-id",
+	"skill-mention",
+	"inline-mime",
+	"inline-data",
+] as const)
+	test(`terminal payload rejected private prefix preserves ${changed} while consuming a checked queue`, async () => {
+		const f = publicLedger();
+		try {
+			const inline = changed === "inline-mime" || changed === "inline-data";
+			const mention = { start: 0, end: 4, text: "task" };
+			const payload = {
+				text: "task",
+				metadata: { nested: { value: "original" } },
+				files: [
+					{
+						uri: inline
+							? "data:text/plain;base64,eA=="
+							: "file:///tmp/flow-evidence.txt",
+						name: "evidence",
+						description: "Exact file",
+						mention,
+					},
+				],
+				agents: [{ name: "build", mention }],
+				skills: [{ id: Skill.ID.make("skill-proof"), mention }],
+			};
+			const reservation = f.inputs.reserve(host, "msg_payload_failed");
+			const admission = f.inputs.register(reservation, {
+				type: "user",
+				payload,
+			});
+			expect(
+				f.inputs.finishReservation(
+					reservation,
+					new Error("Payload dispatch failed"),
+				),
+			).toBe(true);
+			await expect(admission.ready).rejects.toThrow("Payload dispatch failed");
+			const nativePayload = {
+				text: "task",
+				metadata: { nested: { value: "original" } },
+				files: [
+					{
+						source: inline
+							? { type: "inline" as const }
+							: { type: "uri" as const, uri: "file:///tmp/flow-evidence.txt" },
+						data: "eA==",
+						mime: "text/plain",
+						name: "evidence",
+						description: "Exact file",
+						mention: { ...mention },
+					},
+				],
+				agents: [{ name: "build", mention: { ...mention } }],
+				skills: [
+					{
+						id: "skill-proof",
+						name: "proof",
+						text: "Native skill expansion",
+						mention: { ...mention },
+					},
+				],
+			} satisfies SessionInboxUser["payload"];
+			if (changed === "text") nativePayload.text = "tampered";
+			if (changed === "metadata")
+				nativePayload.metadata.nested.value = "tampered";
+			if (changed === "file-count") nativePayload.files = [];
+			if (changed === "file-name")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					name: "tampered",
+				}));
+			if (changed === "file-description")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					description: "tampered",
+				}));
+			if (changed === "file-mention")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					mention: { ...mention, end: 3 },
+				}));
+			if (changed === "file-uri")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					source: { type: "uri", uri: "file:///tmp/changed" },
+				}));
+			if (changed === "file-source")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					source: { type: "inline" },
+				}));
+			if (changed === "inline-mime")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					mime: "text/html",
+				}));
+			if (changed === "inline-data")
+				nativePayload.files = nativePayload.files.map((file) => ({
+					...file,
+					data: "eQ==",
+				}));
+			if (changed === "agent-count") nativePayload.agents = [];
+			if (changed === "agent-name")
+				nativePayload.agents = nativePayload.agents.map((item) => ({
+					...item,
+					name: "other",
+				}));
+			if (changed === "agent-mention")
+				nativePayload.agents = nativePayload.agents.map((item) => ({
+					...item,
+					mention: { ...mention, text: "other" },
+				}));
+			if (changed === "skill-count") nativePayload.skills = [];
+			if (changed === "skill-id")
+				nativePayload.skills = nativePayload.skills.map((item) => ({
+					...item,
+					id: "other",
+				}));
+			if (changed === "skill-mention")
+				nativePayload.skills = nativePayload.skills.map((item) => ({
+					...item,
+					mention: { ...mention, start: 1 },
+				}));
+			f.prepare("msg_payload_queue");
+			const operation = f.inputs.openSource(
+				f.input([reservation.id, "msg_payload_queue"]),
+			);
+			const result = operation.resolve(
+				[
+					{
+						...nativePayload,
+						id: reservation.id,
+						type: "user",
+						time: { created: 0 },
+					},
+					f.message("msg_payload_queue"),
+				],
+				selected,
+				effects,
+			);
+			if (changed === "none") {
+				expect((await result).participation?.kind).toBe("flow");
+				expect(f.intents).toEqual(["msg_payload_queue"]);
+			} else {
+				await expect(result).rejects.toThrow(
+					"payload conflicts with its admitted dispatch",
+				);
+				expect(f.intents).toEqual([]);
+				expect(operation.fail(() => true)).toBe(false);
+			}
+			operation.release();
+		} finally {
+			f.inputs.clear();
+		}
+	});
+
+for (const changed of ["none", "text", "description", "metadata"] as const)
+	test(`terminal payload rejected synthetic prefix preserves ${changed} before a registered successor`, async () => {
+		const f = publicLedger();
+		try {
+			const reservation = f.inputs.reserve(host, "msg_synthetic_payload");
+			const payload = {
+				text: "Notification",
+				description: "Exact description",
+				metadata: { key: "original" },
+			};
+			f.inputs.register(reservation, { type: "synthetic", payload });
+			expect(
+				f.inputs.finishReservation(
+					reservation,
+					new Error("Synthetic dispatch failed"),
+				),
+			).toBe(true);
+			const actual = structuredClone(payload);
+			if (changed === "text") actual.text = "changed";
+			if (changed === "description") actual.description = "changed";
+			if (changed === "metadata") actual.metadata.key = "changed";
+			f.prepare("msg_synthetic_successor");
+			const promise = f.consume(
+				[reservation.id, "msg_synthetic_successor"],
+				[
+					{
+						...actual,
+						type: "synthetic",
+						id: reservation.id,
+						time: { created: 0 },
+					},
+					f.message("msg_synthetic_successor"),
+				],
+			);
+			if (changed === "none")
+				expect((await promise).participation?.kind).toBe("flow");
+			else await expect(promise).rejects.toThrow("payload conflicts");
+		} finally {
+			f.inputs.clear();
+		}
+	});
+
+for (const invalid of ["expired-origin", "delivery", "reason"] as const)
+	test(`terminal bridge completed checkpoint alone retains its ${invalid} guard`, async () => {
+		const f = await compactionFixture();
+		try {
+			const source = await f.admission.ready;
+			const control = f.native[1];
+			if (control?.type !== "compaction" || control.status !== "running")
+				throw new Error("Missing compaction control");
+			expect((await f.boundary.admit(f.input)).kind).toBe("continuation");
+			f.native.splice(0, f.native.length, { ...control, status: "completed" });
+			const input = { ...f.input, ...context(control.id) };
+			if (invalid === "expired-origin") f.inputs.invalidate(host);
+			if (invalid === "delivery")
+				input.model = {
+					...model,
+					id: Model.ID.make("different-checkpoint-model"),
+				};
+			if (invalid === "reason")
+				f.native.splice(0, 1, {
+					...control,
+					status: "completed",
+					reason: "manual",
+				});
+			expect(() => f.boundary.completed(input, f.native)).toThrow(
+				invalid === "expired-origin"
+					? "epoch was revoked"
+					: invalid === "delivery"
+						? "admitted agent or model differs"
+						: "control identity changed",
+			);
+			if (invalid === "expired-origin")
+				expect(() => f.boundary.prefixBridge(input, f.native, source)).toThrow(
+					"epoch was revoked",
+				);
+		} finally {
+			f.close();
+		}
+	});
+
+test("terminal payload failed real metadata remains exact nonfinal history before a fresh queue", async () => {
+	let fail = true;
+	const f = publicLedger(async () => {
+		if (fail) throw new Error("Real metadata activation failed");
+	});
+	try {
+		f.inputs.observePrompt(
+			{
+				sessionID: host,
+				messageID: SessionMessage.ID.make("msg_real_metadata_failed"),
+				prompt: { text: "Real payload" },
+				metadata: { key: "original" },
+				delivery: "queue",
+			},
+			() => {
+				throw new Error("Unexpected immediate reservation");
+			},
+		);
+		const native: SessionMessageInfo = {
+			type: "user",
+			id: "msg_real_metadata_failed",
+			text: "Real payload",
+			metadata: { key: "original" },
+			time: { created: 0 },
+		};
+		const operation = f.inputs.openSource(f.input([native.id]));
+		await expect(
+			operation.resolve([native], selected, effects),
+		).rejects.toThrow("Real metadata activation failed");
+		expect(operation.fail(() => true)).toBe(true);
+		operation.release();
+		fail = false;
+		f.prepare("msg_real_metadata_successor");
+		await expect(
+			f.consume(
+				[native.id, "msg_real_metadata_successor"],
+				[
+					{ ...native, metadata: { key: "tampered" } },
+					f.message("msg_real_metadata_successor"),
+				],
+			),
+		).rejects.toThrow("unknown, synthetic, or stale real input");
+		expect(f.intents).toEqual(["msg_real_metadata_failed"]);
+		expect(
+			(
+				await f.consume(
+					[native.id, "msg_real_metadata_successor"],
+					[native, f.message("msg_real_metadata_successor")],
+				)
+			).participation?.kind,
+		).toBe("flow");
+		expect(f.intents).toEqual([
+			"msg_real_metadata_failed",
+			"msg_real_metadata_successor",
+		]);
+	} finally {
+		f.inputs.clear();
+	}
+});
+
+import { CallID } from "@opencode/plugin/promise/tool";
+import { ExecutionAttribution } from "../src/platform/opencode/execution-attribution.js";
+
+function terminalRegistrationFixture(
+	observed: boolean,
+	type: "user" | "synthetic",
+) {
+	const f = publicLedger(),
+		source = "msg_terminal_registration",
+		text = "Native payload";
+	const failed = f.inputs.reserve(host, "msg_registration_failed");
+	expect(
+		f.inputs.finishReservation(failed, new Error("Local terminal failure")),
+	).toBe(true);
+	if (observed) {
+		const event = f.event("session.inbox.enqueued", source, 1);
+		if (event.type !== "session.inbox.enqueued")
+			throw new Error("Expected enqueue observation");
+		event.data.item = { type, payload: { text }, delivery: "queue" };
+		f.reduce(event);
+	}
+	const input: SessionContext = {
+		...context(source),
+		system: [],
+		options: {},
+		tools: {},
+		messages: [{ role: "user", id: source, content: [{ type: "text", text }] }],
+	};
+	const native: SessionMessageInfo[] = [
+		{ type, id: source, text, time: { created: 1 } },
+	];
+	const operation = f.inputs.openSource(input);
+	const attribution = new ExecutionAttribution((origin) =>
+		f.inputs.assertLive(origin),
+	);
+	const register = (samePayload: boolean, id = source, sessionID = host) =>
+		f.inputs.observePrompt(
+			{
+				sessionID,
+				messageID: SessionMessage.ID.make(id),
+				prompt: { text: samePayload ? text : "Different registered payload" },
+				delivery: "queue",
+			},
+			() => {
+				throw new Error("Queue must remain deferred");
+			},
+		);
+	const execution = {
+		sessionID: host,
+		agent,
+		messageID: SessionMessage.ID.make("msg_registration_assistant"),
+		id: CallID.make("call_registration_shell"),
+	};
+	const addCall = () =>
+		native.push({
+			type: "assistant",
+			id: execution.messageID,
+			agent,
+			model,
+			time: { created: 2 },
+			content: [
+				{
+					type: "tool",
+					id: execution.id,
+					name: "shell",
+					state: { status: "running", input: {}, metadata: {} },
+					time: { created: 2 },
+				},
+			],
+		});
+	return {
+		...f,
+		source,
+		input,
+		native,
+		operation,
+		attribution,
+		register,
+		execution,
+		addCall,
+	};
+}
+
+for (const observed of [false, true])
+	for (const type of ["user", "synthetic"] as const)
+		for (const samePayload of [false, true])
+			for (const when of [
+				"before-resolve",
+				"before-freeze",
+				"before-http",
+				"before-tool",
+			] as const)
+				test(`captured registration clock refuses ${type} observed ${observed} matching ${samePayload} ${when}`, async () => {
+					const f = terminalRegistrationFixture(observed, type);
+					const barrier = f.inputs.captureBarrier(host),
+						epoch = f.inputs.epoch(host);
+					let httpEffects = 0,
+						toolEffects = 0;
+					try {
+						expect(f.operation.scope.current()).toBe(true);
+						if (when === "before-resolve") {
+							f.register(samePayload);
+							expect(f.operation.scope.current()).toBe(false);
+							expect(() => f.operation.scope.assertCurrent()).toThrow(
+								"epoch was revoked",
+							);
+							await expect(
+								f.operation.resolve(f.native, selected, effects),
+							).rejects.toThrow("epoch was revoked");
+						} else {
+							const resolved = await f.operation.resolve(
+								f.native,
+								selected,
+								effects,
+							);
+							expect(resolved.participation).toEqual({ kind: "native-only" });
+							if (!resolved.participation)
+								throw new Error("Missing ordinary participation");
+							if (when === "before-freeze") {
+								f.register(samePayload);
+								expect(resolved.scope.current()).toBe(false);
+								expect(() =>
+									f.attribution.freeze(
+										f.input,
+										f.native,
+										resolved.participation ?? { kind: "native-only" },
+										resolved.scope,
+									),
+								).toThrow("epoch was revoked");
+							} else {
+								const primary = f.attribution.freeze(
+									f.input,
+									f.native,
+									resolved.participation,
+									resolved.scope,
+								);
+								f.operation.release();
+								expect(primary.participation).toEqual({ kind: "native-only" });
+								if (when === "before-tool")
+									f.attribution.request({
+										sessionID: host,
+										agent,
+										model,
+										kind: "primary",
+										request: new Request(
+											"http://localhost/registration-before-change",
+										),
+									});
+								f.addCall();
+								f.register(samePayload);
+								expect(resolved.scope.current()).toBe(false);
+								expect(() => resolved.scope.assertCurrent()).toThrow(
+									"epoch was revoked",
+								);
+								if (when === "before-http")
+									expect(() => {
+										f.attribution.request({
+											sessionID: host,
+											agent,
+											model,
+											kind: "primary",
+											request: new Request(
+												"http://localhost/registration-denied",
+											),
+										});
+										httpEffects++;
+									}).toThrow("epoch was revoked");
+								if (when === "before-tool")
+									expect(() => {
+										f.attribution.verify(
+											f.execution,
+											f.native,
+											selected,
+											process.cwd(),
+											"shell",
+										);
+										toolEffects++;
+									}).toThrow("epoch was revoked");
+							}
+						}
+						expect(f.inputs.epoch(host)).toBe(epoch);
+						expect(barrier.current()).toBe(true);
+						expect(f.operation.current()).toBe(false);
+						expect(f.operation.fail(() => true)).toBe(false);
+						expect(httpEffects).toBe(0);
+						expect(toolEffects).toBe(0);
+						expect(f.intents).toEqual([]);
+					} finally {
+						f.operation.release();
+						f.inputs.clear();
+						f.attribution.clear();
+					}
+				});
+
+for (const observed of [false, true])
+	test(`captured registration cancels only the exact terminal scope held read, observed ${observed}`, async () => {
+		const f = terminalRegistrationFixture(observed, "user"),
+			hold = Promise.withResolvers<void>();
+		try {
+			const wait = f.operation.scope
+				.wait(hold.promise)
+				.then(() => "unexpected read", String);
+			f.register(false, "msg_unrelated_same_host");
+			f.register(
+				false,
+				f.source,
+				Session.ID.make("session-other-registration"),
+			);
+			expect(f.operation.scope.current()).toBe(true);
+			const other = f.inputs.openSource({
+				...f.input,
+				messages: [{ role: "user", id: "msg_held_other_source", content: [] }],
+			});
+			const otherWait = other.scope
+				.wait(hold.promise)
+				.then(() => "other read completed", String);
+			f.register(false);
+			for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+			expect(await Promise.race([wait, Promise.resolve("still pending")])).toBe(
+				"Error: Flow execution epoch was revoked.",
+			);
+			expect(other.scope.current()).toBe(true);
+			hold.resolve();
+			expect(await otherWait).toBe("other read completed");
+			other.release();
+		} finally {
+			hold.resolve();
+			f.operation.release();
+			f.inputs.clear();
+			f.attribution.clear();
+		}
+	});
+
+for (const queuedHost of ["same-host", "other-host"] as const)
+	test(`captured registration unrelated ${queuedHost} queue preserves resolved ordinary scope and tool`, async () => {
+		const f = terminalRegistrationFixture(false, "user");
+		try {
+			const resolved = await f.operation.resolve(f.native, selected, effects);
+			if (!resolved.participation)
+				throw new Error("Missing ordinary participation");
+			const primary = f.attribution.freeze(
+				f.input,
+				f.native,
+				resolved.participation,
+				resolved.scope,
+			);
+			f.operation.release();
+			f.attribution.request({
+				sessionID: host,
+				agent,
+				model,
+				kind: "primary",
+				request: new Request("http://localhost/unrelated-registration"),
+			});
+			f.addCall();
+			f.register(
+				false,
+				"msg_unrelated_registration",
+				queuedHost === "same-host"
+					? host
+					: Session.ID.make("session-other-registration"),
+			);
+			expect(resolved.scope.current()).toBe(true);
+			expect(() => resolved.scope.assertCurrent()).not.toThrow();
+			expect(
+				f.attribution.verify(
+					f.execution,
+					f.native,
+					selected,
+					process.cwd(),
+					"shell",
+				).primary,
+			).toBe(primary);
+			expect(primary.participation).toEqual({ kind: "native-only" });
+			expect(f.intents).toEqual([]);
+			const target =
+				queuedHost === "same-host"
+					? host
+					: Session.ID.make("session-other-registration");
+			const queued = "msg_unrelated_registration",
+				text = "Different registered payload";
+			const nextInput: SessionContext = {
+				...f.input,
+				sessionID: target,
+				messages: [
+					...(queuedHost === "same-host" ? f.input.messages : []),
+					{ role: "user", id: queued, content: [{ type: "text", text }] },
+				],
+			};
+			const nextNative: SessionMessageInfo[] = [
+				...(queuedHost === "same-host" ? f.native : []),
+				{ type: "user", id: queued, text, time: { created: 3 } },
+			];
+			const next = f.inputs.openSource(nextInput);
+			const consumed = await next.resolve(
+				nextNative,
+				{ ...selected, id: target },
+				effects,
+			);
+			expect(consumed.participation?.kind).toBe("flow");
+			if (!consumed.participation)
+				throw new Error("Missing checked queue participation");
+			f.attribution.end(primary);
+			const checked = f.attribution.freeze(
+				nextInput,
+				nextNative,
+				consumed.participation,
+				consumed.scope,
+			);
+			next.release();
+			f.attribution.request({
+				sessionID: target,
+				agent,
+				model,
+				kind: "primary",
+				request: new Request("http://localhost/checked-unrelated-queue"),
+			});
+			const execution = {
+				...f.execution,
+				sessionID: target,
+				messageID: SessionMessage.ID.make("msg_unrelated_queued_assistant"),
+				id: CallID.make("call_unrelated_queued_shell"),
+			};
+			nextNative.push({
+				type: "assistant",
+				id: execution.messageID,
+				agent,
+				model,
+				time: { created: 4 },
+				content: [
+					{
+						type: "tool",
+						id: execution.id,
+						name: "shell",
+						state: { status: "running", input: {}, metadata: {} },
+						time: { created: 4 },
+					},
+				],
+			});
+			expect(
+				f.attribution.verify(
+					execution,
+					nextNative,
+					{ ...selected, id: target },
+					process.cwd(),
+					"shell",
+				).primary,
+			).toBe(checked);
+			expect(f.intents).toEqual([queued]);
+			expect(resolved.scope.current()).toBe(queuedHost === "other-host");
+		} finally {
+			f.operation.release();
+			f.inputs.clear();
+			f.attribution.clear();
+		}
+	});
+
+for (const mutation of ["observation", "checkpoint"] as const)
+	test(`captured registration exact ${mutation} entry replacement wakes its held read only`, async () => {
+		const f = terminalRegistrationFixture(false, "user"),
+			hold = Promise.withResolvers<void>();
+		try {
+			const other = f.inputs.openSource({
+				...f.input,
+				messages: [{ role: "user", id: "msg_other_held_entry", content: [] }],
+			});
+			const waiting = f.operation.scope
+				.wait(hold.promise)
+				.then(() => "unexpected completion", String);
+			const otherWait = other.scope
+				.wait(hold.promise)
+				.then(() => "other completion", String);
+			const epoch = f.inputs.epoch(host);
+			if (mutation === "observation")
+				f.reduce(f.event("session.inbox.enqueued", f.source, 2));
+			else f.inputs.checkpoint(f.operation.scope, f.source, null);
+			for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+			expect(
+				await Promise.race([waiting, Promise.resolve("still pending")]),
+			).toBe("Error: Flow execution epoch was revoked.");
+			expect(f.operation.scope.current()).toBe(false);
+			expect(other.scope.current()).toBe(true);
+			expect(f.inputs.epoch(host)).toBe(epoch);
+			hold.resolve();
+			expect(await otherWait).toBe("other completion");
+			other.release();
+		} finally {
+			hold.resolve();
+			f.operation.release();
+			f.inputs.clear();
+			f.attribution.clear();
+		}
+	});
+
+test("captured registration retained real entry still invalidates on its exact registration generation change", async () => {
+	const f = publicLedger(),
+		hold = Promise.withResolvers<void>();
+	try {
+		const failed = f.inputs.reserve(host, "msg_registration_generation_failed");
+		expect(
+			f.inputs.finishReservation(failed, new Error("Terminal predecessor")),
+		).toBe(true);
+		f.prepare("msg_registration_generation");
+		f.reduce(
+			f.event("session.inbox.enqueued", "msg_registration_generation", 1),
+		);
+		const operation = f.inputs.openSource(
+			f.input(["msg_registration_generation"]),
+		);
+		const waiting = operation.scope
+			.wait(hold.promise)
+			.then(() => "unexpected completion", String);
+		const epoch = f.inputs.epoch(host);
+		f.reduce(
+			f.event("session.inbox.cancelled", "msg_registration_generation", 2),
+		);
+		expect(operation.scope.current()).toBe(true);
+		f.prepare("msg_registration_generation");
+		expect(operation.scope.current()).toBe(false);
+		for (let turn = 0; turn < 20; turn++) await Promise.resolve();
+		expect(
+			await Promise.race([waiting, Promise.resolve("still pending")]),
+		).toBe("Error: Flow execution epoch was revoked.");
+		expect(f.inputs.epoch(host)).toBe(epoch);
+		expect(operation.fail(() => true)).toBe(false);
+		operation.release();
+		f.reduce(
+			f.event("session.inbox.enqueued", "msg_registration_generation", 3),
+		);
+		expect(
+			(await f.consume(["msg_registration_generation"])).participation?.kind,
+		).toBe("flow");
+		expect(f.intents).toEqual(["msg_registration_generation"]);
+	} finally {
+		hold.resolve();
+		f.inputs.clear();
 	}
 });

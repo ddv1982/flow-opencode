@@ -234,7 +234,7 @@ export class ExecutionAttribution {
 		native: readonly SessionMessageInfo[],
 		expected: PrimaryOwner | undefined,
 		changingPublicSource: boolean,
-		bridge?: CompletedPrefix,
+		resolveBridge?: () => CompletedPrefix | undefined,
 	): Replacement {
 		this.assertExpected(input.sessionID, expected);
 		const inputs = modelInputIDs(input),
@@ -247,18 +247,23 @@ export class ExecutionAttribution {
 		if (
 			changingPublicSource &&
 			previous?.clock.current() &&
-			!same(inputs.slice(0, previous.inputs.length), previous.inputs) &&
-			!(
-				bridge &&
-				expected?.participation.kind === "flow" &&
-				bridge.sourceOrigin === expected.participation.origin &&
-				same(bridge.consumed, previous.inputs) &&
-				inputs[0] === bridge.checkpoint
+			!same(inputs.slice(0, previous.inputs.length), previous.inputs)
+		) {
+			const bridge =
+				expected?.participation.kind === "flow" ? resolveBridge?.() : undefined;
+			if (
+				!(
+					bridge &&
+					expected?.participation.kind === "flow" &&
+					bridge.sourceOrigin === expected.participation.origin &&
+					same(bridge.consumed, previous.inputs) &&
+					inputs[0] === bridge.checkpoint
+				)
 			)
-		)
-			throw new Error(
-				"Flow new public input does not extend the frozen consumed prefix.",
-			);
+				throw new Error(
+					"Flow new public input does not extend the frozen consumed prefix.",
+				);
+		}
 		const retry =
 			!!expected &&
 			this.isCurrent(expected) &&

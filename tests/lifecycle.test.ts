@@ -4650,31 +4650,63 @@ for (const proof of ["before", "after"] as const)
 		}
 	});
 
-for (const settled of [false, true])
-	test(`missing raw native input above ${settled ? "rejected" : "pending"} lineage refuses without authority`, async () => {
+test("pending private receipt still refuses a distinct raw native suffix", async () => {
+	const f = await fixture();
+	try {
+		f.blockAdmission();
+		const command = f.command("flow-plan", "Pending plan source").catch(String);
+		await f.flush();
+		f.native.push({
+			type: "synthetic",
+			id: "msg_missing_above_unaccepted",
+			text: "External native",
+			time: { created: 1 },
+		});
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"unknown, synthetic, or stale real input",
+		);
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		expect(f.repository.saveCount).toBe(0);
+		f.releaseAdmission();
+		await command;
+	} finally {
+		f.releaseAdmission();
+		await f.lifecycle.dispose();
+	}
+});
+
+for (const type of ["user", "synthetic"] as const)
+	test(`distinct ${type} after mismatched private receipt runs ordinary execution without summary authority`, async () => {
 		const f = await fixture();
 		try {
-			if (settled) f.corruptReceipt();
-			else f.blockAdmission();
-			const command = f
-				.command("flow-plan", "Pending plan source")
-				.catch(String);
-			await f.flush();
-			f.native.push({
-				type: "synthetic",
-				id: "msg_missing_above_unaccepted",
-				text: "External native",
-				time: { created: 1 },
-			});
-			await expect(f.emit("context", f.context())).rejects.toThrow(
-				"unknown, synthetic, or stale real input",
+			f.corruptReceipt();
+			await expect(
+				f.command("flow-plan", "Pending plan source"),
+			).rejects.toThrow(
+				"Flow admission receipt did not match its exact local payload.",
 			);
+			const failed = f.native.find((message) => message.type === "user");
+			if (failed?.type !== "user")
+				throw new Error("Missing rejected private prefix.");
+			expect(failed.text).toContain("Pending plan source");
+			expect(f.native).toEqual([
+				{
+					type: "user",
+					id: failed.id,
+					text: failed.text,
+					time: { created: 0 },
+				},
+			]);
+			const id = "msg_receipt_distinct",
+				text = "External native";
+			expect(failed.id).not.toBe(id);
+			f.native.push({ type, id, text, time: { created: 20 } });
+			await exerciseUnregisteredNativeExecution(f, f.context().messages);
+			await refuseUnownedSummaries(f, "msg_receipt_summary");
 			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+			expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
 			expect(f.repository.saveCount).toBe(0);
-			f.releaseAdmission();
-			await command;
 		} finally {
-			f.releaseAdmission();
 			await f.lifecycle.dispose();
 		}
 	});
@@ -6947,3 +6979,682 @@ test("parent consecutive public queues after a checked checkpoint need no stale 
 		await f.lifecycle.dispose();
 	}
 });
+
+async function refuseUnownedSummaries(f: OwnershipFixture, id: string) {
+	for (const reason of ["manual", "auto"] as const) {
+		const input = f.context(),
+			control = { ...automaticControl(`${id}_${reason}`), reason };
+		f.native.push(control);
+		try {
+			await expect(f.emit("compaction", input)).rejects.toThrow(
+				"epoch was revoked",
+			);
+		} finally {
+			f.native.splice(f.native.indexOf(control), 1);
+		}
+	}
+	expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	expect(f.recovery.snapshot(sessionID)).toMatchObject({ mode: "off" });
+	expect(f.repository.saveCount).toBe(0);
+}
+
+for (const materialized of [false, true])
+	for (const type of ["user", "synthetic"] as const)
+		test(`terminal recovery ordinary ${type} executes before both summary denials with materialized prefix ${materialized}`, async () => {
+			const f = await fixture();
+			try {
+				await triageRejectedCommand(
+					f,
+					materialized
+						? "native-rpc-after-history"
+						: "native-rpc-before-history",
+				);
+				f.native.push({
+					type,
+					id: "msg_terminal_native",
+					text: "Distinct ordinary suffix",
+					time: { created: 30 },
+				});
+				await exerciseUnregisteredNativeExecution(f, f.context().messages);
+				await refuseUnownedSummaries(f, "msg_terminal_summary");
+			} finally {
+				await f.lifecycle.dispose();
+			}
+		});
+
+for (const depth of [0, 2])
+	for (const type of ["user", "synthetic"] as const)
+		test(`terminal recovery ordinary ${type} preserves automatic history through ${depth} checked aliases after execution`, async () => {
+			const f = await fixture();
+			try {
+				await initialOwnershipWork(f);
+				for (let index = 0; index < depth; index++) {
+					await compactCurrentInput(f, `msg_negative_alias_${index}`);
+					await finishOwnedResponse(f, await startOwnedRequest(f));
+				}
+				f.failNextSessionRead();
+				await expect(f.emit("context", f.context())).rejects.toThrow(
+					"Native session read failed.",
+				);
+				f.native.push({
+					type,
+					id: "msg_after_automatic",
+					text: "Ordinary suffix after automatic history",
+					time: { created: 40 },
+				});
+				await exerciseRetiredAutomaticNativeExecution(f, f.context().messages);
+				await refuseUnownedSummaries(f, "msg_automatic_history_summary");
+			} finally {
+				await f.lifecycle.dispose();
+			}
+		});
+
+test("terminal recovery exact consumed real failure cannot replay before a new source", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(
+			f,
+			"msg_failed_real_replay",
+			"Real failure cannot replay",
+		);
+		const observe = spyOn(f.autoDrive, "observeMessage").mockRejectedValueOnce(
+			new Error("Claimed real activation failed."),
+		);
+		try {
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				"Claimed real activation failed.",
+			);
+		} finally {
+			observe.mockRestore();
+		}
+		expect(
+			f.native.filter((item) => item.type === "user").map((item) => item.id),
+		).toEqual(["msg_failed_real_replay"]);
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"epoch was revoked",
+		);
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("terminal recovery checked ordinary queue resets summary lineage while failed private replay stays denied", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		const { failedID } = await triageRejectedCommand(
+			f,
+			"native-rpc-before-history",
+		);
+		if (!failedID) throw new Error("Missing rejected private identity.");
+		await triageFreshPublic(f, "queue");
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+		f.failNextSessionRead();
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"Native session read failed.",
+		);
+		f.native.push({
+			type: "user",
+			id: "msg_queue_reset_suffix",
+			text: "Unregistered ordinary suffix",
+			time: { created: 40 },
+		});
+		const input = f.context(),
+			control = {
+				...automaticControl("msg_queue_reset_summary"),
+				reason: "manual" as const,
+			};
+		f.native.push(control);
+		await f.emit("compaction", input);
+		expect(f.repository.saveCount).toBe(0);
+		f.native.splice(0, f.native.length, { ...control, status: "completed" });
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"unknown, synthetic, or stale",
+		);
+		f.native.splice(0, f.native.length, {
+			type: "user",
+			id: failedID,
+			text: "Inspect failed reservation",
+			time: { created: 0 },
+		});
+		await expect(f.emit("context", f.context())).rejects.toThrow();
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("terminal recovery expired checkpoint alone cannot execute after a failed command", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		await compactCurrentInput(f, "msg_expired_checkpoint");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await triageRejectedCommand(f, "native-rpc-before-history");
+		expect(
+			f.native
+				.filter((item) => item.type === "compaction")
+				.map((item) => item.id),
+		).toEqual(["msg_expired_checkpoint"]);
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"epoch was revoked",
+		);
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("terminal recovery queued command recovery works after an older checked checkpoint", async () => {
+	const f = await fixture();
+	try {
+		await initialOwnershipWork(f);
+		await compactCurrentInput(f, "msg_old_recovery_checkpoint");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await admitOrdinaryInput(
+			f,
+			"msg_before_failed_command",
+			"Checked ordinary source after checkpoint",
+		);
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await triageRejectedCommand(f, "native-rpc-before-history");
+		const fresh = await triageFreshPublic(f, "queue");
+		expect(fresh.effects).toEqual(["effect"]);
+		expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+test("terminal recovery compaction consumes a changing queue after the previous checkpoint origin retired", async () => {
+	const f = await fixture();
+	try {
+		await admitOrdinaryInput(f, "msg_compact_source", "Ordinary predecessor");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await compactCurrentInput(f, "msg_compact_old_checkpoint");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await admitOrdinaryInput(f, "msg_compact_first_queue", "First queue");
+		await finishOwnedResponse(f, await startOwnedRequest(f));
+		await admitOrdinaryInput(f, "msg_compact_second_queue", "Second queue");
+		await compactCurrentInput(f, "msg_compact_new_checkpoint");
+		expect(f.native.map((item) => item.id)).toEqual([
+			"msg_compact_new_checkpoint",
+		]);
+		const request = await startOwnedRequest(f);
+		const effects: string[] = [],
+			tool = await effectTool(f, effects);
+		expect(await tool.execute({}, ownershipNativeCall(f))).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect"]);
+		await finishOwnedResponse(f, request);
+	} finally {
+		await f.lifecycle.dispose();
+	}
+});
+
+async function exerciseRetiredAutomaticNativeExecution(
+	f: OwnershipFixture,
+	expectedMessages: SessionContext["messages"],
+) {
+	expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	expect(f.recovery.snapshot(sessionID)).toMatchObject({
+		mode: "off",
+		automation: { active: false, bound: false },
+		advice: { active: false },
+	});
+	expect(f.repository.saveCount).toBe(0);
+	const context = f.context();
+	await f.emit("context", context);
+	expect(context.messages).toEqual(expectedMessages);
+	const request = new Request("http://localhost/unregistered-native", {
+		method: "POST",
+		body: "ordinary native request body",
+	});
+	const outbound = {
+		sessionID,
+		agent,
+		model,
+		kind: "primary" as const,
+		request,
+	};
+	await f.emit("http.request", outbound);
+	expect(await outbound.request.clone().text()).toBe(
+		"ordinary native request body",
+	);
+	const inbound = {
+		...outbound,
+		response: new Response("ordinary native response body"),
+	};
+	await f.emit("http.response", inbound);
+	expect(await inbound.response.text()).toBe("ordinary native response body");
+	const shell = ownershipNativeCall(f, "shell");
+	let shellEffects = 0;
+	for (const callback of f.toolCallbacks["execute.before"])
+		await callback({
+			...shell,
+			tool: "shell",
+			input: { command: "printf not-run" },
+		});
+	shellEffects++;
+	expect(shellEffects).toBe(1);
+	const assistant = f.native.find((message) => message.id === shell.messageID);
+	if (assistant?.type !== "assistant")
+		throw new Error("Missing native tool assistant.");
+	const flowCall = { ...shell, id: CallID.make("call_unregistered_flow") };
+	assistant.content.push({
+		type: "tool",
+		id: flowCall.id,
+		name: "flow_status",
+		time: { created: 4 },
+		state: {
+			status: "running",
+			input: { request: { view: "compact" } },
+			metadata: {},
+		},
+	});
+	const effects: string[] = [];
+	const tool = await effectTool(f, effects);
+	await expect(tool.execute({}, flowCall)).rejects.toThrow();
+	expect(effects).toEqual([]);
+	expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+	expect(f.recovery.snapshot(sessionID)).toMatchObject({
+		mode: "off",
+		automation: { active: false, bound: false },
+		advice: { active: false },
+	});
+	expect(f.repository.saveCount).toBe(0);
+	expect(f.repository.session).toBeNull();
+}
+
+test("terminal recovery an overlapping inspection cannot revoke the first checked queue before claim", async () => {
+	const f = await fixture();
+	try {
+		await triageRejectedCommand(f, "native-rpc-before-history");
+		await admitOrdinaryInput(
+			f,
+			"msg_inspection_queue",
+			"Checked queue after failure",
+		);
+		f.blockNextContextRead();
+		const pending = f.emit("context", f.context());
+		await f.waitContextRead();
+		await expect(f.emit("context", f.context())).rejects.toThrow(
+			"context callbacks overlap",
+		);
+		f.releaseContextRead();
+		await pending;
+		const request = new Request("http://localhost/inspection-first");
+		await f.emit("http.request", {
+			sessionID,
+			agent,
+			model,
+			kind: "primary",
+			request,
+		});
+		const effects: string[] = [],
+			tool = await effectTool(f, effects);
+		expect(await tool.execute({}, ownershipNativeCall(f))).toEqual({
+			content: [{ type: "text", text: "applied" }],
+		});
+		expect(effects).toEqual(["effect"]);
+		await finishOwnedResponse(f, request);
+		expect(f.repository.saveCount).toBe(0);
+	} finally {
+		f.releaseContextRead();
+		await f.lifecycle.dispose();
+	}
+});
+
+async function registrationNativeFixture(
+	observed: boolean,
+	type: "user" | "synthetic",
+) {
+	const f = await fixture();
+	await initialOwnershipWork(f);
+	const prior = await f.lifecycle.verifyTool(ownershipNativeCall(f), "flow");
+	if (prior.kind !== "flow")
+		throw new Error("Missing captured automatic owner");
+	await triageRejectedCommand(f, "native-rpc-before-history");
+	expect(() => prior.assertCurrent()).toThrow();
+	const id = "msg_registration_native",
+		text = "Original native payload";
+	if (observed)
+		await f.sendEventAndWait({
+			type: "session.inbox.enqueued",
+			id: "evt_registration_observed",
+			created: 20,
+			durable: { aggregateID: sessionID, seq: 200, version: 1 },
+			data: {
+				sessionID,
+				inboxID: id,
+				item: { type, payload: { text }, delivery: "queue" },
+			},
+		});
+	f.native.push({ type, id, text, time: { created: 30 } });
+	return { f, id, text };
+}
+
+for (const observed of [false, true])
+	for (const type of ["user", "synthetic"] as const)
+		for (const samePayload of [false, true])
+			for (const when of [
+				"before-resolve",
+				"await-freeze",
+				"before-http",
+				"before-tool",
+			] as const)
+				test(`terminal registration lifecycle refuses ${type} observed ${observed} matching ${samePayload} ${when}`, async () => {
+					const { f, id, text } = await registrationNativeFixture(
+						observed,
+						type,
+					);
+					const registeredText = samePayload
+						? text
+						: "Different registered payload";
+					const register = () =>
+						f.emit("prompt", {
+							sessionID,
+							messageID: SessionMessage.ID.make(id),
+							prompt: { text: registeredText },
+							delivery: "queue",
+						});
+					let registration: Promise<void> | undefined,
+						checks = 0,
+						httpEffects = 0,
+						shellEffects = 0;
+					const original = ExecutionAttribution.prototype.prepareReplacement;
+					const check = spyOn(
+						ExecutionAttribution.prototype,
+						"prepareReplacement",
+					).mockImplementation(function (this: ExecutionAttribution, ...args) {
+						const result = original.apply(this, args);
+						if (++checks === 2 && when === "await-freeze")
+							queueMicrotask(() => {
+								registration = register();
+							});
+						return result;
+					});
+					try {
+						if (when === "before-resolve") f.blockNextContextRead();
+						const pending = f
+							.emit("context", f.context())
+							.then(() => "accepted", String);
+						if (when === "before-resolve") {
+							await f.waitContextRead();
+							await register();
+							await f.flush();
+							expect(
+								await Promise.race([pending, Promise.resolve("still pending")]),
+							).toBe("Error: Flow execution epoch was revoked.");
+							f.releaseContextRead();
+						}
+						const outcome = await pending;
+						await registration;
+						check.mockRestore();
+						if (when === "before-resolve" || when === "await-freeze") {
+							expect(outcome).toBe("Error: Flow execution epoch was revoked.");
+							if (when === "await-freeze") {
+								expect(checks).toBe(2);
+								expect(registration).toBeDefined();
+							}
+						} else {
+							expect(outcome).toBe("accepted");
+							if (when === "before-tool") {
+								const request = new Request(
+									"http://localhost/registration-before-mutation",
+								);
+								await f.emit("http.request", {
+									sessionID,
+									agent,
+									model,
+									kind: "primary",
+									request,
+								});
+								await finishOwnedResponse(f, request);
+							}
+							await register();
+						}
+						const request = new Request(
+							"http://localhost/registration-after-mutation",
+						);
+						await expect(
+							(async () => {
+								await f.emit("http.request", {
+									sessionID,
+									agent,
+									model,
+									kind: "primary",
+									request,
+								});
+								httpEffects++;
+							})(),
+						).rejects.toThrow();
+						const shell = ownershipNativeCall(f, "shell");
+						await expect(
+							(async () => {
+								for (const callback of f.toolCallbacks["execute.before"])
+									await callback({
+										...shell,
+										tool: "shell",
+										input: { command: "printf not-run" },
+									});
+								shellEffects++;
+							})(),
+						).rejects.toThrow();
+						await expect(
+							f.lifecycle.verifyTool(shell, "native", "shell"),
+						).rejects.toThrow();
+						const flowEffects: string[] = [],
+							tool = await effectTool(f, flowEffects);
+						await expect(
+							tool.execute({}, ownershipNativeCall(f)),
+						).rejects.toThrow();
+						expect(httpEffects).toBe(0);
+						expect(shellEffects).toBe(0);
+						expect(flowEffects).toEqual([]);
+						expect(f.repository.saveCount).toBe(0);
+						expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+						expect(f.recovery.snapshot(sessionID)).toMatchObject({
+							mode: "off",
+							advice: { active: false },
+							automation: { active: false, bound: false },
+						});
+						if (type === "user" && samePayload) {
+							await admitOrdinaryInput(
+								f,
+								"msg_registration_checked_successor",
+								"Fresh checked successor",
+							);
+							const freshRequest = await startOwnedRequest(f);
+							const applied: string[] = [],
+								freshTool = await effectTool(f, applied);
+							expect(
+								await freshTool.execute({}, ownershipNativeCall(f)),
+							).toEqual({ content: [{ type: "text", text: "applied" }] });
+							expect(applied).toEqual(["effect"]);
+							await finishOwnedResponse(f, freshRequest);
+							expect(f.repository.saveCount).toBe(0);
+						}
+					} finally {
+						check.mockRestore();
+						f.releaseContextRead();
+						await f.lifecycle.dispose();
+					}
+				});
+
+for (const type of ["user", "synthetic"] as const)
+	test(`terminal registration earlier mismatched ${type} registration still refuses before capture`, async () => {
+		const { f, id } = await registrationNativeFixture(false, type);
+		try {
+			await f.emit("prompt", {
+				sessionID,
+				messageID: SessionMessage.ID.make(id),
+				prompt: { text: "Different registered payload" },
+				delivery: "queue",
+			});
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				"unknown, synthetic, or stale real input",
+			);
+			expect(f.repository.saveCount).toBe(0);
+			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+			expect(f.recovery.snapshot(sessionID)).toMatchObject({
+				mode: "off",
+				advice: { active: false },
+				automation: { active: false, bound: false },
+			});
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const queuedHost of ["same-host", "other-host"] as const)
+	test(`terminal registration unrelated ${queuedHost} preparation preserves ordinary execution and a current Flow lease`, async () => {
+		const { f } = await registrationNativeFixture(false, "user");
+		try {
+			const request = await startOwnedRequest(f);
+			const shell = ownershipNativeCall(f, "shell");
+			const target =
+				queuedHost === "same-host"
+					? sessionID
+					: Session.ID.make("session-registration-other");
+			await f.emit("prompt", {
+				sessionID: target,
+				messageID: SessionMessage.ID.make("msg_positive_queued_one"),
+				prompt: { text: "msg_positive_queued_one" },
+				delivery: "queue",
+			});
+			for (const callback of f.toolCallbacks["execute.before"])
+				await callback({
+					...shell,
+					tool: "shell",
+					input: { command: "printf not-run" },
+				});
+			expect(await f.lifecycle.verifyTool(shell, "native", "shell")).toEqual({
+				kind: "native-only",
+			});
+			await finishOwnedResponse(f, request);
+			await f.command(
+				"flow-auto",
+				"Current lease remains active during unrelated queue preparation",
+			);
+			const primaryRequest = await startOwnedRequest(f);
+			const call = ownershipNativeCall(f),
+				guard = await f.lifecycle.verifyTool(call, "flow");
+			if (guard.kind !== "flow") throw new Error("Missing Flow guard");
+			const authority = f.autoDrive.captureAuthority(sessionID);
+			expect(authority?.token).toBe("local-token");
+			await f.emit("prompt", {
+				sessionID: target,
+				messageID: SessionMessage.ID.make("msg_positive_queued_two"),
+				prompt: { text: "msg_positive_queued_two" },
+				delivery: "queue",
+			});
+			expect(() => guard.assertCurrent()).not.toThrow();
+			expect(f.autoDrive.captureAuthority(sessionID)).toEqual(authority);
+			const applied: string[] = [],
+				tool = await effectTool(f, applied);
+			expect(await tool.execute({}, call)).toEqual({
+				content: [{ type: "text", text: "applied" }],
+			});
+			expect(applied).toEqual(["effect"]);
+			await finishOwnedResponse(f, primaryRequest);
+			if (queuedHost === "same-host") {
+				f.native.push(
+					{
+						type: "user",
+						id: "msg_positive_queued_one",
+						text: "msg_positive_queued_one",
+						time: { created: 40 },
+					},
+					{
+						type: "user",
+						id: "msg_positive_queued_two",
+						text: "msg_positive_queued_two",
+						time: { created: 41 },
+					},
+				);
+				const queuedRequest = await startOwnedRequest(f);
+				const queuedEffects: string[] = [],
+					queuedTool = await effectTool(f, queuedEffects);
+				expect(await queuedTool.execute({}, ownershipNativeCall(f))).toEqual({
+					content: [{ type: "text", text: "applied" }],
+				});
+				expect(queuedEffects).toEqual(["effect"]);
+				await finishOwnedResponse(f, queuedRequest);
+			}
+		} finally {
+			await f.lifecycle.dispose();
+		}
+	});
+
+for (const scheduled of [false, true])
+	test(`terminal registration original ownerless await-gap scheduled ${scheduled} refuses context and HTTP`, async () => {
+		const f = await fixture();
+		let checks = 0,
+			registration: Promise<void> | undefined;
+		const original = ExecutionAttribution.prototype.prepareReplacement;
+		const register = () =>
+			f.emit("prompt", {
+				sessionID,
+				messageID: SessionMessage.ID.make("msg_ownerless_registration_gap"),
+				prompt: { text: "Different registered payload" },
+				delivery: "queue",
+			});
+		const check = spyOn(
+			ExecutionAttribution.prototype,
+			"prepareReplacement",
+		).mockImplementation(function (this: ExecutionAttribution, ...args) {
+			const result = original.apply(this, args);
+			if (++checks === 2 && scheduled)
+				queueMicrotask(() => {
+					registration = register();
+				});
+			return result;
+		});
+		try {
+			await triageRejectedCommand(f, "native-rpc-before-history");
+			f.native.push({
+				type: "user",
+				id: "msg_ownerless_registration_gap",
+				text: "Original native payload",
+				time: { created: 30 },
+			});
+			if (!scheduled) await register();
+			await expect(f.emit("context", f.context())).rejects.toThrow(
+				scheduled
+					? "epoch was revoked"
+					: "unknown, synthetic, or stale real input",
+			);
+			await registration;
+			if (scheduled) {
+				expect(checks).toBe(2);
+				expect(registration).toBeDefined();
+			}
+			check.mockRestore();
+			let httpEffects = 0;
+			await expect(
+				(async () => {
+					await f.emit("http.request", {
+						sessionID,
+						agent,
+						model,
+						kind: "primary",
+						request: new Request("http://localhost/ownerless-gap-refusal"),
+					});
+					httpEffects++;
+				})(),
+			).rejects.toThrow();
+			const effects: string[] = [],
+				tool = await effectTool(f, effects);
+			await expect(tool.execute({}, ownershipNativeCall(f))).rejects.toThrow();
+			expect(httpEffects).toBe(0);
+			expect(effects).toEqual([]);
+			expect(f.repository.saveCount).toBe(0);
+			expect(f.autoDrive.captureAuthority(sessionID)).toBeNull();
+			expect(f.recovery.snapshot(sessionID)).toEqual({ mode: "off" });
+		} finally {
+			check.mockRestore();
+			await f.lifecycle.dispose();
+		}
+	});

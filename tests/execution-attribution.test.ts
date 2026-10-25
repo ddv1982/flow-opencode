@@ -1295,3 +1295,93 @@ for (const barrier of ["delete", "clear"] as const)
 				kind: "retired",
 			});
 	});
+
+for (const path of [
+	"direct-extension",
+	"nonchanging",
+	"expired-clock",
+	"native-only",
+] as const)
+	test(`replacement bridge supplier stays lazy for ${path}`, () => {
+		let current = true,
+			calls = 0;
+		const attribution = new ExecutionAttribution(() => {});
+		const primary = attribution.freeze(
+			context,
+			[user],
+			path === "native-only"
+				? { kind: "native-only" }
+				: { kind: "flow", origin },
+			{ current: () => current, assertCurrent: () => {} },
+		);
+		attribution.end(primary);
+		if (path === "expired-clock") current = false;
+		const next: SessionContext = {
+			...context,
+			messages: [
+				...(path === "direct-extension" ? context.messages : []),
+				{ role: "user", id: "msg_bridge_next", content: [] },
+			],
+		};
+		const native: SessionMessageInfo[] = [
+			...(path === "direct-extension" ? [user] : []),
+			{
+				type: "user",
+				id: "msg_bridge_next",
+				text: "Next source",
+				time: { created: 2 },
+			},
+		];
+		const prepare = () =>
+			attribution.prepareReplacement(
+				next,
+				native,
+				primary,
+				path !== "nonchanging",
+				() => {
+					calls++;
+					throw new Error("unneeded bridge was evaluated");
+				},
+			);
+		if (path === "native-only")
+			expect(prepare).toThrow("does not extend the frozen consumed prefix");
+		else
+			expect(prepare().inputs).toEqual(
+				path === "direct-extension"
+					? ["user-1", "msg_bridge_next"]
+					: ["msg_bridge_next"],
+			);
+		expect(calls).toBe(0);
+	});
+
+for (const outcome of ["throws", "undefined"] as const)
+	test(`replacement bridge supplier is required for a changing nonextension and ${outcome} denies it`, () => {
+		const f = fixture();
+		f.attribution.end(f.primary);
+		let calls = 0;
+		const input: SessionContext = {
+			...context,
+			messages: [{ role: "user", id: "msg_nonextension", content: [] }],
+		};
+		const native: SessionMessageInfo[] = [
+			{
+				type: "user",
+				id: "msg_nonextension",
+				text: "Different prefix",
+				time: { created: 2 },
+			},
+		];
+		expect(() =>
+			f.attribution.prepareReplacement(input, native, f.primary, true, () => {
+				calls++;
+				if (outcome === "throws") throw new Error("bridge validation failed");
+				return undefined;
+			}),
+		).toThrow(
+			outcome === "throws"
+				? "bridge validation failed"
+				: "does not extend the frozen consumed prefix",
+		);
+		expect(calls).toBe(1);
+		expect(f.attribution.current(sid)).toBe(f.primary);
+	});
