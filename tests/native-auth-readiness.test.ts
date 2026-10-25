@@ -824,3 +824,90 @@ for (const variant of ["high effort", "高"] as const)
 		};
 		await f.ready({ models: [{ ...ref, variant }] });
 	});
+
+for (const unavailable of ["missing", "misspelled", "disabled"] as const)
+	test(`catalog diagnostic ${unavailable} retains zero fake accounting`, async () => {
+		const f = await fixture(true, ["synthetic-provider/gpt-6.1-sol-typo"]);
+		const requested =
+			unavailable === "misspelled"
+				? { ...f.profile, id: "gpt-6.1-sol-typo" }
+				: f.profile;
+		if (unavailable === "missing") f.state.models = [];
+		if (unavailable === "disabled")
+			f.state.models[0] = { ...f.state.models[0], enabled: false };
+		const host = Object.create(EvalHost.prototype) as EvalHost;
+		let accounting = 0,
+			sessions = 0,
+			dispatches = 0;
+		const accountingSpy = spyOn(
+			paidBudget,
+			"consumePaidDispatch",
+		).mockImplementation(async () => {
+			accounting++;
+		});
+		Object.assign(host, {
+			project: "/synthetic/project",
+			nativeClient: f.client,
+			nativeAuthHost: {
+				requireReady: async () =>
+					f.ready({ models: [requested], timeoutMs: 40 }),
+			},
+			verifyArtifacts: async () => {},
+			createSession: async () => {
+				sessions++;
+				return "synthetic-session";
+			},
+		});
+		try {
+			const error = await hostFailure(
+				host.probeModel(`${requested.providerID}/${requested.id}`, {
+					onDispatch: () => {
+						dispatches++;
+					},
+				}),
+			);
+			expect({ accounting, sessions, dispatches }).toEqual({
+				accounting: 0,
+				sessions: 0,
+				dispatches: 0,
+			});
+			expect(error.message).toBe(
+				"Native account authentication is not ready (readiness-deadline). Check that each requested model is present and enabled in the native catalog; OAuth initialization may also be incomplete.",
+			);
+		} finally {
+			accountingSpy.mockRestore();
+		}
+	});
+for (const unavailable of ["missing", "disabled"] as const)
+	test(`catalog diagnostic transient ${unavailable} waits for valid OAuth bootstrap`, async () => {
+		const f = await fixture(true);
+		const settled = [...f.state.models];
+		f.state.models =
+			unavailable === "missing"
+				? []
+				: settled.map((model) => ({ ...model, enabled: false }));
+		const observed = deferred<void>(),
+			release = deferred<void>();
+		let reads = 0,
+			accounting = 0;
+		f.state.modelRead = async () => {
+			if (++reads === 2) {
+				observed.resolve();
+				await release.promise;
+			}
+		};
+		const pending = f.ready({ timeoutMs: 1000 }).then(() => {
+			accounting++;
+		});
+		try {
+			await observed.promise;
+			expect({ reads, accounting }).toEqual({ reads: 2, accounting: 0 });
+			f.state.models = settled;
+			release.resolve();
+			await pending;
+			expect(accounting).toBe(1);
+		} finally {
+			release.resolve();
+			await pending.catch(() => {});
+		}
+	});
