@@ -918,3 +918,107 @@ test("attachment-only native user direction can close a stopped recovery workflo
 	});
 	expect(closed.status).toBe("ok");
 });
+
+test("current armed validation persistence failure remains visible to the model", async () => {
+	const { spyOn } = await import("bun:test");
+	const { realpath } = await import("node:fs/promises");
+	const { ValidationCaptureCoordinator } = await import(
+		"../src/platform/opencode/validation-capture.js"
+	);
+	type ValidationCaptureCoordinator =
+		import("../src/platform/opencode/validation-capture.js").ValidationCaptureCoordinator;
+	type NativeToolAfter =
+		import("../src/platform/opencode/sdk.js").NativeToolAfter;
+	type NativeToolBefore =
+		import("../src/platform/opencode/sdk.js").NativeToolBefore;
+	const { host, workspace } = await load();
+	let receiver: ValidationCaptureCoordinator | undefined;
+	const rejected: unknown[] = [];
+	const original = ValidationCaptureCoordinator.prototype.observeToolAfter;
+	const observer = spyOn(
+		ValidationCaptureCoordinator.prototype,
+		"observeToolAfter",
+	).mockImplementation(async function (
+		this: ValidationCaptureCoordinator,
+		input,
+	) {
+		receiver = this;
+		try {
+			return await original.call(this, input);
+		} catch (error) {
+			rejected.push(error);
+			throw error;
+		}
+	});
+	try {
+		const command = "printf 'literal raw shell output\\n0 failed\\n'";
+		const native = await host.toolContext("shell", { command });
+		const before: NativeToolBefore = {
+			tool: "shell",
+			sessionID: native.sessionID,
+			messageID: native.messageID,
+			id: native.id,
+			agent: native.agent,
+			input: { command },
+		};
+		await host.toolHooks.emit("execute.after", {
+			...before,
+			status: "completed",
+			result: { content: "unarmed literal" },
+		});
+		function coordinator(): ValidationCaptureCoordinator {
+			if (!receiver)
+				throw new Error("Composition did not invoke its coordinator.");
+			return receiver;
+		}
+		const capture = coordinator();
+		capture.arm(native.sessionID, workspace, {
+			featureId: "capture-research",
+			runId: "run-research",
+			command,
+			scope: "focused",
+			sourceDigest: `sha256:${"a".repeat(64)}`,
+			hostPlatform: "other",
+			intent: "pass",
+			assertions: [],
+			resultsPath: undefined,
+		});
+		await host.toolHooks.emit("execute.before", before);
+		expect(capture.pendingCount()).toBe(1);
+		await mkdir(join(workspace, ".flow"), { recursive: true });
+		await writeFile(
+			join(workspace, ".flow/session.json"),
+			"unchanged durable bytes\n",
+		);
+		await writeFile(
+			join(workspace, ".flow/session.lock"),
+			"deliberate capture failure\n",
+		);
+		const result = {
+			content: "literal raw shell output\n0 failed\n",
+			metadata: { exit: 0, truncated: false },
+			output: {
+				exit: 0,
+				truncated: false,
+				output: "literal raw shell output\n0 failed\n",
+			},
+		};
+		const after: NativeToolAfter = { ...before, status: "completed", result };
+		await host.toolHooks.emit("execute.after", after);
+		expect(rejected.map(String)).toEqual([
+			`Error: Flow requires the Flow session lock to be a directory: ${join(await realpath(workspace), ".flow/session.lock")}.`,
+		]);
+		expect(capture.pendingCount()).toBe(0);
+		expect(await readFile(join(workspace, ".flow/session.json"), "utf8")).toBe(
+			"unchanged durable bytes\n",
+		);
+		expect(after.result.metadata).toBe(result.metadata);
+		expect(after.result.output).toBe(result.output);
+		expect(JSON.stringify(after)).not.toContain("[flow-validation]");
+		expect(after.result.content).toBe(
+			"literal raw shell output\n0 failed\n\n\n[flow-validation-error] Flow validation capture failed. No validation receipt was produced.",
+		);
+	} finally {
+		observer.mockRestore();
+	}
+});
