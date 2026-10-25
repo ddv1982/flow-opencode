@@ -334,7 +334,7 @@ export function connectNativeAccountSource(
 								{
 									origin: "host",
 									code: "native-auth-not-ready",
-									detail: `Native account authentication is not ready (${reason}).`,
+									detail: `Native account authentication is not ready (${reason}).${reason === "readiness-deadline" ? " Check that each requested model is present and enabled in the native catalog; OAuth initialization may also be incomplete." : ""}`,
 									retryable: false,
 								},
 								undefined,
