@@ -11,7 +11,8 @@ import {
 	writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import {
 	RELEASE_HOST_POLICY,
 	releaseReviewerModel,
@@ -1105,14 +1106,14 @@ describe("canary preparation", () => {
 		}
 	});
 
-	test("builds an exact local-plugin fixture from the tarball", async () => {
+	async function exactLocalPluginFixture(contract: string) {
 		const root = await mkdtemp(join(tmpdir(), "flow-canary-package-"));
 		const output = await mkdtemp(join(tmpdir(), "flow-canary-output-"));
 		temporary.push(root, output);
 		await mkdir(join(root, "dist"), { recursive: true });
 		await writeFile(
 			join(root, "dist/index.js"),
-			"export default async () => ({});\n",
+			'import { createRequire } from "node:module"; export default async () => ({ version: createRequire(import.meta.url)("../package.json").version });\n',
 		);
 		await writeFile(join(root, "dist/tui.js"), "export default {};\n");
 		await writeFile(
@@ -1159,9 +1160,49 @@ describe("canary preparation", () => {
 			preparedAt: new Date("2026-08-25T00:00:00.000Z"),
 		});
 		expect(prepared.releaseTag).toBe("v10.0.0");
+		const fixture = join(output, "prepared/fixture");
+		const config = JSON.parse(
+			await readFile(join(fixture, "opencode.json"), "utf8"),
+		);
+		expect(await realpath(resolve(fixture, config.plugins[0].package))).toBe(
+			await realpath(join(fixture, ".opencode/plugins/flow")),
+		);
+
+		if (contract === "workspace") {
+			await run(["git", "rev-parse", "--verify", "HEAD"], fixture);
+			const child = Bun.spawn(["git", "rev-parse", "--show-toplevel"], {
+				cwd: fixture,
+				stdout: "pipe",
+			});
+			expect(await child.exited).toBe(0);
+			expect((await new Response(child.stdout).text()).trim()).toBe(
+				await realpath(fixture),
+			);
+		} else {
+			const resolve = Bun.spawn(
+				[
+					"node",
+					"-e",
+					"console.log(require.resolve(process.argv[1]))",
+					join(fixture, ".opencode/plugins/flow"),
+				],
+				{ stdout: "pipe", stderr: "pipe" },
+			);
+			expect(await resolve.exited).toBe(0);
+			expect(
+				await realpath((await new Response(resolve.stdout).text()).trim()),
+			).toBe(
+				await realpath(join(fixture, ".opencode/plugins/flow/dist/index.js")),
+			);
+			const entry = await import(
+				pathToFileURL(join(fixture, ".opencode/plugins/flow/index.js")).href
+			);
+			expect(await entry.default()).toEqual({ version: "10.0.0" });
+		}
+
 		expect(
 			await readFile(
-				join(output, "prepared/fixture/.opencode/plugins/flow/index.js"),
+				join(output, "prepared/fixture/.opencode/plugins/flow/dist/index.js"),
 				"utf8",
 			),
 		).toContain("export default");
@@ -1179,7 +1220,8 @@ describe("canary preparation", () => {
 			name: "opencode-plugin-flow",
 			version: "10.0.0",
 			type: "module",
-			exports: { ".": "./index.js", "./tui": "./tui.js" },
+			main: "./dist/index.js",
+			exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" },
 			dependencies: {
 				"@opencode/plugin": "2.1.4",
 				zod: "4.4.2",
@@ -1211,7 +1253,12 @@ describe("canary preparation", () => {
 			"package.json",
 			"protocol.ts",
 		]);
-	});
+	}
+
+	test.each(["workspace", "module metadata"])(
+		"builds an exact local-plugin fixture from the tarball: %s",
+		exactLocalPluginFixture,
+	);
 });
 
 test("9.6 canary rejects every wrong-role model including a second reviewer", async () => {
