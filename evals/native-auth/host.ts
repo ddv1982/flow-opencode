@@ -11,16 +11,24 @@ import {
 } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import type { CredentialEntry } from "@opencode/client";
+import type { CredentialEntry, OpenCodeClient } from "@opencode/client";
 import { canonicalSha256 } from "../canonical-json.js";
+import { EvaluationPhaseError } from "../failure-origin.js";
 import ClientPlugin from "./client-plugin.js";
 import {
+	boundedNativeAuth,
 	capability,
 	type NativeAccountConnection,
+	NativeAccountReadinessRpc,
 	object,
 	PLACEHOLDER_REFRESH,
+	parseApprovedModels,
 	parseConnection,
+	parseReadinessInput,
+	parseReadinessResult,
 	providersForModels,
+	type ReadinessModel,
+	type ReadinessReason,
 	refuse,
 	responseJSON,
 	UNRESOLVED_ACCESS,
@@ -43,6 +51,15 @@ export type NativeAuthHost = {
 		}): Promise<void>;
 	};
 	artifactHashes: { entrySha256: string; sourceSha256: string };
+	requireReady(
+		client: Pick<OpenCodeClient, "rpc">,
+		input: {
+			directory: string;
+			models: readonly ReadinessModel[];
+			timeoutMs?: number;
+			signal?: AbortSignal;
+		},
+	): Promise<void>;
 	dispose(): Promise<void>;
 };
 export type NativeAuthentication = {
@@ -189,18 +206,16 @@ export function connectNativeAccountSource(
 		}): Promise<NativeAuthHost> {
 			if (closed || options.signal?.aborted || !isAbsolute(options.directory))
 				refuse();
-			const providers = providersForModels(options.models);
+			const models = parseApprovedModels(options.models);
+			const providers = providersForModels(models);
 			const accounts = connection.accounts.filter((account) =>
 				providers.includes(account.route.providerID),
 			);
 			if (accounts.length !== providers.length) refuse();
-			const acquired = await request(
-				"acquire",
-				{ models: options.models },
-				options.signal,
-			);
+			const acquired = await request("acquire", { models }, options.signal);
 			if (!object(acquired)) refuse();
 			const lease = capability(acquired.lease);
+			const lifetime = new AbortController();
 			let ownedDirectory = false;
 			let done: Promise<void> | undefined;
 			const configurationPath =
@@ -208,6 +223,7 @@ export function connectNativeAccountSource(
 				join(options.directory, "configuration.json");
 			const dispose = () => {
 				done ??= (async () => {
+					lifetime.abort();
 					try {
 						await request("release", { lease });
 					} finally {
@@ -230,7 +246,11 @@ export function connectNativeAccountSource(
 				await verifyNativeAuthClient(artifact);
 				await writeFile(
 					configurationPath,
-					JSON.stringify({ connection: { ...connection, accounts }, lease }),
+					JSON.stringify({
+						connection: { ...connection, accounts },
+						lease,
+						models,
+					}),
 					{ mode: 0o600, flag: "wx" },
 				);
 				const entries = [
@@ -257,6 +277,72 @@ export function connectNativeAccountSource(
 					).values(),
 				];
 				const attachment: NativeAuthHost = {
+					requireReady: async (client, input) => {
+						let reason: ReadinessReason = "readiness-unavailable";
+						let timer: ReturnType<typeof setTimeout> | undefined;
+						const timeout = new AbortController();
+						try {
+							input.signal?.throwIfAborted();
+							if (lifetime.signal.aborted || closed) refuse();
+							const timeoutMs = Math.min(15000, input.timeoutMs ?? 15000);
+							if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+								reason = "readiness-deadline";
+								refuse();
+							}
+							const request = parseReadinessInput({
+								models: input.models,
+								timeoutMs: Math.floor(timeoutMs),
+							});
+							if (
+								request.models.some(
+									(model) =>
+										!models.includes(`${model.providerID}/${model.id}`),
+								)
+							) {
+								reason = "profile-unapproved";
+								refuse();
+							}
+							const deadline = Date.now() + request.timeoutMs;
+							timer = setTimeout(() => timeout.abort(), request.timeoutMs);
+							const signal = AbortSignal.any([
+								lifetime.signal,
+								timeout.signal,
+								...(input.signal ? [input.signal] : []),
+							]);
+							const result = parseReadinessResult(
+								await boundedNativeAuth(signal, () =>
+									client.rpc(NativeAccountReadinessRpc).ready(request, {
+										location: { directory: input.directory },
+										signal,
+									}),
+								),
+							);
+							input.signal?.throwIfAborted();
+							if (Date.now() >= deadline) {
+								reason = "readiness-deadline";
+								refuse();
+							}
+							if (result.state === "not-ready") {
+								reason = result.reason;
+								refuse();
+							}
+						} catch {
+							if (timeout.signal.aborted) reason = "readiness-deadline";
+							lifetime.abort();
+							input.signal?.throwIfAborted();
+							throw new EvaluationPhaseError(
+								{
+									origin: "host",
+									code: "native-auth-not-ready",
+									detail: `Native account authentication is not ready (${reason}).${reason === "readiness-deadline" ? " Check that each requested model is present and enabled in the native catalog; OAuth initialization may also be incomplete." : ""}`,
+									retryable: false,
+								},
+								undefined,
+							);
+						} finally {
+							clearTimeout(timer);
+						}
+					},
 					plugin: {
 						package: artifact.pluginDirectory,
 						options: { configurationPath },

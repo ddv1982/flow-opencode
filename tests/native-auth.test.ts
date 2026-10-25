@@ -283,7 +283,11 @@ async function clientFixture() {
 	const path = join(root, "configuration.json");
 	await writeFile(
 		path,
-		JSON.stringify({ connection: remote.configuration, lease }),
+		JSON.stringify({
+			connection: remote.configuration,
+			lease,
+			models: ["alias/model"],
+		}),
 		{ mode: 0o600 },
 	);
 	let active: unknown = {
@@ -294,7 +298,9 @@ async function clientFixture() {
 	};
 	const methods: IntegrationOAuthMethodRegistration[] = [];
 	const hooks = new Map<string, unknown>();
+	const rpc = rpcCapture();
 	const ctx = context({
+		...rpc,
 		options: { configurationPath: path },
 		provider: {
 			get: async () => ({
@@ -413,12 +419,15 @@ for (const conflict of [true, false])
 						accounts,
 					},
 					lease,
+					models: ["alias/model", "alias-two/model"],
 				}),
 				{ mode: 0o600 },
 			);
 			let transforms = 0;
 			const methods: IntegrationOAuthMethodRegistration[] = [];
+			const rpc = rpcCapture();
 			const ctx = context({
+				...rpc,
 				options: { configurationPath: path },
 				integration: {
 					connection: {

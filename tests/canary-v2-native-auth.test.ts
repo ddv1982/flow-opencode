@@ -15,11 +15,16 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { type CredentialEntry, OpenCode } from "@opencode/client";
+import {
+	type CredentialEntry,
+	OpenCode,
+	type OpenCodeClient,
+} from "@opencode/client";
 import { Service } from "@opencode/client/service";
 import { canonicalJson } from "../evals/canonical-json.js";
 import { startNativeAccountBroker } from "../evals/native-auth/broker.js";
 import {
+	connectNativeAccountSource,
 	nativeAuthSourceSha256,
 	stageNativeAuthClient,
 } from "../evals/native-auth/host.js";
@@ -370,6 +375,77 @@ test("charged source acquisition failure is generic, remains consumed, and remov
 	expect(await readFile(join(f.root, run, "server.log"), "utf8")).toBe(
 		"Native authentication diagnostics omitted.\n",
 	);
+});
+test("readiness failure before canary generation stays charged once and cannot repeat", async () => {
+	const f = await fixture();
+	let launches = 0,
+		generations = 0,
+		releases = 0;
+	const relay = Bun.serve({
+		hostname: "127.0.0.1",
+		port: 0,
+		fetch(request) {
+			if (new URL(request.url).pathname === "/acquire")
+				return Response.json({ lease: "b".repeat(64) });
+			releases++;
+			return Response.json({});
+		},
+	});
+	try {
+		await writeFile(
+			f.source,
+			JSON.stringify({ ...connection, url: relay.url.href }),
+			{ mode: 0o600 },
+		);
+		const launch = async (
+			_directory: string,
+			model: string,
+			_prompt: string,
+			_prepared: unknown,
+			configuration?: NativeAccountConnection,
+		) => {
+			launches++;
+			if (!configuration) throw new Error("Missing synthetic configuration");
+			const source = connectNativeAccountSource(configuration);
+			const auth = await source.prepareHost({
+				directory: join(f.root, "readiness-host"),
+				models: [model],
+			});
+			try {
+				const client = {
+					rpc: () => ({
+						ready: async () => ({
+							version: 1,
+							state: "not-ready",
+							reason: "route-unsettled",
+						}),
+					}),
+				} as unknown as Pick<OpenCodeClient, "rpc">;
+				await auth.requireReady(client, {
+					directory: "/synthetic/project",
+					models: [{ providerID: "fake", id: "model" }],
+				});
+				generations++;
+				return 0;
+			} finally {
+				await auth.dispose();
+				await source.dispose();
+			}
+		};
+		await expect(runPaidCanary(f.input, launch)).rejects.toThrow(
+			"Native-auth canary execution failed during execution.",
+		);
+		expect({
+			launches,
+			generations,
+			releases,
+			consumed: (await paidRunStatus(f.root)).consumed,
+		}).toEqual({ launches: 1, generations: 0, releases: 1, consumed: 1 });
+		await expect(runPaidCanary(f.input, launch)).rejects.toThrow("exhausted");
+		expect(launches).toBe(1);
+	} finally {
+		await relay.stop(true);
+	}
 });
 for (const failure of ["setup", "version", "startup", "release"] as const)
 	test(`charged auth ${failure} failure stops its host and disposes private attachment independently`, async () => {
