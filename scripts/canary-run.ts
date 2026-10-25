@@ -122,7 +122,10 @@ export function canaryLaunchEnvironment(
 	delete environment.TYPESAFE_API_KEY;
 	delete environment.FLOW_EVAL_NATIVE_AUTH;
 	for (const name of Object.keys(environment))
-		if (name.startsWith("OPENCODE_") && name !== "OPENCODE_API_KEY")
+		if (
+			(name.startsWith("OPENCODE_") && name !== "OPENCODE_API_KEY") ||
+			name.startsWith("GIT_")
+		)
 			delete environment[name];
 	for (const name of [
 		"NODE_OPTIONS",
@@ -354,6 +357,24 @@ async function launchCanary(
 				await realpath(join(dirname(directory), CANARY_PLUGIN_DIRECTORY)),
 				attachment.plugin.package,
 			]);
+			const entryRoots = new Map([
+				[
+					await realpath(
+						join(dirname(directory), CANARY_PLUGIN_DIRECTORY, "index.js"),
+					),
+					await realpath(join(dirname(directory), CANARY_PLUGIN_DIRECTORY)),
+				],
+				[
+					await realpath(
+						join(dirname(directory), CANARY_PLUGIN_DIRECTORY, "dist/index.js"),
+					),
+					await realpath(join(dirname(directory), CANARY_PLUGIN_DIRECTORY)),
+				],
+				[
+					await realpath(join(attachment.plugin.package, "index.ts")),
+					attachment.plugin.package,
+				],
+			]);
 			for (;;) {
 				signal.throwIfAborted();
 				if (Date.now() >= deadline)
@@ -372,12 +393,8 @@ async function launchCanary(
 					if (plugin.source.type !== "local")
 						throw new Error("Unprepared canary plugin loaded.");
 					const path = await realpath(plugin.source.path);
-					const base = expected.has(path)
-						? path
-						: /[/\\]index\.(?:ts|js)$/.test(path)
-							? dirname(path)
-							: path;
-					if (!expected.has(base) || plugin.state.status !== "active")
+					const base = expected.has(path) ? path : entryRoots.get(path);
+					if (!base || !expected.has(base) || plugin.state.status !== "active")
 						throw new Error("Unprepared or failed canary plugin loaded.");
 					active.add(base);
 				}

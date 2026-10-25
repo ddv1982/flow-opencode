@@ -10,7 +10,10 @@ import type {
 	SessionMessageAssistantTool,
 	SessionTransferData,
 } from "@opencode/client";
+import { prepareCanaryWorkspace } from "../scripts/canary-workspace.js";
 import {
+	CANARY_PLUGIN_LOADER,
+	CANARY_PLUGIN_LOADER_SHA256,
 	canaryRecordIssue,
 	deriveCanaryResult,
 } from "../scripts/eval-canary.js";
@@ -242,6 +245,7 @@ function derive(transcript: unknown = native(), session = flowSession()) {
 			sourcePackageSha256: hash("manifest"),
 			tuiEntrySha256: hash("tui"),
 			pluginPackageSha256: hash("local-manifest"),
+			loaderEntrySha256: CANARY_PLUGIN_LOADER_SHA256,
 			configSha256: hash("config"),
 		},
 		session,
@@ -595,7 +599,8 @@ async function preparedFixture(directory: string) {
 		name: "opencode-plugin-flow",
 		version: "10.0.0",
 		type: "module",
-		exports: { ".": "./index.js", "./tui": "./tui.js" },
+		main: "./dist/index.js",
+		exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" },
 		dependencies: { "@opencode/plugin": "2.1.4" },
 	});
 	const config = canonicalJson({
@@ -609,15 +614,16 @@ async function preparedFixture(directory: string) {
 		share: "disabled",
 	});
 	await mkdir(join(directory, "package/dist"), { recursive: true });
-	await mkdir(join(directory, "fixture/.opencode/plugins/flow"), {
+	await mkdir(join(directory, "fixture/.opencode/plugins/flow/dist"), {
 		recursive: true,
 	});
 	for (const [path, bytes] of [
 		["package/package.json", sourcePackage],
 		["package/dist/index.js", "plugin"],
 		["package/dist/tui.js", "tui"],
-		["fixture/.opencode/plugins/flow/index.js", "plugin"],
-		["fixture/.opencode/plugins/flow/tui.js", "tui"],
+		["fixture/.opencode/plugins/flow/index.js", CANARY_PLUGIN_LOADER],
+		["fixture/.opencode/plugins/flow/dist/index.js", "plugin"],
+		["fixture/.opencode/plugins/flow/dist/tui.js", "tui"],
 		["fixture/.opencode/plugins/flow/package.json", pluginPackage],
 		["fixture/opencode.json", config],
 	] as const)
@@ -654,9 +660,11 @@ async function preparedFixture(directory: string) {
 			sourcePackageSha256: hash(sourcePackage),
 			tuiEntrySha256: hash("tui"),
 			pluginPackageSha256: hash(pluginPackage),
+			loaderEntrySha256: CANARY_PLUGIN_LOADER_SHA256,
 			configSha256: hash(config),
 		},
 	};
+	await prepareCanaryWorkspace(join(directory, "fixture"));
 	const prepared = { ...base, sha256: preparedCanarySha256(base) };
 	await writeFile(join(directory, "prepared.json"), JSON.stringify(prepared));
 	return prepared;
@@ -748,7 +756,7 @@ test("native canary recording redacts, reopens offline, rejects mutations and re
 	);
 	expect(await verify(result.record)).toContain("digest or size");
 	await writeFile(
-		join(directory, "fixture/.opencode/plugins/flow/tui.js"),
+		join(directory, "fixture/.opencode/plugins/flow/dist/tui.js"),
 		"mutated",
 	);
 	await expect(recordCanary(input)).rejects.toThrow(
