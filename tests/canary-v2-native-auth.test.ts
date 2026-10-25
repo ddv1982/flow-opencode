@@ -38,11 +38,14 @@ import {
 	canaryPublicNativeEvidence,
 	runPaidCanary,
 } from "../scripts/canary-run.js";
+import { prepareCanaryWorkspace } from "../scripts/canary-workspace.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
 	CANARY_NATIVE_AUTH_DIRECTORY,
+	CANARY_PLUGIN_LOADER,
+	CANARY_PLUGIN_LOADER_SHA256,
 	CanaryAuthLaunchReceiptSchema,
 	CanaryNativeAuthSchema,
 	canaryAuthLaunchMatches,
@@ -94,7 +97,7 @@ async function fixture(
 	);
 	roots.push(root);
 	const plugin = join(root, "fixture/.opencode/plugins/flow");
-	await mkdir(plugin, { recursive: true });
+	await mkdir(join(plugin, "dist"), { recursive: true });
 	await mkdir(join(root, "package/dist"), { recursive: true });
 	const entry = options.entry ?? "export default {};\n";
 	const sourcePackage = canonicalJson({
@@ -107,7 +110,8 @@ async function fixture(
 		name: "opencode-plugin-flow",
 		version: "10.0.0",
 		type: "module",
-		exports: { ".": "./index.js", "./tui": "./tui.js" },
+		main: "./dist/index.js",
+		exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" },
 		dependencies: { "@opencode/plugin": "2.1.4" },
 	});
 	const config = canonicalJson({
@@ -124,8 +128,9 @@ async function fixture(
 		["package/package.json", sourcePackage],
 		["package/dist/index.js", entry],
 		["package/dist/tui.js", "export default {};\n"],
-		["fixture/.opencode/plugins/flow/index.js", entry],
-		["fixture/.opencode/plugins/flow/tui.js", "export default {};\n"],
+		["fixture/.opencode/plugins/flow/index.js", CANARY_PLUGIN_LOADER],
+		["fixture/.opencode/plugins/flow/dist/index.js", entry],
+		["fixture/.opencode/plugins/flow/dist/tui.js", "export default {};\n"],
 		["fixture/.opencode/plugins/flow/package.json", pluginPackage],
 		["fixture/opencode.json", config],
 	] as const)
@@ -169,6 +174,7 @@ async function fixture(
 			sourcePackageSha256: digest(sourcePackage),
 			tuiEntrySha256: digest("export default {};\n"),
 			pluginPackageSha256: digest(pluginPackage),
+			loaderEntrySha256: CANARY_PLUGIN_LOADER_SHA256,
 			configSha256: digest(config),
 			...(nativeAuth ? { nativeAuth } : {}),
 		},
@@ -178,6 +184,7 @@ async function fixture(
 		sha256: preparedCanarySha256(base),
 	});
 	await writeFile(join(root, "prepared.json"), canonicalJson(prepared));
+	await prepareCanaryWorkspace(join(root, "fixture"));
 	await writeFile(join(root, "prompt.txt"), "Local only");
 	const privateDirectory = join(root, "source");
 	await mkdir(privateDirectory, { mode: 0o700 });

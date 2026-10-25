@@ -17,10 +17,13 @@ import { join } from "node:path";
 import { canonicalJson } from "../evals/canonical-json.js";
 import { unpackedManifestSha256 } from "../evals/provenance.js";
 import { runPaidCanary } from "../scripts/canary-run.js";
+import { prepareCanaryWorkspace } from "../scripts/canary-workspace.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
+	CANARY_PLUGIN_LOADER,
+	CANARY_PLUGIN_LOADER_SHA256,
 	deriveCanaryResult,
 	preparedCanarySha256,
 } from "../scripts/eval-canary.js";
@@ -189,7 +192,8 @@ export default Plugin.define({ id: "flow-canary-local-proof", async setup(ctx) {
 				name: "opencode-plugin-flow",
 				version: "10.0.0",
 				type: "module",
-				exports: { ".": "./index.js", "./tui": "./tui.js" },
+				main: "./dist/index.js",
+				exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" },
 				dependencies: { "@opencode/plugin": "2.1.4" },
 			});
 			const config = canonicalJson({
@@ -202,12 +206,14 @@ export default Plugin.define({ id: "flow-canary-local-proof", async setup(ctx) {
 				update: "disable",
 				share: "disabled",
 			});
+			await mkdir(join(directory, "dist"), { recursive: true });
 			for (const [path, bytes] of [
 				["package/package.json", metadata],
 				["package/dist/index.js", entry],
 				["package/dist/tui.js", tui],
-				["fixture/.opencode/plugins/flow/index.js", entry],
-				["fixture/.opencode/plugins/flow/tui.js", tui],
+				["fixture/.opencode/plugins/flow/index.js", CANARY_PLUGIN_LOADER],
+				["fixture/.opencode/plugins/flow/dist/index.js", entry],
+				["fixture/.opencode/plugins/flow/dist/tui.js", tui],
 				["fixture/.opencode/plugins/flow/package.json", pluginPackage],
 				["fixture/opencode.json", config],
 			] as const)
@@ -248,11 +254,13 @@ export default Plugin.define({ id: "flow-canary-local-proof", async setup(ctx) {
 					sourcePackageSha256: digest(metadata),
 					tuiEntrySha256: digest(tui),
 					pluginPackageSha256: digest(pluginPackage),
+					loaderEntrySha256: CANARY_PLUGIN_LOADER_SHA256,
 					configSha256: digest(config),
 				},
 			};
 			const prepared = { ...base, sha256: preparedCanarySha256(base) };
 			await writeFile(join(root, "prepared.json"), JSON.stringify(prepared));
+			await prepareCanaryWorkspace(join(root, "fixture"));
 			await writeFile(join(root, "prompt.txt"), "Run fixture");
 			await writeFile(
 				join(root, "npm"),

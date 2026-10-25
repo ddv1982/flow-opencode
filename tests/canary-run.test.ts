@@ -17,10 +17,13 @@ import {
 	canaryProviderConfiguration,
 	runPaidCanary,
 } from "../scripts/canary-run.js";
+import { prepareCanaryWorkspace } from "../scripts/canary-workspace.js";
 import {
 	artifactIdentitySha256,
 	CANARY_CHECKLIST_SHA256,
 	CANARY_CHECKLIST_VERSION,
+	CANARY_PLUGIN_LOADER,
+	CANARY_PLUGIN_LOADER_SHA256,
 	preparedCanarySha256,
 } from "../scripts/eval-canary.js";
 import { authorizePaidRun, paidRunStatus } from "../scripts/paid-budget.js";
@@ -42,7 +45,7 @@ async function fixture() {
 	);
 	directories.push(directory);
 	const pluginDirectory = join(directory, "fixture/.opencode/plugins/flow");
-	await mkdir(pluginDirectory, { recursive: true });
+	await mkdir(join(pluginDirectory, "dist"), { recursive: true });
 	const hash = (text: string | Uint8Array) =>
 		`sha256:${createHash("sha256").update(text).digest("hex")}`;
 	const sourcePackage = JSON.stringify({
@@ -55,7 +58,8 @@ async function fixture() {
 		name: "opencode-plugin-flow",
 		version: "10.0.0",
 		type: "module",
-		exports: { ".": "./index.js", "./tui": "./tui.js" },
+		main: "./dist/index.js",
+		exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" },
 		dependencies: { "@opencode/plugin": "2.1.4" },
 	});
 	const config = canonicalJson({
@@ -73,8 +77,9 @@ async function fixture() {
 		["package/package.json", sourcePackage],
 		["package/dist/index.js", "plugin"],
 		["package/dist/tui.js", "tui"],
-		["fixture/.opencode/plugins/flow/index.js", "plugin"],
-		["fixture/.opencode/plugins/flow/tui.js", "tui"],
+		["fixture/.opencode/plugins/flow/index.js", CANARY_PLUGIN_LOADER],
+		["fixture/.opencode/plugins/flow/dist/index.js", "plugin"],
+		["fixture/.opencode/plugins/flow/dist/tui.js", "tui"],
 		["fixture/.opencode/plugins/flow/package.json", pluginPackage],
 		["fixture/opencode.json", config],
 	] as const)
@@ -109,6 +114,7 @@ async function fixture() {
 			sourcePackageSha256: hash(sourcePackage),
 			tuiEntrySha256: hash("tui"),
 			pluginPackageSha256: hash(pluginPackage),
+			loaderEntrySha256: CANARY_PLUGIN_LOADER_SHA256,
 			configSha256: hash(config),
 		},
 	};
@@ -116,6 +122,7 @@ async function fixture() {
 		join(directory, "prepared.json"),
 		JSON.stringify({ ...base, sha256: preparedCanarySha256(base) }),
 	);
+	await prepareCanaryWorkspace(join(directory, "fixture"));
 	await writeFile(join(directory, "prompt.txt"), "Run fixture");
 	await authorizePaidRun(directory, {
 		schemaVersion: 1,
@@ -219,7 +226,12 @@ test.skipIf(process.platform === "win32")(
 	},
 );
 
-for (const path of ["index.js", "tui.js", "package.json"] as const)
+for (const path of [
+	"index.js",
+	"dist/index.js",
+	"dist/tui.js",
+	"package.json",
+] as const)
 	test(`changed prepared ${path} fails before dispatch consumption`, async () => {
 		const { directory, input } = await fixture();
 		await writeFile(
@@ -349,4 +361,54 @@ test("canary provider configuration uses the native HTTP transport setting for t
 			},
 		},
 	});
+});
+
+for (const state of ["absent", "without commit"] as const)
+	test(`canary refuses ${state} Git workspace before charging`, async () => {
+		const { directory, input } = await fixture();
+		const workspace = join(directory, "fixture");
+		await rm(join(workspace, ".git"), { recursive: true, force: true });
+		if (state === "without commit") {
+			const child = Bun.spawn(["git", "init", "--initial-branch=main"], {
+				cwd: workspace,
+				stdout: "ignore",
+				stderr: "pipe",
+			});
+			expect(await child.exited).toBe(0);
+		}
+		let launches = 0;
+		await expect(
+			runPaidCanary(input, async () => {
+				launches++;
+				return 0;
+			}),
+		).rejects.toThrow("committed Git workspace");
+		expect(launches).toBe(0);
+		expect((await paidRunStatus(directory)).consumed).toBe(0);
+	});
+
+test("canary does not accept an ancestor Git repository as its fixture", async () => {
+	const { directory, input } = await fixture();
+	await rm(join(directory, "fixture/.git"), { recursive: true });
+	await prepareCanaryWorkspace(directory);
+	let launches = 0;
+	await expect(
+		runPaidCanary(input, async () => {
+			launches++;
+			return 0;
+		}),
+	).rejects.toThrow("committed Git workspace");
+	expect(launches).toBe(0);
+	expect((await paidRunStatus(directory)).consumed).toBe(0);
+});
+
+test("canary Git environment cannot redirect its prepared workspace", () => {
+	expect(
+		canaryLaunchEnvironment("/prepared/fixture", {
+			GIT_DIR: "/other/.git",
+			GIT_WORK_TREE: "/other",
+			GIT_CONFIG_GLOBAL: "/other/config",
+			FLOW_CANARY_SENTINEL: "kept",
+		}),
+	).toEqual({ PWD: "/prepared/fixture", FLOW_CANARY_SENTINEL: "kept" });
 });

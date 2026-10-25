@@ -50,6 +50,10 @@ import {
 } from "../src/domain/operation.js";
 import { currentRun } from "../src/domain/session.js";
 import { readWorkspaceTestReport } from "../src/infrastructure/fs/workspace-validation.js";
+import {
+	assertCanaryWorkspace,
+	prepareCanaryWorkspace,
+} from "./canary-workspace.js";
 
 export const CANARY_CHECKLIST_VERSION = "phase9-canary-v1";
 export const CANARY_DERIVATION_VERSION = "canary-evidence-v1";
@@ -70,6 +74,11 @@ export const CANARY_CHECK_IDS = [
 	"closes-with-delivery",
 ] as const;
 export const CANARY_MAX_AGE_MS = 72 * 60 * 60 * 1_000;
+export const CANARY_PLUGIN_LOADER =
+	'export { default } from "./dist/index.js";\n';
+export const CANARY_PLUGIN_LOADER_SHA256 = sha256(
+	Buffer.from(CANARY_PLUGIN_LOADER),
+);
 
 const checklist = {
 	version: CANARY_CHECKLIST_VERSION,
@@ -223,6 +232,7 @@ const NativeInstallationEvidenceSchema =
 		sourcePackageSha256: DigestSchema,
 		tuiEntrySha256: DigestSchema,
 		pluginPackageSha256: DigestSchema,
+		loaderEntrySha256: z.literal(CANARY_PLUGIN_LOADER_SHA256),
 		configSha256: DigestSchema,
 		nativeAuth: NativeAuthInstallationSchema.optional(),
 	}).strict();
@@ -1170,7 +1180,8 @@ function canaryPluginPackage(
 			name: metadata.name,
 			version: metadata.version,
 			type: "module",
-			exports: { ".": "./index.js", "./tui": "./tui.js" },
+			main: "./dist/index.js",
+			exports: { ".": "./dist/index.js", "./tui": "./dist/tui.js" },
 			dependencies: {
 				...metadata.dependencies,
 				"@opencode/plugin": OPENCODE_HOST_VERSION,
@@ -1267,6 +1278,7 @@ const NativePreparationSchema = z
 		sourcePackageSha256: DigestSchema,
 		tuiEntrySha256: DigestSchema,
 		pluginPackageSha256: DigestSchema,
+		loaderEntrySha256: z.literal(CANARY_PLUGIN_LOADER_SHA256),
 		configSha256: DigestSchema,
 		nativeAuth: CanaryNativeAuthSchema.optional(),
 	})
@@ -1528,7 +1540,7 @@ export async function prepareCanary(input: {
 	}
 	const artifact = input.expectedArtifact ?? inspectedArtifact;
 	const fixture = join(input.outputDirectory, "fixture");
-	await mkdir(join(input.outputDirectory, CANARY_PLUGIN_DIRECTORY), {
+	await mkdir(join(input.outputDirectory, CANARY_PLUGIN_DIRECTORY, "dist"), {
 		recursive: true,
 	});
 	const copiedArtifactPath = join(input.outputDirectory, "artifact.tgz");
@@ -1564,8 +1576,9 @@ export async function prepareCanary(input: {
 	const pluginPackage = canaryPluginPackage(packageMetadata);
 	const config = canaryConfig();
 	for (const [name, bytes] of [
-		["index.js", pluginEntry],
-		["tui.js", tuiEntry],
+		["index.js", Buffer.from(CANARY_PLUGIN_LOADER)],
+		["dist/index.js", pluginEntry],
+		["dist/tui.js", tuiEntry],
 		["package.json", pluginPackage],
 	] as const)
 		await writeFile(
@@ -1578,6 +1591,7 @@ export async function prepareCanary(input: {
 		sourcePackageSha256: sha256(sourcePackage),
 		tuiEntrySha256: sha256(tuiEntry),
 		pluginPackageSha256: sha256(pluginPackage),
+		loaderEntrySha256: CANARY_PLUGIN_LOADER_SHA256,
 		configSha256: sha256(config),
 	};
 	if (input.nativeAuth) {
@@ -1600,6 +1614,7 @@ export async function prepareCanary(input: {
 		join(fixture, "README.md"),
 		`# Flow exact-artifact canary\n\nArtifact: ${artifact.tarballSha256}\n\nRun every checklist item and export sanitized JSON session and transcript evidence.\n`,
 	);
+	await prepareCanaryWorkspace(fixture);
 	const base = {
 		schemaVersion: 2 as const,
 		runtime,
@@ -1675,7 +1690,7 @@ export async function measureCanaryInstallation(
 			join(
 				directory,
 				prepared.schemaVersion === 2
-					? `${CANARY_PLUGIN_DIRECTORY}/index.js`
+					? `${CANARY_PLUGIN_DIRECTORY}/dist/index.js`
 					: "fixture/.opencode/plugins/flow.js",
 			),
 		),
@@ -1690,21 +1705,25 @@ export async function measureCanaryInstallation(
 		);
 	}
 	if (prepared.schemaVersion === 2) {
-		const [sourcePackage, tuiEntry, pluginPackage, config] = await Promise.all([
-			Promise.resolve(
-				extractArtifactFile(
-					join(directory, prepared.artifactFile),
-					"package/package.json",
+		await assertCanaryWorkspace(join(directory, "fixture"));
+		const [sourcePackage, tuiEntry, pluginPackage, config, loaderEntry] =
+			await Promise.all([
+				Promise.resolve(
+					extractArtifactFile(
+						join(directory, prepared.artifactFile),
+						"package/package.json",
+					),
 				),
-			),
-			readFile(join(directory, CANARY_PLUGIN_DIRECTORY, "tui.js")),
-			readFile(join(directory, CANARY_PLUGIN_DIRECTORY, "package.json")),
-			readFile(join(directory, "fixture/opencode.json")),
-		]);
+				readFile(join(directory, CANARY_PLUGIN_DIRECTORY, "dist/tui.js")),
+				readFile(join(directory, CANARY_PLUGIN_DIRECTORY, "package.json")),
+				readFile(join(directory, "fixture/opencode.json")),
+				readFile(join(directory, CANARY_PLUGIN_DIRECTORY, "index.js")),
+			]);
 		const measured = {
 			sourcePackageSha256: sha256(sourcePackage),
 			tuiEntrySha256: sha256(tuiEntry),
 			pluginPackageSha256: sha256(pluginPackage),
+			loaderEntrySha256: sha256(loaderEntry),
 			configSha256: sha256(config),
 		};
 		const {
@@ -1718,6 +1737,7 @@ export async function measureCanaryInstallation(
 		if (
 			canonicalJson(measured) !== canonicalJson(expected) ||
 			!pluginPackage.equals(canaryPluginPackage(metadata)) ||
+			!loaderEntry.equals(Buffer.from(CANARY_PLUGIN_LOADER)) ||
 			!config.equals(canaryConfig()) ||
 			sha256(
 				extractArtifactFile(
