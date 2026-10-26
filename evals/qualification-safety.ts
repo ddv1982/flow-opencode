@@ -114,6 +114,8 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 			} else if (typeof operand === "bigint") {
 				if (node.operator === ts.SyntaxKind.MinusToken) value = -operand;
 				else if (node.operator === ts.SyntaxKind.TildeToken) value = ~operand;
+				else if (node.operator === ts.SyntaxKind.ExclamationToken)
+					value = !operand;
 				else throw new Error("Qualification program uses an unsupported form.");
 			}
 		} else if (
@@ -348,7 +350,7 @@ export async function assertQualificationProgram(
 		if (acceptedPrograms.has(key)) return;
 		await parseProgram(text, language);
 		while (
-			acceptedPrograms.size >= 64 ||
+			acceptedPrograms.size >= 512 ||
 			cachedBytes + text.length > 32 * 1024 * 1024
 		) {
 			const oldest = acceptedPrograms.entries().next().value;
