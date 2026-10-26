@@ -176,12 +176,16 @@ const SECRET_ASSIGNMENT =
 
 export const REDACTED = "[redacted]";
 
-export function scrubSecrets(value: string): string {
+export function scrubSecretTokens(value: string): string {
 	let scrubbed = value;
 	for (const pattern of SECRET_PATTERNS) {
 		scrubbed = scrubbed.replace(pattern, REDACTED);
 	}
-	return scrubbed.replace(SECRET_ASSIGNMENT, `$1${REDACTED}`);
+	return scrubbed;
+}
+
+export function scrubSecrets(value: string): string {
+	return scrubSecretTokens(value).replace(SECRET_ASSIGNMENT, `$1${REDACTED}`);
 }
 
 /** Recursively rewrites every string in a JSON-shaped value. */
