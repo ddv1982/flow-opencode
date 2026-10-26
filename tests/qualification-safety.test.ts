@@ -367,6 +367,27 @@ for (const [name, source] of [
 		true,
 	);
 }
+for (const [name, source] of [
+	["logical not zero BigInt", "const enabled = !0n;"],
+	["logical not named BigInt", "const password = !123456789012n;"],
+	["double logical not BigInt", "const enabled = !!123456789012n;"],
+] as const) {
+	for (const role of ["authority-source", "execution-source"] as const)
+		add(`review R2 ${name} ${role}`, role, () => Buffer.from(source), true);
+	add(`review R2 ${name} JavaScript`, "artifact", () => tarball(source), true);
+	add(
+		`review R2 ${name} mapped`,
+		"artifact",
+		() => tarball(sourceMap(source), "package/dist/public.js.map"),
+		true,
+	);
+	add(
+		`review R2 ${name} installed`,
+		"canary-installation",
+		() => installed({ ...installationSources, "protocol.ts": source }),
+		true,
+	);
+}
 const programs = [
 	[
 		"escaped literal",
