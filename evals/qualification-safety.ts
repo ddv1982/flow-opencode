@@ -65,6 +65,7 @@ function parseJson(text: string): unknown {
 
 type Primitive = string | number | boolean | bigint | null;
 function inspectSyntax(source: ts.SourceFile, text: string): void {
+	assertQualificationText(ts.getShebang(text) ?? "");
 	let count = 0;
 	const deadline = performance.now() + 10_000;
 	const values = new Map<ts.Node, Primitive | undefined>();
