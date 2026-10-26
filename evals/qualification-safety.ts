@@ -68,7 +68,7 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 	let count = 0;
 	const deadline = performance.now() + 10_000;
 	const values = new Map<ts.Node, Primitive | undefined>();
-	const trivia = new Set<number>();
+	const literals = new Map<number, number>();
 	const patterns: { start: number; end: number }[] = [];
 	function bounded(value: Primitive | undefined): Primitive | undefined {
 		if (typeof value === "string" && value.length > MAX_BYTES)
@@ -170,15 +170,6 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 		if (key && sensitive.test(key) && value !== undefined)
 			assertQualificationText(`${key}=${String(value)}`);
 	}
-	function comments(pos: number): void {
-		if (pos < 0 || trivia.has(pos)) return;
-		trivia.add(pos);
-		for (const range of [
-			...(ts.getLeadingCommentRanges(text, pos) ?? []),
-			...(ts.getTrailingCommentRanges(text, pos) ?? []),
-		])
-			assertQualificationText(text.slice(range.pos, range.end));
-	}
 	function visit(node: ts.Node, depth: number): void {
 		if (
 			++count > MAX_NODES ||
@@ -194,8 +185,15 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 			ts.isJsxFragment(node)
 		)
 			throw new Error("Qualification program uses an unsupported form.");
-		comments(node.pos);
-		comments(node.end);
+		if (
+			ts.isStringLiteral(node) ||
+			ts.isNoSubstitutionTemplateLiteral(node) ||
+			ts.isTemplateHead(node) ||
+			ts.isTemplateMiddle(node) ||
+			ts.isTemplateTail(node) ||
+			ts.isRegularExpressionLiteral(node)
+		)
+			literals.set(node.getStart(source), node.end);
 		if (
 			ts.isTaggedTemplateExpression(node) &&
 			ts.isNoSubstitutionTemplateLiteral(node.template)
@@ -268,6 +266,22 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 		});
 	}
 	visit(source, 0);
+	const scanner = ts.createScanner(false, source.languageVariant, text);
+	for (
+		let token = scanner.scan();
+		token !== ts.SyntaxKind.EndOfFile;
+		token = scanner.scan()
+	) {
+		if (++count > MAX_NODES || performance.now() > deadline)
+			throw new Error("Qualification program exceeds its inspection limit.");
+		const end = literals.get(scanner.getTokenStart());
+		if (end !== undefined) scanner.resetTokenState(end);
+		else if (
+			token === ts.SyntaxKind.SingleLineCommentTrivia ||
+			token === ts.SyntaxKind.MultiLineCommentTrivia
+		)
+			assertQualificationText(scanner.getTokenText());
+	}
 	let start = 0;
 	for (const pattern of patterns.sort(
 		(left, right) => left.start - right.start,
