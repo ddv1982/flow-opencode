@@ -111,6 +111,10 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 			if (typeof operand === "number") {
 				if (node.operator === ts.SyntaxKind.MinusToken) value = -operand;
 				if (node.operator === ts.SyntaxKind.PlusToken) value = operand;
+			} else if (typeof operand === "bigint") {
+				if (node.operator === ts.SyntaxKind.MinusToken) value = -operand;
+				else if (node.operator === ts.SyntaxKind.TildeToken) value = ~operand;
+				else throw new Error("Qualification program uses an unsupported form.");
 			}
 		} else if (
 			ts.isBinaryExpression(node) &&
@@ -199,6 +203,13 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 			patterns.push({ start: node.getStart(source), end: node.end });
 			assertRawTokens(node.text);
 			const pattern = node.text.slice(1, node.text.lastIndexOf("/"));
+			try {
+				new RegExp(pattern, node.text.slice(node.text.lastIndexOf("/") + 1));
+			} catch {
+				throw new Error(
+					"Qualification program has a malformed regular expression.",
+				);
+			}
 			for (const part of pattern.split(
 				/\[[^\]]*\]|\\[dDsSwWbBpPkK]|[.*+?^${}()|]/,
 			)) {
@@ -243,6 +254,7 @@ function inspectSyntax(source: ts.SourceFile, text: string): void {
 			ts.isEnumMember(node)
 		)
 			if (node.name) binding(node.name, node.initializer);
+		if (ts.isImportAttribute(node)) binding(node.name, node.value);
 		if (
 			ts.isBinaryExpression(node) &&
 			node.operatorToken.kind >= ts.SyntaxKind.FirstAssignment &&
