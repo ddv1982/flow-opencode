@@ -142,46 +142,34 @@ export type Cassette = Readonly<{
 	fidelity: readonly FidelityNote[];
 }>;
 
-/**
- * Anything shaped like a credential, replaced by a fixed marker.
- *
- * The recording host carries the developer's real `auth.json`, and a model may echo
- * an environment variable, a header, or a token into a command or an argument. A
- * cassette is a committed artifact, so this runs over every string in one — before
- * it is written, never after.
- */
 const SECRET_PATTERNS: readonly RegExp[] = [
-	// Provider key prefixes, longest first so a longer prefix is not half-matched.
 	// `[-_]`, because the separator is not the same for all of them: Anthropic, OpenAI
 	// and xAI hyphenate, while Groq, Hugging Face, DigitalOcean and Shopify use an
-	// underscore. Requiring a hyphen meant `gsk_`, `hf_`, `dop_v1_` and `shpat_` were
-	// four prefixes listed here that could never match — the scrubber read as covering
-	// them while passing them straight into a committed artifact.
+	// underscore.
 	/\b(?:sk-ant|sk-proj|sk-or|sk|xai|gsk|hf|dop_v1|shpat)[-_][A-Za-z0-9_-]{16,}/g,
 	/\bgithub_pat_[A-Za-z0-9_]{20,}/g,
 	/\bgh[pousr]_[A-Za-z0-9]{16,}/g,
 	/\bAIza[A-Za-z0-9_-]{20,}/g,
 	/\bAKIA[0-9A-Z]{16}\b/g,
-	// A JSON web token, which is what an OAuth access token normally is.
 	/\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g,
 	/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/gi,
 ];
 
-/**
- * `"api_key": "…"` and `TOKEN=…` forms, where the value carries no recognizable
- * prefix and only the key says what it is.
- */
 const SECRET_ASSIGNMENT =
 	/((?:api[_-]?key|secret|access[_-]?token|refresh[_-]?token|client[_-]?secret|password|passwd|authorization)["']?\s*[:=]\s*["']?)([^\s"',;}&]{8,})/gi;
 
 export const REDACTED = "[redacted]";
 
-export function scrubSecrets(value: string): string {
+export function scrubSecretTokens(value: string): string {
 	let scrubbed = value;
 	for (const pattern of SECRET_PATTERNS) {
 		scrubbed = scrubbed.replace(pattern, REDACTED);
 	}
-	return scrubbed.replace(SECRET_ASSIGNMENT, `$1${REDACTED}`);
+	return scrubbed;
+}
+
+export function scrubSecrets(value: string): string {
+	return scrubSecretTokens(value).replace(SECRET_ASSIGNMENT, `$1${REDACTED}`);
 }
 
 /** Recursively rewrites every string in a JSON-shaped value. */

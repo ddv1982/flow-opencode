@@ -16,8 +16,12 @@ import { tmpdir } from "node:os";
 import { isAbsolute, join, relative, resolve, sep, win32 } from "node:path";
 import { z } from "zod";
 import { canonicalJson, canonicalSha256 } from "./canonical-json.js";
-import { scrubSecrets } from "./cassette.js";
-import { assertNoPrivateUserPaths } from "./private-paths.js";
+import {
+	assertQualificationJson,
+	assertQualificationMember,
+	assertQualificationSource,
+	assertQualificationText as assertSafeText,
+} from "./qualification-safety.js";
 import { ReviewerPacketBytesListSchema } from "./reviewer-packet-bytes.js";
 
 const MAX_OBJECT_BYTES = 16 * 1024 * 1024;
@@ -163,29 +167,6 @@ function validateRoles(files: readonly QualificationBundleFile[]): void {
 	}
 }
 
-function assertSafeText(text: string): void {
-	if (scrubSecrets(text) !== text)
-		throw new Error("Qualification bundle contains secret-shaped evidence.");
-	if (/\b(?:ses_[A-Za-z0-9]+|(?:session|review):[A-Za-z0-9-]+)\b/.test(text))
-		throw new Error("Qualification bundle contains a raw session identifier.");
-	assertNoPrivateUserPaths(text);
-}
-
-function assertSafeSource(text: string): void {
-	if (
-		/\b(?:sk-ant|sk-proj|sk-or|xai|gsk|hf|dop_v1|shpat)[-_][A-Za-z0-9_-]{16,}/.test(
-			text,
-		) ||
-		/\b(?:github_pat_[A-Za-z0-9_]{20,}|gh[pousr]_[A-Za-z0-9]{16}|AKIA[0-9A-Z]{16})\b/.test(
-			text,
-		) ||
-		/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(text) ||
-		/\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i.test(text)
-	) {
-		throw new Error("Qualification bundle contains secret-shaped source.");
-	}
-}
-
 async function assertSafeArtifact(bytes: Uint8Array): Promise<void> {
 	const directory = await mkdtemp(join(tmpdir(), "flow-bundle-artifact-"));
 	const path = join(directory, "artifact.tgz");
@@ -241,22 +222,14 @@ async function assertSafeArtifact(bytes: Uint8Array): Promise<void> {
 				throw new Error(
 					"Qualification artifact exceeds its expanded byte limit.",
 				);
-			const source = extracted.stdout.toString("utf8");
-			assertSafeSource(source);
-			try {
-				assertSafeText(
-					new TextDecoder("utf-8", { fatal: true }).decode(extracted.stdout),
-				);
-			} catch (error) {
-				if (!(error instanceof TypeError)) throw error;
-			}
+			await assertQualificationMember(member, extracted.stdout);
 		}
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}
 }
 
-function normalizedBytes(file: QualificationBundleFile): Buffer {
+async function normalizedBytes(file: QualificationBundleFile): Promise<Buffer> {
 	const bytes = Buffer.from(file.bytes);
 	if (bytes.byteLength > MAX_OBJECT_BYTES)
 		throw new Error("Qualification bundle object exceeds its byte limit.");
@@ -288,42 +261,46 @@ function normalizedBytes(file: QualificationBundleFile): Buffer {
 			}
 		}
 		const canonical = canonicalJson(parsed);
-		assertSafeText(canonical);
+		await assertQualificationJson(file.role, parsed);
 		return Buffer.from(canonical);
 	}
 	if (file.mediaType === "text/typescript") {
 		const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-		assertSafeSource(text);
+		if (file.role === "authority-source" || file.role === "execution-source") {
+			await assertQualificationSource(file.id ?? "input.ts", text);
+		} else assertSafeText(text);
 		return Buffer.from(text);
 	}
 	return bytes;
 }
 
-function buildManifest(input: QualificationBundleInput): {
+async function buildManifest(input: QualificationBundleInput): Promise<{
 	readonly manifest: QualificationBundleManifest;
 	readonly objects: ReadonlyMap<string, Buffer>;
-} {
+}> {
 	validateRoles(input.files);
 	const objects = new Map<string, Buffer>();
-	const files = input.files
-		.map((file) => {
-			const bytes = normalizedBytes(file);
-			const digest = sha256(bytes);
-			const object = `objects/sha256-${digest.slice("sha256:".length)}`;
-			const prior = objects.get(object);
-			if (prior && !prior.equals(bytes))
-				throw new Error("Qualification bundle object digest collision.");
-			objects.set(object, bytes);
-			return {
-				role: file.role,
-				...(file.id ? { id: file.id } : {}),
-				mediaType: file.mediaType,
-				object,
-				sha256: digest,
-				bytes: bytes.byteLength,
-			};
-		})
-		.sort((left, right) => fileKey(left).localeCompare(fileKey(right)));
+	const files = (
+		await Promise.all(
+			input.files.map(async (file) => {
+				const bytes = await normalizedBytes(file);
+				const digest = sha256(bytes);
+				const object = `objects/sha256-${digest.slice("sha256:".length)}`;
+				const prior = objects.get(object);
+				if (prior && !prior.equals(bytes))
+					throw new Error("Qualification bundle object digest collision.");
+				objects.set(object, bytes);
+				return {
+					role: file.role,
+					...(file.id ? { id: file.id } : {}),
+					mediaType: file.mediaType,
+					object,
+					sha256: digest,
+					bytes: bytes.byteLength,
+				};
+			}),
+		)
+	).sort((left, right) => fileKey(left).localeCompare(fileKey(right)));
 	const total = files.reduce((sum, file) => sum + file.bytes, 0);
 	if (total > MAX_BUNDLE_BYTES)
 		throw new Error("Qualification bundle exceeds its total byte limit.");
@@ -419,7 +396,7 @@ export async function writeQualificationBundle(input: {
 	if (!artifact)
 		throw new Error("Qualification bundle artifact role is missing.");
 	await assertSafeArtifact(artifact.bytes);
-	const built = buildManifest(input.input);
+	const built = await buildManifest(input.input);
 	await mkdir(input.outputRoot, { recursive: true, mode: 0o700 });
 	const outputIdentity = await realDirectoryIdentity(input.outputRoot);
 	const path = join(input.outputRoot, built.manifest.bundleId);
@@ -737,7 +714,7 @@ export async function readQualificationBundle(path: string): Promise<{
 				throw new Error(
 					"Qualification bundle object digest or size is invalid.",
 				);
-			normalizedBytes({
+			await normalizedBytes({
 				role: ref.role,
 				...(ref.id ? { id: ref.id } : {}),
 				mediaType: ref.mediaType,

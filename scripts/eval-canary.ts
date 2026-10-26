@@ -236,10 +236,10 @@ const NativeInstallationEvidenceSchema =
 		configSha256: DigestSchema,
 		nativeAuth: NativeAuthInstallationSchema.optional(),
 	}).strict();
-const InstallationEvidenceSchema = z.discriminatedUnion("schemaVersion", [
-	HistoricalInstallationEvidenceSchema,
-	NativeInstallationEvidenceSchema,
-]);
+export const InstallationEvidenceSchema = z.discriminatedUnion(
+	"schemaVersion",
+	[HistoricalInstallationEvidenceSchema, NativeInstallationEvidenceSchema],
+);
 
 const ChecksSchema = z
 	.object({
