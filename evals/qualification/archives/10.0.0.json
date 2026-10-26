@@ -2,7 +2,7 @@
 	"schemaVersion": 1,
 	"packageVersion": "10.0.0",
 	"archive": "10.0.0.tar.gz",
-	"archiveSha256": "sha256:08a3fc2ac2ba07a2a256fa178dc70b9f68bb2fa4efc965030d7cbef141b614c6",
-	"bundleId": "qb1-831b7cbd497950175814d43c1e0715f91cefda15e6e75f041d5138787963c0ca",
-	"bundleSha256": "sha256:831b7cbd497950175814d43c1e0715f91cefda15e6e75f041d5138787963c0ca"
+	"archiveSha256": "sha256:c6862f5995b14d1f9014deb254c5d62ad66403fb1ee65d78d64b3a3229d996d1",
+	"bundleId": "qb1-f08ccc7d736b016f0766327da52da0c8f510757a3130e2b79d757d500b5796fc",
+	"bundleSha256": "sha256:f08ccc7d736b016f0766327da52da0c8f510757a3130e2b79d757d500b5796fc"
 }
