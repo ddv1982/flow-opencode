@@ -389,6 +389,10 @@ for (const [name, source] of [
 	);
 }
 const punctuationComments = [
+	[
+		"hashbang",
+		"#!/usr/bin/env node password=opaqueLiteralValue987\nexport {};",
+	],
 	["empty block", "function f(){ /* password=opaqueLiteralValue987 */ }"],
 	["empty arguments", "f(/* api_key=opaqueLiteralValue987 */);"],
 	[
@@ -419,6 +423,7 @@ for (const [name, source] of punctuationComments) {
 	);
 }
 for (const [name, source] of [
+	["public hashbang", "#!/usr/bin/env node\nexport {};"],
 	["Unicode regex", 'const title="é😀界"; const pattern=/[a-z]+/giu;'],
 	[
 		"Unicode path regex",
