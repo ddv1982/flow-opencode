@@ -310,6 +310,63 @@ for (const key of sensitive) {
 		json({ [key]: "opaqueLiteralValue987" }),
 	);
 }
+const reviewPrograms = [
+	[
+		"import attribute",
+		'import data from "./public.json" with { password: "opaqueLiteralValue987" };',
+	],
+	[
+		"export attribute",
+		'export { default } from "./public.json" with { password: "opaqueLiteralValue987" };',
+	],
+	[
+		"escaped import attribute",
+		String.raw`import data from "./public.json" with { "api_\u006bey": "opaqueLiteralValue987" };`,
+	],
+	[
+		"escaped export attribute",
+		String.raw`export { default } from "./public.json" with { "api_\u006bey": "opaqueLiteralValue987" };`,
+	],
+	["negative BigInt", "const password = -123456789012n;"],
+	["parenthesized negative BigInt", "const password = -(123456789012n);"],
+	["unsupported unary BigInt", "const password = +123456789012n;"],
+	["unmatched regex group", "const pattern = /(/;"],
+	["invalid regex flags", "const pattern = /hello/zz;"],
+	["duplicate regex flags", "const pattern = /hello/gg;"],
+	["invalid Unicode regex", String.raw`const pattern = /\u{110000}/u;`],
+] as const;
+for (const [name, source] of reviewPrograms) {
+	add(`review ${name} authority`, "authority-source", () =>
+		Buffer.from(source),
+	);
+	add(`review ${name} JavaScript`, "artifact", () => tarball(source));
+	add(`review ${name} mapped`, "artifact", () =>
+		tarball(sourceMap(source), "package/dist/public.js.map"),
+	);
+	add(`review ${name} installed`, "canary-installation", () =>
+		installed({ ...installationSources, "protocol.ts": source }),
+	);
+}
+for (const [name, source] of [
+	[
+		"public import attribute",
+		'import data from "./public.json" with { type: "json" };',
+	],
+	[
+		"public export attribute",
+		'export { default } from "./public.json" with { type: "json" };',
+	],
+	["short negative BigInt", "const password = -12n;"],
+	["public negative BigInt", "const count = -123456789012n;"],
+	["valid regex", String.raw`const pattern = /(?<name>[a-z]+)\s+\k<name>/giu;`],
+] as const) {
+	add(
+		`review control ${name}`,
+		"authority-source",
+		() => Buffer.from(source),
+		true,
+	);
+}
 const programs = [
 	[
 		"escaped literal",
