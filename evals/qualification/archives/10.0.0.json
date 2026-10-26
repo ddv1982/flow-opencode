@@ -1,0 +1,8 @@
+{
+	"schemaVersion": 1,
+	"packageVersion": "10.0.0",
+	"archive": "10.0.0.tar.gz",
+	"archiveSha256": "sha256:ca6db4163ca6882f227154f5f9c9f593cd4e386a9ad6e8cbb13adae5a98a4986",
+	"bundleId": "qb1-f8d2099295720615f2c39d8bf6a9dd6183eddd57e8b2be8bd136519e41b30aa7",
+	"bundleSha256": "sha256:f8d2099295720615f2c39d8bf6a9dd6183eddd57e8b2be8bd136519e41b30aa7"
+}
