@@ -388,6 +388,78 @@ for (const [name, source] of [
 		true,
 	);
 }
+const punctuationComments = [
+	["empty block", "function f(){ /* password=opaqueLiteralValue987 */ }"],
+	["empty arguments", "f(/* api_key=opaqueLiteralValue987 */);"],
+	[
+		"trailing object comma",
+		"const data={a:1, /* password=opaqueLiteralValue987 */};",
+	],
+	[
+		"trailing array comma",
+		"const list=[1, /* password=opaqueLiteralValue987 */];",
+	],
+	["empty class", "class Public { /* secret=opaqueLiteralValue987 */ }"],
+	["empty loop", "do { /* password=opaqueLiteralValue987 */ } while(false);"],
+	["line comment", "function f(){ // password=opaqueLiteralValue987\n}"],
+	[
+		"Unicode block",
+		'const title="é😀界"; function f(){ /* password=opaqueLiteralValue987 */ }',
+	],
+] as const;
+for (const [name, source] of punctuationComments) {
+	for (const role of ["authority-source", "execution-source"] as const)
+		add(`Sentry comment ${name} ${role}`, role, () => Buffer.from(source));
+	add(`Sentry comment ${name} JavaScript`, "artifact", () => tarball(source));
+	add(`Sentry comment ${name} mapped`, "artifact", () =>
+		tarball(sourceMap(source), "package/dist/public.js.map"),
+	);
+	add(`Sentry comment ${name} installed`, "canary-installation", () =>
+		installed({ ...installationSources, "protocol.ts": source }),
+	);
+}
+for (const [name, source] of [
+	["Unicode regex", 'const title="é😀界"; const pattern=/[a-z]+/giu;'],
+	[
+		"Unicode path regex",
+		String.raw`const title="é😀界"; const pattern=/\/home\/[^/]+/;`,
+	],
+	["regex punctuation", "const pattern=/[/*]/;"],
+	[
+		"Unicode template expression",
+		'const value = `é${(()=>{ /* public */ return "😀"; })()}界`;',
+	],
+	[
+		"public empty trivia",
+		"function f(){ /* public comment */ } f(/* public argument */);",
+	],
+] as const) {
+	for (const role of ["authority-source", "execution-source"] as const)
+		add(
+			`Sentry control ${name} ${role}`,
+			role,
+			() => Buffer.from(source),
+			true,
+		);
+	add(
+		`Sentry control ${name} JavaScript`,
+		"artifact",
+		() => tarball(source),
+		true,
+	);
+	add(
+		`Sentry control ${name} mapped`,
+		"artifact",
+		() => tarball(sourceMap(source), "package/dist/public.js.map"),
+		true,
+	);
+	add(
+		`Sentry control ${name} installed`,
+		"canary-installation",
+		() => installed({ ...installationSources, "protocol.ts": source }),
+		true,
+	);
+}
 const programs = [
 	[
 		"escaped literal",
