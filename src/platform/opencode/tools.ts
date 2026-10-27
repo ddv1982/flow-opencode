@@ -82,10 +82,6 @@ type ToolOptions = Readonly<{
 		| undefined;
 }>;
 
-function toolError(error: unknown): FlowToolResponse {
-	return errorResponse(error);
-}
-
 function bestEffort<Value>(read: () => Value): Value | undefined {
 	try {
 		return read();
@@ -100,17 +96,13 @@ function withAutoContext(
 	view?: string,
 	sessionID?: string,
 ): FlowToolResponse {
-	let workflowData = response.workflowData;
 	const reviewer =
 		options.readReviewerConfiguration?.() ?? options.reviewerConfiguration;
-	if (reviewer) {
-		workflowData = {
-			...workflowData,
-			reviewerConfiguration: flowReviewerStatus(reviewer),
-		};
-	}
-	workflowData = {
-		...workflowData,
+	const workflowData: Record<string, unknown> = {
+		...response.workflowData,
+		...(reviewer
+			? { reviewerConfiguration: flowReviewerStatus(reviewer) }
+			: {}),
 		modelConfiguration: flowModelStatus(
 			options.readPlanningModel?.(),
 			sessionID ? options.readCodingModel?.(sessionID) : undefined,
@@ -118,38 +110,30 @@ function withAutoContext(
 		),
 	};
 	if (options.runtimeIdentity)
-		workflowData = {
-			...workflowData,
-			runtimeIdentity: options.runtimeIdentity,
-		};
+		workflowData.runtimeIdentity = options.runtimeIdentity;
 	const timing =
 		view === "detail"
 			? bestEffort(() => options.autoTimingSnapshot?.())
 			: undefined;
-	if (timing) workflowData = { ...workflowData, autoTiming: timing };
+	if (timing) workflowData.autoTiming = timing;
 	const continuation = sessionID
 		? bestEffort(() => options.autoContinuationSnapshot?.(sessionID))
 		: undefined;
-	if (continuation) workflowData = { ...workflowData, autoDrive: continuation };
+	if (continuation) workflowData.autoDrive = continuation;
 	const support = bestEffort(() => options.autoContinuationSupport?.());
 	if (support === "supported" || support === "unsupported") {
-		workflowData = {
-			...workflowData,
-			autoContinuation: {
-				scope: "current-plugin-process",
-				support,
-				...(support === "unsupported"
-					? {
-							reason: "host-request-attribution-unavailable",
-							recovery: "Drive each feature with /flow-run.",
-						}
-					: {}),
-			},
+		workflowData.autoContinuation = {
+			scope: "current-plugin-process",
+			support,
+			...(support === "unsupported"
+				? {
+						reason: "host-request-attribution-unavailable",
+						recovery: "Drive each feature with /flow-run.",
+					}
+				: {}),
 		};
 	}
-	return workflowData === response.workflowData
-		? response
-		: { ...response, workflowData };
+	return { ...response, workflowData };
 }
 
 export function createTools(options: ToolOptions): FlowTools {
@@ -169,27 +153,15 @@ export function createTools(options: ToolOptions): FlowTools {
 				),
 			);
 		} catch (error) {
-			return toolError(error);
+			return errorResponse(error);
 		}
 	}
 
 	function executeMutation<T extends FlowToolResponse>(
 		context: FlowToolContext,
-		validation: ValidationCaptureCoordinator,
 		handler: (flow: WorkspaceFlowService) => Promise<T>,
 	): Promise<FlowToolResponse> {
-		validation.cancel(context.sessionID);
-		return execute(context, handler);
-	}
-
-	function executeReviewerMutation<T extends FlowToolResponse>(
-		context: FlowToolContext,
-		handler: (flow: WorkspaceFlowService) => Promise<T>,
-		replayHandler: (flow: WorkspaceFlowService) => Promise<T>,
-	): Promise<FlowToolResponse> {
-		if (context.agent !== "flow-reviewer") {
-			return execute(context, replayHandler);
-		}
+		options.validation.cancel(context.sessionID);
 		return execute(context, handler);
 	}
 
@@ -247,7 +219,7 @@ export function createTools(options: ToolOptions): FlowTools {
 			description: "Create or replace the active draft plan.",
 			schema: PlanSaveInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
+				executeMutation(context, (workspace) =>
 					workspace.planSave(args, requestAuthority(context.sessionID)),
 				),
 		}),
@@ -255,7 +227,7 @@ export function createTools(options: ToolOptions): FlowTools {
 			description: "Approve the current draft plan.",
 			schema: PlanApproveInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
+				executeMutation(context, (workspace) =>
 					workspace.planApprove(args, requestAuthority(context.sessionID)),
 				),
 		}),
@@ -264,17 +236,13 @@ export function createTools(options: ToolOptions): FlowTools {
 				"Record a same-goal reversible prerequisite repair after a failed canonical gate, without an amendment count limit. This does not change the approved plan or bypass review.",
 			schema: PlanAmendInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
-					workspace.planAmend(args),
-				),
+				executeMutation(context, (workspace) => workspace.planAmend(args)),
 		}),
 		flow_run_start: defineFlowTool({
 			description: "Start one runnable approved feature.",
 			schema: RunStartInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
-					workspace.runStart(args),
-				),
+				executeMutation(context, (workspace) => workspace.runStart(args)),
 		}),
 		flow_validation_start: defineFlowTool({
 			description:
@@ -308,7 +276,7 @@ export function createTools(options: ToolOptions): FlowTools {
 						},
 					};
 				} catch (error) {
-					return toolError(error);
+					return errorResponse(error);
 				}
 			},
 		}),
@@ -317,19 +285,17 @@ export function createTools(options: ToolOptions): FlowTools {
 				"Create one independent review assignment using current applicable validation.",
 			schema: ReviewStartInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
-					workspace.reviewStart(args),
-				),
+				executeMutation(context, (workspace) => workspace.reviewStart(args)),
 		}),
 		flow_feature_complete: defineFlowTool({
 			description:
 				"Submit a pending review result; only the reviewer may create a new completion, while exact accepted requests remain replayable for an active Session v5 workflow.",
 			schema: FeatureCompleteInputSchema,
 			execute: (args, context) =>
-				executeReviewerMutation(
-					context,
-					(workspace) => workspace.featureComplete(args),
-					(workspace) => workspace.featureCompleteReplay(args),
+				execute(context, (workspace) =>
+					context.agent === "flow-reviewer"
+						? workspace.featureComplete(args)
+						: workspace.featureCompleteReplay(args),
 				),
 		}),
 		flow_feature_reset: defineFlowTool({
@@ -337,17 +303,13 @@ export function createTools(options: ToolOptions): FlowTools {
 				"Reset dependents and optionally start one exact next run atomically.",
 			schema: FeatureResetInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
-					workspace.featureReset(args),
-				),
+				executeMutation(context, (workspace) => workspace.featureReset(args)),
 		}),
 		flow_session_close: defineFlowTool({
 			description: "Close and archive a session in one convergent operation.",
 			schema: SessionCloseInputSchema,
 			execute: (args, context) =>
-				executeMutation(context, options.validation, (workspace) =>
-					workspace.sessionClose(args),
-				),
+				executeMutation(context, (workspace) => workspace.sessionClose(args)),
 		}),
 	};
 }
