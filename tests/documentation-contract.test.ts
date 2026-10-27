@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { access, readdir, readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
+import { z } from "zod";
 import { pinnedBunVersion } from "../evals/bun-toolchain.js";
 import packageJson from "../package.json" with { type: "json" };
 import { FLOW_CORE_AGENTS, FLOW_CORE_COMMANDS } from "../src/config-shared.js";
@@ -727,29 +728,44 @@ describe("Flow documentation contract", () => {
 
 	test("pins GitHub Actions Bun to package.json packageManager", async () => {
 		const expected = pinnedBunVersion(packageJson.packageManager);
+		const Step = z.object({
+			uses: z.string().optional(),
+			with: z.record(z.string(), z.unknown()).optional(),
+		});
+		const Workflow = z.object({
+			jobs: z.record(z.string(), z.object({ steps: z.array(Step) })),
+		});
+		const Action = z.object({ runs: z.object({ steps: z.array(Step) }) });
 		const workflowNames = (await readdir(".github/workflows"))
 			.filter((name) => name.endsWith(".yml"))
 			.sort();
 		for (const name of workflowNames) {
-			const text = await readFile(join(".github/workflows", name), "utf8");
-			const versions = [
-				...text.matchAll(/^[ \t]*bun-version:[ \t]*(.*)$/gm),
-			].map((match) => {
-				let value = (match[1] ?? "").trim();
-				const comment = value.search(/(?:^|\s)#/);
-				if (comment !== -1) value = value.slice(0, comment).trim();
-				if (
-					(value.startsWith("'") && value.endsWith("'")) ||
-					(value.startsWith('"') && value.endsWith('"'))
-				) {
-					value = value.slice(1, -1);
-				}
-				return value;
-			});
-			expect(versions.length, name).toBeGreaterThan(0);
-			expect(versions, name).toEqual(
-				Array.from({ length: versions.length }, () => expected),
+			const workflow = Workflow.parse(
+				Bun.YAML.parse(await readFile(join(".github/workflows", name), "utf8")),
 			);
+			const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
+			for (const step of [...steps]) {
+				if (step.uses?.startsWith("./.github/actions/")) {
+					const action = Action.parse(
+						Bun.YAML.parse(
+							await readFile(join(step.uses, "action.yml"), "utf8"),
+						),
+					);
+					steps.push(...action.runs.steps);
+				}
+			}
+			const bunSteps = steps.filter((step) =>
+				step.uses?.startsWith("oven-sh/setup-bun@"),
+			);
+			expect(bunSteps.length, name).toBeGreaterThan(0);
+			for (const step of bunSteps) {
+				if (step.with?.["bun-version-file"] !== undefined) {
+					expect(step.with["bun-version-file"], name).toBe("package.json");
+					expect(step.with["bun-version"], name).toBeUndefined();
+				} else {
+					expect(step.with?.["bun-version"], name).toBe(expected);
+				}
+			}
 		}
 	});
 
