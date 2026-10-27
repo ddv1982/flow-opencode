@@ -1313,133 +1313,135 @@ test("9.6 canary rejects every wrong-role model including a second reviewer", as
 	}
 });
 
-test("10.0.0 canary rejects a self-consistent manager and reviewer on the wrong route", async () => {
-	const value = record({
-		artifactValue: { ...artifact, packageVersion: "10.0.0" },
-	});
-	value.derivationVersion = "canary-evidence-v2";
-	value.actors = ["manager", "reviewer"].map((role) => ({
-		...actor,
-		role: role === "manager" ? "manager" : "reviewer",
-		requestedModel: {
-			routeProvider: "other",
-			gateway: null,
-			family: "other",
-			model: "other",
-			revision: null,
-		},
-		actualModel: {
-			kind: "observed",
-			value: {
+for (const version of ["10.0.0", "10.0.1"]) {
+	test(`${version} canary rejects a self-consistent manager and reviewer on the wrong route`, async () => {
+		const value = record({
+			artifactValue: { ...artifact, packageVersion: version },
+		});
+		value.derivationVersion = "canary-evidence-v2";
+		value.actors = ["manager", "reviewer"].map((role) => ({
+			...actor,
+			role: role === "manager" ? "manager" : "reviewer",
+			requestedModel: {
 				routeProvider: "other",
 				gateway: null,
 				family: "other",
 				model: "other",
 				revision: null,
 			},
-		},
-		sessionIds: ["<redacted-id>"],
-	}));
-	const { recordSha256: _prior, ...base } = value;
-	const candidate = { ...base, recordSha256: canaryRecordSha256(base) };
-	expect(
-		await canaryRecordIssue({
-			version: "10.0.0",
-			record: candidate,
-			expectedArtifact: candidate.artifact,
-			directory: "/unused",
-			now: new Date("2026-08-25T00:00:01Z"),
-		}),
-	).toBe("Canary manager model does not match the pinned release route.");
-});
-
-test("10.0.0 canary rejects missing and wrong-role identities before evidence access", async () => {
-	const model: ModelIdentity = {
-		routeProvider: "openai",
-		gateway: null,
-		family: "gpt-6.1-sol",
-		model: "gpt-6.1-sol",
-		revision: null,
-	};
-	for (const variant of [
-		"missing-manager",
-		"manager",
-		"reviewer",
-		"second-reviewer",
-		"observed-route",
-		"observed-model",
-		"family",
-		"gateway",
-		"revision",
-	]) {
-		const value = record({
-			artifactValue: { ...artifact, packageVersion: "10.0.0" },
-		});
-		value.derivationVersion = "canary-evidence-v2";
-		value.actors = ["manager", "reviewer"].map((role) => ({
-			...actor,
-			role: role === "manager" ? "manager" : "reviewer",
-			requestedModel: model,
-			actualModel: { kind: "observed", value: model },
+			actualModel: {
+				kind: "observed",
+				value: {
+					routeProvider: "other",
+					gateway: null,
+					family: "other",
+					model: "other",
+					revision: null,
+				},
+			},
 			sessionIds: ["<redacted-id>"],
 		}));
-		const reviewer = value.actors[1];
-		if (!reviewer) throw new Error("Missing reviewer fixture.");
-		switch (variant) {
-			case "missing-manager":
-				value.actors = [reviewer];
-				break;
-			case "manager": {
-				const manager = value.actors[0];
-				if (!manager) throw new Error("Missing manager fixture.");
-				manager.requestedModel = { ...model, model: "other" };
-				break;
-			}
-			case "reviewer":
-				reviewer.requestedModel = { ...model, model: "other" };
-				break;
-			case "second-reviewer":
-				value.actors.push({
-					...reviewer,
-					requestedModel: { ...model, model: "other" },
-				});
-				break;
-			case "observed-route":
-				reviewer.actualModel = {
-					kind: "observed",
-					value: { ...model, routeProvider: "other" },
-				};
-				break;
-			case "observed-model":
-				reviewer.actualModel = {
-					kind: "observed",
-					value: { ...model, model: "other" },
-				};
-				break;
-			case "family":
-				reviewer.requestedModel = { ...model, family: "other" };
-				break;
-			case "gateway":
-				reviewer.requestedModel = { ...model, gateway: "proxy" };
-				break;
-			case "revision":
-				reviewer.requestedModel = { ...model, revision: "preview" };
-				break;
-		}
 		const { recordSha256: _prior, ...base } = value;
 		const candidate = { ...base, recordSha256: canaryRecordSha256(base) };
 		expect(
 			await canaryRecordIssue({
-				version: "10.0.0",
+				version,
 				record: candidate,
 				expectedArtifact: candidate.artifact,
 				directory: "/unused",
 				now: new Date("2026-08-25T00:00:01Z"),
 			}),
-		).toBe(
-			variant === "missing-manager"
-				? "Passed canaries require actors, session, and transcript evidence."
-				: `Canary ${variant === "manager" ? "manager" : "reviewer"} model does not match the pinned release route.`,
-		);
-	}
-});
+		).toBe("Canary manager model does not match the pinned release route.");
+	});
+
+	test(`${version} canary rejects missing and wrong-role identities before evidence access`, async () => {
+		const model: ModelIdentity = {
+			routeProvider: "openai",
+			gateway: null,
+			family: "gpt-6.1-sol",
+			model: "gpt-6.1-sol",
+			revision: null,
+		};
+		for (const variant of [
+			"missing-manager",
+			"manager",
+			"reviewer",
+			"second-reviewer",
+			"observed-route",
+			"observed-model",
+			"family",
+			"gateway",
+			"revision",
+		]) {
+			const value = record({
+				artifactValue: { ...artifact, packageVersion: version },
+			});
+			value.derivationVersion = "canary-evidence-v2";
+			value.actors = ["manager", "reviewer"].map((role) => ({
+				...actor,
+				role: role === "manager" ? "manager" : "reviewer",
+				requestedModel: model,
+				actualModel: { kind: "observed", value: model },
+				sessionIds: ["<redacted-id>"],
+			}));
+			const reviewer = value.actors[1];
+			if (!reviewer) throw new Error("Missing reviewer fixture.");
+			switch (variant) {
+				case "missing-manager":
+					value.actors = [reviewer];
+					break;
+				case "manager": {
+					const manager = value.actors[0];
+					if (!manager) throw new Error("Missing manager fixture.");
+					manager.requestedModel = { ...model, model: "other" };
+					break;
+				}
+				case "reviewer":
+					reviewer.requestedModel = { ...model, model: "other" };
+					break;
+				case "second-reviewer":
+					value.actors.push({
+						...reviewer,
+						requestedModel: { ...model, model: "other" },
+					});
+					break;
+				case "observed-route":
+					reviewer.actualModel = {
+						kind: "observed",
+						value: { ...model, routeProvider: "other" },
+					};
+					break;
+				case "observed-model":
+					reviewer.actualModel = {
+						kind: "observed",
+						value: { ...model, model: "other" },
+					};
+					break;
+				case "family":
+					reviewer.requestedModel = { ...model, family: "other" };
+					break;
+				case "gateway":
+					reviewer.requestedModel = { ...model, gateway: "proxy" };
+					break;
+				case "revision":
+					reviewer.requestedModel = { ...model, revision: "preview" };
+					break;
+			}
+			const { recordSha256: _prior, ...base } = value;
+			const candidate = { ...base, recordSha256: canaryRecordSha256(base) };
+			expect(
+				await canaryRecordIssue({
+					version,
+					record: candidate,
+					expectedArtifact: candidate.artifact,
+					directory: "/unused",
+					now: new Date("2026-08-25T00:00:01Z"),
+				}),
+			).toBe(
+				variant === "missing-manager"
+					? "Passed canaries require actors, session, and transcript evidence."
+					: `Canary ${variant === "manager" ? "manager" : "reviewer"} model does not match the pinned release route.`,
+			);
+		}
+	});
+}

@@ -56,7 +56,7 @@ import { assertQualificationBundle } from "../scripts/release-metadata.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 test("current release defaults retain 17 cases on OpenAI and three autonomous attempts", () => {
-	expect(packageJson.version).toBe("10.0.0");
+	expect(packageJson.version).toBe("10.0.1");
 	const scenarios = releaseScenarios(packageJson.version);
 	const catalog = releaseCatalog(packageJson.version);
 	expect(scenarios).toHaveLength(17);

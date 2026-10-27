@@ -2,6 +2,21 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [10.0.1]
+
+- Simplify plugin tool response assembly and mutation routing while retaining
+  validation cancellation, reviewer-only writes, and exact completion replay.
+- Share the CI toolchain setup across normal checks, scheduled evals, and host
+  compatibility checks. Main reports candidate readiness without requiring
+  development bytes to match a previously published artifact; publication still
+  requires exact qualified bytes.
+- Session v5 schema, persisted state, commands, and tool inputs are unchanged.
+- Qualification uses `openai/gpt-6.1-sol` for manager and reviewer across all
+  17 cases, followed by a fresh exact-artifact canary. No cross-provider
+  reliability claim follows.
+
+Upgrade with `opencode plugin add opencode-plugin-flow@10.0.1`.
+
 ## [10.0.0]
 
 - Flow now targets OpenCode v2, with 2.1.4 as its tested minimum. OpenCode 1

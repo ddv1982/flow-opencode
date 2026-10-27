@@ -11,6 +11,7 @@ import {
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
+import packageJson from "../package.json" with { type: "json" };
 import { createFlowCoreConfigEntries } from "../src/config-shared.js";
 import {
 	FLOW_GUIDANCE_IDS,
@@ -224,7 +225,7 @@ describe("Flow distribution surface", () => {
 			join(import.meta.dir, "../src/platform/opencode/plugin.ts"),
 		);
 		expect(response.workflowData.runtimeIdentity).toEqual({
-			packageVersion: "10.0.0",
+			packageVersion: packageJson.version,
 			pluginEntrySha256: `sha256:${createHash("sha256").update(entry).digest("hex")}`,
 		});
 	});

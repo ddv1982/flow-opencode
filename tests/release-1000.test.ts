@@ -142,7 +142,7 @@ test("OpenAI-only 10.0.0 admits only the complete canonical direct identity", ()
 });
 
 test("OpenAI-only exception leaves later release defaults unchanged", () => {
-	for (const version of ["10.0.1", "10.1.0", "11.0.0"]) {
+	for (const version of ["10.0.2", "10.1.0", "11.0.0"]) {
 		expect(releaseCatalog(version).map((row) => row.minProviders)).toEqual(
 			Array(17).fill(2),
 		);

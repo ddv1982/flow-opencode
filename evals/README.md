@@ -132,9 +132,9 @@ Ordinary runs use one sequential queue per model, with up to four queues in flig
 Release mode is strictly sequential (`--concurrency 1`). Versions 9.1.0 and
 9.2.0 pin `openai/gpt-6-sol` with 38 primary targets and eight reserves. Version
 9.3.0 pins the same model with 48 primary targets and nine reserves. Version
-9.4.0 uses 57 primary targets and 12 reserves on the same route. Exact 10.0.0
-pins `openai/gpt-6.1-sol` across all 17 cases with 72 primary cells and 17 reserves.
-Later v2 releases retain two routes and 144/34 cells. The 10.0.0 exception makes
+9.4.0 uses 57 primary targets and 12 reserves on the same route. 10.0.0/10.0.1
+pin `openai/gpt-6.1-sol` across all 17 cases with 72 primary cells and 17 reserves.
+Other v2 releases retain two routes and 144/34 cells. These exceptions make
 no cross-provider reliability claim.
 Cells are scheduling units; count scenario steps and probes separately for the
 dispatch authorization. Only retained retryable
@@ -569,8 +569,8 @@ about the prompts; a single attempt of a stochastic scenario is not a rate.
 ## Multi-model matrix
 
 The [versioned policy](../docs/release-qualification.md#the-qualification-bar)
-owns model requirements. Exact 10.0.0 requires only `openai/gpt-6.1-sol` and makes
-no cross-provider reliability claim. Later v2 releases require two distinct
+owns model requirements. 10.0.0/10.0.1 require only `openai/gpt-6.1-sol` and makes
+no cross-provider reliability claim. Other v2 releases require two distinct
 provider routes. This policy is not evidence that any candidate has qualified.
 `.github/workflows/evals.yml`
 runs the matrix weekly and on demand, outside contributor gates.
@@ -730,8 +730,8 @@ distinction that matters: one pass in six and six in six are different findings.
 ## Cost
 
 The [versioned qualification policy](../docs/release-qualification.md#the-qualification-bar)
-owns model pins and cell counts, including historical exceptions. Exact 10.0.0
-has 72 primary cells and 17 reserves on `openai/gpt-6.1-sol`. Current scenario
+owns model pins and cell counts, including historical exceptions. 10.0.0/10.0.1
+have 72 primary cells and 17 reserves on `openai/gpt-6.1-sol`. Current scenario
 steps derive 90 primary dispatches, 23 reserve dispatches, and one route probe,
 for 91 planned or 114 maximum top-level dispatches. These remain an unapproved
 proposal to refresh at final candidate freeze. Paid work is HOLD until purpose,

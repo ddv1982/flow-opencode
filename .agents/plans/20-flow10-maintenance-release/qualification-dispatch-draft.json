@@ -1,0 +1,134 @@
+{
+  "status": "draft-not-authorized",
+  "packageVersion": "10.0.1",
+  "managerModels": 1,
+  "modelSet": [
+    "openai/gpt-6.1-sol"
+  ],
+  "cases": [
+    {
+      "caseId": "delivery-summary-completed",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "delivery-summary-deferred",
+      "stepsPerAttempt": 2,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 6,
+      "reserveDispatchesPerModel": 2
+    },
+    {
+      "caseId": "delivery-summary-observed-failure",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "delivery-full-detail-followup",
+      "stepsPerAttempt": 2,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 6,
+      "reserveDispatchesPerModel": 2
+    },
+    {
+      "caseId": "delivery-idle-after-close",
+      "stepsPerAttempt": 2,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 6,
+      "reserveDispatchesPerModel": 2
+    },
+    {
+      "caseId": "happy-path",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "plan-only-stops",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "goal-change-refused",
+      "stepsPerAttempt": 2,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 6,
+      "reserveDispatchesPerModel": 2
+    },
+    {
+      "caseId": "continuation-accepted",
+      "stepsPerAttempt": 2,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 6,
+      "reserveDispatchesPerModel": 2
+    },
+    {
+      "caseId": "failing-gate-blocks",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 10,
+      "primaryDispatchesPerModel": 10,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "resumes-after-interruption",
+      "stepsPerAttempt": 2,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 6,
+      "reserveDispatchesPerModel": 2
+    },
+    {
+      "caseId": "unprovable-claim-refused",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 10,
+      "primaryDispatchesPerModel": 10,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "skipped-case-named-binding",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "inspection-failed-audit-completes",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 10,
+      "primaryDispatchesPerModel": 10,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "auto-two-features-evidence",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "auto-prerequisite-repair",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    },
+    {
+      "caseId": "auto-observe-with-required-pass",
+      "stepsPerAttempt": 1,
+      "primaryAttemptsPerModel": 3,
+      "primaryDispatchesPerModel": 3,
+      "reserveDispatchesPerModel": 1
+    }
+  ],
+  "primaryDispatches": 90,
+  "reserveDispatches": 23,
+  "routeProbes": 1,
+  "plannedDispatches": 91,
+  "totalDispatchLimit": 114
+}

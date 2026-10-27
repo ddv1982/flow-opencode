@@ -204,8 +204,10 @@ const V2_RELEASE: ReleaseProfile = {
 	requiredModels: null,
 };
 
+const OPENAI_ONLY_V2_RELEASES = new Set(["10.0.0", "10.0.1"]);
+
 export function releaseProfile(packageVersion: string): ReleaseProfile {
-	if (packageVersion === "10.0.0")
+	if (OPENAI_ONLY_V2_RELEASES.has(packageVersion))
 		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
 	if (targetsOpenCodeV2(packageVersion)) return V2_RELEASE;
 	if (packageVersion === "9.6.0")
@@ -226,7 +228,10 @@ export function releaseReviewerModel(
 	packageVersion: string,
 	managerModel?: ModelIdentity,
 ): ModelIdentity | null {
-	if (packageVersion === "9.6.0" || packageVersion === "10.0.0") {
+	if (
+		packageVersion === "9.6.0" ||
+		OPENAI_ONLY_V2_RELEASES.has(packageVersion)
+	) {
 		const model = releaseProfile(packageVersion).requiredModels?.[0];
 		if (!model) throw new Error("Pinned release reviewer model is absent.");
 		return model;
