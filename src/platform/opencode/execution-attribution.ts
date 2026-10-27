@@ -43,7 +43,7 @@ type HttpResource =
 	| Readonly<{ phase: "context"; requestSeen: false }>
 	| Readonly<{ phase: "ended"; requestSeen: false }>
 	| Readonly<{
-			phase: "request" | "streaming" | "ended";
+			phase: "request" | "rejected" | "streaming" | "ended";
 			requestSeen: true;
 	  }>;
 type Lifetime =
@@ -440,7 +440,7 @@ export class ExecutionAttribution {
 		const snapshot = this.#evidence(primary);
 		const record = this.#session(primary.sessionID);
 		if (
-			primary.http.phase !== "request" ||
+			(primary.http.phase !== "request" && primary.http.phase !== "rejected") ||
 			!same(nativeInputIDs(native), snapshot.inputs)
 		)
 			return false;
@@ -496,7 +496,7 @@ export class ExecutionAttribution {
 			if (finish()) failed(primary);
 		};
 		if (!input.response.ok) {
-			fail();
+			primary.http = { phase: "rejected", requestSeen: true };
 			return;
 		}
 		try {
@@ -557,6 +557,7 @@ export class ExecutionAttribution {
 		if (
 			!record ||
 			!primary?.http.requestSeen ||
+			primary.http.phase === "rejected" ||
 			primary.agent !== execution.agent
 		)
 			throw new Error("Flow tool has no attributable primary request.");

@@ -226,7 +226,7 @@ test("an old assistant is rejected after a later context", async () => {
 });
 
 test.each([false, true])(
-	"HTTP 400 preserves the native provider error and releases authority when already revoked is %s",
+	"HTTP 400 preserves the native provider error and denies tools when already revoked is %s",
 	async (alreadyRevoked) => {
 		const f = fixture();
 		if (alreadyRevoked) f.revoke();
@@ -265,16 +265,21 @@ test.each([false, true])(
 				"/tmp",
 				"shell",
 			),
-		).toThrow("revoked epoch");
+		).toThrow("no attributable primary");
 	},
 );
 
-test("a failed HTTP response does not leave the next fresh request overlapping", () => {
+test("native terminal failure after rejected HTTP permits the next fresh request", () => {
 	let current = "user-1";
 	const attribution = new ExecutionAttribution((candidate) => {
 		if (candidate.id !== current) throw new Error("revoked origin");
 	});
-	attribution.freeze(context, [user], { kind: "flow", origin: origin }, clock);
+	const failed = attribution.freeze(
+		context,
+		[user],
+		{ kind: "flow", origin: origin },
+		clock,
+	);
 	const request = new Request("http://localhost/failed");
 	attribution.request({
 		sessionID: sid,
@@ -299,6 +304,9 @@ test("a failed HTTP response does not leave the next fresh request overlapping",
 			current = "user-2";
 		},
 	);
+	expect(current).toBe("user-1");
+	attribution.retire(failed);
+	current = "user-2";
 	const nextUser: SessionMessageInfo = {
 		...user,
 		id: "user-2",
@@ -1385,3 +1393,106 @@ for (const outcome of ["throws", "undefined"] as const)
 		expect(calls).toBe(1);
 		expect(f.attribution.current(sid)).toBe(f.primary);
 	});
+
+for (const status of [400, 429, 503]) {
+	test(`HTTP ${status} waits for native retry evidence without granting tools`, () => {
+		const f = fixture();
+		let failures = 0;
+		f.attribution.response(
+			{
+				sessionID: sid,
+				agent,
+				model,
+				kind: "primary",
+				request: f.request,
+				response: new Response("native error", { status }),
+			},
+			() => {
+				failures++;
+				f.revoke();
+			},
+		);
+		expect(failures).toBe(0);
+		expect(() => f.attribution.assertCurrent(f.primary)).not.toThrow();
+		expect(() =>
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			),
+		).toThrow("no attributable primary");
+		expect(() =>
+			f.attribution.prepareReplacement(context, [user], f.primary, false),
+		).toThrow("overlap");
+		const retry: SessionMessageInfo = {
+			...assistant,
+			content: [],
+			retry: {
+				attempt: 1,
+				at: 2,
+				error: { type: "provider.transport", message: "Retry" },
+			},
+		};
+		const permit = f.attribution.prepareReplacement(
+			context,
+			[user, retry],
+			f.primary,
+			false,
+		);
+		expect(permit.retry).toBe(true);
+		const next = f.attribution.freeze(
+			context,
+			[user, retry],
+			{ kind: "flow", origin },
+			clock,
+			permit,
+		);
+		f.attribution.request({
+			sessionID: sid,
+			agent,
+			model,
+			kind: "primary",
+			request: new Request("http://localhost/retry"),
+		});
+		expect(
+			f.attribution.verify(
+				execution,
+				[user, assistant],
+				session,
+				"/tmp",
+				"shell",
+			).primary,
+		).toBe(next);
+		expect(() => f.attribution.assertCurrent(f.primary)).toThrow("superseded");
+	});
+}
+
+test("a rejected HTTP request cannot revive a revoked input on native retry", () => {
+	const f = fixture();
+	f.attribution.response(
+		{
+			sessionID: sid,
+			agent,
+			model,
+			kind: "primary",
+			request: f.request,
+			response: new Response("retry", { status: 503 }),
+		},
+		() => {},
+	);
+	f.revoke();
+	const retry: SessionMessageInfo = {
+		...assistant,
+		content: [],
+		retry: {
+			attempt: 1,
+			at: 2,
+			error: { type: "provider.transport", message: "Retry" },
+		},
+	};
+	expect(() =>
+		f.attribution.prepareReplacement(context, [user, retry], f.primary, false),
+	).toThrow("revoked epoch");
+});
