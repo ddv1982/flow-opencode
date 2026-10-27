@@ -43,7 +43,7 @@ Install OpenCode v2 and the exact Flow release:
 ```sh
 npm install -g @opencode/cli@2.1.4
 opencode2 --version
-opencode2 plugin add opencode-plugin-flow@10.0.0
+opencode2 plugin add opencode-plugin-flow@10.0.1
 ```
 
 The version command must report `opencode v2.1.4` or a later tested 2.x version.
@@ -57,7 +57,7 @@ For project scope, add this entry to the project's `opencode.json`:
 
 ```json
 {
-  "plugins": ["opencode-plugin-flow@10.0.0"]
+  "plugins": ["opencode-plugin-flow@10.0.1"]
 }
 ```
 
@@ -74,7 +74,7 @@ Set plugin defaults:
 ```json
 {
   "plugins": [{
-    "package": "opencode-plugin-flow@10.0.0",
+    "package": "opencode-plugin-flow@10.0.1",
     "options": {
       "reviewer": { "model": "provider/model", "steps": 80 },
       "typesafeApiKeyEnv": "MY_TYPESAFE_KEY"

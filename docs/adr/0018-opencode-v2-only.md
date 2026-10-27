@@ -46,8 +46,8 @@ variant. Reset restores its base. Native selection owns the coding model.
 
 ## Qualification
 
-Flow 10.0.0 pins `openai/gpt-6.1-sol` across 17 cases with 72 primary and 17
-reserve cells. Later v2 releases retain two routes and 144/34 cells. Reviewers
+10.0.0/10.0.1 pin `openai/gpt-6.1-sol` across 17 cases with 72 primary and 17
+reserve cells. Other v2 releases retain two routes and 144/34 cells. Reviewers
 use the manager model with recovery off. Candidate, canary, and publication
 bind the exact archive and unpacked manifest.
 
