@@ -1519,7 +1519,7 @@ test("a delayed terminal session read cannot revoke a replacement primary", asyn
 	}
 });
 
-test("native retry keeps its unfinished assistant and late old responses cannot revoke it", async () => {
+test("HTTP retry keeps its unfinished assistant and late old responses cannot revoke it", async () => {
 	const f = await fixture();
 	try {
 		await f.command("flow-auto", "Inspect original");
@@ -1531,6 +1531,14 @@ test("native retry keeps its unfinished assistant and late old responses cannot 
 			model,
 			kind: "primary",
 			request: oldRequest,
+		});
+		await f.emit("http.response", {
+			sessionID,
+			agent,
+			model,
+			kind: "primary",
+			request: oldRequest,
+			response: new Response("transient", { status: 503 }),
 		});
 		const assistantID = SessionMessage.ID.make("msg_retry_assistant");
 		const callID = CallID.make("call_retry_status");

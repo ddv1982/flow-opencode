@@ -500,6 +500,52 @@ test.skipIf(!LIVE)(
 				validationEvidence,
 			);
 
+			const retrySession = await client.session.create(
+				{
+					title: "Native HTTP retry control",
+					agent: "build",
+					model: { providerID: "flow-smoke", id: "catalog-model" },
+					location: { directory: project },
+				},
+				request(),
+			);
+			await client.session.command(
+				{
+					sessionID: retrySession.id,
+					name: "flow-auto",
+					text: `FLOW_SMOKE_RETRY FLOW_SMOKE_ACTIONS ${JSON.stringify([
+						{ tool: "flow_status", input: { request: { view: "compact" } } },
+						{ tool: "flow_status", input: { request: { view: "compact" } } },
+					])}`,
+				},
+				request(),
+			);
+			await client.session.wait({ sessionID: retrySession.id }, request());
+			expect(
+				(await client.session.get({ sessionID: retrySession.id }, request()))
+					.outcome,
+			).toBe("succeeded");
+			expect(
+				provider.requests.filter((entry) => entry.scenario === "retry"),
+			).toHaveLength(4);
+			const retryCalls = await tools(client, retrySession.id);
+			expect(retryCalls.map((call) => [call.name, call.state.status])).toEqual([
+				["flow_status", "completed"],
+				["flow_status", "completed"],
+			]);
+			for (const call of retryCalls) {
+				if (call.state.status !== "completed")
+					throw new Error("Retry tool did not complete");
+				expect(
+					JSON.parse(
+						call.state.content
+							.filter((item) => item.type === "text")
+							.map((item) => item.text)
+							.join("\n"),
+					),
+				).toMatchObject({ status: "ok" });
+			}
+
 			try {
 				const errorSession = await client.session.create(
 					{
