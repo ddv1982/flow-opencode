@@ -87,6 +87,12 @@ case "$1" in
     printf '%s/qualified-bundle' "$RUNNER_TEMP"
     ;;
   scripts/restore-exact-release-artifact.ts)
+    if [[ "$3" == --bundle ]]; then
+      [[ "$5" == "$FLOW_TEST_VERSION" ]]
+      printf attempted > .restore-attempt
+      if [[ "\${FLOW_TEST_RESTORE_REFUSE:-0}" == 1 ]]; then exit 81; fi
+      printf 'qualified-%s' "$FLOW_TEST_VERSION" > "$2"
+    else
     case "$4" in
       sha256:0af07377229cd23d5f1ec7fd666666bc58ffda94348fce4d0070af0a05d6f80b) printf qualified-9.2.0 > "$2" ;;
       sha256:5635502fd5f56ff160edcb78bc8b1d34fb2545e3aaf20fac4f25272f7cdbed9f) printf qualified-9.3.0 > "$2" ;;
@@ -94,6 +100,7 @@ case "$1" in
       sha256:71ad6adcbdb6f0650a230a9494242d346e9c344c7c3e84d8ae32cb8e5c7bc7ec) printf qualified-9.6.0 > "$2" ;;
       *) exit 80 ;;
     esac
+    fi
     ;;
   release:metadata)
     if [[ " $* " == *' --tag '* ]]; then printf 'METADATA VERIFIED\\n'; else printf 'METADATA INCONCLUSIVE\\n'; fi
@@ -122,6 +129,7 @@ function execute(
 	f: { root: string; bin: string },
 	version: string,
 	recovery = "",
+	environment: Record<string, string> = {},
 ) {
 	return spawnSync("bash", ["-c", run], {
 		cwd: f.root,
@@ -134,6 +142,8 @@ function execute(
 			FLOW_TEST_REGRADE_LOG: join(f.root, ".regraded-source"),
 			GITHUB_WORKSPACE: f.root,
 			RUNNER_TEMP: f.root,
+			FLOW_RELEASE_PUBLISH: "false",
+			...environment,
 		},
 	});
 }
@@ -430,3 +440,46 @@ test("exact restoration accepts permission differences and rejects changed file 
 	expect(rejected.stderr).toContain("Rebuilt package contents differ");
 	expect(await readFile(rebuilt)).toEqual(changed);
 });
+
+for (const [job, publish, refuse, status, contents] of [
+	["verify-main-and-tag", "false", "1", 0, "generic-10.0.0"],
+	["verify-main-and-tag", "true", "0", 0, "qualified-10.0.0"],
+	["verify-main-and-tag", "true", "1", 81, "generic-10.0.0"],
+	["release", "false", "0", 0, "qualified-10.0.0"],
+	["release", "false", "1", 81, "generic-10.0.0"],
+] as const) {
+	test(`v2 candidate ${job} publish=${publish} refused=${refuse} preserves its preparation boundary`, async () => {
+		const f = await fixture("10.0.0");
+		const archives = join(f.root, "evals/qualification/archives");
+		await mkdir(archives, { recursive: true });
+		await writeFile(join(archives, "10.0.0.json"), "{}");
+		const run = await step(
+			job,
+			job === "release" ? "Prepare package" : "Rebuild release candidate",
+		);
+		const result = execute(run, f, "10.0.0", "", {
+			FLOW_RELEASE_PUBLISH: publish,
+			FLOW_TEST_RESTORE_REFUSE: refuse,
+		});
+		expect(result.status, result.stderr).toBe(status);
+		expect(
+			await readFile(join(f.root, "opencode-plugin-flow-10.0.0.tgz"), "utf8"),
+		).toBe(contents);
+		if (job === "verify-main-and-tag" && publish === "false") {
+			await expect(
+				readFile(join(f.root, ".restore-attempt")),
+			).rejects.toMatchObject({ code: "ENOENT" });
+			const readiness = execute(
+				await step(job, "Report release evidence readiness without publishing"),
+				f,
+				"10.0.0",
+			);
+			expect(readiness.status, readiness.stderr).toBe(0);
+			expect(readiness.stdout).toBe("METADATA INCONCLUSIVE\nCANARY DRY RUN\n");
+		} else {
+			expect(await readFile(join(f.root, ".restore-attempt"), "utf8")).toBe(
+				"attempted",
+			);
+		}
+	});
+}
