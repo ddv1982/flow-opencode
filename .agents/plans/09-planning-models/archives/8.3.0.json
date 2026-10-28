@@ -1,0 +1,8 @@
+{
+	"schemaVersion": 1,
+	"packageVersion": "8.3.0",
+	"archive": "8.3.0.tar.gz",
+	"archiveSha256": "sha256:ddecb4c394a3a1bf28e251a95c0ee7bbf58f1b52bd338ced03f7a1465154e151",
+	"bundleId": "qb1-01702420392aee2ed7c028c7bfd2dc3a8f85981d69ec60ec4f53f7a208e2db6e",
+	"bundleSha256": "sha256:01702420392aee2ed7c028c7bfd2dc3a8f85981d69ec60ec4f53f7a208e2db6e"
+}
