@@ -29,15 +29,17 @@ export function localScriptedProvider() {
 			requests.push({
 				model: body.model,
 				tools,
-				scenario: text?.includes("FLOW_SMOKE_RETRY")
-					? "retry"
-					: text?.includes("FLOW_SMOKE_PROVIDER_ERROR")
-						? "error"
-						: text?.includes("FLOW_SMOKE_DELAY")
-							? "delay"
-							: text?.includes("FLOW_SMOKE_ACTIONS")
-								? "actions"
-								: "plain",
+				scenario: text?.includes("FLOW_SMOKE_QUIET")
+					? "quiet"
+					: text?.includes("FLOW_SMOKE_RETRY")
+						? "retry"
+						: text?.includes("FLOW_SMOKE_PROVIDER_ERROR")
+							? "error"
+							: text?.includes("FLOW_SMOKE_DELAY")
+								? "delay"
+								: text?.includes("FLOW_SMOKE_ACTIONS")
+									? "actions"
+									: "plain",
 			});
 			if (
 				text?.includes("FLOW_SMOKE_RETRY") &&
@@ -47,6 +49,11 @@ export function localScriptedProvider() {
 					{ error: { message: "Local transient error" } },
 					{ status: 503 },
 				);
+			if (
+				text?.includes("FLOW_SMOKE_QUIET") &&
+				requests.filter((entry) => entry.scenario === "quiet").length === 2
+			)
+				await Bun.sleep(6000);
 			if (text?.includes("FLOW_SMOKE_PROVIDER_ERROR"))
 				return Response.json(
 					{ error: { message: "Local scripted provider error" } },

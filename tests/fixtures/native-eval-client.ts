@@ -90,7 +90,10 @@ export function sessionReply(data: SessionInfo): Response {
 	return Response.json({ data });
 }
 
-export function nativeClient(handler: NativeHandler): OpenCodeClient {
+export function nativeClient(
+	handler: NativeHandler,
+	active: () => Record<string, { type: "running" }> = () => ({}),
+): OpenCodeClient {
 	const transport: typeof fetch = Object.assign(
 		async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
 			const url = new URL(input instanceof Request ? input.url : String(input));
@@ -98,6 +101,8 @@ export function nativeClient(handler: NativeHandler): OpenCodeClient {
 				throw new Error(
 					`Fixture refused transport outside its origin ${url.origin}`,
 				);
+			if (url.pathname === "/api/session/active")
+				return Response.json({ data: active() });
 			return handler({ url, method: init?.method ?? "GET", init: init ?? {} });
 		},
 		{ preconnect: globalThis.fetch.preconnect },
@@ -150,6 +155,8 @@ export function nativeHttpClient(handler: NativeHandler): {
 		hostname: "127.0.0.1",
 		port: 0,
 		async fetch(request) {
+			if (new URL(request.url).pathname === "/api/session/active")
+				return Response.json({ data: {} });
 			const body = request.method === "GET" ? undefined : await request.text();
 			return handler({
 				url: new URL(request.url),

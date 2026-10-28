@@ -22,8 +22,10 @@ import type {
 } from "@opencode/client";
 import { currentBunToolchain } from "../evals/bun-toolchain.js";
 import {
+	EvalHost,
 	packPlugin,
 	preparePackageCache,
+	runSessionRequest,
 	terminateChildProcessTree,
 } from "../evals/harness.js";
 import {
@@ -545,6 +547,62 @@ test.skipIf(!LIVE)(
 					),
 				).toMatchObject({ status: "ok" });
 			}
+
+			const quietSession = await primaryClient.session.create(
+				{
+					title: "Native active wait control",
+					agent: "build",
+					model: { providerID: "flow-smoke", id: "catalog-model" },
+					location: { directory: project },
+				},
+				request(),
+			);
+			const quietHost = Reflect.construct(EvalHost, [project, root]);
+			Reflect.set(quietHost, "nativeClient", primaryClient);
+			const observation = await Reflect.get(
+				quietHost,
+				"commandObservation",
+			).call(quietHost, quietSession.id);
+			await runSessionRequest({
+				url: "local",
+				body: null,
+				onRejected() {},
+				waitOwnsCancellation: true,
+				post: (_url, _body, options) =>
+					primaryClient.session.prompt(
+						{
+							sessionID: quietSession.id,
+							text: `FLOW_SMOKE_QUIET FLOW_SMOKE_ACTIONS ${JSON.stringify([{ tool: "flow_status", input: { request: { view: "compact" } } }])}`,
+						},
+						{ signal: options.signal },
+					),
+				wait: (pending) =>
+					Reflect.get(quietHost, "waitForQuiet").call(
+						quietHost,
+						quietSession.id,
+						{ quietMs: 1500, timeoutMs: 30000, request: pending, observation },
+					),
+			});
+			expect(
+				Object.hasOwn(
+					await primaryClient.session.active(request()),
+					quietSession.id,
+				),
+			).toBe(false);
+			const quietMessages = await listNativeMessages(
+				primaryClient,
+				quietSession.id,
+			);
+			expect(
+				quietMessages.some(
+					(message) =>
+						message.type === "idle" && message.outcome === "succeeded",
+				),
+			).toBe(true);
+			expect(JSON.stringify(quietMessages)).toContain("Local smoke complete");
+			expect(
+				provider.requests.filter((entry) => entry.scenario === "quiet"),
+			).toHaveLength(2);
 
 			try {
 				const errorSession = await client.session.create(

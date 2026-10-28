@@ -29,6 +29,7 @@ import { executeStudy } from "../evals/study-runner.js";
 import {
 	fixtureModel,
 	messagePage,
+	type NativeHandler,
 	nativeAssistant,
 	nativeClient,
 	nativeHost,
@@ -402,7 +403,9 @@ test("old V2 fields stay absent and strict new fields do not accept extra data",
 type FixtureOptions = {
 	messages: (poll: number) => SessionMessageInfo[];
 	prior?: SessionMessageInfo[];
-	child?: "failed" | "running" | "read-failure";
+	child?: "failed" | "running" | "read-failure" | "empty";
+	active?: (poll: number) => Record<string, { type: "running" }>;
+	timeoutMs?: number;
 	pendingPost?: boolean;
 	cancel?: "before" | "after";
 	outcomeOnly?: boolean;
@@ -422,7 +425,7 @@ async function observeWait(options: FixtureOptions) {
 		parentID: "ses_root",
 		agent: "flow-reviewer",
 	});
-	const client = nativeClient(async ({ url, init }) => {
+	const handler: NativeHandler = async ({ url, init }) => {
 		const path = url.pathname;
 		if (path.endsWith("/model")) return new Response(null, { status: 204 });
 		if (path.endsWith("/command") || path.endsWith("/prompt")) {
@@ -453,23 +456,26 @@ async function observeWait(options: FixtureOptions) {
 			if (options.child === "read-failure")
 				throw new Error("Fixture child read failed");
 			return messagePage(
-				options.child === "failed"
-					? [idle("failed", "msg_child_idle")]
-					: [
-							nativeAssistant("msg_child", {
-								content: [
-									nativeTool("call_read", "read", {
-										status: "running",
-										input: {},
-										metadata: {},
-									}),
-								],
-							}),
-						],
+				options.child === "empty"
+					? []
+					: options.child === "failed"
+						? [idle("failed", "msg_child_idle")]
+						: [
+								nativeAssistant("msg_child", {
+									content: [
+										nativeTool("call_read", "read", {
+											status: "running",
+											input: {},
+											metadata: {},
+										}),
+									],
+								}),
+							],
 			);
 		}
 		throw new Error("Unexpected fixture endpoint");
-	});
+	};
+	const client = nativeClient(handler, () => options.active?.(poll) ?? {});
 	const clock = spyOn(Date, "now").mockImplementation(() => now);
 	const sleep = spyOn(Bun, "sleep").mockImplementation(async () => {
 		now += 2000;
@@ -483,7 +489,7 @@ async function observeWait(options: FixtureOptions) {
 			result = await evaluationPhase("host", "command-aborted", true, () =>
 				host.runCommand("ses_root", "flow-plan", "fixture", fixtureModel, {
 					quietMs: 0,
-					timeoutMs: 8000,
+					timeoutMs: options.timeoutMs ?? 8000,
 					stalledMs: 4000,
 				}),
 			).catch((error: unknown) => error);
@@ -1130,4 +1136,52 @@ test("study runner grades an allowed question stop instead of recording native f
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}
+});
+
+for (const scope of ["root", "child"] as const)
+	test(`native active ${scope} without an exported unfinished assistant cannot settle quiet`, async () => {
+		const result = await observeWait({
+			messages: (poll) => (poll < 3 ? [] : [idle("succeeded")]),
+			...(scope === "child" ? { child: "empty" as const } : {}),
+			active: (poll) =>
+				poll < 4
+					? {
+							[scope === "root" ? "ses_root" : "ses_child"]: {
+								type: "running",
+							},
+						}
+					: {},
+			timeoutMs: 20000,
+		});
+		expect(result.result).toBe("quiet");
+		expect(result.now).toBeGreaterThanOrEqual(8000);
+		expect(result.aborts).toBe(0);
+	});
+
+test("unrelated native activity does not hold the owned command open", async () => {
+	const result = await observeWait({
+		messages: () => [idle("succeeded")],
+		active: () => ({ ses_other: { type: "running" } }),
+	});
+	expect(result.result).toBe("quiet");
+	expect(result.now).toBeLessThanOrEqual(6000);
+});
+
+test("unexported native activity still reaches the command deadline", async () => {
+	const result = await observeWait({
+		messages: () => [],
+		active: () => ({ ses_root: { type: "running" } }),
+	});
+	expect(result.result).toBeInstanceOf(EvaluationPhaseError);
+	expect(result.aborts).toBe(1);
+});
+
+test("native activity read failure cannot establish quiet", async () => {
+	const result = await observeWait({
+		messages: () => [],
+		active: () => {
+			throw new Error("Native activity unavailable");
+		},
+	});
+	expect(result.result).toBeInstanceOf(EvaluationPhaseError);
 });
