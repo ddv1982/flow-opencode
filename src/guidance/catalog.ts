@@ -1,3 +1,9 @@
+import delivery from "../../skills/flow/references/delivery.md" with {
+	type: "text",
+};
+import managerEntry from "../../skills/flow/references/manager-entry.md" with {
+	type: "text",
+};
 import flowSkill from "../../skills/flow/SKILL.md" with { type: "text" };
 import flowPlanSkill from "../../skills/flow-plan/SKILL.md" with {
 	type: "text",
@@ -34,10 +40,22 @@ export const FLOW_MANAGER_KERNEL = [
 	].join(" "),
 ].join("\n");
 
+function managerGuide(skill: string, kernel = false): string {
+	return [
+		skill,
+		managerEntry,
+		delivery,
+		...(kernel ? [FLOW_MANAGER_KERNEL] : []),
+	]
+		.map((part) => part.trimEnd())
+		.join("\n\n")
+		.concat("\n");
+}
+
 const GUIDANCE_CONTENT: Record<FlowGuidanceId, string> = {
-	flow: `${flowSkill.trimEnd()}\n\n${FLOW_MANAGER_KERNEL}\n`,
-	"flow-plan": flowPlanSkill,
-	"flow-run": `${flowRunSkill.trimEnd()}\n\n${FLOW_MANAGER_KERNEL}\n`,
+	flow: managerGuide(flowSkill, true),
+	"flow-plan": managerGuide(flowPlanSkill),
+	"flow-run": managerGuide(flowRunSkill, true),
 	"flow-review": flowReviewSkill,
 };
 

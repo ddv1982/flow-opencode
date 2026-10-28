@@ -166,7 +166,7 @@ fi
 
 if range_contains "$files" '^(src/platform/opencode/|src/config-shared\.ts|src/guidance/|src/prompt-surfaces\.ts|skills/)'; then
   log "Run OpenCode surface focused checks"
-  bun test tests/distribution-and-surface.test.ts tests/opencode-schema-contract.test.ts tests/prompt-quality.test.ts
+  bun run eval:guidance
 fi
 
 if range_contains "$files" '^(package\.json|README\.md|src/index\.ts|src/platform/opencode/|scripts/lib/package-surface\.ts)'; then

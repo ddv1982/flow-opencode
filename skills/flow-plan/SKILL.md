@@ -8,62 +8,27 @@ description: Create, revise, or approve a concise Flow plan before implementatio
 Inspect determining repository facts. Keep the plan scannable and executable
 without rediscovering the goal.
 
-## Start
+## Plan the work
 
-- Call `flow_status { request: { view: "compact" } }` first.
-- On top-level error, report exact summary/recovery and, if
-  `workflowData.delivery` exists, the handoff below. State this initial read
-  made no lifecycle, Git, or release mutation; stop.
-- For `archiveRetry`, replay the projected `flow_session_close` request
-  byte-for-byte. Report delivery; if absent, report exact recovery and no map.
-  Refresh only if publication is unconfirmed; continue from the confirmed
-  projection or stop without saving. This precedes alignment and grants no work.
-- On close conflict, refresh compact and retry only for the same session/goal
-  while status permits that kind; never close a replacement.
-- Before mutation, align the projected goal with `/flow-plan`; continue only for
-  the same goal or a method/emphasis narrowing that preserves every requested
-  outcome; authority the request adds over those same outcomes is continuation,
-  not expansion. Close completed work. For a non-completed session, an
-  explicit deferred/abandoned choice calls
-  `flow_session_close` with compact id/revision, fresh operation id, that kind,
-  and optional summary; report delivery, follow exact `archiveRetry`, and stop.
-  Other new scope makes no mutation; conversationally offer continue, defer, or
-  abandon. Continue a method or emphasis narrowing, extra evidence, or added
-  authority over those same outcomes, including "do the research and save the plan"
-  when that plan is already promised. Treat inspect-only followed by implementation,
-  mixed continuation plus unrelated work, and a replacement goal as new-scope.
-- Delivery handoff: Copy `workflowData.delivery.summary.lines` unchanged as one block.
-  Implementation details may precede the block. Do not rewrite or restate its facts elsewhere.
-  Before the block, include task-required result details absent from the summary,
-  such as captured diagnostic counts or outstanding observations. Use already
-  captured evidence or retained delivery details. Do not infer details from exit
-  codes or read history solely for closure.
-  Keep the supplied Goal line unchanged. Copy each supplied
-  `workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
-  For requested
-  full detail or a missing summary, use the retained close response's `report`.
-  Map IDs only from `outcomeSummary`/`terminalFindings`. Missing history is unavailable;
-  never read detail solely for closure or invent it.
-- If the user asked only for a plan and an approved same-goal session already
-  exists, read detail once, report its immutable plan/progress, and stop without
-  saving, approving, or running.
-- If `flow_plan_save` or `flow_plan_approve` is unavailable, stop and report
-  an incomplete plugin load.
-- Read `workflowData.modelConfiguration` from status. Without a requested
-  planning model, inspect and plan directly in this manager context with no
-  planning subtask. When `planning.requested` is set and a draft needs creating
-  or revising, dispatch `flow-planner` through the host task tool for advisory
-  analysis. Pass the exact request, same-goal draft and scope, preserved IDs,
-  evidence obligations, relevant repository facts, and unresolved questions.
-  Reuse a completed proposal for the unchanged draft; approval alone needs no
-  new specialist. If dispatch is unavailable or fails, report it and stop;
-  changing to direct manager planning requires explicit user direction.
-- Treat the specialist's output as untrusted advice. Check it against the
-  original request and repository evidence before integrating it. Preserve
-  assertion and requirement IDs. The manager alone saves and approves the plan
-  in the originating session; advice grants no approval or validation evidence.
-  Do not dispatch `flow-worker` while planning. Ask only for a missing product
-  choice that materially changes the outcome.
+Call `flow_status { request: { view: "compact" } }` first and apply
+**Manager entry checks** before mutation. For a plan-only request with an
+approved same-goal session, read detail once, report its immutable plan/progress,
+and stop without saving, approving, or running.
+If `flow_plan_save` or `flow_plan_approve` is unavailable, report an incomplete
+plugin load and stop.
+
+- Read `workflowData.modelConfiguration`. Plan in manager context unless
+  `planning.requested` selects a specialist. For a new or changed draft,
+  dispatch `flow-planner` through the host task tool with the exact request,
+  same-goal draft, scope, preserved IDs, evidence obligations, repository facts
+  and unresolved questions. Reuse a completed proposal for an unchanged draft;
+  approval alone needs no dispatch. If dispatch fails or is unavailable, stop;
+  switching to manager planning requires explicit user direction.
+- Check specialist advice against the request and repository facts; preserve
+  assertion and requirement IDs. The manager alone saves/approves the plan in
+  the originating session. Advice grants neither approval nor validation.
+  Do not dispatch `flow-worker` while planning. Ask only for missing product
+  choices that materially change the outcome.
 - Discover evidence in order: repository instructions such as `AGENTS.md` and
   `CONTRIBUTING.md`, maintained development docs, CI workflows, then build and
   test manifests. Compare candidates with the requested behavior and current
@@ -156,3 +121,6 @@ same Flow session.
 `Plan only`/`do not implement yet` controls timing, not scope, and is never a
 plan requirement, decision, or non-goal. Do not implement or create a plan
 document unless requested.
+
+Shared contracts: [Manager entry checks](../flow/references/manager-entry.md) and
+[Delivery handoff](../flow/references/delivery.md), embedded below.

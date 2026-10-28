@@ -2,6 +2,14 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## Unreleased
+
+- Put ordinary Flow execution before recovery details, share goal-alignment and
+  delivery instructions across the existing guides, and clarify read-only status
+  routing. Commands, tool inputs, Session v5 and runtime gates are unchanged.
+- Add three development status evals and one offline guidance check. Offline
+  results do not claim model improvement or qualify a new release.
+
 ## [10.0.1]
 
 - Simplify plugin tool response assembly and mutation routing while retaining

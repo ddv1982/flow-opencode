@@ -7,80 +7,14 @@ description: Implement, validate, independently review, and record one approved 
 
 Work on exactly one approved feature.
 
-## Start
+## Execute the feature
 
-1. Call `flow_status { request: { view: "compact" } }` first. Treat
-   `nextAction` as the durable default, not as permission.
-2. If the top-level response status is `error`, report its exact summary and
-   recovery when present and, if `workflowData.delivery` exists, the handoff
-   below. This read made no lifecycle, Git, or release mutation. Stop. Do not
-   route its `nextAction`.
-3. If compact status contains `archiveRetry`, call `flow_session_close` once
-   with the projected request byte-for-byte. Report delivery under the contract
-   below. Refresh only if publication is unconfirmed. Stop after this cleanup
-   either way; it grants no work.
- 4. When the projection contains an active goal, align it with the current
-   `/flow-run` request before another manager lifecycle mutation. Continue only
-   for the same goal or a method/emphasis narrowing that preserves all outcomes;
-   authority the request adds over those same outcomes is continuation, not
-   expansion. Close completed work. Unless the next step applies, new or expanded work
-   makes no mutation: report that it has not started and offer continue, defer,
-   or abandon. Continue a method or emphasis narrowing, extra evidence, or added
-   authority over those same outcomes, including "do the research and save the plan"
-   when that plan is already promised. Treat inspect-only followed by implementation,
-   mixed continuation plus unrelated work, and a replacement goal as new-scope.
-5. If the aligned request explicitly chooses deferred or abandoned closure for
-   a non-completed session, call `flow_session_close` with compact session id and
-   revision, fresh operation id, that kind, and optional summary. Report delivery
-   under the contract below, follow a projected exact `archiveRetry`, and stop.
-6. If status is `idle` or `planning`, report its projected planning action,
-   explain that `/flow-run` requires an approved feature, and stop without
-   mutation.
-
-Delivery handoff: Copy `workflowData.delivery.summary.lines` unchanged as one block.
-Implementation details may precede the block. Do not rewrite or restate its facts elsewhere.
-Before the block, include task-required result details absent from the summary,
-such as captured diagnostic counts or outstanding observations. Use already
-captured evidence or retained delivery details. Do not infer details from exit
-codes or read history solely for closure.
-Keep the supplied Goal line unchanged. Copy each supplied
-`workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
-For requested
-full detail or a missing summary, use the retained close response's `report`.
-Map IDs only
-from delivery `outcomeSummary`/`terminalFindings`. Requirements are `verified`,
-`incomplete`, or explicitly `deferred`, and `abandoned` remains the kind. If
-delivery is absent, report exact recovery and no map. On revision conflict,
-refresh compact; retry only for the same session and goal while status still
-permits the selected closure kind; never close a replacement.
-
-## Route
-
-Follow compact `nextAction` in this order:
-
-- `flow_session_close`: close completed work with its projected session
-  id/revision, fresh operation id, and `kind: "completed"`. Report delivery,
-  follow one exact `archiveRetry` if needed, and stop.
-- `await-user-direction` or blocked `flow_feature_reset`: call
-  `flow_status { request: { view: "detail" } }` exactly once, then apply
-  **Blocked review**.
-- Running `flow_feature_reset`: the pending review is source-stale. Reset with
-  the same feature as `nextFeatureId` when continuing it. Never redispatch that
-  assignment.
-- `dispatch-flow-reviewer`: read execution status. If that read errors, report
-  its exact summary and recovery when present and stop. Otherwise route that
-  refreshed projection. Dispatch under **Review** only if `nextAction` is still
-  `dispatch-flow-reviewer`. If it is now running `flow_feature_reset`, follow
-  the source-stale reset route.
-- `flow_run_start`: start the ready feature, refresh compact status, and read
-  execution status.
-- `flow_validation_start`: read execution status and resume from the current
-  worktree.
-- `flow_review_start`: read execution status and continue at **Review**.
-- Any other action: report it and stop.
-
-Use execution status for scope and revision. Stay in the feature; reset a wrong
-design instead of layering retries.
+Call `flow_status { request: { view: "compact" } }` first and apply
+**Manager entry checks** before mutation. If status is `idle` or `planning`,
+report its planning action and stop: `/flow-run` requires an approved feature.
+For `nextAction: flow_run_start`, start the ready feature, read execution status, then implement,
+validate and dispatch review below. For an existing run or a non-start action,
+use **Recovery routing**. Use execution status for scope and revision.
 
 ## Implement
 
@@ -176,6 +110,31 @@ apply the `dispatch-flow-reviewer` or running `flow_feature_reset` route. If
 status is blocked, apply **Blocked review**. A recorded pass completes the
 feature.
 
+## Recovery routing
+
+Follow compact `nextAction` in this order:
+
+- `flow_session_close`: close completed work with its projected session
+  id/revision, fresh operation id, and `kind: "completed"`. Report delivery,
+  follow one exact `archiveRetry` if needed, and stop.
+- `await-user-direction` or blocked `flow_feature_reset`: call
+  `flow_status { request: { view: "detail" } }` exactly once, then apply
+  **Blocked review**.
+- Running `flow_feature_reset`: the pending review is source-stale. Reset with
+  the same feature as `nextFeatureId` when continuing it. Never redispatch that
+  assignment.
+- `dispatch-flow-reviewer`: refresh execution status and route its `nextAction`.
+  Dispatch under **Review** if it still names dispatch; a source-stale assignment
+  takes the reset route instead.
+- `flow_run_start`: start the ready feature, refresh compact status, and read
+  execution status.
+- `flow_validation_start`: read execution status and resume from the current
+  worktree.
+- `flow_review_start`: read execution status and continue at **Review**.
+- Any other action: report it and stop.
+
+Stay in the feature; reset a wrong design instead of layering retries.
+
 ### Blocked review
 
 Follow `nextAction` with the one detail projection for routing. At
@@ -204,3 +163,6 @@ and `blockedFeature.scopeBlocker`.
 
 Direct `/flow-run` reports compact `findingsDigest` and `nextAction`, then
 stops. Under `/flow-auto`, return to its lifecycle loop.
+
+Shared contracts: [Manager entry checks](../flow/references/manager-entry.md) and
+[Delivery handoff](../flow/references/delivery.md), embedded below.

@@ -1,0 +1,49 @@
+{
+	"version": 5,
+	"id": "guidance-session",
+	"revision": 2,
+	"goal": "Add a greeting to src/greet.mjs",
+	"approval": "approved",
+	"plan": {
+		"summary": "Add a greeting",
+		"overview": "Export greet",
+		"requirements": ["greet returns Hello"],
+		"decisions": [],
+		"features": [
+			{
+				"id": "greet",
+				"title": "Greeting",
+				"summary": "Export greet",
+				"targets": ["src/greet.mjs"],
+				"validation": ["node --test"],
+				"dependsOn": []
+			}
+		],
+		"evidence": [
+			{
+				"requirement": "Repository suite",
+				"environment": "this host",
+				"command": "node --test",
+				"scope": "gate",
+				"platform": "other",
+				"assertions": []
+			}
+		]
+	},
+	"runs": [],
+	"operations": [
+		{
+			"id": "seed-plan",
+			"kind": "plan-save",
+			"inputDigest": "sha256:80a6a3afe0c528f1d846950c07aad916eff125260b3c302dd773dc62e8aee8a0",
+			"committedRevision": 1
+		},
+		{
+			"id": "seed-approve",
+			"kind": "plan-approve",
+			"inputDigest": "sha256:950fbd0b2ef8fefab38f5604cd7c450e239f772769f72d7164dd77387a4033e0",
+			"committedRevision": 2
+		}
+	],
+	"closure": null
+}

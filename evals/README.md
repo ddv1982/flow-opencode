@@ -9,6 +9,39 @@ asserts durable Session v5 state and the observed tool-call sequence — never
 prompt wording — so a prompt can be rewritten freely as long as the outcomes
 hold.
 
+## Guidance changes
+
+Run `bun run eval:guidance` for the offline contributor check. It combines prompt
+wiring/size checks, native-surface integration, adversarial tests of the guidance
+scenario graders, and the existing cassette replay. It performs no model calls
+or credential setup. This is regression evidence, not model-comprehension proof.
+There is no second guidance runner, report format, budget, or qualification path.
+
+The new `guidance-status-ready`, `guidance-status-blocked`, and
+`guidance-status-error` cases measure compact-only status, one detail read for a
+blocked state, and stopping after a status error. Each seeds synthetic Session
+state and checks observed calls, unchanged persisted state/workspace, and the
+actual returned status/error text. They are development report-only cases and do
+not change the frozen 10.0.1 release matrix.
+
+For model behavior, use the ordinary runner after obtaining a current bounded
+[dispatch authorization](../.agents/plans/05-release-simplification/README.md#authorize-paid-work):
+
+```sh
+bun run eval -- --model openai/gpt-6.1-sol --concurrency 1 --repeat 1 \
+  --scenario plan-only-stops --scenario goal-change-refused \
+  --scenario continuation-accepted --scenario resumes-after-interruption \
+  --scenario guidance-status-ready --scenario guidance-status-blocked \
+  --scenario guidance-status-error
+```
+
+This selection covers normal planning, scope boundaries, recovery and status.
+It is not release qualification. Count all scenario steps and route probes in
+the authorization; failed starts remain consumed. Reuse neither an old campaign's
+unused balance nor its partial outcomes. Native-account setup and exact-artifact
+options below apply unchanged. Retain the ordinary report and original failures;
+compare behavior and measured instruction size before claiming improvement.
+
 ## Running
 
 Model runs require provider credentials and an approved

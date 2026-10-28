@@ -46,6 +46,7 @@
 		"eval:recovery": "bun run evals/recovery-decisions/run.ts",
 		"eval:blockers": "bun run evals/blocker-decisions/run.ts",
 		"eval:cheap": "bun run evals/eval-cheap.ts",
+		"eval:guidance": "bun test tests/prompt-quality.test.ts tests/guidance-scenarios.test.ts tests/distribution-and-surface.test.ts tests/opencode-schema-contract.test.ts && bun run replay",
 		"benchmark": "bun run evals/benchmark-run.ts",
 		"lint": "bunx biome check biome.json src tests scripts evals --files-ignore-unknown=true --vcs-use-ignore-file=true",
 		"release:metadata": "bun run scripts/release-metadata.ts",

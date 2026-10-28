@@ -9,6 +9,7 @@ import { AUTO_SCENARIOS } from "./auto-scenarios.js";
 import { currentHandoffFacts } from "./delivery-presentation.js";
 import { DELIVERY_SCENARIOS } from "./delivery-scenarios.js";
 import type { ScenarioGradeInput } from "./grader-input.js";
+import { GUIDANCE_SCENARIOS } from "./guidance-scenarios.js";
 import { askedQuestions, type Scenario } from "./harness.js";
 
 // Session v5, narrowed to the fields the checks actually read, and mirrored by hand
@@ -1497,6 +1498,7 @@ const INSPECTION_AUDIT_FIXTURE: Record<string, string> = {
 export const SCENARIOS: readonly Scenario[] = [
 	...AUTO_SCENARIOS,
 	...DELIVERY_SCENARIOS,
+	...GUIDANCE_SCENARIOS,
 	{
 		id: "happy-path",
 		description:

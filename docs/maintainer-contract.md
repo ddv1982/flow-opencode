@@ -295,10 +295,9 @@ user starting point.
 | `flow_feature_reset` | Supersede a failed attempt and optionally atomically start the exact authorized retry or dependency-independent feature through `nextFeatureId`. |
 | `flow_session_close` | Close and archive the session, returning the same concise derived delivery and tiered assurance on every durably accepted close path. |
 
-The ten lifecycle tools accept a nested `request`, return state under
-`workflowData`, and require the current revision plus a stable operation ID for
-mutations. `flow_session_close` additionally returns derived delivery under
-`workflowData`; `flow_guidance` instead accepts a guide ID and returns Markdown.
+Tools accept nested `request` and return state under `workflowData`; mutations
+require a current revision and stable operation ID. Closure adds derived delivery.
+`flow_guidance` instead takes an ID and returns Markdown; see [authoring](../skills/README.md).
 
 ### Guides
 

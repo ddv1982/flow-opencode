@@ -10,31 +10,8 @@ never silently fall back.
 
 ## Route from status
 
-1. Call `flow_status { request: { view: "compact" } }` first. Trust its
-   `nextAction` as the durable default, not added authority.
-   If the top-level response is an error, report its exact summary and recovery;
-   when delivery is present, handle its bounded map under **Recovery**. Stop
-   without another mutation.
-   For `archiveRetry`, call the projected `flow_session_close` request
-   byte-for-byte and handle its delivery under **Recovery**. Refresh compact status;
-   stop if publication remains unconfirmed, otherwise continue from the
-   refreshed projection. This cleanup precedes goal alignment and grants no work.
-   Before another manager mutation, align the compact-projected goal with the
-   request. Continue only for the same goal or a narrowing that preserves every
-   outcome; authority the request adds over those same outcomes is continuation,
-   not expansion. Close a completed session as completed before new work. If the user
-   explicitly chooses deferred or abandoned closure for a non-completed session,
-   call `flow_session_close` with compact session id/revision, fresh operation
-   id, that kind, and optional summary; handle **Recovery**, follow a projected
-   exact `archiveRetry`, and stop. Otherwise new or expanded work makes no
-    mutation: say it has not started and offer continue, defer, or abandon. Keep
-   alignment conversational. Continue a method or emphasis narrowing, extra
-   evidence, or added authority over those same outcomes, including
-   "do the research and save the plan" when that plan is already promised. Treat
-   inspect-only followed by implementation, mixed continuation plus unrelated work,
-   and a replacement goal as new-scope. On revision conflict, refresh compact status and
-   retry only after confirming the same session and goal and that status still
-   permits the selected closure kind; never close a replacement.
+1. Call `flow_status { request: { view: "compact" } }` first and apply
+   **Manager entry checks** before mutation.
 2. For a plan-only request with an approved same-goal session, read detail once,
    report the immutable plan and progress, and stop.
 3. With no session or a draft, load `flow_guidance { id: "flow-plan" }`; stop
@@ -55,7 +32,7 @@ The runtime decides when `/flow-auto` continues automatically; never assume a
 further turn, and finish the authorized work in this one.
 
 For `ready`, apply `flow-run`; after every recorded result reload compact. For `completed`,
-close and handle **Recovery** plus exact `archiveRetry`.
+close and handle **Delivery handoff** plus exact `archiveRetry`.
 `flow_run_start` and intermediate progress are not terminal: never return “ready
 for the next feature” or wait while an action is authorized. Return only after closure
 or a checkpoint. Direct `/flow-run` stops after one feature.
@@ -80,40 +57,5 @@ If a Flow tool is absent, report an incomplete plugin load; never simulate state
 - Do not create reports/sidecars, Git changes, or release mutations unless
   requested; reports default to Markdown and JSON is opt-in.
 
-## Recovery
-
-On interruption, read compact status; load `flow-run` for an active or blocked feature
-and use execution or reviewer status, never prose, for lifecycle truth. At a
-checkpoint or lease stop, print compact `findingsDigest` before any delivery map.
-
-Summaries keep plan/source IDs `verified` or `incomplete`. A prior finding is
-terminally `fixed` only when review passes with current evidence. A failed
-verdict carries every prior ID forward: report a proven repair as `terminal
-fixed pending pass` with concise evidence, an
-unproven repair as unverified-fixed, a recurrence as `recurring`, or a confirmed
-nonblocker as `residual`. Blockers stay terminal.
-
-For an accepted close, map only `workflowData.delivery`
-`outcomeSummary`/`terminalFindings`.
-Requirements are proven `verified`, otherwise `incomplete` or explicit
-`deferred`. Apply the finding rules above, using `incomplete` for an unproven
-terminal claim; `abandoned` stays the kind. Missing IDs are unavailable: never
-invent or read detail solely for closure. Without delivery, report exact
-recovery and no map.
-
-Unresolved blockers forbid completed closure. Fresh close: projected session
-id/revision, fresh operation id, kind, optional summary. Replay byte-for-byte
-only the `archiveRetry` of a durably accepted close. Rejected revision conflict:
-refresh compact, confirm the same session/goal, then build a fresh request.
-Copy `workflowData.delivery.summary.lines` unchanged as one block.
-Implementation details may precede the block. Do not rewrite or restate its facts elsewhere.
-Before the block, include task-required result details absent from the summary,
-such as captured diagnostic counts or outstanding observations. Use already
-captured evidence or retained delivery details. Do not infer details from exit
-codes or read history solely for closure.
-Keep the supplied Goal line unchanged. Copy each supplied
-`workflowData.delivery.assurance.limitations` statement unchanged, including its full topic list.
-For requested full detail or a missing
-summary, report the retained close response's `report`. Report external prerequisites only
-from terminal text; otherwise mark them unavailable. Create no other ledger or
-report.
+Shared contracts: [Manager entry checks](../flow/references/manager-entry.md) and
+[Delivery handoff](../flow/references/delivery.md), embedded below.

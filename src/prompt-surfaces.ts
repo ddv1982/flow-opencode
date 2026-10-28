@@ -58,29 +58,18 @@ const FLOW_WORKER_PROMPT = [
 ].join("\n");
 
 const FLOW_STATUS_PROMPT = [
-	'Call `flow_status { request: { view: "compact" } }` first.',
-	"Do not mutate.",
-	"Report `workflowData.modelConfiguration.report` as process-local model settings and observations when present.",
-	"Report `workflowData.reviewerConfiguration.report` verbatim when present and label it process-local, not persisted state.",
-	"Report `workflowData.statusReport` verbatim when present; do not reconstruct lifecycle or recovery facts from the projection.",
-	"If the top-level response status is `error`, report its exact summary and",
-	"`workflowData.failure.recovery` when present; otherwise say no recovery guidance was supplied.",
-	"If current `workflowData.delivery` exists, report its `summary.lines`, or its `report` on request or no summary. Otherwise say unavailable.",
-	"Map IDs only from `outcomeSummary` and `terminalFindings`: IDs are `verified`",
-	"only when proven, otherwise `incomplete` or explicitly `deferred`; `fixed` needs later passing",
-	"review plus current evidence, `recurring` current confirmation, `residual` a confirmed nonblocker,",
-	"`abandoned` remains the closure kind.",
-	"Missing IDs unavailable.",
-	"State that `/flow-status` made no Git or release mutation, note any lifecycle effect, and stop.",
-	"Do not interpret recovery guidance as a blocked review.",
-	"If `projection.status` is `blocked` or `projection.nextAction` is `await-user-direction`,",
-	'call `flow_status { request: { view: "detail" } }` exactly once and label the result overall incomplete.',
-	"Report the detail `workflowData.statusReport` verbatim when present; it owns retry, evidence, artifact, and recovery text.",
-	"When `workflowData.autoTiming` is present, report `activeMs` as non-authoritative process-local wall time, not CPU or pure work, and `waitingForUserMs` as only projected `flow_plan_approve` plus `await-user-direction` time for the latest `/flow-auto`.",
-	"State that paused, inactive, errored, and unprojected waits are excluded.",
-	"Otherwise report the compact projection and its exact `nextAction`, state that `/flow-status`",
-	"made no lifecycle, Git, or release mutation, and stop.",
-].join(" ");
+	"# Flow status",
+	"Read and report current state without advancing work.",
+	'1. Call `flow_status { request: { view: "compact" } }` first.',
+	"2. On error, select that response. Report its exact summary and `workflowData.failure.recovery`, or say none was supplied. Apply only step 4's delivery bullet, then step 5. Use no further tools.",
+	'3. If `projection.status` is `blocked` or `projection.nextAction` is `await-user-direction`, call `flow_status { request: { view: "detail" } }` exactly once. On error, apply step 2. Otherwise use that detail response and label the result overall incomplete.',
+	"4. Report the selected response once:",
+	"- Report `workflowData.statusReport` verbatim when present; otherwise report its projection and exact `nextAction`. Do not reconstruct recovery facts.",
+	"- Report `workflowData.modelConfiguration.report` and `workflowData.reviewerConfiguration.report` verbatim when present, labelled process-local settings and observations, not persisted state.",
+	"- If current `workflowData.delivery` exists, report its `summary.lines`, or its `report` on request or no summary. Otherwise say unavailable. Map IDs only from `outcomeSummary` and `terminalFindings`: `verified` needs proof; `fixed` needs passing review plus current evidence; otherwise use `incomplete`, explicit `deferred`, confirmed `recurring` or `residual`, or the closure kind `abandoned`. Missing IDs are unavailable.",
+	"- When `workflowData.autoTiming` is present, report `activeMs` as non-authoritative process-local wall time, not CPU or pure work. `waitingForUserMs` covers only projected `flow_plan_approve` plus `await-user-direction` time for the latest `/flow-auto`; paused, inactive, errored and unprojected waits are excluded.",
+	"5. Report any lifecycle effect, append `/flow-status made no Git or release mutation.`, and stop. Recovery guidance grants no mutation authority.",
+].join("\n\n");
 
 const FLOW_REVIEW_PROMPT = [
 	"# Flow review command",
