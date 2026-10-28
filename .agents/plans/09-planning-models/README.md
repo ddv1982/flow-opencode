@@ -56,3 +56,11 @@ requires editing `OFFLINE_FEATURES`, review, and merge. A record whose version a
 feature pair is absent from that list is refused before any evidence is read, so a
 record cannot nominate its own scope, reuse another feature's commit, or advance
 to a later version.
+
+## Retained baseline archive
+
+The original baseline seal and all 250 objects are retained byte-for-byte in
+`archives/8.3.0.tar.gz`, bound by `archives/8.3.0.json`. The existing qualification
+loader materializes this archive outside the workspace when it reads the
+code-owned `baselines` path. This lossless storage change keeps release evidence
+within the unchanged 256 MiB workspace fingerprint limit.
