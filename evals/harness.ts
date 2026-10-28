@@ -3155,15 +3155,21 @@ export class EvalHost {
 				if (remaining === 0) continue;
 				const observerDeadline = AbortSignal.timeout(remaining);
 				let sessions: readonly OwnedProgressSession[];
+				let active: Awaited<ReturnType<OpenCodeClient["session"]["active"]>>;
+				const observerSignal = AbortSignal.any([
+					...(this.signal ? [this.signal] : []),
+					observerDeadline,
+				]);
 				try {
 					sessions = await this.ownedProgressSessions(
 						sessionId,
 						messages,
-						AbortSignal.any([
-							...(this.signal ? [this.signal] : []),
-							observerDeadline,
-						]),
+						observerSignal,
 						options.observation.metadata,
+					);
+					active = await this.nativeRequest(
+						(options) => this.client.session.active(options),
+						observerSignal,
 					);
 				} catch (error) {
 					accountPollElapsed();
@@ -3215,6 +3221,7 @@ export class EvalHost {
 				);
 				const busy =
 					delivery?.kind === "pending" ||
+					sessions.some((session) => Object.hasOwn(active, session.id)) ||
 					ownedPending.length > 0 ||
 					ownedMessages.some(
 						(entry) =>
