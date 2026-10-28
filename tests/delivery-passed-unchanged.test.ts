@@ -51,6 +51,84 @@ test("passed unchanged claims both script and invocation integrity", () => {
 		},
 	]);
 });
+
+function compoundFixture(separator = "; independent review") {
+	const input = fixture();
+	input.finalText = input.finalText.replace(
+		"passed unchanged.",
+		`passed unchanged${separator} passed with no findings.`,
+	);
+	return input;
+}
+
+test("supported separators preserve command integrity and independent review evidence", () => {
+	for (const separator of [
+		"; independent review",
+		";Independent review:",
+		"; Independent review",
+		", and Independent review",
+		". Independent review",
+	]) {
+		const facts = currentHandoffFacts(
+			`${gate} passed unchanged${separator} passed with no findings.`,
+			[gate],
+		);
+		expect(facts.unsupported).toEqual([]);
+		expect(facts.observations).toEqual([
+			{
+				command: gate,
+				exitCode: 0,
+				qualification: "claimed-pass",
+				integrity: "script-and-invocation-unchanged",
+			},
+		]);
+		expect(facts.independentReview).toEqual([
+			{ kind: "passed", findings: "none" },
+		]);
+		expect(scenario.check(compoundFixture(separator))).toEqual([]);
+	}
+});
+
+for (const suffix of [
+	"independent review passed if it ran",
+	"independent review passed and deployed",
+	"independent review passed with no findings; exited 1",
+	"independent review passed with no findings; its script changed",
+	"independent review passed with no findings; this observation does not claim a pass",
+]) {
+	test(`semicolon review composition still rejects ${suffix}`, () => {
+		const input = compoundFixture();
+		input.finalText = input.finalText.replace(
+			"independent review passed with no findings.",
+			`${suffix}.`,
+		);
+		expect(scenario.check(input)).toContain(
+			"Unsupported or conflicting current handoff assertions.",
+		);
+	});
+}
+
+for (const change of ["nonzero", "incomplete", "source", "unsubmitted"]) {
+	test(`a semicolon review claim cannot rescue ${change} native evidence`, () => {
+		const input = compoundFixture();
+		const runs = object(input.archives[0]).runs;
+		if (!Array.isArray(runs)) throw new Error("Missing native runs.");
+		const run = object(runs[0]);
+		if (!Array.isArray(run.validations) || !Array.isArray(run.reviews))
+			throw new Error("Missing native proof.");
+		const validation = run.validations
+			.map(object)
+			.find((value) => value.command === gate);
+		if (!validation) throw new Error("Missing gate.");
+		if (change === "nonzero") validation.exitCode = 1;
+		if (change === "incomplete") validation.outputComplete = false;
+		if (change === "source")
+			validation.sourceDigest = `sha256:${"b".repeat(64)}`;
+		if (change === "unsubmitted") object(run.reviews[0]).result = null;
+		expect(scenario.check(input)).not.toEqual([]);
+	});
+}
+
 for (const paths of [null, ["src/parser.mjs", "scripts/verify.mjs"]]) {
 	test(`passed unchanged requires immutable script evidence ${paths}`, () => {
 		const input = fixture();

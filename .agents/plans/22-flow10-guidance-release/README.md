@@ -66,3 +66,20 @@ No source guard removal, reauthentication or credential fallback is authorized.
   historical policy preservation and 100/126 dispatch arithmetic were checked.
 - This document and the count draft authorize no paid starts. The final proposal
   still requires exact merged-source/artifact/evaluator bindings and approval.
+
+## First campaign: retained failure
+
+The frozen 4d08d36b / f670ad4f candidate stopped after three required attempts:
+two passed and one failed the current-handoff parser; 78 primary cells remained
+missing. Four top-level starts were consumed, leaving 122 unused and not
+transferred. The original report remains NOT VERIFIED and all failed receipts
+are preserved. No canary or publication followed.
+
+Offline reproduction identifies an evaluator false positive: the known command
+claim `passed unchanged; independent review passed with no findings` was parsed
+as one command suffix. The same retained evidence passes when only that semicolon
+becomes a period. The correction extends the existing review-sibling boundary
+rule, retaining native command/review proof, script-integrity and contradiction
+checks. Diagnostic acceptance is not qualification evidence and does not
+complete or pool the stopped campaign. Further real-account qualification needs
+a freshly bound approval after corrected evaluator preparation.

@@ -416,10 +416,11 @@ function sentenceBoundary(
 			/^,\s*host\b/i.test(text.slice(index))
 		)
 			return { end: index, next: index, unterminatedQuote: false };
-		if (mode === "command" && character === ",") {
-			const sibling = /^,\s+and\s+(?=Independent review(?::|\s))/i.exec(
-				text.slice(index),
-			);
+		if (mode === "command" && (character === "," || character === ";")) {
+			const sibling =
+				/^(?:,\s+and\s+|;\s*)(?=Independent review(?::|\s))/i.exec(
+					text.slice(index),
+				);
 			if (sibling)
 				return {
 					end: index,
