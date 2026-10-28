@@ -21,8 +21,8 @@ The new `guidance-status-ready`, `guidance-status-blocked`, and
 `guidance-status-error` cases measure compact-only status, one detail read for a
 blocked state, and stopping after a status error. Each seeds synthetic Session
 state and checks observed calls, unchanged persisted state/workspace, and the
-actual returned status/error text. They are development report-only cases and do
-not change the frozen 10.0.1 release matrix.
+actual returned status/error text. They remain development report-only in ordinary runs. From 10.0.2 they are also
+required release cases; the frozen 10.0.1 matrix stays unchanged.
 
 For model behavior, use the ordinary runner after obtaining a current bounded
 [dispatch authorization](../.agents/plans/05-release-simplification/README.md#authorize-paid-work):
@@ -167,7 +167,8 @@ Release mode is strictly sequential (`--concurrency 1`). Versions 9.1.0 and
 9.3.0 pins the same model with 48 primary targets and nine reserves. Version
 9.4.0 uses 57 primary targets and 12 reserves on the same route. 10.0.0/10.0.1
 pin `openai/gpt-6.1-sol` across all 17 cases with 72 primary cells and 17 reserves.
-Other v2 releases retain two routes and 144/34 cells. These exceptions make
+10.0.2 adds the three required status cases for 81/20 cells on the same route.
+Later v2 releases require two providers and 162/40 cells. These exceptions make
 no cross-provider reliability claim.
 Cells are scheduling units; count scenario steps and probes separately for the
 dispatch authorization. Only retained retryable

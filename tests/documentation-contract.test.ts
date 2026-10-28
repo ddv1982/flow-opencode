@@ -599,8 +599,10 @@ describe("Flow documentation contract", () => {
 			changelog,
 			`[${packageVersion}]${releaseDate ? ` - ${releaseDate}` : ""}`,
 		);
-		expect(currentReleaseNotes).toContain(
-			`opencode plugin add opencode-plugin-flow@${packageVersion}`,
+		expect(currentReleaseNotes).toMatch(
+			new RegExp(
+				`opencode2? plugin add opencode-plugin-flow@${packageVersion.replaceAll(".", "\\.")}`,
+			),
 		);
 		// Release notes must state the schema impact explicitly rather than the
 		// uninformative "public surface is unchanged".
