@@ -158,7 +158,7 @@ Follow the [frozen-candidate sequence](release-qualification.md#running-it):
 finish fixes and dependency updates, pass deterministic checks, approve paid
 evals.
 `bun run qualify -- --campaign-dir <dir> --canary <record>` seals the
-policy grid, canary and grader evidence. 10.0.0/10.0.1 pin `openai/gpt-6.1-sol`.
+policy grid, canary and grader evidence. 10.0.0/10.0.1/10.0.2 pin `openai/gpt-6.1-sol`.
 See [model policy](release-qualification.md#the-qualification-bar) for historical
 exceptions and later defaults. Commit the bundle before tagging;
 interrupted results cannot qualify.

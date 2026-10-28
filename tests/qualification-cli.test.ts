@@ -55,11 +55,11 @@ import { assertQualificationBundle } from "../scripts/release-metadata.js";
 
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
-test("current release defaults retain 17 cases on OpenAI and three autonomous attempts", () => {
-	expect(packageJson.version).toBe("10.0.1");
+test("current release defaults retain 20 cases on OpenAI and three autonomous attempts", () => {
+	expect(packageJson.version).toBe("10.0.2");
 	const scenarios = releaseScenarios(packageJson.version);
 	const catalog = releaseCatalog(packageJson.version);
-	expect(scenarios).toHaveLength(17);
+	expect(scenarios).toHaveLength(20);
 	expect([...new Set(catalog.map((row) => row.minProviders))]).toEqual([1]);
 	const plan = campaignPlanFor({
 		models: ["openai/gpt-6.1-sol"],
@@ -68,11 +68,11 @@ test("current release defaults retain 17 cases on OpenAI and three autonomous at
 		opencodeVersion: releaseHostPolicy(packageJson.version).opencodeVersion,
 	});
 	expect(plan.cells.filter((cell) => cell.schedule === "primary")).toHaveLength(
-		72,
+		81,
 	);
 	expect(
 		plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
-	).toHaveLength(17);
+	).toHaveLength(20);
 	expect(
 		[
 			...new Set(plan.cells.map((cell) => cell.managerModel?.routeProvider)),

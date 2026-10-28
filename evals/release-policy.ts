@@ -165,6 +165,28 @@ const deliveryParsed = parseCaseCatalog([
 if (!deliveryParsed.ok) throw new Error("Delivery release policy is invalid.");
 const DELIVERY_RELEASE_CATALOG = deliveryParsed.value;
 
+// 10.0.2 adds status coverage after the unchanged historical 17-case prefix.
+const guidanceParsed = parseCaseCatalog([
+	...DELIVERY_RELEASE_CATALOG,
+	...[
+		"guidance-status-ready",
+		"guidance-status-blocked",
+		"guidance-status-error",
+	].map((caseId) => ({
+		caseId,
+		caseVersion: 1,
+		evidenceClass: "conformance",
+		oracle: "durable-state",
+		release: "required",
+		minProviders: 1,
+		minScoredAttempts: 3,
+		minPassRate: 1,
+		reviewerPromotionRecordSha256: null,
+	})),
+]);
+if (!guidanceParsed.ok) throw new Error("Guidance release policy is invalid.");
+const GUIDANCE_RELEASE_CATALOG = guidanceParsed.value;
+
 export type ReleaseProfile = {
 	readonly catalog: ValidatedCaseCatalog;
 	readonly requiredModels: readonly ModelIdentity[] | null;
@@ -197,18 +219,23 @@ export function targetsOpenCodeV2(packageVersion: string): boolean {
 }
 
 const V2_RELEASE: ReleaseProfile = {
-	catalog: DELIVERY_RELEASE_CATALOG.map((row) => ({
+	catalog: GUIDANCE_RELEASE_CATALOG.map((row) => ({
 		...row,
 		minProviders: 2,
 	})),
 	requiredModels: null,
 };
 
-const OPENAI_ONLY_V2_RELEASES = new Set(["10.0.0", "10.0.1"]);
+const OPENAI_ONLY_V2_RELEASES = new Set(["10.0.0", "10.0.1", "10.0.2"]);
 
 export function releaseProfile(packageVersion: string): ReleaseProfile {
 	if (OPENAI_ONLY_V2_RELEASES.has(packageVersion))
-		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");
+		return openAiOnlyRelease(
+			packageVersion === "10.0.2"
+				? GUIDANCE_RELEASE_CATALOG
+				: DELIVERY_RELEASE_CATALOG,
+			"gpt-6.1-sol",
+		);
 	if (targetsOpenCodeV2(packageVersion)) return V2_RELEASE;
 	if (packageVersion === "9.6.0")
 		return openAiOnlyRelease(DELIVERY_RELEASE_CATALOG, "gpt-6.1-sol");

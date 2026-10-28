@@ -381,24 +381,24 @@ describe("release eval sampling", () => {
 		).toThrow("openai/gpt-6.1-sol");
 	});
 
-	test("schedules the current OpenAI-only seventeen-case grid", () => {
+	test("schedules the current OpenAI-only twenty-case grid", () => {
 		const scenarios = releaseScenarios(packageJson.version);
-		expect(scenarios).toHaveLength(17);
+		expect(scenarios).toHaveLength(20);
 		const plan = campaignPlanFor({
 			models: ["openai/gpt-6.1-sol"],
 			scenarios,
 			sampling: { kind: "release", packageVersion: packageJson.version },
 			opencodeVersion: "2.1.4",
 		});
-		expect(plan.stoppingRule.count).toBe(72);
-		expect(plan.budget.maxAttempts).toBe(89);
-		expect(plan.abortPolicy.maxReplacementBlocks).toBe(17);
+		expect(plan.stoppingRule.count).toBe(81);
+		expect(plan.budget.maxAttempts).toBe(101);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(20);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "primary"),
-		).toHaveLength(72);
+		).toHaveLength(81);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
-		).toHaveLength(17);
+		).toHaveLength(20);
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -603,8 +603,8 @@ for (const version of ["10.0.0", "10.0.1"]) {
 		}
 	});
 }
-test("10.0.2 retains the default two-provider requirement", () => {
-	expect(releaseCatalog("10.0.2").every((row) => row.minProviders === 2)).toBe(
+test("10.0.3 retains the default two-provider requirement", () => {
+	expect(releaseCatalog("10.0.3").every((row) => row.minProviders === 2)).toBe(
 		true,
 	);
 });

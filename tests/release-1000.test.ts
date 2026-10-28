@@ -141,10 +141,10 @@ test("OpenAI-only 10.0.0 admits only the complete canonical direct identity", ()
 		);
 });
 
-test("OpenAI-only exception leaves later release defaults unchanged", () => {
-	for (const version of ["10.0.2", "10.1.0", "11.0.0"]) {
+test("OpenAI-only exceptions keep later releases on two providers", () => {
+	for (const version of ["10.0.3", "10.1.0", "11.0.0"]) {
 		expect(releaseCatalog(version).map((row) => row.minProviders)).toEqual(
-			Array(17).fill(2),
+			Array(20).fill(2),
 		);
 		expect(() => assertReleaseModels([manager], version)).toThrow("exactly 2");
 		expect(() =>
@@ -156,15 +156,15 @@ test("OpenAI-only exception leaves later release defaults unchanged", () => {
 		assertReleaseModels([manager, alternate], version);
 		const cells = releaseCellsFor([manager, alternate], version);
 		expect(cells.filter((cell) => cell.schedule === "primary")).toHaveLength(
-			144,
+			162,
 		);
 		expect(
 			cells.filter((cell) => cell.schedule === "environment-reserve"),
-		).toHaveLength(34);
+		).toHaveLength(40);
 		expect(releaseReviewerModel(version, alternate)).toEqual(alternate);
 		expect(releaseReviewerModel(version)).toBeNull();
 		expect(releasePolicySha256(version)).toBe(
-			"sha256:86953cd5da1a0af6a541243abd1d8b92ec5d4c2e0aff26334a5be1d21187c3f6",
+			"sha256:64a9ab9be09cf3505746ffe0b9c1c1ed1d4746921a34f931784310cf9b9ae445",
 		);
 	}
 });
