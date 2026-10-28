@@ -1,0 +1,124 @@
+{
+	"version": 5,
+	"id": "guidance-session",
+	"revision": 6,
+	"goal": "Add a greeting to src/greet.mjs",
+	"approval": "approved",
+	"plan": {
+		"summary": "Add a greeting",
+		"overview": "Export greet",
+		"requirements": ["greet returns Hello"],
+		"decisions": [],
+		"features": [
+			{
+				"id": "greet",
+				"title": "Greeting",
+				"summary": "Export greet",
+				"targets": ["src/greet.mjs"],
+				"validation": ["node --test"],
+				"dependsOn": []
+			}
+		],
+		"evidence": [
+			{
+				"requirement": "Repository suite",
+				"environment": "this host",
+				"command": "node --test",
+				"scope": "gate",
+				"platform": "other",
+				"assertions": []
+			}
+		]
+	},
+	"runs": [
+		{
+			"id": "guidance-run",
+			"featureId": "greet",
+			"attempt": 1,
+			"state": "blocked",
+			"startedRevision": 3,
+			"summary": "The greeting has not been implemented.",
+			"artifactsChanged": [],
+			"validations": [
+				{
+					"id": "seed-validation",
+					"featureId": "greet",
+					"runId": "guidance-run",
+					"scope": "broad",
+					"command": "node --test",
+					"sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					"exitCode": 0,
+					"outputDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					"outputComplete": true,
+					"recordedRevision": 4,
+					"hostPlatform": "linux"
+				}
+			],
+			"reviews": [
+				{
+					"id": "guidance-review",
+					"operationId": "seed-review",
+					"featureId": "greet",
+					"runId": "guidance-run",
+					"kind": "final",
+					"sourceDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+					"validationIds": ["seed-validation"],
+					"packet": {
+						"summary": "Seeded review",
+						"riskLenses": []
+					},
+					"createdRevision": 5,
+					"result": {
+						"verdict": "failed",
+						"findings": [
+							{
+								"severity": "blocking",
+								"summary": "greet is missing",
+								"evidence": "src/greet.mjs lacks greet",
+								"findingId": "greet.R5-01"
+							}
+						],
+						"terminalDisposition": "submitted",
+						"recordedRevision": 6
+					}
+				}
+			]
+		}
+	],
+	"operations": [
+		{
+			"id": "seed-plan",
+			"kind": "plan-save",
+			"inputDigest": "sha256:80a6a3afe0c528f1d846950c07aad916eff125260b3c302dd773dc62e8aee8a0",
+			"committedRevision": 1
+		},
+		{
+			"id": "seed-approve",
+			"kind": "plan-approve",
+			"inputDigest": "sha256:950fbd0b2ef8fefab38f5604cd7c450e239f772769f72d7164dd77387a4033e0",
+			"committedRevision": 2
+		},
+		{
+			"id": "seed-run",
+			"kind": "run-start",
+			"inputDigest": "sha256:e2c4dd3799947abcb2ff76ad4e509325aeda359f3dbaf25b894e173b595a9cfd",
+			"committedRevision": 3,
+			"entityId": "guidance-run"
+		},
+		{
+			"id": "seed-review",
+			"kind": "review-start",
+			"inputDigest": "sha256:8bb3373a89d00b8b75625fe2c1966fcaf5c0f419045fbf5879ee0e8962d8c07a",
+			"committedRevision": 5,
+			"entityId": "guidance-review"
+		},
+		{
+			"id": "seed-failure",
+			"kind": "feature-complete",
+			"inputDigest": "sha256:02bc166fb687677b1dc549a67cd52f92ec58882095fc8cbba3d8b5df61c76d8f",
+			"committedRevision": 6,
+			"entityId": "guidance-run"
+		}
+	],
+	"closure": null
+}

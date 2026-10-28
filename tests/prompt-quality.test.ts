@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
 import { FeatureCompleteInputSchema } from "../src/application/schema.js";
 import { FLOW_CORE_COMMANDS } from "../src/config-shared.js";
 import {
@@ -40,7 +41,7 @@ const MANAGER_GUIDANCE = [
 	["flow-run", "flow-run"],
 ] as const;
 
-const MAX_MANAGER_PROMPT_BYTES = 34_000;
+const MAX_MANAGER_PROMPT_BYTES = 28_000;
 const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
 
 /**
@@ -71,7 +72,7 @@ const MANAGER_PROMPT_RESERVE_BYTES = 4 * 1024;
  * evidence rules arrived as a checked field rather than another paragraph asking the
  * model to be careful.
  */
-const MAX_TOTAL_PROMPT_BYTES = 14_500;
+const MAX_TOTAL_PROMPT_BYTES = 14_400;
 
 /**
  * Absolute-rule markers per surface. Both Anthropic and OpenAI advise reserving
@@ -229,6 +230,28 @@ describe("Flow prompt structure", () => {
 		expect(() =>
 			compileFlowPromptSurface("unknown" as FlowPromptSurfaceName),
 		).toThrow("Unsupported Flow prompt surface");
+	});
+
+	test("embeds each shared manager contract once in self-contained guides", async () => {
+		const contracts = await Promise.all(
+			["manager-entry", "delivery"].map((name) =>
+				readFile(
+					new URL(`../skills/flow/references/${name}.md`, import.meta.url),
+					"utf8",
+				),
+			),
+		);
+		for (const id of ["flow", "flow-plan", "flow-run"] as const) {
+			const content = getFlowGuidance(id).content;
+			for (const contract of contracts) expectOnce(content, contract.trimEnd());
+		}
+		const run = getFlowGuidance("flow-run").content;
+		expect(run.indexOf("## Implement")).toBeLessThan(
+			run.indexOf("## Recovery routing"),
+		);
+		expect(run.indexOf("## Review")).toBeLessThan(
+			run.indexOf("## Manager entry checks"),
+		);
 	});
 
 	test("keeps worker dispatch inside an active feature run", () => {
