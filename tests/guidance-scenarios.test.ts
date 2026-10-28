@@ -6,10 +6,15 @@ import type { ScenarioGradeInput } from "../evals/grader-input.js";
 import {
 	GUIDANCE_SCENARIOS,
 	GUIDANCE_STATUS_CASES,
+	guidanceStatusIssues,
+	STATUS_MUTATION_STATEMENT,
 } from "../evals/guidance-scenarios.js";
 import type { ObservedToolCall } from "../evals/harness.js";
 import { caseCatalogFor, releaseScenarios } from "../evals/run.js";
+import { SessionSchema } from "../src/application/schema.js";
+import { closeSession } from "../src/domain/transitions.js";
 import FlowPlugin from "../src/index.js";
+import { archivedSessionPath } from "../src/infrastructure/fs/workspace-paths.js";
 import { createNativeFlowHost } from "./fixtures/native-flow-host.js";
 
 for (const [index, entry] of GUIDANCE_STATUS_CASES.entries()) {
@@ -49,6 +54,7 @@ for (const [index, entry] of GUIDANCE_STATUS_CASES.entries()) {
 					finalText = `${report.join("\n")}\nOverall incomplete.`;
 				}
 			}
+			finalText += `\n${STATUS_MUTATION_STATEMENT}`;
 			const input: ScenarioGradeInput = {
 				flowCalls: calls,
 				allCalls: calls,
@@ -58,6 +64,13 @@ for (const [index, entry] of GUIDANCE_STATUS_CASES.entries()) {
 				finalText,
 			};
 			expect(scenario.check(input)).toEqual([]);
+			expect(
+				scenario.check({
+					...input,
+					finalText: finalText.replace(STATUS_MUTATION_STATEMENT, ""),
+				}),
+			).not.toEqual([]);
+
 			expect(
 				await readFile(join(workspace, ".flow/session.json"), "utf8"),
 			).toBe(bytes);
@@ -175,4 +188,91 @@ test("guidance cases reuse ordinary catalog/reporting without altering the relea
 	expect(release.some((row) => row.id.startsWith("guidance-status-"))).toBe(
 		false,
 	);
+});
+
+test("status archive-collision errors retain delivery before stopping", async () => {
+	const workspace = await mkdtemp(join(tmpdir(), "flow-status-collision-"));
+	const host = await createNativeFlowHost(workspace);
+	const blocked = SessionSchema.parse(GUIDANCE_STATUS_CASES[1].session);
+	const closed = closeSession(blocked, {
+		operationId: "close-for-status",
+		expectedRevision: blocked.revision,
+		sessionId: blocked.id,
+		kind: "deferred",
+		summary: "Preserve incomplete work.",
+	}).session;
+	const conflict = { ...closed, goal: "Different archived goal" };
+	try {
+		await mkdir(join(workspace, ".flow/history"), { recursive: true });
+		await writeFile(
+			join(workspace, ".flow/session.json"),
+			JSON.stringify(closed),
+		);
+		await writeFile(
+			archivedSessionPath(workspace, closed.id),
+			JSON.stringify(conflict),
+		);
+		await host.load(FlowPlugin);
+		const output = await host.response("flow_status", {
+			request: { view: "compact" },
+		});
+		expect(output.status).toBe("error");
+		const data = output.workflowData as {
+			failure: { recovery: string };
+			delivery: { summary: { lines: string[] }; report: string[] };
+		};
+		const lines = data.delivery.summary.lines;
+		expect(lines.length).toBeGreaterThan(0);
+		const call: ObservedToolCall = {
+			tool: "flow_status",
+			status: "completed",
+			sessionIndex: 0,
+			agent: "build",
+			input: { request: { view: "compact" } },
+			output,
+			rawOutput: JSON.stringify(output),
+			metadata: {},
+		};
+		const errorText = `${output.summary}\n${data.failure.recovery}`;
+		const input: ScenarioGradeInput = {
+			flowCalls: [call],
+			allCalls: [call],
+			session: closed,
+			archives: [conflict],
+			workspaceChanges: { kind: "observed", paths: [] },
+			finalText: `${errorText}\n${lines.join("\n")}\n${STATUS_MUTATION_STATEMENT}`,
+		};
+		const expected = {
+			...GUIDANCE_STATUS_CASES[2],
+			session: closed,
+			archives: [conflict],
+		};
+		expect(guidanceStatusIssues(input, expected)).toEqual([]);
+		expect(
+			guidanceStatusIssues(
+				{ ...input, finalText: `${errorText}\n${STATUS_MUTATION_STATEMENT}` },
+				expected,
+			),
+		).toContain("status omitted supplied delivery details");
+		expect(
+			guidanceStatusIssues(
+				{
+					...input,
+					finalText: input.finalText.replace(STATUS_MUTATION_STATEMENT, ""),
+				},
+				expected,
+			),
+		).toContain("status omitted the Git/release mutation statement");
+		expect(
+			JSON.parse(await readFile(join(workspace, ".flow/session.json"), "utf8")),
+		).toEqual(closed);
+		expect(
+			JSON.parse(
+				await readFile(archivedSessionPath(workspace, closed.id), "utf8"),
+			),
+		).toEqual(conflict);
+	} finally {
+		await host.dispose();
+		await rm(workspace, { recursive: true, force: true });
+	}
 });

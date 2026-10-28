@@ -55,19 +55,20 @@ rewrite. Full release qualification still applies to any future candidate.
 
 ## Evidence
 
-- `bun run eval:guidance`: 83 focused tests pass; all 13 gated cassettes reproduce.
+- `bun run eval:guidance`: 84 focused tests pass; all 13 gated cassettes reproduce.
   The new graders use actual native-plugin fixture responses and adversarial
   variants, including a tool read after a status error.
 - `bun run check`: 5,766 pass, 27 skip, zero failures before final review fixes;
   the clean committed push preflight repeats the complete gate after those fixes.
 - `bun run smoke:live`: two packed OpenCode tests, 128 assertions, pass using a
   local scripted provider. No real provider dispatch or account use.
-- Independent GPT-6.1 Sol review: two rounds, final APPROVE. Fixed both findings:
+- Independent GPT-6.1 Sol review: three rounds, final APPROVE. Fixed all findings:
   accepted-close archive retry remains exact and immediate; status error grading
-  rejects every following tool call, not just further status reads.
+  rejects every following tool call, not just further status reads. Error handoffs
+  retain supplied delivery and the mutation statement, including archive collisions.
 - Authored skill text including shared fragments falls from 36,220 to 29,853
   bytes. The ordinary manager stack is effectively flat: 23,599 to 23,592 bytes;
-  compiled command/agent surfaces fall from 14,496 to 14,361. Existing prompt
+  compiled command/agent surfaces fall from 14,496 to 14,335. Existing prompt
   ceilings ratchet down; documentation and source ceilings are unchanged.
 - Contributor preflight now owns one mandatory offline guidance command. Live
   model measurement is explicitly separate, rather than silently attempted by

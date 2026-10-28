@@ -20,7 +20,13 @@ export const GUIDANCE_STATUS_CASES = [
 	},
 ] as const;
 
-type StatusCase = (typeof GUIDANCE_STATUS_CASES)[number];
+type StatusCase = Omit<(typeof GUIDANCE_STATUS_CASES)[number], "session"> & {
+	readonly session: Record<string, unknown>;
+	readonly archives?: readonly Record<string, unknown>[];
+};
+
+export const STATUS_MUTATION_STATEMENT =
+	"/flow-status made no Git or release mutation.";
 function object(value: unknown): Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value)
 		? (value as Record<string, unknown>)
@@ -49,7 +55,7 @@ export function guidanceStatusIssues(
 		issues.push("status attempted work outside its read-only route");
 	if (
 		canonicalJson(input.session) !== canonicalJson(expected.session) ||
-		input.archives.length !== 0
+		canonicalJson(input.archives) !== canonicalJson(expected.archives ?? [])
 	)
 		issues.push("status changed or removed the seeded session");
 	if (
@@ -58,9 +64,27 @@ export function guidanceStatusIssues(
 	)
 		issues.push("read-only workspace evidence is missing or reports changes");
 
+	if (!input.finalText.includes(STATUS_MUTATION_STATEMENT))
+		issues.push("status omitted the Git/release mutation statement");
+
 	const selected = calls.at(-1);
 	const response = object(selected?.output);
 	const data = object(response.workflowData);
+	if (data.delivery !== undefined) {
+		const delivery = object(data.delivery);
+		const summary = object(delivery.summary).lines;
+		const lines =
+			Array.isArray(summary) && summary.length > 0 ? summary : delivery.report;
+		if (
+			!Array.isArray(lines) ||
+			lines.length === 0 ||
+			!lines.every(
+				(line) => typeof line === "string" && input.finalText.includes(line),
+			)
+		)
+			issues.push("status omitted supplied delivery details");
+	}
+
 	const firstError = input.allCalls.findIndex(
 		(call) =>
 			call.tool === "flow_status" && object(call.output).status === "error",
