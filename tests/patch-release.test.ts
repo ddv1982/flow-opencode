@@ -119,6 +119,28 @@ async function fixture(startup = false) {
 	);
 	await writeFile(join(root, "src/index.ts"), "export const fixed = true;\n");
 	await writeFile(join(root, "skills/flow-run/SKILL.md"), "original");
+	if (startup) {
+		await mkdir(join(root, "scripts"));
+		await mkdir(join(root, "node_modules"));
+		await writeFile(
+			join(root, "scripts/release-metadata.ts"),
+			`
+import { readFile } from "node:fs/promises";
+export async function assertStrictReleaseEvidence(input) {
+  const { version } = JSON.parse(await readFile("package.json", "utf8"));
+  if (version !== "10.0.2" || input.version !== version || input.freshness !== "retained")
+    throw new Error("Must verify the released baseline, never the candidate");
+  if (process.env.FLOW_TEST_PARENT_ONLY) throw new Error("Parent environment leaked");
+  return { bundleSha256: ${JSON.stringify(hash("bundle"))}, summary: {
+    schemaVersion: 1, packageVersion: version, reportId: "retained", verdict: "VERIFIED",
+    bundleSha256: ${JSON.stringify(hash("bundle"))}, artifact: input.expectedArtifact,
+    canarySha256: ${JSON.stringify(hash("canary"))}, totals: { scheduled: 81, scored: 81, passed: 80 },
+    providers: [{ provider: "openai", scheduled: 81, scored: 81, passed: 80, passRate: 80/81 }]
+  }};
+}
+`,
+		);
+	}
 	await git(root, "add", ".");
 	await git(root, "commit", "-m", "full baseline");
 	const commit = await git(root, "rev-parse", "HEAD");
@@ -265,6 +287,27 @@ test("exact startup patch verifies the retained OpenAI baseline without claiming
 			};
 		}),
 	).rejects.toThrow("two-provider baseline");
+});
+test("startup baseline uses the released tag's verifier with isolated environment and cleans its worktree", async () => {
+	const f = await fixture(true);
+	await writeFile(
+		join(f.root, "scripts/release-metadata.ts"),
+		"throw new Error('candidate verifier must not run');\n",
+	);
+	await git(f.root, "add", ".");
+	await git(f.root, "commit", "-m", "candidate authority differs");
+	const prior = process.env.FLOW_TEST_PARENT_ONLY;
+	process.env.FLOW_TEST_PARENT_ONLY = "fixture-value";
+	try {
+		const result = await assertPatchReleaseEvidence(f.input);
+		expect(result.notes).toContain("80/81 passed");
+	} finally {
+		if (prior === undefined) delete process.env.FLOW_TEST_PARENT_ONLY;
+		else process.env.FLOW_TEST_PARENT_ONLY = prior;
+	}
+	expect(await git(f.root, "worktree", "list", "--porcelain")).not.toContain(
+		"flow-startup-baseline-",
+	);
 });
 test("startup approval rejects changed baseline or candidate code, extra runtime paths and script edits", async () => {
 	const f = await fixture(true);

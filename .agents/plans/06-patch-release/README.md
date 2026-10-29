@@ -44,8 +44,11 @@ extra runtime paths or weakened smoke commands fail.
 Review must confirm that only home-directory setup becomes inactive, preserving
 mutable-state rejection, project registration and every workflow gate. Linux
 packed startup must cover home, Git and non-Git folders without a model call.
-The baseline is reverified as retained evidence; the patch has no new model
-measurements or canary. Publication still checks exact candidate package bytes.
+The baseline is reverified by its original released-tag authority in a temporary
+worktree with the unchanged dependencies. This avoids resealing historical
+evidence merely because the candidate runtime/version changed. No credentials
+are inherited and no model calls occur. The patch has no new model measurements
+or canary. Publication still checks exact candidate package bytes.
 
 ## Evidence
 

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { z } from "zod";
 import { canonicalJson } from "../evals/canonical-json.js";
 import { samePackedArtifact } from "../evals/provenance.js";
@@ -181,6 +182,72 @@ export async function releaseGit(root: string, args: string[]) {
 	return out;
 }
 
+/** Retained evidence is checked by its released authority, not the new runtime. */
+async function verifyStartupBaseline(root: string, record: PatchRelease) {
+	const temporary = await mkdtemp(join(tmpdir(), "flow-startup-baseline-"));
+	const source = join(temporary, "source");
+	let added = false;
+	try {
+		await releaseGit(root, [
+			"-c",
+			"core.hooksPath=/dev/null",
+			"worktree",
+			"add",
+			"--quiet",
+			"--detach",
+			source,
+			record.baseline.commit,
+		]);
+		added = true;
+		// Scope validation already requires unchanged dependencies and lockfiles.
+		await symlink(
+			resolve(root, "node_modules"),
+			join(source, "node_modules"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
+		const home = join(temporary, "home");
+		await mkdir(home);
+		const child = Bun.spawn(
+			[
+				process.execPath,
+				"-e",
+				`
+import { assertStrictReleaseEvidence } from "./scripts/release-metadata.ts";
+const artifact = JSON.parse(process.argv[1]);
+const result = await assertStrictReleaseEvidence({
+  version: "10.0.2", expectedArtifact: artifact,
+  canaryPath: "evals/canary/10.0.2.json",
+  bundlesDirectory: "evals/qualification/bundles", freshness: "retained",
+});
+console.log(JSON.stringify(result));
+`,
+				JSON.stringify(record.baseline.artifact),
+			],
+			{
+				cwd: source,
+				env: { PATH: process.env.PATH ?? "", HOME: home },
+				timeout: 120_000,
+				stdout: "pipe",
+				stderr: "pipe",
+			},
+		);
+		const [out, error, code] = await Promise.all([
+			new Response(child.stdout).text(),
+			new Response(child.stderr).text(),
+			child.exited,
+		]);
+		if (code !== 0)
+			throw new Error(`Released baseline verification failed: ${error.trim()}`);
+		return JSON.parse(out) as Awaited<
+			ReturnType<typeof assertStrictReleaseEvidence>
+		>;
+	} finally {
+		if (added)
+			await releaseGit(root, ["worktree", "remove", "--force", source]);
+		await rm(temporary, { recursive: true, force: true });
+	}
+}
+
 export async function assertPatchReleaseEvidence(
 	input: {
 		path: string;
@@ -188,7 +255,7 @@ export async function assertPatchReleaseEvidence(
 		bundlesDirectory: string;
 		repositoryRoot?: string;
 	},
-	verifyBaseline = assertStrictReleaseEvidence,
+	verifyBaseline?: typeof assertStrictReleaseEvidence,
 ) {
 	const root = resolve(input.repositoryRoot ?? process.cwd());
 	const bytes = await readFile(input.path);
@@ -303,7 +370,7 @@ export async function assertPatchReleaseEvidence(
 		if (hash(await readFile(resolve(root, entry.path))) !== entry.sha256)
 			throw new Error("Reviewed guidance content changed.");
 	}
-	const baseline = await verifyBaseline({
+	const baselineInput = {
 		version: record.baseline.artifact.packageVersion,
 		expectedArtifact: record.baseline.artifact,
 		canaryPath: record.baseline.canary,
@@ -311,8 +378,13 @@ export async function assertPatchReleaseEvidence(
 		// Retained: this seal is prior evidence the patch cites, never a
 		// measurement of the candidate, so its canary window has already served
 		// its purpose for the release that recorded it.
-		freshness: "retained",
-	});
+		freshness: "retained" as const,
+	};
+	const baseline = verifyBaseline
+		? await verifyBaseline(baselineInput)
+		: record.startup
+			? await verifyStartupBaseline(root, record)
+			: await assertStrictReleaseEvidence(baselineInput);
 	if (baseline.bundleSha256 !== record.baseline.bundleSha256)
 		throw new Error("Baseline qualification bundle changed.");
 	const providers = new Set(
