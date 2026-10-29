@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "10.0.2",
+	"version": "10.0.3",
 	"description": "Durable planning, validation, and independent review for OpenCode v2",
 	"type": "module",
 	"repository": {
@@ -55,7 +55,7 @@
 		"replay": "bun run evals/replay-run.ts",
 		"triage": "bun run scripts/triage-report.ts",
 		"release:monitor": "node scripts/release-monitor.mjs",
-		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
+		"smoke:live": "FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts tests/plugin-startup-live.test.ts",
 		"test": "bun test tests",
 		"typecheck": "tsc --noEmit",
 		"check": "bun run typecheck && bun run lint && bun run release:metadata && bun run build && bun run test"

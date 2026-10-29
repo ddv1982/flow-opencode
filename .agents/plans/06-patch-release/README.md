@@ -26,6 +26,27 @@ semantic judgment from a path or a patch version. A content change invalidates
 that approval. This is a maintainer review control, not a sandbox against someone
 who can rewrite the policy and its approvals together.
 
+## Reviewed home-startup exception
+
+The operator authorized a release without new model qualification for the
+home-startup defect on 2026-10-29. Exact 10.0.3 may use fully qualified 10.0.2's
+OpenAI-only baseline. This does not change full-matrix profiles or admit later
+runtime patches automatically.
+
+An optional `startup` approval binds before/after SHA-256 hashes for exactly
+`src/infrastructure/fs/workspace-paths.ts` and
+`src/platform/opencode/plugin-composition.ts`, both regular non-executable files.
+The sole package-script change appends the provider-free startup test to
+`smoke:live`. Other metadata, runtime files, guides, dependencies and build inputs
+remain protected. Missing approvals, changed content, other baselines/versions,
+extra runtime paths or weakened smoke commands fail.
+
+Review must confirm that only home-directory setup becomes inactive, preserving
+mutable-state rejection, project registration and every workflow gate. Linux
+packed startup must cover home, Git and non-Git folders without a model call.
+The baseline is reverified as retained evidence; the patch has no new model
+measurements or canary. Publication still checks exact candidate package bytes.
+
 ## Evidence
 
 A record at evals/qualification/patches/VERSION.json uses schemaVersion 1 and kind
@@ -34,10 +55,10 @@ manifest hashes, its version, the baseline artifact identity, tag commit, canary
 path and regraded bundle hash, approvedBy, rationale, and any guidance approval.
 The PatchReleaseSchema in scripts/patch-release.ts is the executable format.
 
-The baseline must independently pass the full verifier at release time. Existing
-seven-day campaign and 72-hour canary limits remain unchanged. A patch record
-cannot stand in for a fully qualified baseline, extend freshness, or invent runs.
-An expired baseline blocks; it never starts a paid campaign automatically.
+The baseline must independently pass the full verifier as retained evidence at
+release time. Its prior campaign and canary are historical, not fresh candidate
+measurements. A patch record cannot become a fully qualified baseline or invent
+runs. Verification never starts a paid campaign.
 
 The candidate has no new model eval or live model canary. Required assurance is
 clean source, strict diff eligibility, matching package bytes, review of the

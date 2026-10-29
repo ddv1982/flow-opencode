@@ -12,7 +12,10 @@ import {
 } from "../../config-shared.js";
 import { createFileSourceIdentityProvider } from "../../infrastructure/fs/source-identity.js";
 import { createWorkspaceFlowService } from "../../infrastructure/fs/workspace-flow-service.js";
-import { resolveWorkspaceRoot } from "../../infrastructure/fs/workspace-paths.js";
+import {
+	HomeDirectoryWorkspaceError,
+	resolveWorkspaceRoot,
+} from "../../infrastructure/fs/workspace-paths.js";
 import {
 	persistWorkspaceValidation,
 	prepareWorkspaceValidation,
@@ -54,6 +57,17 @@ export function createFlowPlugin(dependencies: {
 		id: "opencode-plugin-flow",
 		async setup(ctx) {
 			const log = createFlowLog(ctx);
+			let workspace: string;
+			try {
+				workspace = resolveWorkspaceRoot({ directory: ctx.location.directory });
+			} catch (error) {
+				if (!(error instanceof HomeDirectoryWorkspaceError)) throw error;
+				log(
+					"warn",
+					"Flow is inactive in the home directory to keep its state inside a project. Open a project folder and start OpenCode there: cd /path/to/project && opencode2.",
+				);
+				return;
+			}
 			const baseReviewer = resolveFlowReviewerConfiguration({
 				pluginOptions: ctx.options,
 				onWarning: (warning) => log("warn", warning),
@@ -65,9 +79,6 @@ export function createFlowPlugin(dependencies: {
 			const pluginEntrySha256 = `sha256:${createHash("sha256")
 				.update(await readFile(fileURLToPath(dependencies.entryUrl)))
 				.digest("hex")}`;
-			const workspace = resolveWorkspaceRoot({
-				directory: ctx.location.directory,
-			});
 			const runtimeGuard = registerFlowPluginInstance(workspace, {
 				packageName: "opencode-plugin-flow",
 				version,

@@ -1,15 +1,17 @@
 # Troubleshooting
 
+## Home-directory startup error
+
+OpenCode started in `~`. Run `cd /path/to/project && opencode2`.
+Flow protects home from state and source scans; no reinstall is needed.
+
 ## Flow commands are missing
 
-Rerun the exact-version plugin command from the
-[README installation section](../README.md#install), or confirm that the
-relevant `opencode.json` holds that same exact entry.
-
-Restart OpenCode and inspect its plugin-loading logs. Flow has no installer,
-cache cleaner, or configuration-repair CLI. Follow the official
-[OpenCode plugin documentation](https://opencode.ai/v2/docs/plugins/) for npm or
-configuration failures.
+In a project folder, confirm the exact [README plugin entry](../README.md#install)
+in `opencode.json`, restart OpenCode, and inspect plugin-loading logs. Flow does
+not repair host configuration or caches. See the official
+[OpenCode plugin documentation](https://opencode.ai/v2/docs/plugins/) for
+installation or configuration failures.
 
 ## Reviewer model looks shared
 

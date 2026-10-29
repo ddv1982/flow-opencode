@@ -35,11 +35,12 @@ Verifier fixes may reuse runs for unchanged package bytes and case policy.
 Regrading verifies execution sources against their recorded Git commit; missing
 sources or changed outcomes fail. Canary retries keep manager/reviewer identity.
 
-Reviewed offline exceptions cover [narrow patches](../.agents/plans/06-patch-release/README.md)
-and [frozen features](../.agents/plans/09-planning-models/README.md). They measure
-against the last fully qualified release, never another offline one. Baseline
-citations are historical evidence at their recorded source. Only the candidate
-needs a fresh canary; historical reconstruction measures nothing new.
+Reviewed offline paths cover [narrow patches](../.agents/plans/06-patch-release/README.md)
+and [frozen features](../.agents/plans/09-planning-models/README.md), always against
+a fully qualified baseline. Exact 10.0.3's reviewed home-startup patch uses
+10.0.2's retained evidence plus Linux startup tests, without new model calls or
+canary. Other runtime changes retain full qualification. Prior passes never
+become candidate measurements.
 
 New scenarios need a policy decision. Missing required cases fail qualification.
 
@@ -106,8 +107,7 @@ on the canonical Linux host. The v2 profile uses HTTP transport with ambient
 OpenCode configuration disabled. Run a fresh canary against its exact `artifact.tgz`,
 seal/regrade the bundle, and commit only evidence without changing measured inputs.
 Recheck final main CI and exact artifact identity before tagging `v<package-version>`.
-For 9.4.0, use
-`bun scripts/prepare-qualified-release-940.ts --out opencode-plugin-flow-9.4.0.tgz`.
+Historical artifact reconstruction follows the versioned release workflow.
 
 Authorize dispatches using the [paid-run budget](../.agents/plans/05-release-simplification/README.md#authorize-paid-work).
 Keep that ledger across retries. Budget-stopped campaigns cannot qualify.

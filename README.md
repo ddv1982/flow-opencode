@@ -43,21 +43,27 @@ Install OpenCode v2 and the exact Flow release:
 ```sh
 npm install -g @opencode/cli@2.1.4
 opencode2 --version
-opencode2 plugin add opencode-plugin-flow@10.0.2
+opencode2 plugin add opencode-plugin-flow@10.0.3
 ```
 
-The version command must report `opencode v2.1.4` or a later tested 2.x version.
-Flow selects HTTP transport for provider, model, and variant settings while loaded.
-This keeps model requests observable for continuation and validation attribution.
-The v2 package provides both `opencode` and `opencode2`. Use `opencode2` when an
-older `opencode` executable remains on your PATH. The plugin command installs
-Flow globally. Exact pins stay fixed until you install another version.
+`opencode2 --version` must report `opencode v2.1.4` or a later tested 2.x version.
+Use `opencode2` to avoid an older `opencode` on PATH. The install is global;
+start inside a project:
+
+```sh
+cd /path/to/your/project
+opencode2
+```
+
+Flow keeps state in `<project>/.flow/` and refuses the home directory itself.
+Exact pins stay fixed. Flow uses HTTP transport for provider, model, and variant
+settings to observe continuation and validation.
 
 For project scope, add this entry to the project's `opencode.json`:
 
 ```json
 {
-  "plugins": ["opencode-plugin-flow@10.0.2"]
+  "plugins": ["opencode-plugin-flow@10.0.3"]
 }
 ```
 
@@ -74,7 +80,7 @@ Set plugin defaults:
 ```json
 {
   "plugins": [{
-    "package": "opencode-plugin-flow@10.0.2",
+    "package": "opencode-plugin-flow@10.0.3",
     "options": {
       "reviewer": { "model": "provider/model", "steps": 80 },
       "typesafeApiKeyEnv": "MY_TYPESAFE_KEY"

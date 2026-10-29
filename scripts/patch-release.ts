@@ -13,6 +13,23 @@ import { assertStrictReleaseEvidence } from "./release-metadata.js";
 const Hash = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const Commit = z.string().regex(/^[a-f0-9]{40}$/);
 const Text = z.string().trim().min(1).max(4096);
+const StartupFile = <Path extends string>(path: Path) =>
+	z
+		.object({ path: z.literal(path), baselineSha256: Hash, sha256: Hash })
+		.strict();
+const StartupApproval = z
+	.object({
+		kind: z.literal("home-directory-startup-10.0.3"),
+		files: z.tuple([
+			StartupFile("src/infrastructure/fs/workspace-paths.ts"),
+			StartupFile("src/platform/opencode/plugin-composition.ts"),
+		]),
+	})
+	.strict();
+const STARTUP_SMOKE =
+	"FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts tests/plugin-startup-live.test.ts";
+const BASELINE_SMOKE =
+	"FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts";
 export const PatchReleaseSchema = z
 	.object({
 		schemaVersion: z.literal(1),
@@ -43,6 +60,7 @@ export const PatchReleaseSchema = z
 			.max(1),
 		approvedBy: Text,
 		rationale: Text,
+		startup: StartupApproval.optional(),
 	})
 	.strict();
 export type PatchRelease = z.infer<typeof PatchReleaseSchema>;
@@ -57,6 +75,7 @@ export function assertPatchScope(input: {
 	package: Record<string, unknown>;
 	changedPaths: readonly string[];
 	guidance: PatchRelease["guidance"];
+	startup?: PatchRelease["startup"];
 }) {
 	const version = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 	const base = input.baselineVersion.match(version);
@@ -71,6 +90,29 @@ export function assertPatchScope(input: {
 		throw new Error("Patch must advance within the baseline major/minor.");
 	const { version: oldVersion, ...oldPackage } = input.baselinePackage;
 	const { version: newVersion, ...newPackage } = input.package;
+	if (input.startup) {
+		StartupApproval.parse(input.startup);
+		if (
+			input.baselineVersion !== "10.0.2" ||
+			input.version !== "10.0.3" ||
+			input.guidance.length
+		)
+			throw new Error(
+				"Startup exception is only 10.0.3 against fully qualified 10.0.2, without guide changes.",
+			);
+		const oldScripts = oldPackage.scripts as
+			| Record<string, unknown>
+			| undefined;
+		const scripts = newPackage.scripts as Record<string, unknown> | undefined;
+		if (
+			oldScripts?.["smoke:live"] !== BASELINE_SMOKE ||
+			scripts?.["smoke:live"] !== STARTUP_SMOKE
+		)
+			throw new Error(
+				"Startup patch must add only the declared native startup smoke.",
+			);
+		newPackage.scripts = { ...scripts, "smoke:live": BASELINE_SMOKE };
+	}
 	if (
 		oldVersion !== input.baselineVersion ||
 		newVersion !== input.version ||
@@ -85,12 +127,14 @@ export function assertPatchScope(input: {
 export function assertPatchPaths(input: {
 	changedPaths: readonly string[];
 	guidance: readonly { readonly path: string }[];
+	startup?: PatchRelease["startup"];
 }) {
 	const guides = new Set<string>(input.guidance.map((entry) => entry.path));
 	if (guides.size !== input.guidance.length)
 		throw new Error("Duplicate guidance approval.");
 	for (const path of input.changedPaths) {
 		if (guides.has(path)) continue;
+		if (input.startup?.files.some((file) => file.path === path)) continue;
 		if (/^(?:docs\/|tests\/|evals\/|\.agents\/plans\/)/.test(path)) continue;
 		if (
 			[
@@ -117,6 +161,9 @@ export function assertPatchPaths(input: {
 	for (const guide of guides)
 		if (!input.changedPaths.includes(guide))
 			throw new Error("Guidance approval does not name a changed guide.");
+	for (const file of input.startup?.files ?? [])
+		if (!input.changedPaths.includes(file.path))
+			throw new Error("Startup approval does not name a changed runtime file.");
 }
 
 export async function releaseGit(root: string, args: string[]) {
@@ -201,7 +248,31 @@ export async function assertPatchReleaseEvidence(
 		package: JSON.parse(await readFile(resolve(root, "package.json"), "utf8")),
 		changedPaths,
 		guidance: record.guidance,
+		...(record.startup ? { startup: record.startup } : {}),
 	});
+	for (const file of record.startup?.files ?? []) {
+		for (const [revision, expected] of [
+			[record.baseline.artifact.sourceCommit, file.baselineSha256],
+			["HEAD", file.sha256],
+		] as const) {
+			if (
+				!(
+					await releaseGit(root, ["ls-tree", revision, "--", file.path])
+				).startsWith("100644 blob ")
+			)
+				throw new Error(
+					"Startup files must remain regular non-executable files.",
+				);
+			const content =
+				revision === "HEAD"
+					? await readFile(resolve(root, file.path))
+					: Buffer.from(
+							await releaseGit(root, ["show", `${revision}:${file.path}`]),
+						);
+			if (hash(content) !== expected)
+				throw new Error("Reviewed startup content changed.");
+		}
+	}
 	if (changedPaths.includes("biome.json")) {
 		const oldConfig = JSON.parse(
 			await releaseGit(root, [
@@ -244,7 +315,13 @@ export async function assertPatchReleaseEvidence(
 	});
 	if (baseline.bundleSha256 !== record.baseline.bundleSha256)
 		throw new Error("Baseline qualification bundle changed.");
-	if (new Set(baseline.summary.providers.map((item) => item.provider)).size < 2)
+	const providers = new Set(
+		baseline.summary.providers.map((item) => item.provider),
+	);
+	if (
+		providers.size < 2 &&
+		!(record.startup && providers.size === 1 && providers.has("openai"))
+	)
 		throw new Error("Patch exception requires a two-provider baseline.");
 	return {
 		bundleSha256: hash(bytes),

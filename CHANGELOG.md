@@ -2,6 +2,21 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [10.0.3]
+
+- Start OpenCode safely from home after a global installation. Flow stays
+  inactive there and explains how to open a project, instead of failing the
+  server plugin. Project state and source scans remain excluded from home.
+- Add a provider-free packed startup check for home, Git projects and ordinary
+  folders to CI and release smoke. Session v5 schema, permissions, validation, review,
+  continuation and closure requirements are unchanged.
+- Use the reviewed baseline-qualified patch route against 10.0.2. No new live
+  model qualification or model canary was run for 10.0.3; 10.0.2's 80/81 matrix
+  and 6/6 canary are historical evidence, not measurements of this patch.
+
+Upgrade with `opencode2 plugin add opencode-plugin-flow@10.0.3`, then start
+`opencode2` inside your project folder.
+
 ## [10.0.2]
 
 - Put ordinary Flow execution before recovery details, share goal-alignment and
