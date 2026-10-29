@@ -113,3 +113,29 @@ These guidance edits change the package artifact, so the next candidate must be
 rebuilt and sealed with its new bytes; the previous archive approval cannot be
 reused. All 306 prior starts remain consumed, and all 289 unused starts remain
 separate. No further native generation is authorized by the stopped grant.
+
+## Qualified 10.0.2 evidence
+
+The fdd11b7d / 6d8345ea candidate completed all 81 primary attempts: 80 passed.
+The one failing-gate handoff omission leaves that case at 9/10, meeting its
+unchanged 90% threshold. Every other case met its sample and pass requirement,
+including inspection at 10/10 and all nine new status attempts. The maintained
+release decision is VERIFIED, with zero false completions or unsubmitted reviews.
+The raw CLI exit was 1 for its single failed attempt; it was not used as the
+qualification verdict. No reserves, partial pooling, regrading away of failures,
+or threshold changes were used.
+
+A separately approved one-start native-auth canary passed all six maintained
+checks against the same exact archive and manifest. Both manager and reviewer
+were observed on direct openai/gpt-6.1-sol, using the existing subscription.
+The sealed combined bundle is
+`qb1-89b32228d6651737152a616dea44439b1d8acd23037c1f6123f91c2e920674ed`.
+It is stored in the existing lossless archive format, preserving every sealed
+object, including the failed attempt, without raising the workspace byte limit.
+
+This matrix consumed 100 starts and its canary consumed one. All 407 prior
+starts remain consumed; 315 unused starts remain separate and are not transferred.
+Original failed reports and canary outputs remain intact. Owned worker, source,
+tunnel and VM cleanup was confirmed; the protected service received no OS queries
+or signals. No additional paid native qualification starts are authorized.
+Tag/npm/GitHub publication remains a separate approval after this evidence lands and final release gates pass.
