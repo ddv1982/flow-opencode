@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { createHash } from "node:crypto";
 import {
 	mkdir,
@@ -19,6 +19,7 @@ import {
 	getFlowGuidance,
 } from "../src/guidance/catalog.js";
 import FlowPlugin from "../src/index.js";
+import { assertMutableWorkspaceRoot } from "../src/infrastructure/fs/workspace-paths.js";
 import {
 	AutoDriveCoordinator,
 	FLOW_AUTO_METADATA_KEY,
@@ -299,13 +300,53 @@ describe("Flow distribution surface", () => {
 			text: expect.stringContaining("Assignment: assignment-1"),
 		});
 	});
-	test("refuses to load the home directory before registering native tools", async () => {
+	test("loads inertly at home, preserves the state guard, and still activates in a project", async () => {
 		const host = await createNativeFlowHost(homedir());
 		hosts.push(host);
-		await expect(host.load(FlowPlugin)).rejects.toThrow(
+		const log = spyOn(process.stderr, "write").mockImplementation(() => true);
+		try {
+			await host.load(FlowPlugin);
+			expect(log).toHaveBeenCalledWith(
+				expect.stringContaining("Flow is inactive in the home directory"),
+			);
+			expect(log).toHaveBeenCalledWith(expect.stringContaining("opencode2"));
+		} finally {
+			log.mockRestore();
+		}
+		expect(host.tools.size).toBe(0);
+		expect(host.commands.size).toBe(0);
+		expect(host.agents.size).toBe(0);
+		expect(host.events.subscribers.size).toBe(0);
+		expect(host.sessionHooks.callbacks).toEqual({});
+		expect(host.toolHooks.callbacks).toEqual({});
+		expect(() => assertMutableWorkspaceRoot(homedir())).toThrow(
 			"Flow refuses to use the home directory itself",
 		);
-		expect(host.tools.size).toBe(0);
+		const { host: project } = await load();
+		expect([...project.tools.keys()].sort()).toEqual(TOOL_NAMES);
+		expect([...project.commands.keys()].sort()).toEqual(COMMAND_NAMES);
+		expect((await project.response("flow_status", statusInput)).status).toBe(
+			"ok",
+		);
+	});
+	test("still fails setup for a filesystem root or a missing workspace", async () => {
+		const root = await createNativeFlowHost("/");
+		hosts.push(root);
+		await expect(root.load(FlowPlugin)).rejects.toThrow(
+			"Flow could not resolve a workspace root",
+		);
+		const workspace = await mkdtemp(join(tmpdir(), "flow-missing-workspace-"));
+		workspaces.push(workspace);
+		const missing = await createNativeFlowHost(workspace);
+		hosts.push(missing);
+		await rm(workspace, { recursive: true });
+		await expect(missing.load(FlowPlugin)).rejects.toThrow(
+			"Flow requires an existing workspace directory",
+		);
+		for (const host of [root, missing]) {
+			expect(host.tools.size).toBe(0);
+			expect(host.commands.size).toBe(0);
+		}
 	});
 });
 

@@ -483,3 +483,26 @@ for (const [job, publish, refuse, status, contents] of [
 		}
 	});
 }
+
+test("v2 offline patch keeps candidate bytes for strict patch verification instead of requiring a model archive", async () => {
+	const f = await fixture("10.0.3");
+	const patches = join(f.root, "evals/qualification/patches");
+	await mkdir(patches, { recursive: true });
+	await writeFile(join(patches, "10.0.3.json"), "{}");
+	const result = execute(await step("release", "Prepare package"), f, "10.0.3");
+	expect(result.status, result.stderr).toBe(0);
+	expect(
+		await readFile(join(f.root, "opencode-plugin-flow-10.0.3.tgz"), "utf8"),
+	).toBe("generic-10.0.3");
+	await expect(
+		readFile(join(f.root, ".restore-attempt")),
+	).rejects.toMatchObject({ code: "ENOENT" });
+	// The preparation step makes no verdict; the existing next step still parses
+	// and validates the selected patch before any publication record is persisted.
+	expect(await step("release", "Verify selected release evidence")).toContain(
+		"--patch",
+	);
+	expect(await step("release", "Verify selected release evidence")).toContain(
+		"scripts/release.ts init",
+	);
+});

@@ -8,6 +8,8 @@ class InvalidFlowWorkspaceRootError extends Error {
 	readonly code = "INVALID_FLOW_WORKSPACE_ROOT";
 }
 
+export class HomeDirectoryWorkspaceError extends InvalidFlowWorkspaceRootError {}
+
 function normalizeWorkspaceRoot(rawPath: string | undefined): string | null {
 	const value = rawPath?.trim();
 	if (!value) return null;
@@ -46,7 +48,7 @@ export function assertMutableWorkspaceRoot(rawPath: string): string {
 			}
 		});
 	if (homes.includes(root)) {
-		throw new InvalidFlowWorkspaceRootError(
+		throw new HomeDirectoryWorkspaceError(
 			"Flow refuses to use the home directory itself as mutable state.",
 		);
 	}

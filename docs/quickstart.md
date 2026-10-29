@@ -5,9 +5,9 @@ consequential change. Read the plan and the review before accepting the result.
 
 ## Install Flow
 
-Install the exact release shown in the [README installation section](../README.md#install).
-Use OpenCode v2 with the tested minimum from the README. Finish or explicitly
-close active Flow sessions before upgrading, then restart OpenCode.
+Install the exact release and start OpenCode inside your project as shown in the
+[README installation section](../README.md#install). Finish or explicitly close
+active Flow sessions before upgrading, then restart OpenCode.
 
 ## Select Flow models
 

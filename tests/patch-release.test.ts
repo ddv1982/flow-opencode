@@ -72,7 +72,7 @@ async function git(root: string, ...args: string[]) {
 	if (code) throw new Error(err);
 	return out.trim();
 }
-async function fixture() {
+async function fixture(startup = false) {
 	const parent = await mkdtemp(join(tmpdir(), "flow-patch-"));
 	roots.push(parent);
 	const root = join(parent, "repo");
@@ -82,23 +82,93 @@ async function fixture() {
 	await git(root, "config", "user.name", "Test");
 	await mkdir(join(root, "src"));
 	await mkdir(join(root, "skills/flow-run"), { recursive: true });
-	await writeFile(join(root, "package.json"), JSON.stringify(metadata));
+	const baselineVersion = startup ? "10.0.2" : "8.3.0";
+	const version = startup ? "10.0.3" : "8.3.1";
+	const baselinePackage = startup
+		? {
+				...metadata,
+				version: baselineVersion,
+				scripts: {
+					...metadata.scripts,
+					"smoke:live":
+						"FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
+				},
+			}
+		: metadata;
+	await writeFile(join(root, "package.json"), JSON.stringify(baselinePackage));
+	const startupFiles: NonNullable<PatchRelease["startup"]>["files"] = [
+		{
+			path: "src/infrastructure/fs/workspace-paths.ts",
+			baselineSha256: hash("before\n"),
+			sha256: hash("after\n"),
+		},
+		{
+			path: "src/platform/opencode/plugin-composition.ts",
+			baselineSha256: hash("before\n"),
+			sha256: hash("after\n"),
+		},
+	];
+	if (startup)
+		for (const file of startupFiles) {
+			await mkdir(join(root, file.path, ".."), { recursive: true });
+			await writeFile(join(root, file.path), "before\n");
+		}
 	await writeFile(
 		join(root, "biome.json"),
 		JSON.stringify({ files: { includes: ["**"] } }),
 	);
 	await writeFile(join(root, "src/index.ts"), "export const fixed = true;\n");
 	await writeFile(join(root, "skills/flow-run/SKILL.md"), "original");
+	if (startup) {
+		await mkdir(join(root, "scripts"));
+		await mkdir(join(root, "node_modules"));
+		await writeFile(
+			join(root, "scripts/release-metadata.ts"),
+			`
+import { readFile } from "node:fs/promises";
+export async function assertStrictReleaseEvidence(input) {
+  const { version } = JSON.parse(await readFile("package.json", "utf8"));
+  if (version !== "10.0.2" || input.version !== version || input.freshness !== "retained")
+    throw new Error("Must verify the released baseline, never the candidate");
+  if (process.env.FLOW_TEST_PARENT_ONLY) throw new Error("Parent environment leaked");
+  return { bundleSha256: ${JSON.stringify(hash("bundle"))}, summary: {
+    schemaVersion: 1, packageVersion: version, reportId: "retained", verdict: "VERIFIED",
+    bundleSha256: ${JSON.stringify(hash("bundle"))}, artifact: input.expectedArtifact,
+    canarySha256: ${JSON.stringify(hash("canary"))}, totals: { scheduled: 81, scored: 81, passed: 80 },
+    providers: [{ provider: "openai", scheduled: 81, scored: 81, passed: 80, passRate: 80/81 }]
+  }};
+}
+`,
+		);
+	}
 	await git(root, "add", ".");
 	await git(root, "commit", "-m", "full baseline");
 	const commit = await git(root, "rev-parse", "HEAD");
-	await git(root, "tag", "v8.3.0");
-	await writeFile(join(root, "package.json"), JSON.stringify(scope.package));
-	await writeFile(join(root, "skills/flow-run/SKILL.md"), "clarification");
+	await git(root, "tag", `v${baselineVersion}`);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify(
+			startup
+				? {
+						...baselinePackage,
+						version,
+						scripts: {
+							...baselinePackage.scripts,
+							"smoke:live":
+								"FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts tests/plugin-startup-live.test.ts",
+						},
+					}
+				: scope.package,
+		),
+	);
+	if (startup)
+		for (const file of startupFiles)
+			await writeFile(join(root, file.path), "after\n");
+	else await writeFile(join(root, "skills/flow-run/SKILL.md"), "clarification");
 	await git(root, "add", ".");
 	await git(root, "commit", "-m", "patch");
 	const baselineArtifact = {
-		packageVersion: "8.3.0",
+		packageVersion: baselineVersion,
 		sourceCommit: commit,
 		sourceTreeSha256: hash("tree"),
 		tarballSha256: hash("baseline"),
@@ -106,13 +176,13 @@ async function fixture() {
 	};
 	const candidate = {
 		...baselineArtifact,
-		packageVersion: "8.3.1",
+		packageVersion: version,
 		tarballSha256: hash("candidate"),
 	};
 	const record: PatchRelease = {
 		schemaVersion: 1,
 		kind: "baseline-qualified-patch",
-		version: "8.3.1",
+		version,
 		baseline: {
 			commit,
 			artifact: baselineArtifact,
@@ -124,15 +194,25 @@ async function fixture() {
 			tarballSha256: candidate.tarballSha256,
 			unpackedManifestSha256: candidate.unpackedManifestSha256,
 		},
-		guidance: [
-			{
-				path: "skills/flow-run/SKILL.md",
-				sha256: hash("clarification"),
-				rationale: "Clarify existing handoff",
-			},
-		],
+		guidance: startup
+			? []
+			: [
+					{
+						path: "skills/flow-run/SKILL.md",
+						sha256: hash("clarification"),
+						rationale: "Clarify existing handoff",
+					},
+				],
 		approvedBy: "test operator",
 		rationale: "No core guarantees changed",
+		...(startup
+			? {
+					startup: {
+						kind: "home-directory-startup-10.0.3" as const,
+						files: startupFiles,
+					},
+				}
+			: {}),
 	};
 	const path = join(parent, "patch.json");
 	await writeFile(path, JSON.stringify(record));
@@ -143,20 +223,22 @@ async function fixture() {
 			bundleSha256: hash("bundle"),
 			summary: {
 				schemaVersion: 1,
-				packageVersion: "8.3.0",
+				packageVersion: baselineVersion,
 				reportId: "baseline-report",
 				verdict: "VERIFIED",
 				bundleSha256: hash("bundle"),
 				artifact: baselineArtifact,
 				canarySha256: hash("canary"),
 				totals: { scheduled: 76, passed: 76, scored: 76 },
-				providers: ["openai", "xai"].map((provider) => ({
-					provider,
-					scheduled: 38,
-					scored: 38,
-					passed: 38,
-					passRate: 1,
-				})),
+				providers: (startup ? ["openai"] : ["openai", "xai"]).map(
+					(provider) => ({
+						provider,
+						scheduled: 38,
+						scored: 38,
+						passed: 38,
+						passRate: 1,
+					}),
+				),
 			} as ReleaseEvidenceSummary,
 		};
 	};
@@ -183,6 +265,156 @@ test("eligible patch verifies baseline and discloses prior-only evidence", async
 	expect(result.notes).toContain("No live model evals or canary");
 	expect(result.notes).toContain("not measurements of this candidate");
 	expect(result.bundleSha256).toBe(hash(await readFile(f.input.path, "utf8")));
+});
+test("exact startup patch verifies the retained OpenAI baseline without claiming a new measurement", async () => {
+	const f = await fixture(true);
+	const result = await assertPatchReleaseEvidence(f.input, f.verify);
+	expect(f.calls()).toBe(1);
+	expect(result.notes).toContain("No live model evals or canary were run");
+	expect(result.notes).toContain("Prior measured version: 10.0.2");
+	await expect(
+		assertPatchReleaseEvidence(f.input, async () => {
+			const verified = await f.verify();
+			return {
+				...verified,
+				summary: {
+					...verified.summary,
+					providers: verified.summary.providers.map((row) => ({
+						...row,
+						provider: "fixture",
+					})),
+				},
+			};
+		}),
+	).rejects.toThrow("two-provider baseline");
+});
+test("startup baseline uses the released tag's verifier with isolated environment and cleans its worktree", async () => {
+	const f = await fixture(true);
+	await writeFile(
+		join(f.root, "scripts/release-metadata.ts"),
+		"throw new Error('candidate verifier must not run');\n",
+	);
+	await git(f.root, "add", ".");
+	await git(f.root, "commit", "-m", "candidate authority differs");
+	const prior = process.env.FLOW_TEST_PARENT_ONLY;
+	process.env.FLOW_TEST_PARENT_ONLY = "fixture-value";
+	try {
+		const result = await assertPatchReleaseEvidence(f.input);
+		expect(result.notes).toContain("80/81 passed");
+	} finally {
+		if (prior === undefined) delete process.env.FLOW_TEST_PARENT_ONLY;
+		else process.env.FLOW_TEST_PARENT_ONLY = prior;
+	}
+	expect(await git(f.root, "worktree", "list", "--porcelain")).not.toContain(
+		"flow-startup-baseline-",
+	);
+});
+test("startup approval rejects changed baseline or candidate code, extra runtime paths and script edits", async () => {
+	const f = await fixture(true);
+	const startup = f.record.startup;
+	if (!startup) throw new Error("Missing fixture approval");
+	for (const field of ["baselineSha256", "sha256"] as const) {
+		const prior = startup.files[0][field];
+		startup.files[0][field] = hash("substituted");
+		await f.writeRecord();
+		await expect(assertPatchReleaseEvidence(f.input, f.verify)).rejects.toThrow(
+			"startup content changed",
+		);
+		startup.files[0][field] = prior;
+	}
+	await f.writeRecord();
+	await writeFile(join(f.root, "src/index.ts"), "other runtime change");
+	await git(f.root, "add", ".");
+	await git(f.root, "commit", "-m", "unapproved runtime");
+	await expect(assertPatchReleaseEvidence(f.input, f.verify)).rejects.toThrow(
+		"Full qualification",
+	);
+	expect(f.calls()).toBe(0);
+});
+test("startup scope cannot extend to other versions, guides, dependencies or smoke bypasses", () => {
+	const startup = {
+		kind: "home-directory-startup-10.0.3" as const,
+		files: [
+			{
+				path: "src/infrastructure/fs/workspace-paths.ts" as const,
+				baselineSha256: hash("a"),
+				sha256: hash("b"),
+			},
+			{
+				path: "src/platform/opencode/plugin-composition.ts" as const,
+				baselineSha256: hash("a"),
+				sha256: hash("b"),
+			},
+		] as NonNullable<PatchRelease["startup"]>["files"],
+	};
+	const before = {
+		...metadata,
+		version: "10.0.2",
+		scripts: {
+			build: "fixed",
+			"smoke:live":
+				"FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts",
+		},
+	};
+	const after = {
+		...before,
+		version: "10.0.3",
+		scripts: {
+			...before.scripts,
+			"smoke:live": `${before.scripts["smoke:live"]} tests/plugin-startup-live.test.ts`,
+		},
+	};
+	const input = {
+		...scope,
+		baselineVersion: "10.0.2",
+		version: "10.0.3",
+		baselinePackage: before,
+		package: after,
+		changedPaths: startup.files.map((file) => file.path),
+		startup,
+	};
+	expect(() => assertPatchScope(input)).not.toThrow();
+	for (const version of ["10.0.4", "10.1.0", "11.0.0"])
+		expect(() =>
+			assertPatchScope({ ...input, version, package: { ...after, version } }),
+		).toThrow();
+	expect(() =>
+		assertPatchScope({ ...input, baselineVersion: "10.0.1" }),
+	).toThrow();
+	expect(() => assertPatchScope({ ...input, startup: undefined })).toThrow();
+	expect(() =>
+		assertPatchScope({
+			...input,
+			package: { ...after, dependencies: { test: "2.0" } },
+		}),
+	).toThrow("metadata");
+	expect(() =>
+		assertPatchScope({
+			...input,
+			package: { ...after, scripts: { ...after.scripts, build: "changed" } },
+		}),
+	).toThrow("metadata");
+	expect(() =>
+		assertPatchScope({
+			...input,
+			package: {
+				...after,
+				scripts: { ...after.scripts, "smoke:live": "echo passed" },
+			},
+		}),
+	).toThrow("declared native startup smoke");
+	expect(() =>
+		assertPatchScope({
+			...input,
+			guidance: [
+				{
+					path: "skills/flow-run/SKILL.md",
+					sha256: hash("guide"),
+					rationale: "extra",
+				},
+			],
+		}),
+	).toThrow("without guide changes");
 });
 test("refuses a one-provider release as a patch baseline", async () => {
 	const f = await fixture();

@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"kind": "baseline-qualified-patch",
+	"version": "10.0.3",
+	"baseline": {
+		"commit": "a920f7375d2bd5262e7fc5c272f5cac55c6b3b4b",
+		"artifact": {
+			"packageVersion": "10.0.2",
+			"sourceCommit": "fdd11b7dea1e95a87d781bdee89ed84aea8a29e7",
+			"sourceTreeSha256": "sha256:5ca3dc21436044f8a4d3b0c92f160d3cb90a7af422cfed8dd252846a818eccc9",
+			"tarballSha256": "sha256:6d8345ea7968799778fa4dc9c818ab37449b70c16a08a7eedba48f8c24c8f5a4",
+			"unpackedManifestSha256": "sha256:cf68469968b148aac2ccf30d6e0d22460079597d59ff6662ec39907362842153"
+		},
+		"canary": "evals/canary/10.0.2.json",
+		"bundleSha256": "sha256:89b32228d6651737152a616dea44439b1d8acd23037c1f6123f91c2e920674ed"
+	},
+	"artifact": {
+		"packageVersion": "10.0.3",
+		"tarballSha256": "sha256:74294e90f7ff9e9500fab1ee4b896273bca9848815eab6a494c55a7bf75b1399",
+		"unpackedManifestSha256": "sha256:c136169692af6ef0dd95b1d6e73e3942b60588c91dbae8b202785cc428c6ee49"
+	},
+	"guidance": [],
+	"approvedBy": "Maintainer approval in this T3 Code thread on 2026-10-29: release the home-startup fix without a new model qualification; full-stop requires reviewed PR handoff before merge.",
+	"rationale": "Exact-version home-startup compatibility patch. Only the two reviewed runtime files and the declared smoke command may change. Retain 10.0.2 historical matrix/canary evidence; candidate assurance is deterministic checks, Linux packed startup, replay and independent review, not a new model measurement.",
+	"startup": {
+		"kind": "home-directory-startup-10.0.3",
+		"files": [
+			{
+				"path": "src/infrastructure/fs/workspace-paths.ts",
+				"baselineSha256": "sha256:f49ac543d8253e868aafd885feaced8214b0e3704815d606477ab3ab45c1e1fa",
+				"sha256": "sha256:fd146e0a680bd9d879292b6e3c88e853527d3354e1db842e13934b835c1b80c2"
+			},
+			{
+				"path": "src/platform/opencode/plugin-composition.ts",
+				"baselineSha256": "sha256:26ffd9677ca07b4ab5f8f7297ecabc10cdf7df1feae0a2b8471490b5ca3ee214",
+				"sha256": "sha256:9e164e3a31464e8cfee7b860d6b707ae18e6418762c5647c0a05acba65556986"
+			}
+		]
+	}
+}

@@ -193,9 +193,10 @@ describe("release eval sampling", () => {
 
 	test("checks configured CI release models before authorization", async () => {
 		for (const [configured, expectedCode] of [
-			["openai/gpt-6.1-sol", 0],
+			["openai/gpt-6.1-sol", 1],
+			["openai/gpt-6.1-sol,fixture/no-calls", 0],
 			["openai/gpt-6-sol", 1],
-			["openai/gpt-6.1-sol,xai/grok-4.7", 1],
+			["openai/gpt-6.1-sol,xai/grok-4.7", 0],
 			["openai/gpt-6.1-sol,openai/gpt-6-sol", 1],
 			["xai/grok-4.6", 1],
 		] as const) {
@@ -214,7 +215,7 @@ describe("release eval sampling", () => {
 			expect(code).toBe(expectedCode);
 			if (expectedCode !== 0)
 				expect(stderr).toContain(
-					`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol with its canonical direct-route identity.`,
+					"Release requires exactly 2 models on distinct route providers.",
 				);
 		}
 	});
@@ -381,24 +382,24 @@ describe("release eval sampling", () => {
 		).toThrow("openai/gpt-6.1-sol");
 	});
 
-	test("schedules the current OpenAI-only twenty-case grid", () => {
+	test("keeps the full twenty-case grid at two providers for the offline patch", () => {
 		const scenarios = releaseScenarios(packageJson.version);
 		expect(scenarios).toHaveLength(20);
 		const plan = campaignPlanFor({
-			models: ["openai/gpt-6.1-sol"],
+			models: ["openai/gpt-6.1-sol", "fixture/no-calls"],
 			scenarios,
 			sampling: { kind: "release", packageVersion: packageJson.version },
 			opencodeVersion: "2.1.4",
 		});
-		expect(plan.stoppingRule.count).toBe(81);
-		expect(plan.budget.maxAttempts).toBe(101);
-		expect(plan.abortPolicy.maxReplacementBlocks).toBe(20);
+		expect(plan.stoppingRule.count).toBe(162);
+		expect(plan.budget.maxAttempts).toBe(202);
+		expect(plan.abortPolicy.maxReplacementBlocks).toBe(40);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "primary"),
-		).toHaveLength(81);
+		).toHaveLength(162);
 		expect(
 			plan.cells.filter((cell) => cell.schedule === "environment-reserve"),
-		).toHaveLength(20);
+		).toHaveLength(40);
 	});
 
 	test("keeps ordinary scenario catalogs report-only", () => {
@@ -463,7 +464,7 @@ describe("release eval sampling", () => {
 		}
 	});
 
-	test("rejects current release grids outside the canonical OpenAI pin", async () => {
+	test("rejects current full grids without exactly two distinct providers", async () => {
 		for (const models of [
 			["xai/a"],
 			["xai/a", "xai/b"],
@@ -486,7 +487,7 @@ describe("release eval sampling", () => {
 			]);
 			expect(exitCode).toBe(2);
 			expect(stderr).toContain(
-				`Release ${packageJson.version} requires exactly openai/gpt-6.1-sol with its canonical direct-route identity.`,
+				"Release requires exactly 2 models on distinct route providers.",
 			);
 		}
 	});
@@ -499,6 +500,8 @@ describe("release eval sampling", () => {
 				"evals/run.ts",
 				"--model",
 				"openai/gpt-6.1-sol",
+				"--model",
+				"fixture/no-calls",
 				"--release",
 				"--concurrency",
 				"2",
