@@ -17,13 +17,14 @@ and stop without saving, approving, or running.
 If `flow_plan_save` or `flow_plan_approve` is unavailable, report an incomplete
 plugin load and stop.
 
-- Read `workflowData.modelConfiguration`. Plan in manager context unless
-  `planning.requested` selects a specialist. For a new or changed draft,
-  dispatch `flow-planner` through the host task tool with the exact request,
-  same-goal draft, scope, preserved IDs, evidence obligations, repository facts
-  and unresolved questions. Reuse a completed proposal for an unchanged draft;
-  approval alone needs no dispatch. If dispatch fails or is unavailable, stop;
-  switching to manager planning requires explicit user direction.
+- Read `workflowData.modelConfiguration`. If `planning.requested` is absent,
+  draft in manager context; skip specialist dispatch.
+- If `planning.requested` selects a specialist, dispatch `flow-planner` through
+  the host task tool for a new or changed draft. Send the exact request, same-goal
+  draft, scope, IDs, evidence, repository facts and open questions. Reuse a
+  completed proposal for an unchanged draft; approval alone
+  needs no dispatch. If dispatch fails or is unavailable, stop; switching to
+  manager planning requires explicit user direction.
 - Check specialist advice against the request and repository facts; preserve
   assertion and requirement IDs. The manager alone saves/approves the plan in
   the originating session. Advice grants neither approval nor validation.
@@ -101,6 +102,10 @@ Confirm:
 - assumptions and intentional gaps are visible in `decisions`.
 
 ## Save and approve
+
+For a new `/flow-auto` session, save the exact command goal as the Flow goal.
+An accepted same-host, all-inspect draft may receive one runtime approval
+continuation; an existing or changed draft still waits for user direction.
 
 Call `flow_plan_save` with one nested request: stable operation id, current
 revision (`0` for new), goal, and complete draft. Summarize outcome, feature

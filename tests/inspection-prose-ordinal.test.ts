@@ -2,6 +2,9 @@ import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { SCENARIOS } from "../evals/scenarios.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
+import phaseTitles from "./fixtures/inspection-phase-title-document.json" with {
+	type: "json",
+};
 import saved from "./fixtures/inspection-prose-ordinal-document.json" with {
 	type: "json",
 };
@@ -130,3 +133,34 @@ test("phase-two nested body stops at an outdented ancestor item", () => {
 		"review document omitted a phased remediation plan",
 	);
 });
+
+// Retained text is a diagnostic fixture; the stopped paid campaign stays failed.
+test("explicit phased roadmap accepts actionable numbered titles around the exact finding", () => {
+	expect(issues(phaseTitles.document)).toEqual([]);
+});
+
+for (const [index, document] of [
+	phaseTitles.document.replace("## Phased roadmap", "## Findings"),
+	phaseTitles.document.replace(
+		"2. **Establish an actionable security audit and restore meaningful gate evidence.**",
+		"2. **Notes about the current dependency audit evidence.**",
+	),
+	phaseTitles.document.replace(
+		"1. **Correct the inclusive range contract and its regression coverage.**",
+		"1. **Current inclusive range contract notes and test coverage.**",
+	),
+	phaseTitles.document.replace(
+		"2. **Establish",
+		"## Separate section\n\n2. **Establish",
+	),
+	phaseTitles.document.replace(
+		"2. **Establish",
+		"7. Other release notes.\n\n2. **Establish",
+	),
+].entries()) {
+	test(`phased title parsing retains action, phase and section boundaries ${index + 1}`, () => {
+		expect(issues(document)).toContain(
+			"review document omitted a phased remediation plan",
+		);
+	});
+}

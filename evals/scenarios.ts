@@ -1043,7 +1043,21 @@ function inspectionDocumentHasPhases(content: string): boolean {
 						line.trim() &&
 						(line.match(/^[ \t]*/)?.[0].length ?? 0) <= indentation,
 				);
-			if (firstHeading || separateParagraph || outsideList) continue;
+			if (firstHeading) continue;
+			if (separateParagraph || outsideList) {
+				// A named phased section can contain standalone finding paragraphs.
+				// Accept only self-contained action/target titles, never borrowed prose.
+				const section = sectionHeadings.findLast(
+					(heading) => heading.index < firstItem.index,
+				);
+				if (
+					section &&
+					/#{1,6}[ \t]+phased (?:roadmap|plan)\b/i.test(section[0]) &&
+					actionablePlan([firstItem[3] ?? "", secondItem[3] ?? ""])
+				)
+					return true;
+				continue;
+			}
 			const nextItem = items.find(
 				(item) =>
 					item.index > secondItem.index &&

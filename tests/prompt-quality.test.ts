@@ -254,6 +254,17 @@ describe("Flow prompt structure", () => {
 		);
 	});
 
+	test("loads direct planning and exact auto goal rules in the planning guide", () => {
+		const planning = getFlowGuidance("flow-plan").content;
+		expect(planning).toContain("If `planning.requested` is absent");
+		expect(planning).toContain("skip specialist dispatch");
+		expect(planning).toContain("If `planning.requested` selects a specialist");
+		expect(planning).toContain("save the exact command goal as the Flow goal");
+		expect(getFlowGuidance("flow").content).not.toContain(
+			"save the exact command goal as the Flow goal",
+		);
+	});
+
 	test("keeps worker dispatch inside an active feature run", () => {
 		// 7.3.0 thin routers load only flow-plan during planning. If the kernel still
 		// says "delegate active Flow work to flow-worker" and flow-plan is silent,
