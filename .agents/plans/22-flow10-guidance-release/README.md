@@ -83,3 +83,33 @@ rule, retaining native command/review proof, script-integrity and contradiction
 checks. Diagnostic acceptance is not qualification evidence and does not
 complete or pool the stopped campaign. Further real-account qualification needs
 a freshly bound approval after corrected evaluator preparation.
+
+## Corrected-evaluator campaign: retained inspection failures
+
+The f215759d / f670ad4f campaign remains NOT VERIFIED: 57 passes, two failures
+and 22 missing primary attempts. It consumed 78 starts, leaving 48 unused and
+not transferred. All 188 retained evidence files are preserved; the worker,
+source, tunnel and preparation VM were stopped. All 29 reviewer assignments
+passed, with no unsubmitted reviews or false completions. No canary followed.
+
+Offline inspection separates two failures. A roadmap with actionable numbered
+phase titles under an explicit phased-roadmap section was rejected because the
+required standalone finding text interrupted Markdown list indentation. The
+grammar correction checks those phase titles themselves and retains section,
+ordinal, action and target boundaries. Diagnostic acceptance never changes the
+original report.
+
+The other attempt dispatched an unconfigured planning specialist despite the
+observed manager-direct configuration, then saved a paraphrased inspection goal
+and stopped with approval pending. The loaded planning guide contained an
+unconditional specialist instruction, while the exact-goal continuation rule
+was in a guide that the thin router did not load. Make specialist dispatch
+conditional and move that existing rule into the planning guide. Preserve the
+runtime's exact-goal approval guard, inspect-only scope, existing-draft refusal,
+and explicit authority for repairs. Live adherence of the corrected guidance
+remains unmeasured until a fresh approved complete campaign.
+
+These guidance edits change the package artifact, so the next candidate must be
+rebuilt and sealed with its new bytes; the previous archive approval cannot be
+reused. All 306 prior starts remain consumed, and all 289 unused starts remain
+separate. No further native generation is authorized by the stopped grant.
