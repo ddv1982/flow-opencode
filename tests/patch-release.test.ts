@@ -72,7 +72,7 @@ async function git(root: string, ...args: string[]) {
 	if (code) throw new Error(err);
 	return out.trim();
 }
-async function fixture(startup = false) {
+async function fixture(startup: boolean | "picker" = false) {
 	const parent = await mkdtemp(join(tmpdir(), "flow-patch-"));
 	roots.push(parent);
 	const root = join(parent, "repo");
@@ -83,7 +83,8 @@ async function fixture(startup = false) {
 	await mkdir(join(root, "src"));
 	await mkdir(join(root, "skills/flow-run"), { recursive: true });
 	const baselineVersion = startup ? "10.0.2" : "8.3.0";
-	const version = startup ? "10.0.3" : "8.3.1";
+	const version =
+		startup === "picker" ? "10.0.4" : startup ? "10.0.3" : "8.3.1";
 	const baselinePackage = startup
 		? {
 				...metadata,
@@ -96,7 +97,7 @@ async function fixture(startup = false) {
 			}
 		: metadata;
 	await writeFile(join(root, "package.json"), JSON.stringify(baselinePackage));
-	const startupFiles: NonNullable<PatchRelease["startup"]>["files"] = [
+	const homeFiles = [
 		{
 			path: "src/infrastructure/fs/workspace-paths.ts",
 			baselineSha256: hash("before\n"),
@@ -107,7 +108,22 @@ async function fixture(startup = false) {
 			baselineSha256: hash("before\n"),
 			sha256: hash("after\n"),
 		},
-	];
+	] as const;
+	const approval: NonNullable<PatchRelease["startup"]> =
+		startup === "picker"
+			? {
+					kind: "model-picker-10.0.4",
+					files: [
+						...homeFiles,
+						{
+							path: "src/tui.ts",
+							baselineSha256: hash("before\n"),
+							sha256: hash("after\n"),
+						},
+					],
+				}
+			: { kind: "home-directory-startup-10.0.3", files: [...homeFiles] };
+	const startupFiles = approval.files;
 	if (startup)
 		for (const file of startupFiles) {
 			await mkdir(join(root, file.path, ".."), { recursive: true });
@@ -207,10 +223,7 @@ export async function assertStrictReleaseEvidence(input) {
 		rationale: "No core guarantees changed",
 		...(startup
 			? {
-					startup: {
-						kind: "home-directory-startup-10.0.3" as const,
-						files: startupFiles,
-					},
+					startup: approval,
 				}
 			: {}),
 	};
@@ -288,6 +301,40 @@ test("exact startup patch verifies the retained OpenAI baseline without claiming
 		}),
 	).rejects.toThrow("two-provider baseline");
 });
+test("10.0.4 seals the picker and inherited startup fixes without admitting future versions", async () => {
+	const f = await fixture("picker");
+	const result = await assertPatchReleaseEvidence(f.input, f.verify);
+	expect(result.notes).toContain("Candidate 10.0.4");
+	expect(result.notes).toContain("not measurements of this candidate");
+	const approved = f.record.startup;
+	if (approved?.kind !== "model-picker-10.0.4")
+		throw new Error("Missing picker approval");
+	for (const field of ["baselineSha256", "sha256"] as const) {
+		const prior = approved.files[2][field];
+		approved.files[2][field] = hash("changed picker");
+		await f.writeRecord();
+		await expect(assertPatchReleaseEvidence(f.input, f.verify)).rejects.toThrow(
+			"startup content changed",
+		);
+		approved.files[2][field] = prior;
+	}
+	f.record.version = "10.0.5";
+	f.record.artifact.packageVersion = "10.0.5";
+	f.input.expectedArtifact.packageVersion = "10.0.5";
+	await writeFile(
+		join(f.root, "package.json"),
+		(await readFile(join(f.root, "package.json"), "utf8")).replace(
+			"10.0.4",
+			"10.0.5",
+		),
+	);
+	await git(f.root, "add", ".");
+	await git(f.root, "commit", "-m", "future version");
+	await f.writeRecord();
+	await expect(assertPatchReleaseEvidence(f.input, f.verify)).rejects.toThrow(
+		"exact version",
+	);
+});
 test("startup baseline uses the released tag's verifier with isolated environment and cleans its worktree", async () => {
 	const f = await fixture(true);
 	await writeFile(
@@ -345,7 +392,10 @@ test("startup scope cannot extend to other versions, guides, dependencies or smo
 				baselineSha256: hash("a"),
 				sha256: hash("b"),
 			},
-		] as NonNullable<PatchRelease["startup"]>["files"],
+		] as Extract<
+			NonNullable<PatchRelease["startup"]>,
+			{ kind: "home-directory-startup-10.0.3" }
+		>["files"],
 	};
 	const before = {
 		...metadata,

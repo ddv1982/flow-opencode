@@ -2,6 +2,19 @@
 
 One short entry per release, written for users deciding whether to upgrade.
 
+## [10.0.4]
+
+- Restore `/flow-models` and **Flow: Model settings** in the terminal prompt and
+  command palette. The picker now uses a global input mode; planning and reviewer
+  preferences, coding-model selection, and runtime gates are unchanged.
+- Use an exact-version offline patch approval against the retained 10.0.2
+  qualification. No new live model qualification or model canary was run;
+  historical results do not measure this UI fix.
+
+Remove an older exact pin before installing this release, then restart OpenCode:
+`opencode2 plugin remove opencode-plugin-flow@10.0.3` followed by
+`opencode2 plugin add opencode-plugin-flow@10.0.4`.
+
 ## [10.0.3]
 
 - Start OpenCode safely from home after a global installation. Flow stays

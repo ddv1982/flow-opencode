@@ -41,6 +41,7 @@ export default define({
 			toast: ctx.ui.toast,
 		});
 		ctx.keymap.layer(() => ({
+			mode: "global",
 			commands: [
 				{
 					id: "flow.models.select",

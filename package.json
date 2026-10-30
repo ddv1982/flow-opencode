@@ -1,6 +1,6 @@
 {
 	"name": "opencode-plugin-flow",
-	"version": "10.0.3",
+	"version": "10.0.4",
 	"description": "Durable planning, validation, and independent review for OpenCode v2",
 	"type": "module",
 	"repository": {
