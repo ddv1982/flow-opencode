@@ -56,7 +56,7 @@ import { assertQualificationBundle } from "../scripts/release-metadata.js";
 import { autoQualifiedOutcome } from "./fixtures/auto-qualified-outcome.js";
 
 test("full qualification retains two providers; the startup patch uses separate offline evidence", () => {
-	expect(packageJson.version).toBe("10.0.3");
+	expect(packageJson.version).toBe("10.0.4");
 	const scenarios = releaseScenarios(packageJson.version);
 	const catalog = releaseCatalog(packageJson.version);
 	expect(scenarios).toHaveLength(20);

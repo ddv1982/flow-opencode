@@ -18,15 +18,24 @@ const StartupFile = <Path extends string>(path: Path) =>
 	z
 		.object({ path: z.literal(path), baselineSha256: Hash, sha256: Hash })
 		.strict();
-const StartupApproval = z
-	.object({
-		kind: z.literal("home-directory-startup-10.0.3"),
-		files: z.tuple([
-			StartupFile("src/infrastructure/fs/workspace-paths.ts"),
-			StartupFile("src/platform/opencode/plugin-composition.ts"),
-		]),
-	})
-	.strict();
+const StartupFiles = [
+	StartupFile("src/infrastructure/fs/workspace-paths.ts"),
+	StartupFile("src/platform/opencode/plugin-composition.ts"),
+] as const;
+const StartupApproval = z.discriminatedUnion("kind", [
+	z
+		.object({
+			kind: z.literal("home-directory-startup-10.0.3"),
+			files: z.tuple(StartupFiles),
+		})
+		.strict(),
+	z
+		.object({
+			kind: z.literal("model-picker-10.0.4"),
+			files: z.tuple([...StartupFiles, StartupFile("src/tui.ts")]),
+		})
+		.strict(),
+]);
 const STARTUP_SMOKE =
 	"FLOW_LIVE_SMOKE=1 bun test tests/live-opencode-smoke.test.ts tests/plugin-startup-live.test.ts";
 const BASELINE_SMOKE =
@@ -95,11 +104,12 @@ export function assertPatchScope(input: {
 		StartupApproval.parse(input.startup);
 		if (
 			input.baselineVersion !== "10.0.2" ||
-			input.version !== "10.0.3" ||
+			input.version !==
+				(input.startup.kind === "model-picker-10.0.4" ? "10.0.4" : "10.0.3") ||
 			input.guidance.length
 		)
 			throw new Error(
-				"Startup exception is only 10.0.3 against fully qualified 10.0.2, without guide changes.",
+				"Startup/picker exceptions require their exact version against fully qualified 10.0.2, without guide changes.",
 			);
 		const oldScripts = oldPackage.scripts as
 			| Record<string, unknown>

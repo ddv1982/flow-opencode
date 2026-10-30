@@ -1,7 +1,9 @@
 import { expect, test } from "bun:test";
 import type { LocationRef } from "@opencode/client";
 import type {
+	Context,
 	DialogSelectOptions,
+	KeymapLayer,
 	ToastOptions,
 } from "@opencode/plugin/tui/context";
 import type {
@@ -23,6 +25,43 @@ import {
 	type ModelPickerHost,
 } from "../src/platform/opencode/model-picker-ui.js";
 import pickerDefinition from "../src/tui.js";
+
+test("picker is discoverable from prompt and command palette input modes", async () => {
+	let layer: KeymapLayer | undefined;
+	let titles: string[] = [];
+	const cleanup = await pickerDefinition.setup({
+		location: { directory: "/project" },
+		client: { rpc: () => ({}) },
+		ui: {
+			dialog: {
+				select: async (input: DialogSelectOptions<unknown>) => {
+					titles = input.options.map((option) => option.title);
+					return undefined;
+				},
+				clear() {},
+			},
+			toast: {},
+		},
+		keymap: {
+			layer: (factory: () => KeymapLayer) => {
+				layer = factory();
+			},
+		},
+	} as unknown as Context);
+	try {
+		// OpenCode defaults omitted mode to base, hiding the command in prompt/palette modes.
+		expect(layer?.mode).toBe("global");
+		const command = layer?.commands?.find(
+			(item) => item.id === "flow.models.select",
+		);
+		expect(command?.palette).toBe(true);
+		expect(command?.slash?.name).toBe("flow-models");
+		await command?.run();
+		expect(titles).toEqual(["Planning specialist", "Reviewer"]);
+	} finally {
+		await cleanup?.();
+	}
+});
 
 const model: PickerCatalogModel = {
 	id: "native-id",
