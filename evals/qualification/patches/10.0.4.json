@@ -16,8 +16,8 @@
 	},
 	"artifact": {
 		"packageVersion": "10.0.4",
-		"tarballSha256": "sha256:c330f8aec7f975b68e766652722b3d3818d59018f64d395186f9abc3186d4aae",
-		"unpackedManifestSha256": "sha256:0ac857002a784ce447c7131f171f55543ed49fcba9fda4d7e8fccdfe617b029d"
+		"tarballSha256": "sha256:34f1f0feda43d712030660cc0d8ffd40fe3f7f05a74f35630aaaa79354646591",
+		"unpackedManifestSha256": "sha256:712182b40c2314e66b31de1f6a1a86077f33775ff9599db597d5182975b46a58"
 	},
 	"guidance": [],
 	"approvedBy": "Maintainer full-send approval in this T3 Code thread on 2026-10-30: release the model-picker fix through release CI without new model qualification.",

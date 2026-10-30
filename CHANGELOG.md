@@ -6,7 +6,8 @@ One short entry per release, written for users deciding whether to upgrade.
 
 - Restore `/flow-models` and **Flow: Model settings** in the terminal prompt and
   command palette. The picker now uses a global input mode; planning and reviewer
-  preferences, coding-model selection, and runtime gates are unchanged.
+  preferences, coding-model selection, runtime gates and Session v5 schema are
+  unchanged.
 - Use an exact-version offline patch approval against the retained 10.0.2
   qualification. No new live model qualification or model canary was run;
   historical results do not measure this UI fix.

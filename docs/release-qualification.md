@@ -37,8 +37,8 @@ sources or changed outcomes fail. Canary retries keep manager/reviewer identity.
 
 Reviewed offline paths cover [narrow patches](../.agents/plans/06-patch-release/README.md)
 and [frozen features](../.agents/plans/09-planning-models/README.md), always against
-a fully qualified baseline. Exact 10.0.3's home-startup patch and 10.0.4's picker fix use
-10.0.2's released-tag evidence plus Linux startup tests, without new model calls or
+a fully qualified baseline. The exact 10.0.3 startup and 10.0.4 picker patches use
+10.0.2's released evidence plus offline native tests, without new model calls or
 canary. Other runtime changes retain full qualification. Prior passes never
 become candidate measurements.
 
